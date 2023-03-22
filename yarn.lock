@@ -2,6 +2,18 @@
 # yarn lockfile v1
 
 
+"@0xsplits/splits-sdk@^2.7.0":
+  version "2.7.0"
+  resolved "https://registry.yarnpkg.com/@0xsplits/splits-sdk/-/splits-sdk-2.7.0.tgz#07b1e3f0aa4be071fa9ca7d07637e60e282f13d2"
+  integrity sha512-eaVts1za92EQgvYIhu+fiZRirxb2VpGSHzCMdWAafHlJQHn4cuyLbEi6+vTR6cKf+RrmpSBEVbWJyXX63NjPSg==
+  dependencies:
+    abi-coder "^4.1.1"
+    base-64 "^1.0.0"
+    ethereum-multicall "^2.15.0"
+    ethers "^5.6.9"
+    graphql "^16.5.0"
+    graphql-request "^4.3.0"
+
 "@ampproject/remapping@^2.1.0":
   version "2.2.0"
   resolved "https://registry.yarnpkg.com/@ampproject/remapping/-/remapping-2.2.0.tgz#56c133824780de3174aed5ab6834f3026790154d"

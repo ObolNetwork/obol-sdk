@@ -1,0 +1,35 @@
+{
+  "_id": { "$oid": "63d36c25c655f41775861285" },
+  "name": "TestyWhat",
+  "operators": [
+    {
+      "address": "0x367C266b94Bf9c213b2A9C61b5915E2a493533C8",
+      "enr": "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8",
+      "enr_signature": "0x48c05b0f84ea62a11c56c6e05b1e896ac1399eb17abc803fd9fbe7df5789ed2b13867a76266e2e96ef444f0b69f74b2f4e003a1c05bf20812420596d66177b5e1b",
+      "config_signature": "0x0444eb9d03fb5bbc2a750a9433f97d0a719c9a49fb8699e981b1945b686e081233973fdf807775a3b619e20f8229b7e9302176b93405db2a55ace8e32d9b6f2c1b"
+    },
+    { "address": "0x86B8145c98e5BD25BA722645b15eD65f024a87EC" },
+    { "address": "0x3C75594181e03E8ECD8468A0037F058a9dAfad79" },
+    {
+      "address": "0xFe7cBb9cCd3057589eeBcb915c9d959A822C4b7B",
+      "enr": "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl9",
+      "enr_signature": "0x7d5af664052b27585e91d2662dc7111e7d9bf90389ed35c6b22c3dc3f0ebef70352162854fa2a18cb4f8945d7876394111ee459b835595246c918c2500dfe2411c",
+      "config_signature": "0x4e80ce583706d2efe587ec4e73b4b09ff924b06ab1ee9eb53efc555f569661b524a33ed4adc3bede0f1c745cadeca51e4adcdb48beefe0d4be3f84ddf88d56971c"
+    }
+  ],
+  "creator": {
+    "address": "0x367C266b94Bf9c213b2A9C61b5915E2a493533C8",
+    "config_signature": "0x6f48023ee43b444d3c22bee3516c37b2a19d74304a4463bc8a998e0c21c4264a2ddb49f7a43de81e4016912a9e836f67c22230dd990f0d505d55c64f61cad1441c"
+  },
+  "uuid": "c76bd2d9-e78a-457f-a939-5d127627e3e5",
+  "version": "v1.4.0",
+  "num_validators": 1,
+  "threshold": 3,
+  "fee_recipient_address": "0xd822FFC91AA029Aa5a4C15a4a87796A7f968C6aC",
+  "withdrawal_address": "0xd822FFC91AA029Aa5a4C15a4a87796A7f968C6aC",
+  "dkg_algorithm": "default",
+  "fork_version": "0x00001020",
+  "config_hash": "0x4b5439f0962a9b9233c3731a2e03c140e0e77fcfc40b41f5eece289e063b4bdd",
+  "timestamp": "2023-01-27T06:15:56.411Z",
+  "__v": 0
+}
