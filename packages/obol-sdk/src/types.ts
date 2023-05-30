@@ -17,9 +17,6 @@ type ClusterValidator  = {
   withdrawal_address: string;
 }
 
-
-
-
 export type Cluster = {
   name:string;
   operators:ClusterOperator[] ;
