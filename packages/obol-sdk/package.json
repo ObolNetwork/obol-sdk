@@ -26,8 +26,9 @@
   },
   "homepage": "https://docs.obol.tech/",
   "dependencies": {
-  
     "cross-fetch": "^3.1.5"
-   
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.1"
   }
 }

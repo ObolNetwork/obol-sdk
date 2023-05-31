@@ -1,10 +1,12 @@
 
 import { ethers } from 'ethers';
+import { v4 as uuidv4 } from "uuid";
 import { Base } from './base';
 import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorithm, version } from './constants';
 import { ConflictError } from './errors';
 import { Cluster, ClusterPayload } from './types';
 import { clusterConfigOrDefinitionHash } from './hash';
+
 
 export class Client extends Base {
 
@@ -25,6 +27,8 @@ export class Client extends Base {
       fork_version: this.fork_version,
       dkg_algorithm: dkg_algorithm,
       version: version,
+      uuid: uuidv4(),
+      timestamp: new Date().toISOString(),
     }
 
     return signer.getAddress().then((address: string) => {

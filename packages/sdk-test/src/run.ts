@@ -18,7 +18,6 @@ const signer = wallet.connect(provider);
 
   client.createCluster({
     name: "testSDK",
-    uuid: "30a4ea89-4693-481a-bba7-a314025e1633",
     num_validators: 1,
     operators:
       [
@@ -28,7 +27,6 @@ const signer = wallet.connect(provider);
         { address: "0x3C75594181e03E8ECD8468A0037F058a9dAfad79" }
       ],
     threshold: 3,
-    timestamp: "2023-03-28T11:44:04.350Z",
     validators: [{
       fee_recipient_address: "0x3CD4958e76C317abcEA19faDd076348808424F99",
       withdrawal_address: "0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e"
@@ -37,7 +35,7 @@ const signer = wallet.connect(provider);
     .then((c: any) => {
       console.log(c, "ccccc")
       console.log(`Created new cluster with creator address ${c.creator.address}`);
-      client.deleteCluster("0xeb99f244ca6e7ea963c10a4b81c5f604fd8250cdfc1e01221f4d92686cd436fb")
+      client.deleteCluster(c.config_hash)
         .then(() => {
           console.log(`Cluster is deleted`);
         });

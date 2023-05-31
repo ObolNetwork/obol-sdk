@@ -20,10 +20,8 @@ type ClusterValidator  = {
 export interface ClusterPayload  {
   name:string;
   operators:ClusterOperator[] ;
-  uuid: string;
   num_validators: number;
   threshold:number;
-  timestamp:string;
   validators: ClusterValidator[];
 };
 
@@ -32,6 +30,8 @@ export interface Cluster extends ClusterPayload{
   version: string;
   dkg_algorithm:string;
   fork_version:string;
+  uuid: string;
+  timestamp:string;
   config_hash:string;
 };
 
