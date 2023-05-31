@@ -18,4 +18,8 @@ export enum FORK_MAPPING {
     "0x00000064" = 100, // Gnosis Chain
     "0x70000069" = 1337802, // Kiln
     "0x80000069" = 3, // Ropsten
-  }
+}
+
+export const dkg_algorithm = "default";
+
+export const version = "v1.5.0";

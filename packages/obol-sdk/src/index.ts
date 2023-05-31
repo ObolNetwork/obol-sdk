@@ -1,9 +1,10 @@
 
 import { ethers } from 'ethers';
 import { Base } from './base';
-import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain } from './constants';
+import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorithm, version } from './constants';
 import { ConflictError } from './errors';
-import { Cluster } from './types';
+import { Cluster, ClusterPayload } from './types';
+import { clusterConfigOrDefinitionHash } from './hash';
 
 export class Client extends Base {
 
@@ -18,21 +19,20 @@ export class Client extends Base {
    * @param cluster The new unique cluster
    * @returns The saved cluster from DB
   */
-  createCluster(newCluster: Cluster, signer: any): Promise<unknown> {
-    const authPromise = signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: newCluster.config_hash });
-    const pubAddressPromise = signer.getAddress();
+  createCluster(newCluster: ClusterPayload, signer: any): Promise<unknown> {
+    let clusterConfig: any = {
+      ...newCluster,
+      fork_version: this.fork_version,
+      dkg_algorithm: dkg_algorithm,
+      version: version,
+    }
 
-    return Promise.all([authPromise, pubAddressPromise]).then(([creatorConfigSignature, address]) => {
-      const clusterConfig = {
-        ...newCluster,
-        fork_version: this.fork_version,
-        dkg_algorithm: "default",
-        version: "v1.5.0",
-        creator:
-        {
-          address: address,
-        }
-      }
+    return signer.getAddress().then((address: string) => {
+      clusterConfig.creator = { address: address };
+      clusterConfig.config_hash = clusterConfigOrDefinitionHash(clusterConfig, true)
+
+    }).then(() => { return signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash }) }).then((creatorConfigSignature: string) => {
+
       return this.request(`/dv`, {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
