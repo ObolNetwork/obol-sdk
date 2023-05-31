@@ -19,10 +19,19 @@ export class Client extends Base {
    * @returns The saved cluster from DB
   */
   createCluster(newCluster: Cluster, signer: any): Promise<unknown> {
-    return signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: newCluster.config_hash }).then((creatorConfigSignature: string) => {
+    const authPromise = signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: newCluster.config_hash });
+    const pubAddressPromise = signer.getAddress();
+
+    return Promise.all([authPromise, pubAddressPromise]).then(([creatorConfigSignature, address]) => {
       const clusterConfig = {
         ...newCluster,
         fork_version: this.fork_version,
+        dkg_algorithm: "default",
+        version: "v1.5.0",
+        creator:
+        {
+          address: address,
+        }
       }
       return this.request(`/dv`, {
         method: 'POST',

@@ -20,11 +20,6 @@ const signer = wallet.connect(provider);
     name: "testSDK",
     uuid: "30a4ea89-4693-481a-bba7-a314025e1633",
     config_hash: "0xeb99f244ca6e7ea963c10a4b81c5f604fd8250cdfc1e01221f4d92686cd436fb",
-    creator:
-    {
-      address: "0x86B8145c98e5BD25BA722645b15eD65f024a87EC"
-    },
-    dkg_algorithm: "default",
     num_validators: 1,
     operators:
       [
@@ -39,7 +34,6 @@ const signer = wallet.connect(provider);
       fee_recipient_address: "0x3CD4958e76C317abcEA19faDd076348808424F99",
       withdrawal_address: "0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e"
     }],
-    version: "v1.5.0"
   }, signer)
     .then((c: any) => {
       console.log(c, "ccccc")

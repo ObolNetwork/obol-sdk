@@ -20,12 +20,12 @@ type ClusterValidator  = {
 export type Cluster = {
   name:string;
   operators:ClusterOperator[] ;
-  creator:ClusterCreator;
+  creator?:ClusterCreator;
   uuid: string;
-  version: string;
+  version?: string;
   num_validators: number;
   threshold:number;
-  dkg_algorithm:string;
+  dkg_algorithm?:string;
   fork_version?:string;
   timestamp:string;
   validators: ClusterValidator[];
