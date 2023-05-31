@@ -26,7 +26,7 @@ export type Cluster = {
   num_validators: number;
   threshold:number;
   dkg_algorithm:string;
-  fork_version:string;
+  fork_version?:string;
   timestamp:string;
   validators: ClusterValidator[];
   config_hash:string;

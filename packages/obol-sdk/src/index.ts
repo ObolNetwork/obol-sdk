@@ -9,7 +9,7 @@ export class Client extends Base {
 
   private signer: ethers.Wallet;
 
-  constructor(config: any, signer: ethers.Wallet) {
+  constructor(config: { baseUrl?: string | undefined; chainId?: number | undefined }, signer: ethers.Wallet) {
     super(config)
     this.signer = signer
   }
@@ -20,20 +20,22 @@ export class Client extends Base {
   */
   createCluster(newCluster: Cluster, signer: any): Promise<unknown> {
     return signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: newCluster.config_hash }).then((creatorConfigSignature: string) => {
+      const clusterConfig = {
+        ...newCluster,
+        fork_version: this.fork_version,
+      }
       return this.request(`/dv`, {
         method: 'POST',
-        body: JSON.stringify(newCluster),
+        body: JSON.stringify(clusterConfig),
         headers: {
           Authorization: `Bearer ${creatorConfigSignature}`,
-          "fork-version": newCluster.fork_version,
+          "fork-version": this.fork_version,
         }
-      }).catch(err => {
-        if (err.message == CONFLICT_ERROR_MSG)
-          throw new ConflictError()
-      }
-      );
-    }).catch(() => { })
-
+      })
+    }).catch((err: { message: string; }) => {
+      if (err.message == CONFLICT_ERROR_MSG)
+        throw new ConflictError()
+    });
   }
 
   // /**

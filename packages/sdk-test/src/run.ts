@@ -12,9 +12,6 @@ const wallet = new ethers.Wallet("replace_with_private_key");
 const signer = wallet.connect(provider);
 
 
-
-
-
 (async () => {
 
   const client: Client = new Client({ baseUrl: 'https://obol-api-dev.gcp.obol.tech' }, signer);
@@ -28,7 +25,6 @@ const signer = wallet.connect(provider);
       address: "0x86B8145c98e5BD25BA722645b15eD65f024a87EC"
     },
     dkg_algorithm: "default",
-    fork_version: "0x00001020",
     num_validators: 1,
     operators:
       [
@@ -46,6 +42,7 @@ const signer = wallet.connect(provider);
     version: "v1.5.0"
   }, signer)
     .then((c: any) => {
+      console.log(c, "ccccc")
       console.log(`Created new cluster with creator address ${c.creator.address}`);
       client.deleteCluster("0xeb99f244ca6e7ea963c10a4b81c5f604fd8250cdfc1e01221f4d92686cd436fb")
         .then(() => {
