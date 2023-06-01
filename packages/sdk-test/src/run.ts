@@ -7,7 +7,11 @@ const provider = ethers.getDefaultProvider("goerli", {
   infura: infuraProjectId,
 });
 
-const wallet = new ethers.Wallet("replace_with_private_key");
+const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase || "";
+
+const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
+
+const wallet = new ethers.Wallet(privateKey);
 
 const signer = wallet.connect(provider);
 
@@ -43,7 +47,6 @@ const signer = wallet.connect(provider);
 
 })();
 
-//0xd6e8dfe49ad2337472ba791ad7e89060dd5eda1fd805407a9f7f0ad8b3da4d4a533d21074bd87afebaa659b36f44b7168f15d9de010738244ec05adcc8398dea1c
 
 
 
