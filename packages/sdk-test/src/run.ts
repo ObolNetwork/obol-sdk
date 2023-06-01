@@ -27,12 +27,11 @@ client.createCluster({
       { address: "0x367C266b94Bf9c213b2A9C61b5915E2a493533C8" },
       { address: "0x3C75594181e03E8ECD8468A0037F058a9dAfad79" }
     ],
-  threshold: 3,
   validators: [{
     fee_recipient_address: "0x3CD4958e76C317abcEA19faDd076348808424F99",
     withdrawal_address: "0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e"
   }],
-}, signer)
+})
   .then((link: any) => {
     console.log(link, "inviteLink")
   }).catch((err: any) => { console.log(err); });

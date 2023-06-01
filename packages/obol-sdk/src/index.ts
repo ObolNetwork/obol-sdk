@@ -2,7 +2,7 @@
 import { ethers } from 'ethers';
 import { v4 as uuidv4 } from "uuid";
 import { Base } from './base';
-import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorithm, version } from './constants';
+import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorithm, config_version } from './constants';
 import { ConflictError } from './errors';
 import { Cluster, ClusterPayload } from './types';
 import { clusterConfigOrDefinitionHash } from './hash';
@@ -20,21 +20,22 @@ export class Client extends Base {
    * @param cluster The new unique cluster
    * @returns Invite Link with config_hash
   */
-  createCluster(newCluster: ClusterPayload, signer: any): Promise<string> {
+  createCluster(newCluster: ClusterPayload): Promise<string | void> {
     let clusterConfig: any = {
       ...newCluster,
       fork_version: this.fork_version,
       dkg_algorithm: dkg_algorithm,
-      version: version,
+      version: config_version,
       uuid: uuidv4(),
       timestamp: new Date().toISOString(),
+      threshold: Math.ceil((2 * newCluster.operators.length) / 3)
     }
 
-    return signer.getAddress().then((address: string) => {
+    return this.signer.getAddress().then((address: string) => {
       clusterConfig.creator = { address: address };
       clusterConfig.config_hash = clusterConfigOrDefinitionHash(clusterConfig, true)
     }).then(() => {
-      return signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash })
+      return this.signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash })
     }).then((creatorConfigSignature: string) => {
       return this.request(`/dv`, {
         method: 'POST',
@@ -44,7 +45,7 @@ export class Client extends Base {
           "fork-version": this.fork_version,
         }
       })
-    }).then((cluster: Cluster) => { return `https://dev.launchpad.obol.tech/dv#${cluster.config_hash}` })
+    }).then((cluster: any) => { return `https://dev.launchpad.obol.tech/dv#${cluster.config_hash}` })
       .catch((err: { message: string; }) => {
         if (err.message == CONFLICT_ERROR_MSG)
           throw new ConflictError()

@@ -21,7 +21,6 @@ export interface ClusterPayload  {
   name:string;
   operators:ClusterOperator[] ;
   num_validators: number;
-  threshold:number;
   validators: ClusterValidator[];
 };
 
@@ -33,5 +32,6 @@ export interface Cluster extends ClusterPayload{
   uuid: string;
   timestamp:string;
   config_hash:string;
+  threshold:number;
 };
 

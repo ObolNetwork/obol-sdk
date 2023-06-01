@@ -22,4 +22,4 @@ export enum FORK_MAPPING {
 
 export const dkg_algorithm = "default";
 
-export const version = "v1.5.0";
+export const config_version = "v1.5.0";
