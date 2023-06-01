@@ -9,7 +9,6 @@ import { clusterConfigOrDefinitionHash } from './hash';
 
 
 export class Client extends Base {
-
   private signer: ethers.Wallet;
 
   constructor(config: { baseUrl?: string | undefined; chainId?: number | undefined }, signer: ethers.Wallet) {
@@ -19,7 +18,7 @@ export class Client extends Base {
 
   /**
    * @param cluster The new unique cluster
-   * @returns The saved cluster from DB
+   * @returns Invite Link with config_hash
   */
   createCluster(newCluster: ClusterPayload, signer: any): Promise<unknown> {
     let clusterConfig: any = {
@@ -36,7 +35,6 @@ export class Client extends Base {
       clusterConfig.config_hash = clusterConfigOrDefinitionHash(clusterConfig, true)
 
     }).then(() => { return signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash }) }).then((creatorConfigSignature: string) => {
-
       return this.request(`/dv`, {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
@@ -45,7 +43,7 @@ export class Client extends Base {
           "fork-version": this.fork_version,
         }
       })
-    }).catch((err: { message: string; }) => {
+    }).then((cluster: Cluster) => { return `https://dev.launchpad.obol.tech/dv#${cluster.config_hash}` }).catch((err: { message: string; }) => {
       if (err.message == CONFLICT_ERROR_MSG)
         throw new ConflictError()
     });

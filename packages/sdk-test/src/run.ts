@@ -33,8 +33,8 @@ client.createCluster({
     withdrawal_address: "0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e"
   }],
 }, signer)
-  .then((c: any) => {
-    console.log(c, "ccccc")
+  .then((link: any) => {
+    console.log(link, "inviteLink")
   }).catch((err: any) => { console.log(err); });
 
 
