@@ -20,7 +20,7 @@ export class Client extends Base {
    * @param cluster The new unique cluster
    * @returns Invite Link with config_hash
   */
-  createCluster(newCluster: ClusterPayload): Promise<string | void> {
+  createCluster(newCluster: ClusterPayload): Promise<string> {
     let clusterConfig: any = {
       ...newCluster,
       fork_version: this.fork_version,
@@ -36,7 +36,7 @@ export class Client extends Base {
       clusterConfig.config_hash = clusterConfigOrDefinitionHash(clusterConfig, true)
     }).then(() => {
       return this.signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash })
-    }).then((creatorConfigSignature: string) => {
+    }).then((creatorConfigSignature: string): Promise<Cluster> => {
       return this.request(`/dv`, {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
@@ -45,10 +45,11 @@ export class Client extends Base {
           "fork-version": this.fork_version,
         }
       })
-    }).then((cluster: any) => { return `https://dev.launchpad.obol.tech/dv#${cluster.config_hash}` })
+    }).then((cluster: Cluster) => { return `https://dev.launchpad.obol.tech/dv#${cluster?.config_hash}` })
       .catch((err: { message: string; }) => {
         if (err.message == CONFLICT_ERROR_MSG)
           throw new ConflictError()
+        throw err.message
       });
   }
 
