@@ -15,7 +15,7 @@ const wallet = new ethers.Wallet(privateKey);
 
 const signer = wallet.connect(provider);
 
-const client: Client = new Client({ baseUrl: 'https://obol-api-dev.gcp.obol.tech' }, signer);
+const client: Client = new Client({}, signer);
 
 client.createCluster({
   name: "testSDK",

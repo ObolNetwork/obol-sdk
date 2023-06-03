@@ -9,15 +9,15 @@ type Config = {
 };
 
 export abstract class Base {
-   baseUrl: string;
-   chainId: number;
-   fork_version: string;
+  baseUrl: string;
+  chainId: number;
+  fork_version: string;
 
 
 
-  constructor({ baseUrl, chainId }: Config) {
-    this.baseUrl = baseUrl || 'https://obol-api-dev.gcp.obol.tech';
-    this.chainId = chainId || 5;
+  constructor({ baseUrl = 'https://obol-api-dev.gcp.obol.tech', chainId = 5 }: Config) {
+    this.baseUrl = baseUrl;
+    this.chainId = chainId;
     this.fork_version = FORK_MAPPING[this.chainId]
   }
 
