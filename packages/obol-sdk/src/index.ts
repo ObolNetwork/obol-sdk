@@ -58,7 +58,7 @@ export class Client extends Base {
    * @returns The matched cluster details (lock) from DB
   */
   getClusterDtls(configHash: string): Promise<Cluster> {
-    return this.pollRequest(`/lock/${configHash}`, {
+    return this.pollRequest(`/lock/configHash/${configHash}`, {
       method: 'GET',
     });
   }
