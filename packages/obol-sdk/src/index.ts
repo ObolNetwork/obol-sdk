@@ -53,15 +53,15 @@ export class Client extends Base {
       });
   }
 
-  // /**
-  //  * @param configHash The config hash of the requested cluster
-  //  * @returns The matched cluster from DB
-  // */
-  // getCluster(configHash: string): Promise<Cluster> {
-  //     return this.request(`/dv/${configHash}`, {
-  //         method: 'GET',
-  //     });
-  // }
+  /**
+   * @param configHash The config hash of the requested cluster
+   * @returns The matched cluster details (lock) from DB
+  */
+  getClusterDtls(configHash: string): Promise<Cluster> {
+    return this.pollRequest(`/lock/${configHash}`, {
+      method: 'GET',
+    });
+  }
 
 
   //To be used only in testing

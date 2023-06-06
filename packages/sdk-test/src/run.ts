@@ -22,10 +22,10 @@ client.createCluster({
   num_validators: 1,
   operators:
     [
-      { address: "0x86B8145c98e5BD25BA722645b15eD65f024a87EC" },
-      { address: "0x4123c277dfcBdDDC3585fDb10c0cEE3cE9BBBCf1" },
-      { address: "0x367C266b94Bf9c213b2A9C61b5915E2a493533C8" },
-      { address: "0x3C75594181e03E8ECD8468A0037F058a9dAfad79" }
+      { address: "" },
+      { address: "" },
+      { address: "" },
+      { address: "" }
     ],
   validators: [{
     fee_recipient_address: "0x3CD4958e76C317abcEA19faDd076348808424F99",
@@ -33,7 +33,12 @@ client.createCluster({
   }],
 })
   .then((link: any) => {
-    console.log(link, "inviteLink")
+    console.log(link.split("#")[1], "inviteLink")
+   return client.getClusterDtls(link.split("#")[1])
+
+  }).then((lock: any) => {
+    console.log(lock, "lockFile")
+
   }).catch((err: any) => { console.log(err); });
 
 

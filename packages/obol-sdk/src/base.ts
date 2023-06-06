@@ -15,7 +15,7 @@ export abstract class Base {
 
 
 
-  constructor({ baseUrl = 'https://obol-api-dev.gcp.obol.tech', chainId = 5 }: Config) {
+  constructor({ baseUrl = 'https://03e1-2a01-9700-111d-9f00-1867-15e1-e43f-afec.eu.ngrok.io', chainId = 5 }: Config) {
     this.baseUrl = baseUrl;
     this.chainId = chainId;
     this.fork_version = FORK_MAPPING[this.chainId]
@@ -37,5 +37,33 @@ export abstract class Base {
       }
       throw new Error(response.statusText);
     });
+  }
+
+  protected pollRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`
+    const config = {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+      }
+    };
+
+    return new Promise((resolve, reject) => {
+
+      var pollReqIntervalId = setInterval(function () {
+        fetch(url, config).then((response) => {
+          if (response.ok) {
+            clearInterval(pollReqIntervalId);
+            resolve(response.json());
+          }
+        });
+      }, 5000);
+
+      setTimeout(function () {
+        clearInterval(pollReqIntervalId);
+        reject("Time out")
+      }, 1000000)
+    })
   }
 }
