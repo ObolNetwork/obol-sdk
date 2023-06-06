@@ -6,6 +6,7 @@ import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorith
 import { ConflictError } from './errors';
 import { Cluster, ClusterPayload } from './types';
 import { clusterConfigOrDefinitionHash } from './hash';
+import { validateDefinition } from './ajv';
 
 
 export class Client extends Base {
@@ -20,7 +21,9 @@ export class Client extends Base {
    * @param cluster The new unique cluster
    * @returns Invite Link with config_hash
   */
-  createCluster(newCluster: ClusterPayload): Promise<string> {
+  createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
+    const isValid = validateDefinition(newCluster)
+    if (isValid !== null) return Promise.reject(new Error(`An error occurred,${JSON.stringify(isValid)}`));
     let clusterConfig: any = {
       ...newCluster,
       fork_version: this.fork_version,
@@ -28,7 +31,8 @@ export class Client extends Base {
       version: config_version,
       uuid: uuidv4(),
       timestamp: new Date().toISOString(),
-      threshold: Math.ceil((2 * newCluster.operators.length) / 3)
+      threshold: Math.ceil((2 * newCluster.operators.length) / 3),
+      num_validators: newCluster.validators.length
     }
 
     return this.signer.getAddress().then((address: string) => {
@@ -45,7 +49,7 @@ export class Client extends Base {
           "fork-version": this.fork_version,
         }
       })
-    }).then((cluster: Cluster) => { return `https://dev.launchpad.obol.tech/dv#${cluster?.config_hash}` })
+    }).then((cluster: Cluster) => { return cluster?.config_hash })
       .catch((err: { message: string; }) => {
         if (err.message == CONFLICT_ERROR_MSG)
           throw new ConflictError()
@@ -53,15 +57,18 @@ export class Client extends Base {
       });
   }
 
-  // /**
-  //  * @param configHash The config hash of the requested cluster
-  //  * @returns The matched cluster from DB
-  // */
-  // getCluster(configHash: string): Promise<Cluster> {
-  //     return this.request(`/dv/${configHash}`, {
-  //         method: 'GET',
-  //     });
-  // }
+  /**
+   * @param configHash The config hash of the requested cluster
+   * @returns The matched cluster details (lock) from DB
+  */
+  getClusterLock(configHash: string): Promise<Cluster> {
+    return this.request(`/lock/configHash/${configHash}`, {
+      method: 'GET',
+    }).then((lock: any) => { return lock })
+      .catch((err: { message: string; }) => {
+        throw err.message
+      });
+  }
 
 
   //To be used only in testing
@@ -75,6 +82,4 @@ export class Client extends Base {
     });
   }
 }
-
-
 

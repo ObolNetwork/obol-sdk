@@ -26,11 +26,13 @@
   },
   "homepage": "https://docs.obol.tech/",
   "dependencies": {
-    "cross-fetch": "^3.1.5",
     "@chainsafe/ssz": "^0.11.1",
+    "ajv": "^8.12.0",
+    "cross-fetch": "^3.1.5",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@types/ajv": "^1.0.0",
     "@types/uuid": "^9.0.1"
   }
 }
