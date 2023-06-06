@@ -22,10 +22,10 @@ client.createCluster({
   num_validators: 1,
   operators:
     [
-      { address: "" },
-      { address: "" },
-      { address: "" },
-      { address: "" }
+      { address: "0xC35CfCd67b9C27345a54EDEcC1033F2284148c81" },
+      { address: "0x33807D6F1DCe44b9C599fFE03640762A6F08C496" },
+      { address: "0xc6e76F72Ea672FAe05C357157CfC37720F0aF26f" },
+      { address: "0x86B8145c98e5BD25BA722645b15eD65f024a87EC" }
     ],
   validators: [{
     fee_recipient_address: "0x3CD4958e76C317abcEA19faDd076348808424F99",
