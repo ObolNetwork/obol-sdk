@@ -17,7 +17,7 @@ const signer = wallet.connect(provider);
 
 const client: Client = new Client({}, signer);
 
-client.createCluster({
+client.createClusterDefinition({
   name: "testSDK",
   num_validators: 1,
   operators:
@@ -32,9 +32,9 @@ client.createCluster({
     withdrawal_address: "0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e"
   }],
 })
-  .then((link: any) => {
-    console.log(link.split("#")[1], "inviteLink")
-   return client.getClusterDtls(link.split("#")[1])
+  .then((configHash: string) => {
+   console.log(configHash)
+   return client.getClusterLock(configHash)
 
   }).then((lock: any) => {
     console.log(lock, "lockFile")

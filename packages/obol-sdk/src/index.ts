@@ -20,7 +20,7 @@ export class Client extends Base {
    * @param cluster The new unique cluster
    * @returns Invite Link with config_hash
   */
-  createCluster(newCluster: ClusterPayload): Promise<string> {
+  createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
     let clusterConfig: any = {
       ...newCluster,
       fork_version: this.fork_version,
@@ -45,7 +45,7 @@ export class Client extends Base {
           "fork-version": this.fork_version,
         }
       })
-    }).then((cluster: Cluster) => { return `https://dev.launchpad.obol.tech/dv#${cluster?.config_hash}` })
+    }).then((cluster: Cluster) => { return cluster?.config_hash })
       .catch((err: { message: string; }) => {
         if (err.message == CONFLICT_ERROR_MSG)
           throw new ConflictError()
@@ -57,7 +57,7 @@ export class Client extends Base {
    * @param configHash The config hash of the requested cluster
    * @returns The matched cluster details (lock) from DB
   */
-  getClusterDtls(configHash: string): Promise<Cluster> {
+  getClusterLock(configHash: string): Promise<Cluster> {
     return this.pollRequest(`/lock/configHash/${configHash}`, {
       method: 'GET',
     });
