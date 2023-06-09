@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "start": "node dist/run.js"
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand"
   },
   "author": "Obol Labs (https://obol.tech)",
   "publishConfig": {
@@ -27,5 +27,12 @@
   "homepage": "https://docs.obol.tech/",
   "dependencies": {
     "@obolnetwork/obol-sdk": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^28.1.7",
+    "@types/supertest": "^2.0.12",
+    "jest": "^28.1.3",
+    "supertest": "^6.3.3",
+    "ts-jest": "^28.0.8"
   }
 }
