@@ -87,37 +87,6 @@ describe('Poll Cluster Lock', () => {
     return postedLockFile;
   }
 
-  const getLock = () => {
-
-    console.log("yalla?")
-
-    return new Promise((resolve, reject) => {
-      console.log("tayyeb here?")
-
-      var pollReqIntervalId = setInterval(function () {
-
-        request(app).get(`/lock/configHash/${mockGroupClusterLockV1X5.cluster_definition.config_hash}`).then((response) => {
-
-          if (response.ok) {
-            console.log("here333333", response)
-
-            clearInterval(pollReqIntervalId);
-            resolve(response);
-          }
-        });
-      }, 1000);
-
-      setTimeout(function () {
-        console.log("here22222")
-
-        clearInterval(pollReqIntervalId);
-        reject("Time out")
-      }, 5000)
-    })
-  }
-
-
-
   beforeAll(async () => {
     await request(app)
       .post('/dv')
@@ -128,7 +97,7 @@ describe('Poll Cluster Lock', () => {
 
   it('should make a GET request to the API periodically until a lock is returned', async () => {
     jest.setTimeout(10000);
-    const [lockObject, postedLockFile] = await Promise.all([getLock(), updateClusterDefAndPushLock()]);
+    const [lockObject, postedLockFile] = await Promise.all([client.getClusterLock(mockGroupClusterLockV1X5.cluster_definition.config_hash), updateClusterDefAndPushLock()]);
     expect(lockObject).toHaveProperty('lock_hash');
   });
 

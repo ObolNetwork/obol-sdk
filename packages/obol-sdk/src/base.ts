@@ -58,12 +58,12 @@ export abstract class Base {
             resolve(response.json());
           }
         });
-      }, 5000);
+      }, 1000);
 
       setTimeout(function () {
         clearInterval(pollReqIntervalId);
         reject("Time out")
-      }, 1000000)
+      }, 5000)
     })
   }
 }
