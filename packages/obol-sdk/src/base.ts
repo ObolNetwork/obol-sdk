@@ -15,7 +15,7 @@ export abstract class Base {
 
 
 
-  constructor({ baseUrl = 'https://3db7-2a01-9700-111d-9f00-35d2-48d4-627-7f86.eu.ngrok.io', chainId = 5 }: Config) {
+  constructor({ baseUrl = 'https://d1e2-2a01-9700-111d-9f00-397e-42af-516d-37e0.eu.ngrok.io', chainId = 5 }: Config) {
     this.baseUrl = baseUrl;
     this.chainId = chainId;
     this.fork_version = FORK_MAPPING[this.chainId]

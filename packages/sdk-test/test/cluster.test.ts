@@ -43,7 +43,7 @@ const client: Client = new Client({}, signer);
 // });
 
 describe('Poll Cluster Lock', () => {
-  const app = "https://3db7-2a01-9700-111d-9f00-35d2-48d4-627-7f86.eu.ngrok.io";
+  const app = "https://d1e2-2a01-9700-111d-9f00-397e-42af-516d-37e0.eu.ngrok.io";
   const { definition_hash: _, ...rest } =
     mockGroupClusterLockV1X5.cluster_definition;
   const cloneDef = rest;
@@ -80,10 +80,43 @@ describe('Poll Cluster Lock', () => {
         );
     }
 
-    await request(app)
+    const postedLockFile = await request(app)
       .post('/lock')
       .send(mockGroupClusterLockV1X5);
+
+    return postedLockFile;
   }
+
+  const getLock = () => {
+
+    console.log("yalla?")
+
+    return new Promise((resolve, reject) => {
+      console.log("tayyeb here?")
+
+      var pollReqIntervalId = setInterval(function () {
+
+        request(app).get(`/lock/configHash/${mockGroupClusterLockV1X5.cluster_definition.config_hash}`).then((response) => {
+
+          if (response.ok) {
+            console.log("here333333", response)
+
+            clearInterval(pollReqIntervalId);
+            resolve(response);
+          }
+        });
+      }, 1000);
+
+      setTimeout(function () {
+        console.log("here22222")
+
+        clearInterval(pollReqIntervalId);
+        reject("Time out")
+      }, 5000)
+    })
+  }
+
+
 
   beforeAll(async () => {
     await request(app)
@@ -91,22 +124,22 @@ describe('Poll Cluster Lock', () => {
       .set('Authorization', `Bearer ${postAuth}`)
       .send({ ...cloneDef, operators: operatorsToPOST })
   })
-  it('should make a GET request to the API periodically until a lock is returned', async () => {
-    //Call them in parallel
-    const [lockObject,x] = await Promise.all([client.getClusterLock(mockGroupClusterLockV1X5.cluster_definition.config_hash), updateClusterDefAndPushLock()]);
 
-    console.log(lockObject, "lockObject")
+
+  it('should make a GET request to the API periodically until a lock is returned', async () => {
+    jest.setTimeout(10000);
+    const [lockObject, postedLockFile] = await Promise.all([getLock(), updateClusterDefAndPushLock()]);
     expect(lockObject).toHaveProperty('lock_hash');
   });
 
   afterAll(async () => {
+    jest.setTimeout(10000);
     const config_hash = mockGroupClusterLockV1X5.cluster_definition.config_hash;
     const lock_hash = mockGroupClusterLockV1X5.lock_hash;
 
-    return request(app).delete(`/lock/${lock_hash}`).set('Authorization', `Bearer ${postAuth}`).then(() => {
-       request(app)
-        .delete(`/dv/${config_hash}`)
-        .set('Authorization', `Bearer ${postAuth}`).then(()=>{
+    return request(app).delete(`/dv/${config_hash}`).then(() => {
+      return request(app)
+        .delete(`/lock/${lock_hash}`).then(() => {
           console.log("done")
         });
     });
