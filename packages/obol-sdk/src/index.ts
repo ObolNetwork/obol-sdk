@@ -57,10 +57,10 @@ export class Client extends Base {
    * @param configHash The config hash of the requested cluster
    * @returns The matched cluster details (lock) from DB
   */
-  getClusterLock(configHash: string): Promise<Cluster> {
+  getClusterLock(configHash: string, timeOut: number): Promise<Cluster> {
     return this.pollRequest(`/lock/configHash/${configHash}`, {
       method: 'GET',
-    });
+    }, timeOut);
   }
 
 

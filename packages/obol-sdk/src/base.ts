@@ -15,7 +15,7 @@ export abstract class Base {
 
 
 
-  constructor({ baseUrl = 'https://d1e2-2a01-9700-111d-9f00-397e-42af-516d-37e0.eu.ngrok.io', chainId = 5 }: Config) {
+  constructor({ baseUrl = 'https://d924-2a01-9700-111d-9f00-249f-5ebb-7be2-2d62.eu.ngrok.io', chainId = 5 }: Config) {
     this.baseUrl = baseUrl;
     this.chainId = chainId;
     this.fork_version = FORK_MAPPING[this.chainId]
@@ -39,7 +39,7 @@ export abstract class Base {
     });
   }
 
-  protected pollRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  protected pollRequest<T>(endpoint: string, options?: RequestInit, timeOut = 1000000): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
     const config = {
       ...options,
@@ -63,7 +63,7 @@ export abstract class Base {
       setTimeout(function () {
         clearInterval(pollReqIntervalId);
         reject("Time out")
-      }, 5000)
+      }, timeOut)
     })
   }
 }
