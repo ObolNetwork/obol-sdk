@@ -6,6 +6,7 @@ import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorith
 import { ConflictError } from './errors';
 import { Cluster, ClusterPayload } from './types';
 import { clusterConfigOrDefinitionHash } from './hash';
+import { validateDefinition } from './ajv';
 
 
 export class Client extends Base {
@@ -21,6 +22,8 @@ export class Client extends Base {
    * @returns Invite Link with config_hash
   */
   createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
+    const isValid = validateDefinition(newCluster)
+    if (isValid !== null) return Promise.reject(new Error(`An error occurred,${JSON.stringify(isValid)}`));
     let clusterConfig: any = {
       ...newCluster,
       fork_version: this.fork_version,
@@ -28,7 +31,8 @@ export class Client extends Base {
       version: config_version,
       uuid: uuidv4(),
       timestamp: new Date().toISOString(),
-      threshold: Math.ceil((2 * newCluster.operators.length) / 3)
+      threshold: Math.ceil((2 * newCluster.operators.length) / 3),
+      num_validators: newCluster.validators.length
     }
 
     return this.signer.getAddress().then((address: string) => {
@@ -75,6 +79,4 @@ export class Client extends Base {
     });
   }
 }
-
-
 
