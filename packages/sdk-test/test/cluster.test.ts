@@ -18,13 +18,13 @@ const signer = wallet.connect(provider);
 
 const client: Client = new Client({}, signer);
 
+jest.setTimeout(10000);
+
 describe('Create Cluster Definition', () => {
   it('should post a cluster definition and return lockhash', async () => {
 
-
     const lockHash = await client.createClusterDefinition({
       name: "testSDK",
-      num_validators: 1,
       operators:
         [
           { address: "0xC35CfCd67b9C27345a54EDEcC1033F2284148c81" },
@@ -43,7 +43,7 @@ describe('Create Cluster Definition', () => {
 });
 
 describe('Poll Cluster Lock', () => {
-  const app = "https://d924-2a01-9700-111d-9f00-249f-5ebb-7be2-2d62.eu.ngrok.io";
+  const app = "https://618a-2a01-9700-111d-9f00-249f-5ebb-7be2-2d62.eu.ngrok.io";
   const { definition_hash: _, ...rest } =
     mockGroupClusterLockV1X5.cluster_definition;
   const cloneDef = rest;
@@ -96,13 +96,12 @@ describe('Poll Cluster Lock', () => {
 
 
   it('should make a GET request to the API periodically until a lock is returned', async () => {
-    jest.setTimeout(10000);
+    //To call two async operations in parallel
     const [lockObject, postedLockFile] = await Promise.all([client.getClusterLock(mockGroupClusterLockV1X5.cluster_definition.config_hash, 5000), updateClusterDefAndPushLock()]);
     expect(lockObject).toHaveProperty('lock_hash');
   });
 
   afterAll(async () => {
-    jest.setTimeout(10000);
     const config_hash = mockGroupClusterLockV1X5.cluster_definition.config_hash;
     const lock_hash = mockGroupClusterLockV1X5.lock_hash;
 
