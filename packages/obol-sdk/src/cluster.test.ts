@@ -21,7 +21,7 @@ describe('Cluster Client', () => {
     });
 
     test('createClusterDefinition should return config_hash', async () => {
-        clusterClientService.createClusterDefinition = jest.fn().mockResolvedValueOnce(mockConfigHash);
+        clusterClientService.createClusterDefinition = jest.fn().mockResolvedValueOnce(mockConfigHash); //Can't mock protected methods in Base class
 
         const config_hash = await clusterClientService.createClusterDefinition(clusterConfig);
 

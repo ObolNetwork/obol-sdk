@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "test": "jest"
+    "test": "jest --config ./src/jest.config.json"
   },
   "author": "Obol Labs (https://obol.tech)",
   "publishConfig": {
@@ -33,11 +33,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.22.5",
-    "@babel/preset-env": "^7.22.5",
-    "@babel/preset-typescript": "^7.22.5",
     "@types/ajv": "^1.0.0",
-    "@types/uuid": "^9.0.1",
-    "babel-jest": "^29.5.0"
+    "@types/uuid": "^9.0.1"
   }
 }
