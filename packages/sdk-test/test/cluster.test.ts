@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { clusterConfig, mockGroupClusterLockV1X5 } from './fixtures';
+import { clusterConfig, clusterLockV1X5 } from './fixtures';
 import { client, updateClusterDef, publishLockFile, app, postClusterDef } from './utils';
 
 
@@ -16,7 +16,7 @@ describe('Create Cluster Definition', () => {
 describe('Poll Cluster Lock', () => {
   //Test polling getClusterLock through mimicing the whole flow using obol-api endpoints 
   const { definition_hash: _, ...rest } =
-    mockGroupClusterLockV1X5.cluster_definition;
+  clusterLockV1X5.cluster_definition;
   const clusterWithoutDefHash = rest;
 
   beforeAll(async () => {
@@ -27,7 +27,7 @@ describe('Poll Cluster Lock', () => {
     //Call two async operations in parallel, polling to fetch lockFile when exist and the whole process after the creator shares the link with operators
     const [lockObject] = await Promise.all([new Promise((resolve, reject) => {
       var pollReqIntervalId = setInterval(function () {
-        client.getClusterLock(mockGroupClusterLockV1X5.cluster_definition.config_hash).then((lockFile: any) => {
+        client.getClusterLock(clusterLockV1X5.cluster_definition.config_hash).then((lockFile: any) => {
           if (lockFile?.lock_hash) {
             console.log(lockFile, "lockFile")
             clearInterval(pollReqIntervalId);
@@ -45,15 +45,15 @@ describe('Poll Cluster Lock', () => {
       }, 5000)
 
     }), (async () => {
-      await updateClusterDef(mockGroupClusterLockV1X5.cluster_definition);
-      await publishLockFile(mockGroupClusterLockV1X5)
+      await updateClusterDef(clusterLockV1X5.cluster_definition);
+      await publishLockFile(clusterLockV1X5)
     })()]);
     expect(lockObject).toHaveProperty('lock_hash');
   });
 
   afterAll(async () => {
-    const config_hash = mockGroupClusterLockV1X5.cluster_definition.config_hash;
-    const lock_hash = mockGroupClusterLockV1X5.lock_hash;
+    const config_hash = clusterLockV1X5.cluster_definition.config_hash;
+    const lock_hash = clusterLockV1X5.lock_hash;
 
     return request(app).delete(`/lock/${lock_hash}`).then(() => {
       return request(app)

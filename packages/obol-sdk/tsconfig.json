@@ -2,13 +2,12 @@
   "extends": "../../tsconfig.json",
   "baseUrl": "./src",
   "compilerOptions": {
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "module": "commonjs",
+    "target": "es2017",
+    "allowSyntheticDefaultImports": true,
   },
-  "include": ["./src"],
-  "exclude": [
-    "dist",
-    "node_modules",
-    "./**/*.test.ts",
-    "./src/testing/**/*"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test", "**/*test.ts"]
+
 }
