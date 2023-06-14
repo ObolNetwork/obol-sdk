@@ -15,7 +15,7 @@ export abstract class Base {
 
 
 
-  constructor({ baseUrl = 'https://016e-2a01-9700-15b3-9500-59d3-ccda-fa6c-51a8.eu.ngrok.io', chainId = 5 }: Config) {
+  constructor({ baseUrl = 'https://obol-api-dev.gcp.obol.tech', chainId = 5 }: Config) {
     this.baseUrl = baseUrl;
     this.chainId = chainId;
     this.fork_version = FORK_MAPPING[this.chainId]
