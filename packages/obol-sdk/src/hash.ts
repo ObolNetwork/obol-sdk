@@ -8,7 +8,7 @@ import {
 } from '@chainsafe/ssz';
 import { UintNumberByteLen } from '@chainsafe/ssz/lib/type/uint';
 import { ValueOfFields } from '@chainsafe/ssz/lib/view/container';
-import { Cluster } from './types';
+import { ClusterDefintion } from './types';
 
 /**
  * Returns the SSZ cluster config hash or the definition hash of the given cluster definition object
@@ -17,7 +17,7 @@ import { Cluster } from './types';
  * @returns The config hash or he definition hash in of the corresponding cluster definition
  */
 export const clusterConfigOrDefinitionHash = (
-  cluster: Cluster,
+  cluster: ClusterDefintion,
   configOnly: boolean,
 ): string => {
 

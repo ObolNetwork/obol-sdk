@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Base } from './base';
 import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorithm, config_version } from './constants';
 import { ConflictError } from './errors';
-import { Cluster, ClusterPayload } from './types';
+import { ClusterDefintion, ClusterLock, ClusterPayload } from './types';
 import { clusterConfigOrDefinitionHash } from './hash';
 import { validateDefinition } from './ajv';
 
@@ -40,7 +40,7 @@ export class Client extends Base {
       clusterConfig.config_hash = clusterConfigOrDefinitionHash(clusterConfig, true)
     }).then(() => {
       return this.signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash })
-    }).then((creatorConfigSignature: string): Promise<Cluster> => {
+    }).then((creatorConfigSignature: string): Promise<ClusterDefintion> => {
       return this.request(`/dv`, {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
@@ -49,7 +49,7 @@ export class Client extends Base {
           "fork-version": this.fork_version,
         }
       })
-    }).then((cluster: Cluster) => { return cluster?.config_hash })
+    }).then((cluster: ClusterDefintion) => { return cluster?.config_hash })
       .catch((err: { message: string; }) => {
         if (err.message == CONFLICT_ERROR_MSG)
           throw new ConflictError()
@@ -61,7 +61,7 @@ export class Client extends Base {
    * @param configHash The config hash of the requested cluster
    * @returns The matched cluster details (lock) from DB
   */
-  getClusterLock(configHash: string): Promise<Cluster> {
+  getClusterLock(configHash: string): Promise<ClusterLock> {
     return this.request(`/lock/configHash/${configHash}`, {
       method: 'GET',
     }).then((lock: any) => { return lock })
@@ -76,7 +76,7 @@ export class Client extends Base {
    * @param configHash The config hash of the cluster to be deleted
    * @returns The deleted cluster data
   */
-  deleteCluster(configHash: string): Promise<Cluster> {
+  deleteCluster(configHash: string): Promise<ClusterDefintion> {
     return this.request(`/dv/${configHash}`, {
       method: 'DELETE',
     });

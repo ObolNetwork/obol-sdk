@@ -2,6 +2,7 @@
 import request from 'supertest';
 import { Client } from '@obolnetwork/obol-sdk';
 import { ethers } from 'ethers';
+import { ClusterDefintion, ClusterLock } from '@obolnetwork/obol-sdk/dist/types'; //Should be fixed when "exports": "./types": "./dist/types.js" is added to obol-sdk package.json
 
 const infuraProjectId = 'ca1a29fe66dd40dbbc2b5cc2d7fda17c';
 
@@ -21,7 +22,7 @@ export const client: Client = new Client({}, signer);
 
 export const app = client.baseUrl;
 
-export const postClusterDef = async (clusterWithoutDefHash: any) => {
+export const postClusterDef = async (clusterWithoutDefHash: ClusterDefintion) => {
     const postAuth =
         clusterWithoutDefHash.creator.config_signature;
     const operatorsToPOST = clusterWithoutDefHash.operators.map((operator: { address: any; }) => {
@@ -37,7 +38,7 @@ export const postClusterDef = async (clusterWithoutDefHash: any) => {
 
 
 
-export const updateClusterDef = async (clusterDef: { name?: string; creator?: { address: string; config_signature: string; }; operators: any; uuid?: string; version: any; timestamp?: string; num_validators?: number; threshold?: number; validators?: { fee_recipient_address: string; withdrawal_address: string; }[]; dkg_algorithm?: string; fork_version: any; config_hash: any; definition_hash?: string; }) => {
+export const updateClusterDef = async (clusterDef: ClusterDefintion ) => {
     const cluserOperators = clusterDef.operators;
     for (
         let count = 0;
@@ -64,7 +65,7 @@ export const updateClusterDef = async (clusterDef: { name?: string; creator?: { 
     }
 }
 
-export const publishLockFile = async (clusterLock: string | object | undefined) => {
+export const publishLockFile = async (clusterLock:ClusterLock ) => {
     const postedLockFile = await request(app)
         .post('/lock')
         .send(clusterLock);
