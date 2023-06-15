@@ -13,6 +13,7 @@ export class Client extends Base {
   private signer: ethers.Wallet;
 
   constructor(config: { baseUrl?: string | undefined; chainId?: number | undefined }, signer: ethers.Wallet) {
+
     super(config)
     this.signer = signer
   }
@@ -23,7 +24,7 @@ export class Client extends Base {
   */
   createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
     const isValid = validateDefinition(newCluster)
-    if (isValid !== null) return Promise.reject(new Error(`An error occurred,${JSON.stringify(isValid)}`));
+    if (isValid !== null) return Promise.reject(new Error(`An error occurred: ${JSON.stringify(isValid)}`));
     let clusterConfig: any = {
       ...newCluster,
       fork_version: this.fork_version,

@@ -26,6 +26,7 @@
   },
   "homepage": "https://docs.obol.tech/",
   "dependencies": {
-    "@obolnetwork/obol-sdk": "^0.1.0"
+    "@obolnetwork/obol-sdk": "^0.1.0",
+    "ethers": "^6.4.0"
   }
 }

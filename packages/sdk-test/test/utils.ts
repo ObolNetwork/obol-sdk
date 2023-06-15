@@ -4,19 +4,13 @@ import { Client } from '@obolnetwork/obol-sdk';
 import { ethers } from 'ethers';
 import { ClusterDefintion, ClusterLock } from '@obolnetwork/obol-sdk/dist/types'; //Should be fixed when "exports": "./types": "./dist/types.js" is added to obol-sdk package.json
 
-const infuraProjectId = 'ca1a29fe66dd40dbbc2b5cc2d7fda17c';
-
-const provider = ethers.getDefaultProvider("goerli", {
-    infura: infuraProjectId,
-});
-
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase || "";
 
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 
 const wallet = new ethers.Wallet(privateKey);
 
-const signer = wallet.connect(provider);
+const signer = wallet.connect(null);
 
 export const client: Client = new Client({}, signer);
 

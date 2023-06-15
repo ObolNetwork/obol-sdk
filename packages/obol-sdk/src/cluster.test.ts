@@ -1,11 +1,11 @@
 import { ethers } from 'ethers';
-import  {Client}  from './index';
+import { Client } from './index';
 import { clusterConfig, clusterLockV1X5 } from './fixtures';
 
 describe('Cluster Client', () => {
 
     const mockConfigHash = "0x1f6c94e6c070393a68c1aa6073a21cb1fd57f0e14d2a475a2958990ab728c2fd";
-    let clusterClientService: Client; 
+    let clusterClientService: Client;
     const infuraProjectId = 'ca1a29fe66dd40dbbc2b5cc2d7fda17c';
     const provider = ethers.getDefaultProvider("goerli", {
         infura: infuraProjectId,

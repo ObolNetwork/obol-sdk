@@ -36,14 +36,14 @@ export interface ClusterDefintion extends ClusterPayload {
   definition_hash?: string;
 };
 
-type DistValidator = {
+type DistributedValidator = {
   distributed_public_key: string;
   public_shares: string[]
 }
 
 export interface ClusterLock {
   cluster_definition: ClusterDefintion;
-  distributed_validators: DistValidator[];
+  distributed_validators: DistributedValidator[];
   signature_aggregate: string;
   lock_hash: string
 };

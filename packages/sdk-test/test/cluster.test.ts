@@ -16,7 +16,7 @@ describe('Create Cluster Definition', () => {
 describe('Poll Cluster Lock', () => {
   //Test polling getClusterLock through mimicing the whole flow using obol-api endpoints 
   const { definition_hash: _, ...rest } =
-  clusterLockV1X5.cluster_definition;
+    clusterLockV1X5.cluster_definition;
   const clusterWithoutDefHash = rest;
 
   beforeAll(async () => {
