@@ -22,21 +22,29 @@ describe('Cluster Client', () => {
 
     test('createClusterDefinition should return config_hash', async () => {
         clusterClientService.createClusterDefinition = jest.fn().mockResolvedValueOnce(mockConfigHash); //Can't mock protected methods in Base class
+        try {
+            const config_hash = await clusterClientService.createClusterDefinition(clusterConfig);
 
-        const config_hash = await clusterClientService.createClusterDefinition(clusterConfig);
+            expect(clusterClientService.createClusterDefinition).toHaveBeenCalledTimes(1);
+            expect(clusterClientService.createClusterDefinition).toHaveBeenCalledWith(clusterConfig);
+            expect(config_hash).toEqual(mockConfigHash);
+        } catch (error) {
+            fail(error);
+        }
 
-        expect(clusterClientService.createClusterDefinition).toHaveBeenCalledTimes(1);
-        expect(clusterClientService.createClusterDefinition).toHaveBeenCalledWith(clusterConfig);
-        expect(config_hash).toEqual(mockConfigHash);
     });
 
     test('getClusterLock should return lockFile if exist', async () => {
         clusterClientService.getClusterLock = jest.fn().mockResolvedValueOnce(clusterLockV1X5);
+        try {
+            const clusterLock = await clusterClientService.getClusterLock(mockConfigHash);
 
-        const clusterLock = await clusterClientService.getClusterLock(mockConfigHash);
+            expect(clusterClientService.getClusterLock).toHaveBeenCalledTimes(1);
+            expect(clusterClientService.getClusterLock).toHaveBeenCalledWith(mockConfigHash);
+            expect(clusterLock).toEqual(clusterLockV1X5);
 
-        expect(clusterClientService.getClusterLock).toHaveBeenCalledTimes(1);
-        expect(clusterClientService.getClusterLock).toHaveBeenCalledWith(mockConfigHash);
-        expect(clusterLock).toEqual(clusterLockV1X5);
+        } catch (error) {
+            fail(error);
+        }
     });
 });

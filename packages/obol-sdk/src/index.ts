@@ -22,10 +22,12 @@ export class Client extends Base {
    * @param cluster The new unique cluster
    * @returns Invite Link with config_hash
   */
-  createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
-    const isValid = validateDefinition(newCluster)
-    if (isValid !== null) return Promise.reject(new Error(`An error occurred: ${JSON.stringify(isValid)}`));
-    let clusterConfig: any = {
+  async createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
+
+    const isValid = validateDefinition(newCluster);
+    if (isValid !== null) throw new Error(`An error occurred: ${JSON.stringify(isValid)}`);
+
+    const clusterConfig: any = {
       ...newCluster,
       fork_version: this.fork_version,
       dkg_algorithm: dkg_algorithm,
@@ -36,39 +38,44 @@ export class Client extends Base {
       num_validators: newCluster.validators.length
     }
 
-    return this.signer.getAddress().then((address: string) => {
-      clusterConfig.creator = { address: address };
-      clusterConfig.config_hash = clusterConfigOrDefinitionHash(clusterConfig, true)
-    }).then(() => {
-      return this.signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash })
-    }).then((creatorConfigSignature: string): Promise<ClusterDefintion> => {
-      return this.request(`/dv`, {
+    try {
+      const address = await this.signer.getAddress();
+
+      clusterConfig.creator = { address };
+      clusterConfig.config_hash = clusterConfigOrDefinitionHash(clusterConfig, true);
+
+      const creatorConfigSignature = await this.signer.signTypedData(Domain, CreatorConfigHashSigningTypes, { creator_config_hash: clusterConfig.config_hash });
+
+      const clusterDefinition: ClusterDefintion = await this.request(`/dv`, {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
         headers: {
           Authorization: `Bearer ${creatorConfigSignature}`,
           "fork-version": this.fork_version,
         }
-      })
-    }).then((cluster: ClusterDefintion) => { return cluster?.config_hash })
-      .catch((err: { message: string; }) => {
-        if (err.message == CONFLICT_ERROR_MSG)
-          throw new ConflictError()
-        throw err.message
+
       });
+      return clusterDefinition?.config_hash;
+    } catch (err: any) {
+      if (err?.message == CONFLICT_ERROR_MSG)
+        throw new ConflictError();
+      throw err?.message;
+    }
   }
 
   /**
    * @param configHash The config hash of the requested cluster
    * @returns The matched cluster details (lock) from DB
   */
-  getClusterLock(configHash: string): Promise<ClusterLock> {
-    return this.request(`/lock/configHash/${configHash}`, {
-      method: 'GET',
-    }).then((lock: any) => { return lock })
-      .catch((err: { message: string; }) => {
-        throw err.message
+  async getClusterLock(configHash: string): Promise<ClusterLock> {
+    try {
+      const lock: ClusterLock = await this.request(`/lock/configHash/${configHash}`, {
+        method: 'GET',
       });
+      return lock;
+    } catch (err: any) {
+      throw err.message;
+    }
   }
 
 
@@ -77,10 +84,10 @@ export class Client extends Base {
    * @param configHash The config hash of the cluster to be deleted
    * @returns The deleted cluster data
   */
-  deleteCluster(configHash: string): Promise<ClusterDefintion> {
-    return this.request(`/dv/${configHash}`, {
+  async deleteCluster(configHash: string): Promise<ClusterDefintion> {
+    return (await this.request(`/dv/${configHash}`, {
       method: 'DELETE',
-    });
+    }));
   }
 }
 

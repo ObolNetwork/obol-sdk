@@ -23,45 +23,58 @@ export const postClusterDef = async (clusterWithoutDefHash: ClusterDefintion) =>
         return { address: operator.address };
     });
 
-    await request(app)
-        .post('/dv')
-        .set('Authorization', `Bearer ${postAuth}`)
-        .send({ ...clusterWithoutDefHash, operators: operatorsToPOST })
+    try {
+        await request(app)
+            .post('/dv')
+            .set('Authorization', `Bearer ${postAuth}`)
+            .send({ ...clusterWithoutDefHash, operators: operatorsToPOST })
+    } catch (error) {
+        throw error
+    }
 }
 
 
 
 
-export const updateClusterDef = async (clusterDef: ClusterDefintion ) => {
+export const updateClusterDef = async (clusterDef: ClusterDefintion) => {
     const cluserOperators = clusterDef.operators;
     for (
         let count = 0;
         count < cluserOperators.length;
         count++
     ) {
-        await request(app)
-            .put(`/dv/${clusterDef.config_hash}`)
-            .set('Authorization', `Bearer ${cluserOperators[count].config_signature}`)
+        try {
+            await request(app)
+                .put(`/dv/${clusterDef.config_hash}`)
+                .set('Authorization', `Bearer ${cluserOperators[count].config_signature}`)
 
 
-            .send({
-                address: cluserOperators[count].address,
-                enr: cluserOperators[count].enr,
-                enr_signature:
-                    cluserOperators[count].enr_signature,
-                config_signature:
-                    cluserOperators[count].config_signature,
-                version: clusterDef.version,
-                fork_version:
-                    clusterDef.fork_version,
-            },
-            );
+                .send({
+                    address: cluserOperators[count].address,
+                    enr: cluserOperators[count].enr,
+                    enr_signature:
+                        cluserOperators[count].enr_signature,
+                    config_signature:
+                        cluserOperators[count].config_signature,
+                    version: clusterDef.version,
+                    fork_version:
+                        clusterDef.fork_version,
+                },
+                );
+        } catch (error) {
+            throw error
+        }
     }
 }
 
-export const publishLockFile = async (clusterLock:ClusterLock ) => {
-    const postedLockFile = await request(app)
-        .post('/lock')
-        .send(clusterLock);
+export const publishLockFile = async (clusterLock: ClusterLock) => {
+    try {
+        await request(app)
+            .post('/lock')
+            .send(clusterLock);
+
+    } catch (error) {
+        throw error
+    }
 
 }

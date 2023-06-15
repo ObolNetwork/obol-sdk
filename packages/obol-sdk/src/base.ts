@@ -21,7 +21,7 @@ export abstract class Base {
     this.fork_version = FORK_MAPPING[this.chainId]
   }
 
-  protected request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  protected async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
     const config = {
       ...options,
@@ -31,11 +31,14 @@ export abstract class Base {
       }
     };
 
-    return fetch(url, config).then((response) => {
+    try {
+      const response = await fetch(url, config);
       if (response.ok) {
         return response.json();
       }
       throw new Error(response.statusText);
-    });
+    } catch (e) {
+      throw e
+    }
   }
 }

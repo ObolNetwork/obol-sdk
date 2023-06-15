@@ -6,7 +6,6 @@ export function validateDefinition(data: ClusterPayload): ErrorObject[] | undefi
     const ajv = new Ajv();
     const validate = ajv.compile(definitionSchema);
     const isValid = validate(data);
-    console.log(isValid, "isValid")
     if (!isValid) {
         return validate.errors;
     }
