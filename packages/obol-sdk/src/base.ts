@@ -16,6 +16,9 @@ export abstract class Base {
 
 
   constructor({ baseUrl = 'https://obol-api-dev.gcp.obol.tech', chainId = 5 }: Config) {
+    if (chainId == 1) {
+      throw new Error('Invalid ChainId');
+    }
     this.baseUrl = baseUrl;
     this.chainId = chainId;
     this.fork_version = FORK_MAPPING[this.chainId]

@@ -20,6 +20,15 @@ describe('Cluster Client', () => {
         clusterClientService = new Client({}, mockSigner);
     });
 
+    test('throws invalid ChainId when it is equal to 1', async () => {
+        try {
+            const invalidClientService = new Client({ chainId: 1 }, mockSigner);
+
+        } catch (error: any) {
+            expect(error.message).toBe("Invalid ChainId");
+        }
+    })
+
     test('createClusterDefinition should return config_hash', async () => {
         clusterClientService.createClusterDefinition = jest.fn().mockResolvedValueOnce(mockConfigHash); //Can't mock protected methods in Base class
         try {
