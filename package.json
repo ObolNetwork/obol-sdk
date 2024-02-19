@@ -12,26 +12,18 @@
     "Ethereum"
   ],
   "scripts": {
-    "compile": "tsc -b ./tsconfig.cjs.json ./tsconfig.esm.json",
+    "compile": "tsc -b ./tsconfig.cjs.json ./tsconfig.esm.json ./tsconfig.types.json",
     "build:clean": "rm -rf ./dist",
-    "build": "npm-run-all build:clean compile && node ./esm-package-json",
-    "test": "jest",
+    "build": "npm-run-all build:clean compile",
+    "test": "jest ./test/methods.test.ts",
     "generate-typedoc": "typedoc",
     "ds:release:major": "npm version $(semver $npm_package_version -i major) && npm publish --tag latest",
     "ds:release:minor": "npm version $(semver $npm_package_version -i minor) && npm publish --tag latest",
     "ds:release:patch": "npm version $(semver $npm_package_version -i patch) && npm publish --tag latest"
   },
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/esm/index.js",
-  "types": "index.d.ts",
-  "exports": {
-    "./*": {
-      "require": "./dist/cjs/*.js",
-      "import": "./dist/esm/*.js",
-      "default": "./dist/esm/*.js"
-    },
-    "./package.json": "./package.json"
-  },
+  "main": "./dist/cjs/src/index.js",
+  "module": "./dist/esm/src/index.js",
+  "typings": "./dist/types/src/index.d.ts",
   "author": "Obol Labs (https://obol.tech)",
   "repository": {
     "type": "git",

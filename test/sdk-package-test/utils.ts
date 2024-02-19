@@ -1,7 +1,9 @@
 
 import request from 'supertest';
 import { ethers } from 'ethers';
-import { Client, ClusterDefintion, ClusterLock } from '../../src';
+import { ClusterDefintion, Client, ClusterLock } from '@obolnetwork/obol-sdk';
+
+//import { Client, ClusterDefintion, ClusterLock } from '../../src';
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase || "";
 

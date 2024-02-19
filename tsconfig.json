@@ -6,9 +6,6 @@
     "forceConsistentCasingInFileNames": true /* Ensure that casing is correct in imports. */,
     "strict": false /* Enable all strict type-checking options. */,
     "skipLibCheck": true, /* Skip type checking all .d.ts files. */
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "module": "amd",
-    "moduleResolution": "node",
+    "moduleResolution":"node"
   }
 }

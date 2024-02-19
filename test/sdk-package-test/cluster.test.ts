@@ -2,7 +2,8 @@ import request from 'supertest';
 import dotenv from 'dotenv';
 import { clusterConfig, clusterLockV1X7, enr } from './fixtures';
 import { client, updateClusterDef, publishLockFile, app, postClusterDef, signer } from './utils';
-import { Client, ClusterDefintion } from '../../src';
+//import { ClusterDefintion } from '../../src';
+import { ClusterDefintion, Client } from '@obolnetwork/obol-sdk';
 
 dotenv.config();
 
@@ -14,7 +15,7 @@ describe('Cluster Definition', () => {
   let configHash: string;
   let clusterDefinition: ClusterDefintion;
   let secondConfigHash: string;
-  const clientWithoutAsigner: Client = new Client({ baseUrl: "https://obol-api-dev.gcp.obol.tech", chainId: 17000 });
+  const clientWithoutAsigner = new Client({ baseUrl: "https://obol-api-dev.gcp.obol.tech", chainId: 17000 });
 
   beforeAll(async () => {
     configHash = await client.createClusterDefinition(clusterConfig);
@@ -81,7 +82,7 @@ describe('Poll Cluster Lock', () => {
   const { definition_hash: _, ...rest } =
     clusterLockV1X7.cluster_definition;
   const clusterWithoutDefHash = rest;
-  const clientWithoutAsigner: Client = new Client({ baseUrl: "https://obol-api-dev.gcp.obol.tech", chainId: 17000 });
+  const clientWithoutAsigner = new Client({ baseUrl: "https://obol-api-dev.gcp.obol.tech", chainId: 17000 });
 
   beforeAll(async () => {
 

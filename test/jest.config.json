@@ -1,7 +1,0 @@
-{
-  "preset": "ts-jest/presets/default-esm", 
-  "extensionsToTreatAsEsm": [".ts"],
-  "testRegex": ".test.ts$",
-  "transform": {
-  }
-}

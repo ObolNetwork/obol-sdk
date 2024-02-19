@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand --forceExit"
+    "test:e2e": "jest --config ./jest-e2e.json --runInBand --forceExit"
   },
   "author": "Obol Labs (https://obol.tech)",
   "publishConfig": {
@@ -26,7 +26,7 @@
   },
   "homepage": "https://docs.obol.tech/",
   "dependencies": {
-    "@obolnetwork/obol-sdk": "file:..",
+    "@obolnetwork/obol-sdk": "file:../..",
     "dotenv": "^16.3.1",
     "ethers": "^6.4.0"
   },

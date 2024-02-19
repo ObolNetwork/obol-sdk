@@ -1,4 +1,4 @@
-import { Signer } from 'ethers';
+import { Signer } from "ethers";
 import { v4 as uuidv4 } from "uuid";
 import { Base } from './base.js';
 import { CONFLICT_ERROR_MSG, CreatorConfigHashSigningTypes, Domain, dkg_algorithm, config_version, OperatorConfigHashSigningTypes, EnrSigningTypes } from './constants.js';
