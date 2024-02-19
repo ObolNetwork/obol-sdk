@@ -1,40 +1,10 @@
-# Obol SDK
+![Obol Logo](https://obol.tech/obolnetwork.png)
 
-A typescript package for interacting with the Obol Network
 
-## Packages
-| Package                                                   | Description                                                                                                            |
-|-----------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------|
-| [obol-sdk](/packages/splits-sdk)  | Core package for integrating with 0xSplits                                                                           |
+<h1 align="center">Obol SDK</h1>
 
-## Testing
- Run tests with `yarn test`
+This repo contains the Obol Software Development Kit, for creating Distributed Validators with the help of the [Obol API](https://docs.obol.tech/api). 
 
-## Local development
+## Getting Started
 
-### Build the packages
-From the root directory:
-
-```bash
-yarn install
-yarn lerna-build
-```
-
-### Update versions and prepare for npm publish
-From the root directory:
-
-```bash
-yarn lerna-version
-```
-
-### Publish to npm
-From each package directory that you want to publish:
-
-```bash
-npm publish
-```
-
-If you want to publish an alpha/beta version, apply the appropriate tag:
-```bash
-npm publish --tag beta
-```
+Checkout our [docs](https://docs.obol.tech/docs/advanced/quickstart-sdk), [examples](https://github.com/ObolNetwork/obol-sdk-examples/), and SDK [reference](https://obolnetwork.github.io/obol-packages). Further guides and walkthroughs coming soon. 
