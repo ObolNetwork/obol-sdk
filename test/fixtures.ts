@@ -65,7 +65,7 @@ export const clusterLockV1X7 = {
       },
       builder_registration: {
         message: {
-          fee_recipient: "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+          fee_recipient: "0x86B8145c98e5BD25BA722645b15eD65f024a87EC",
           gas_limit: 30000000,
           timestamp: 1616508000,
           pubkey: "0xb61b17f3b6425eb2636bc6378de0ed8aab918c3346b59d297828e7c74643d51e80edc2b41290c568614cfb80d2b0be34"

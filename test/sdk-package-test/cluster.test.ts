@@ -2,8 +2,8 @@ import request from 'supertest';
 import dotenv from 'dotenv';
 import { clusterConfig, clusterLockV1X7, enr } from './fixtures';
 import { client, updateClusterDef, publishLockFile, app, postClusterDef, signer } from './utils';
-//import { ClusterDefintion } from '../../src';
-import { ClusterDefintion, Client } from '@obolnetwork/obol-sdk';
+import { ClusterDefintion, Client, validateClusterLock } from '@obolnetwork/obol-sdk';
+
 
 dotenv.config();
 
@@ -155,6 +155,11 @@ describe('Poll Cluster Lock', () => {
   it('should fetch the cluster definition for the configHash', async () => {
     const clusterDefinition: ClusterDefintion = await client.getClusterDefinition(clusterLockV1X7.cluster_definition.config_hash);
     expect(clusterDefinition.config_hash).toEqual(clusterLockV1X7.cluster_definition.config_hash);
+  })
+
+  it('should return true on verified the cluster lock', async () => {
+    const isValidLock: boolean = await validateClusterLock(clusterLockV1X7);
+    expect(isValidLock).toEqual(true);
   })
 
   afterAll(async () => {

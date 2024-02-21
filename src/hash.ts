@@ -8,31 +8,33 @@ import {
 } from '@chainsafe/ssz';
 import { UintNumberByteLen } from '@chainsafe/ssz/lib/type/uint.js';
 import { ValueOfFields } from '@chainsafe/ssz/lib/view/container.js';
-import { ClusterDefintion } from './types.js';
+import { ClusterDefintion, ClusterLock } from './types.js';
+import { strToUint8Array } from './utils.js';
+
+//cluster-definition
 
 /**
- * Returns the SSZ cluster config hash or the definition hash of the given cluster definition object
- * @param cluster The cluster whose config hash or definition hash needs to be calculated
- * @param configOnly A flag that indicates which hash to evaluate
- * @returns The config hash or he definition hash in of the corresponding cluster definition
+ * @param cluster The cluster configuration or the cluster definition
+ * @param configOnly a boolean to indicate config hash or definition hash
+ * @returns The config hash or the definition hash in of the corresponding cluster
  */
 export const clusterConfigOrDefinitionHash = (
   cluster: ClusterDefintion,
   configOnly: boolean,
 ): string => {
 
-  const definitionType = clusterDefinitionContainerTypeV1X7(configOnly);
-  const val = hashClusterDefinitionV1X7(cluster, configOnly);
+  const definitionType = clusterDefinitionContainerType(configOnly);
+  const val = hashClusterDefinition(cluster, configOnly);
   return (
     '0x' + Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
   );
 };
 
-export const hashClusterDefinitionV1X7 = (
+export const hashClusterDefinition = (
   cluster: ClusterDefintion,
   configOnly: boolean,
-): ValueOfFields<DefinitionFieldsV1X7> => {
-  const definitionType = clusterDefinitionContainerTypeV1X7(configOnly);
+): ValueOfFields<DefinitionFields> => {
+  const definitionType = clusterDefinitionContainerType(configOnly);
 
   const val = definitionType.defaultValue();
 
@@ -74,19 +76,6 @@ export const hashClusterDefinitionV1X7 = (
   return val;
 };
 
-/**
- * Converts a string to a Uint8Array
- * @param str The string to convert
- * @returns The converted Uint8Array
- */
-export const strToUint8Array = (str: string): Uint8Array => {
-  return new TextEncoder().encode(str);
-};
-
-/**
- * operatorContainerType is an SSZ Composite Container type for Operator.
- * Note that the type has fixed size for address as it is an ETH1 address (20 bytes).
- */
 const operatorAddressWrapperType = new ContainerType({
   address: new ByteVectorType(20),
 });
@@ -120,7 +109,7 @@ const newOperatorContainerType = (configOnly: boolean) => {
   return configOnly ? operatorAddressWrapperType : operatorContainerType;
 };
 
-type DefinitionFieldsV1X7 = {
+type DefinitionFields = {
   uuid: ByteListType;
   name: ByteListType;
   version: ByteListType;
@@ -137,18 +126,17 @@ type DefinitionFieldsV1X7 = {
   config_hash?: ByteVectorType;
 };
 
-export type DefinitionContainerTypeV1X7 =
-  ContainerType<DefinitionFieldsV1X7>;
+export type DefinitionContainerType =
+  ContainerType<DefinitionFields>;
 
 /**
- * Returns the containerized cluster definition
- * @param cluster ClusterDefinition to calculate the type from
- * @returns SSZ Containerized type of cluster input
+ * @param configOnly a boolean to indicate config hash or definition hash
+ * @returns SSZ Containerized type of cluster definition
  */
-export const clusterDefinitionContainerTypeV1X7 = (
+export const clusterDefinitionContainerType = (
   configOnly: boolean,
-): DefinitionContainerTypeV1X7 => {
-  let returnedContainerType: DefinitionFieldsV1X7 = {
+): DefinitionContainerType => {
+  let returnedContainerType: DefinitionFields = {
     uuid: new ByteListType(64),
     name: new ByteListType(256),
     version: new ByteListType(16),
@@ -170,4 +158,93 @@ export const clusterDefinitionContainerTypeV1X7 = (
   }
 
   return new ContainerType(returnedContainerType);
+};
+
+//cluster-lock
+
+/**
+ * @param cluster The published cluster lock 
+ * @returns The lock hash in of the corresponding cluster
+ */
+export const clusterLockHash = (cluster: ClusterLock): string => {
+  const lockType = clusterLockContainerType();
+
+  const val = lockType.defaultValue();
+
+  //Check if we can replace with definition_hash 
+  val.cluster_definition = hashClusterDefinition(
+    cluster.cluster_definition,
+    false,
+  );
+  val.distributed_validators = cluster.distributed_validators.map(dVaidator => {
+    return {
+      distributed_public_key: fromHexString(dVaidator.distributed_public_key),
+      public_shares: dVaidator.public_shares.map(publicShare =>
+        fromHexString(publicShare),
+      ),
+      deposit_data: {
+        pubkey: fromHexString(dVaidator.deposit_data.pubkey as string),
+        withdrawal_credentials: fromHexString(
+          dVaidator.deposit_data.withdrawal_credentials as string
+        ),
+        amount: parseInt(dVaidator.deposit_data.amount as string),
+        signature: fromHexString(dVaidator.deposit_data.signature as string),
+      },
+      builder_registration: {
+        message: {
+          fee_recipient: fromHexString(
+            dVaidator.builder_registration.message.fee_recipient,
+          ),
+          gas_limit: dVaidator.builder_registration.message.gas_limit,
+          timestamp: dVaidator.builder_registration.message.timestamp,
+          pubkey: fromHexString(dVaidator.builder_registration.message.pubkey),
+        },
+        signature: fromHexString(dVaidator.builder_registration.signature),
+      },
+    };
+  });
+
+  return '0x' + Buffer.from(lockType.hashTreeRoot(val).buffer).toString('hex');
+};
+
+const depositDataContainer = new ContainerType({
+  pubkey: new ByteVectorType(48),
+  withdrawal_credentials: new ByteVectorType(32),
+  amount: new UintNumberType(8 as UintNumberByteLen),
+  signature: new ByteVectorType(96),
+});
+
+
+const builderRegistrationMessageContainer = new ContainerType({
+  fee_recipient: new ByteVectorType(20),
+  gas_limit: new UintNumberType(8 as UintNumberByteLen),
+  timestamp: new UintNumberType(8 as UintNumberByteLen),
+  pubkey: new ByteVectorType(48),
+});
+
+const builderRegistrationContainer = new ContainerType({
+  message: builderRegistrationMessageContainer,
+  signature: new ByteVectorType(96),
+});
+
+const dvContainerType = new ContainerType({
+  distributed_public_key: new ByteVectorType(48),
+  public_shares: new ListCompositeType(new ByteVectorType(48), 256),
+  deposit_data: depositDataContainer,
+  builder_registration: builderRegistrationContainer,
+});
+
+type LockContainerType = ContainerType<{
+  cluster_definition: DefinitionContainerType;
+  distributed_validators: ListCompositeType<typeof dvContainerType>;
+}>;
+
+/**
+ * @returns SSZ Containerized type of cluster lock
+ */
+const clusterLockContainerType = (): LockContainerType => {
+  return new ContainerType({
+    cluster_definition: clusterDefinitionContainerType(false),
+    distributed_validators: new ListCompositeType(dvContainerType, 65536),
+  });
 };

@@ -8,6 +8,8 @@ import { clusterConfigOrDefinitionHash } from './hash.js';
 import { validatePayload } from './ajv.js';
 import { definitionSchema, operatorPayloadSchema } from './schema.js';
 export * from "./types.js";
+export * from "./services.js";
+
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
@@ -132,12 +134,11 @@ export class Client extends Base {
    * [getObolClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
    */
   async getClusterDefinition(configHash: string): Promise<ClusterDefintion> {
+      const clusterDefinition: ClusterDefintion = await this.request(`/dv/${configHash}`, {
+        method: 'GET',
+      })
 
-    const clusterDefinition: ClusterDefintion = await this.request(`/dv/${configHash}`, {
-      method: 'GET',
-    })
-
-    return clusterDefinition
+      return clusterDefinition
   }
 
   /** 
@@ -150,11 +151,10 @@ export class Client extends Base {
    */
   async getClusterLock(configHash: string): Promise<ClusterLock> {
 
-    const lock: ClusterLock = await this.request(`/lock/configHash/${configHash}`, {
-      method: 'GET',
-    })
-
-    return lock
+      const lock: ClusterLock = await this.request(`/lock/configHash/${configHash}`, {
+        method: 'GET',
+      })
+      return lock
   }
 }
 

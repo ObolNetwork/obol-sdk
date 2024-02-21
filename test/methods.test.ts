@@ -1,10 +1,10 @@
 import { ethers } from 'ethers';
-import { Client } from '../src/index.js';
+import { Client, validateClusterLock } from '../src/index';
 import { clusterConfig, clusterLockV1X7 } from './fixtures.js';
-// import { SDK_VERSION } from '../src/constants.js';
+// import { SDK_VERSION } from '../src/constants';
 // import fetchMock from 'fetch-mock';
-// import { Base } from '../src/base.js';
-import { validatePayload } from '../src/ajv.js';
+// import { Base } from '../src/base';
+import { validatePayload } from '../src/ajv';
 
 
 describe('Cluster Client', () => {
@@ -83,7 +83,6 @@ describe('Cluster Client', () => {
     //         body: { message: 'user-agent header exist' },
     //         headers: expectedHeaders
     //     });
-        
     //     class TestBase extends Base {
     //         async callProtectedRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
     //             return (await this.request(endpoint, options));
@@ -135,6 +134,11 @@ describe('Cluster Client without a signer', () => {
         const clusterLock = await clientInstance.getClusterLock(clusterLockV1X7.cluster_definition.config_hash);
         expect(clusterLock.lock_hash).toEqual(clusterLockV1X7.lock_hash);
     });
+
+    it('should return true on verified the cluster lock', async () => {
+        const isValidLock: boolean = await validateClusterLock(clusterLockV1X7);
+        expect(isValidLock).toEqual(true);
+    })
 });
 
 
