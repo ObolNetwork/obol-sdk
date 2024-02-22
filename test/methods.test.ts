@@ -1,10 +1,11 @@
 import { ethers } from 'ethers';
 import { Client, validateClusterLock } from '../src/index';
 import { clusterConfig, clusterLockV1X7 } from './fixtures.js';
-// import { SDK_VERSION } from '../src/constants';
-// import fetchMock from 'fetch-mock';
-// import { Base } from '../src/base';
+import { SDK_VERSION } from '../src/constants';
+import { Base } from '../src/base';
 import { validatePayload } from '../src/ajv';
+import { HttpResponse, http } from 'msw';
+import { setupServer } from 'msw/node';
 
 
 describe('Cluster Client', () => {
@@ -33,10 +34,10 @@ describe('Cluster Client', () => {
         expect(config_hash).toEqual(mockConfigHash);
     });
 
-    test('updateClusterDefinition should return cluster definition', async () => {
+    test('acceptClusterDefinition should return cluster definition', async () => {
         clientInstance['request'] = jest.fn().mockReturnValue(Promise.resolve(clusterLockV1X7.cluster_definition));
 
-        const clusterDefinition = await clientInstance.updateClusterDefinition({ enr: clusterLockV1X7.cluster_definition.operators[0].enr, version: clusterLockV1X7.cluster_definition.version }, clusterLockV1X7.cluster_definition.config_hash);
+        const clusterDefinition = await clientInstance.acceptClusterDefinition({ enr: clusterLockV1X7.cluster_definition.operators[0].enr, version: clusterLockV1X7.cluster_definition.version }, clusterLockV1X7.cluster_definition.config_hash);
         expect(clusterDefinition).toEqual(clusterLockV1X7.cluster_definition);
     });
 
@@ -72,29 +73,31 @@ describe('Cluster Client', () => {
 
     });
 
-    // test('request method should set user agent header', async () => {
+    test('request method should set user agent header', async () => {
+        const server = setupServer(
+            http.get('http://testexample.com/test', ({ request }) => {
+                // Check if the request contains specific headers
+                if (request.headers.get('User-Agent') === `Obol-SDK/${SDK_VERSION}`) {
+                    return HttpResponse.json(
+                        { message: 'user-agent header exist' }
+                    )
+                }
+            })
+        );
+        server.listen()
+        class TestBase extends Base {
+            async callProtectedRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
+                return (await this.request(endpoint, options));
+            }
+        }
+        const testBaseInstance = new TestBase({ baseUrl: "http://testExample.com" });
 
-    //     const expectedHeaders = {
-    //         'User-Agent': `Obol-SDK/${SDK_VERSION}`,
-    //     };
-
-    //     fetchMock.mock('http://testexample.com/test', {
-    //         status: 200,
-    //         body: { message: 'user-agent header exist' },
-    //         headers: expectedHeaders
-    //     });
-    //     class TestBase extends Base {
-    //         async callProtectedRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    //             return (await this.request(endpoint, options));
-    //         }
-    //     }
-    //     const testBaseInstance = new TestBase({ baseUrl: "http://testExample.com" });
-
-    //     const result: { message: string } = await testBaseInstance.callProtectedRequest('/test', {
-    //         method: 'GET',
-    //     });
-    //     expect(result?.message).toEqual("user-agent header exist")
-    // })
+        const result: { message: string } = await testBaseInstance.callProtectedRequest('/test', {
+            method: 'GET',
+        });
+        expect(result?.message).toEqual("user-agent header exist")
+        server.close()
+    })
 });
 
 describe('Cluster Client without a signer', () => {
@@ -111,12 +114,12 @@ describe('Cluster Client without a signer', () => {
         }
     });
 
-    test('updateClusterDefinition should throw an error without signer', async () => {
+    test('acceptClusterDefinition should throw an error without signer', async () => {
         try {
-            await clientInstance.updateClusterDefinition({ enr: clusterLockV1X7.cluster_definition.operators[0].enr, version: clusterLockV1X7.cluster_definition.version }, clusterLockV1X7.cluster_definition.config_hash);
+            await clientInstance.acceptClusterDefinition({ enr: clusterLockV1X7.cluster_definition.operators[0].enr, version: clusterLockV1X7.cluster_definition.version }, clusterLockV1X7.cluster_definition.config_hash);
         } catch (err) {
             expect(err).toEqual(
-                "Signer is required in updateClusterDefinition"
+                "Signer is required in acceptClusterDefinition"
             );
         }
     });

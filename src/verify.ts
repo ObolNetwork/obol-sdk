@@ -299,10 +299,6 @@ export const signingRoot = (
     return computeSigningRoot(messageBuffer, domain);
 };
 
-/**
- * @param clusterLock The published cluster lock 
- * @returns a boolean to indicate if the lock distributed validators data and node signatures are valid or not
- */
 const verifyLockData = async (
     clusterLock: ClusterLock,
 ): Promise<boolean> => {
@@ -444,10 +440,6 @@ const verifyLockData = async (
     return true;
 };
 
-/**
- * @param clusterLock The published cluster lock 
- * @returns a boolean to indicate if the lock is valid or not
- */
 export const isValidClusterLock = async (
     clusterLock: ClusterLock,
 ): Promise<boolean> => {

@@ -45,7 +45,7 @@ describe('Cluster Definition', () => {
 
   it('should throw on update a cluster that the operator is not part of', async () => {
     try {
-      await client.updateClusterDefinition({ enr: enr, version: clusterDefinition.version }, configHash);
+      await client.acceptClusterDefinition({ enr: enr, version: clusterDefinition.version }, configHash);
     } catch (err: any) {
       expect(err.message).toEqual('Not Found');
     }
@@ -57,15 +57,15 @@ describe('Cluster Definition', () => {
 
     secondConfigHash = await client.createClusterDefinition(clusterConfig);
 
-    const definitionData: ClusterDefintion = await client.updateClusterDefinition({ enr: enr, version: clusterDefinition.version }, secondConfigHash);
+    const definitionData: ClusterDefintion = await client.acceptClusterDefinition({ enr: enr, version: clusterDefinition.version }, secondConfigHash);
     expect(definitionData.operators[definitionData.operators.length - 1].enr).toEqual(enr);
   })
 
   it('should throw on update a cluster without a signer', async () => {
     try {
-      await clientWithoutAsigner.updateClusterDefinition({ enr: enr, version: clusterDefinition.version }, configHash);
+      await clientWithoutAsigner.acceptClusterDefinition({ enr: enr, version: clusterDefinition.version }, configHash);
     } catch (err: any) {
-      expect(err).toEqual('Signer is required in updateClusterDefinition');
+      expect(err).toEqual('Signer is required in acceptClusterDefinition');
     }
   })
 

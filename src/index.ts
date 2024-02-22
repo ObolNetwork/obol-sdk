@@ -90,11 +90,11 @@ export class Client extends Base {
   * @returns {Promise<ClusterDefintion>} The cluster definition.
   * @throws On unauthorized, duplicate entries, missing keys, not found cluster or invalid data.
   * 
-  * An example of how to use updateClusterDefinition:
-  * [updateClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
+  * An example of how to use acceptClusterDefinition:
+  * [acceptClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
   */
-  async updateClusterDefinition(operatorPayload: OperatorPayload, configHash: string): Promise<ClusterDefintion> {
-    if (!this.signer) throw "Signer is required in updateClusterDefinition"
+  async acceptClusterDefinition(operatorPayload: OperatorPayload, configHash: string): Promise<ClusterDefintion> {
+    if (!this.signer) throw "Signer is required in acceptClusterDefinition"
 
     validatePayload(operatorPayload, operatorPayloadSchema);
 

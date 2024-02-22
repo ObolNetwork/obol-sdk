@@ -1,0 +1,58 @@
+name: Publish Obol-SDK to NPM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - packages/obol-sdk/**
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '16.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: yarn install --frozen-lockfile
+
+      - run: yarn workspace @obolnetwork/obol-sdk run ds:build
+
+      - run: yarn workspace @obolnetwork/obol-sdk run generate-typedoc 
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.PLATFORM_GITHUB_TOKEN }}
+          publish_dir: packages/obol-sdk/docs 
+
+      - name: Set up Git user information
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - run: npm config list
+
+      - run: yarn workspace @obolnetwork/obol-sdk run ds:release:patch
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          HUSKY: 0
+
+      - name: Commit changes
+        run: |
+          git config --global user.name github-actions
+          git config --global user.email github-actions@github.com
+          git add .
+          git commit -m "Bump version [skip ci]"
+          
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.PLATFORM_GITHUB_TOKEN }}
+          force: true
+          branch: ${{ github.ref }}
