@@ -2,6 +2,7 @@ import { ClusterLock } from "./types.js";
 import { isValidClusterLock } from "./verify.js";
 
 /** 
+ * Verifies Cluster Lock's validity.
  * @param lock - cluster lock
  * @returns {Promise<{ result: boolean }> } boolean result to indicate if lock is valid  
  * @throws on missing keys or values.
