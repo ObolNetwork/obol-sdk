@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - packages/obol-sdk/**
 
 jobs:
   build:
@@ -19,17 +17,9 @@ jobs:
           node-version: '16.x'
           registry-url: 'https://registry.npmjs.org'
 
-      - run: yarn install --frozen-lockfile
+      - run: npm ci
 
-      - run: yarn workspace @obolnetwork/obol-sdk run ds:build
-
-      - run: yarn workspace @obolnetwork/obol-sdk run generate-typedoc 
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.PLATFORM_GITHUB_TOKEN }}
-          publish_dir: packages/obol-sdk/docs 
+      - run: npm run build
 
       - name: Set up Git user information
         run: |
@@ -38,7 +28,7 @@ jobs:
 
       - run: npm config list
 
-      - run: yarn workspace @obolnetwork/obol-sdk run ds:release:patch
+      - run: npm run ds:release:patch
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           HUSKY: 0
