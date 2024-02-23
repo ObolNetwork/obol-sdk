@@ -11,38 +11,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          persist-credentials: false # Required to make GitHub forget this checkout for the next step
 
       - uses: actions/setup-node@v3
         with:
-          node-version: '16.x'
+          node-version: '18.x'
           registry-url: 'https://registry.npmjs.org'
 
       - run: npm ci
 
       - run: npm run build
 
-      - name: Set up Git user information
-        run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-
-      - run: npm config list
-
       - run: npm run ds:release:patch
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           HUSKY: 0
-
-      - name: Commit changes
-        run: |
-          git config --global user.name github-actions
-          git config --global user.email github-actions@github.com
-          git add .
-          git commit -m "Bump version [skip ci]"
-          
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.PLATFORM_GITHUB_TOKEN }}
-          force: true
-          branch: ${{ github.ref }}
