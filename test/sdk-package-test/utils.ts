@@ -3,8 +3,6 @@ import request from 'supertest';
 import { ethers } from 'ethers';
 import { ClusterDefintion, Client, ClusterLock } from '@obolnetwork/obol-sdk';
 
-//import { Client, ClusterDefintion, ClusterLock } from '../../src';
-
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase || "";
 
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
