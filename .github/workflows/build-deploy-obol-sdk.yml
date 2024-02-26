@@ -21,9 +21,9 @@ jobs:
           scope: '@obolnetwork'
 
       - name: Configure git
-      run: |
-        git config user.email "platform@obol.tech"
-        git config user.name "Obol Platform"
+        run: |
+          git config user.email "platform@obol.tech"
+          git config user.name "Obol Platform"
 
       - run: yarn install --frozen-lockfile
 
