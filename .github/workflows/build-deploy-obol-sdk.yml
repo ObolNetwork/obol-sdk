@@ -21,11 +21,11 @@ jobs:
 
       - run: yarn install --frozen-lockfile
 
-      - run: yarn workspace @obolnetwork/obol-sdk run ds:build
+      - run: yarn run ds:build
 
-      - run: yarn workspace @obolnetwork/obol-sdk run generate-typedoc 
+      - run: yarn run generate-typedoc 
 
-      - run: yarn workspace @obolnetwork/obol-sdk run ds:release:patch
+      - run: yarn run ds:release:patch
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           HUSKY: 0
