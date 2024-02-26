@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: '18.x'
           registry-url: 'https://registry.npmjs.org'
+          scope: '@obolnetwork'
 
       - run: yarn install --frozen-lockfile
 
