@@ -20,6 +20,11 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           scope: '@obolnetwork'
 
+      - name: Configure git
+      run: |
+        git config user.email "platform@obol.tech"
+        git config user.name "Obol Platform"
+
       - run: yarn install --frozen-lockfile
 
       - run: yarn run build
