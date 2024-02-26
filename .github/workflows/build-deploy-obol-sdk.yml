@@ -19,11 +19,13 @@ jobs:
           node-version: '18.x'
           registry-url: 'https://registry.npmjs.org'
 
-      - run: npm ci
+      - run: yarn install --frozen-lockfile
 
-      - run: npm run build
+      - run: yarn workspace @obolnetwork/obol-sdk run ds:build
 
-      - run: npm run ds:release:patch
+      - run: yarn workspace @obolnetwork/obol-sdk run generate-typedoc 
+
+      - run: yarn workspace @obolnetwork/obol-sdk run ds:release:patch
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           HUSKY: 0
