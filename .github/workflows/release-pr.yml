@@ -37,7 +37,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TYPE_ARG: ${{ fromJSON('{"auto":"", "patch":"patch", "minor":"minor", "major":"major"}')[github.event.inputs.type] }}
-        run: yarn run release -- $TYPE_ARG --ci --verbose --no-git.push --no-git.commit --no-git.tag --no-github
+        run: yarn run release $TYPE_ARG --ci --verbose --no-git.push --no-git.commit --no-git.tag --no-github --no-npm
       
       - name: Show git status
         if: failure()
