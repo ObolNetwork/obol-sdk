@@ -43,7 +43,7 @@ describe('Cluster Definition', () => {
     try {
       await clientWithoutAsigner.createClusterDefinition(clusterConfig)
     } catch (err: any) {
-      expect(err).toEqual('Signer is required in createClusterDefinition')
+      expect(err.message).toEqual('Signer is required in createClusterDefinition')
     }
   })
 
@@ -92,7 +92,7 @@ describe('Cluster Definition', () => {
         configHash,
       )
     } catch (err: any) {
-      expect(err).toEqual('Signer is required in acceptClusterDefinition')
+      expect(err.message).toEqual('Signer is required in acceptClusterDefinition')
     }
   })
 
@@ -192,7 +192,7 @@ describe('Poll Cluster Lock', () => {
     )
   })
 
-  it('should return true on verified the cluster lock', async () => {
+  it('should return true on verified cluster lock', async () => {
     const isValidLock: boolean = await validateClusterLock(clusterLockV1X7)
     expect(isValidLock).toEqual(true)
   })

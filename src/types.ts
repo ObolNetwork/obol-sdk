@@ -90,7 +90,7 @@ export interface ClusterDefintion extends ClusterPayload {
   version: string
 
   /** The cluster dkg algorithm. */
-  DKG_ALGORITHM: string
+  dkg_algorithm: string
 
   /** The cluster fork version. */
   fork_version: string

@@ -44,7 +44,7 @@ export const hashClusterDefinition = (
   val.timestamp = strToUint8Array(cluster.timestamp)
   val.num_validators = cluster.num_validators
   val.threshold = cluster.threshold
-  val.dkg_algorithm = strToUint8Array(cluster.DKG_ALGORITHM)
+  val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm)
   val.fork_version = fromHexString(cluster.fork_version)
   val.operators = cluster.operators.map((operator) => {
     return configOnly

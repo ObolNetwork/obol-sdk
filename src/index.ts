@@ -64,7 +64,7 @@ export class Client extends Base {
     const clusterConfig: Partial<ClusterDefintion> = {
       ...newCluster,
       fork_version: this.fork_version,
-      DKG_ALGORITHM,
+      dkg_algorithm: DKG_ALGORITHM,
       version: CONFIG_VERSION,
       uuid: uuidv4(),
       timestamp: new Date().toISOString(),

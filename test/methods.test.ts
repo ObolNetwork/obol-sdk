@@ -183,7 +183,7 @@ describe('Cluster Client without a signer', () => {
     expect(clusterLock.lock_hash).toEqual(clusterLockV1X7.lock_hash)
   })
 
-  it('should return true on verified the cluster lock', async () => {
+  it('should return true on verified cluster lock', async () => {
     const isValidLock: boolean = await validateClusterLock(clusterLockV1X7)
     expect(isValidLock).toEqual(true)
   })

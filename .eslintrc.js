@@ -21,6 +21,7 @@ module.exports = {
         "ecmaVersion": "latest",
         "sourceType": "module"
     },
+    "ignorePatterns": ["**/dist/**"],
     "rules": {
         "@typescript-eslint/strict-boolean-expressions": 0,
         "@typescript-eslint/comma-dangle": 0,

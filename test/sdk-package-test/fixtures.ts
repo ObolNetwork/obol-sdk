@@ -51,7 +51,7 @@ export const clusterLockV1X7 = {
         withdrawal_address: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
       },
     ],
-    DKG_ALGORITHM: 'default',
+    dkg_algorithm: 'default',
     fork_version: '0x00001020',
     config_hash:
       '0x4c3e37cbdb2fb850150f6e112c4ea03cdc388bff059081182659b3407183b431',
