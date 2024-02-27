@@ -1,4 +1,4 @@
-name: 'Lint, Prettier and Unit Test'
+name: 'Lint, Unit Test and E2E'
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ jobs:
       - name: Run unit tests
         run: yarn run test
       
-      - name: Install SDK-e2e dependancies
+      - name: Install SDK e2e dependancies
         working-directory: ./test/sdk-package-test
         run: yarn install --frozen-lockfile
 
