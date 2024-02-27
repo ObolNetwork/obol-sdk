@@ -47,10 +47,6 @@ jobs:
         id: package-version
         uses: martinbeentjes/npm-get-version-action@main
 
-      - name: Extract release notes
-        id: extract-release-notes
-        uses: ffurrer2/extract-release-notes@v1
-
       - name: Create pull request
         uses: peter-evans/create-pull-request@v4
         id: cpr
