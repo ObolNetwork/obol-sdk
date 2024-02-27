@@ -1,0 +1,31 @@
+name: 'Lint, Prettier and Unit Test'
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install SDK dependancies
+        run: yarn install --frozen-lockfile
+
+      - name: Check eslint rules
+        run: yarn run lint-ci
+
+      - name: Build SDK
+        run: yarn run build
+
+      - name: Run unit tests
+        run: yarn run test
+      
+      - name: Install SDK-e2e dependancies
+        working-directory: ./test/sdk-package-test
+        run: yarn install --frozen-lockfile
+
+      - name: Run e2e tests
+        working-directory: ./test/sdk-package-test
+        run: yarn run test:e2e
