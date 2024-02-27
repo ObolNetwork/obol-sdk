@@ -55,7 +55,6 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@release-it/conventional-changelog": "^8.0.1",
     "@types/elliptic": "^6.4.18",
     "@types/jest": "^28.1.8",
     "@types/node": "^20.2.5",
