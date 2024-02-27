@@ -78,6 +78,24 @@
     "dist",
     "src"
   ],
+  "release-it": {
+    "git": {
+      "commitMessage": "chore(release): v${version}",
+      "push": true,
+      "commit": true,
+      "tag": true,
+      "requireCommits": false,
+      "requireCleanWorkingDir": false
+    },
+    "github": {
+      "release": true,
+      "draft": true
+    },
+    "npm": {
+      "publish": false,
+      "ignoreVersion": false
+    }
+  },
   "jest": {
     "transform": {
       "\\.[jt]sx?$": "ts-jest"
