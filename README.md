@@ -7,4 +7,4 @@ This repo contains the Obol Software Development Kit, for creating Distributed V
 
 ## Getting Started
 
-Checkout our [docs](https://docs.obol.tech/docs/advanced/quickstart-sdk), [examples](https://github.com/ObolNetwork/obol-sdk-examples/), and SDK [reference](https://obolnetwork.github.io/obol-packages). Further guides and walkthroughs coming soon. 
+Checkout our [docs](https://docs.obol.tech/docs/advanced/quickstart-sdk), [examples](https://github.com/ObolNetwork/obol-sdk-examples/), and SDK [reference](https://obolnetwork.github.io/obol-sdk). Further guides and walkthroughs coming soon. 
