@@ -44,21 +44,20 @@ export const postClusterDef = async (
 export const updateClusterDef = async (
   clusterDef: ClusterDefintion,
 ): Promise<void> => {
-  const cluserOperators = clusterDef.operators
-  for (let count = 0; count < cluserOperators.length; count++) {
+  const clusterOperators = clusterDef.operators
+  for (const clusterOperator of clusterOperators) {
     try {
       await request(app)
         .put(`/dv/${clusterDef.config_hash}`)
         .set(
           'Authorization',
-          `Bearer ${cluserOperators[count].config_signature}`,
+          `Bearer ${clusterOperator.config_signature}`,
         )
-
         .send({
-          address: cluserOperators[count].address,
-          enr: cluserOperators[count].enr,
-          enr_signature: cluserOperators[count].enr_signature,
-          config_signature: cluserOperators[count].config_signature,
+          address: clusterOperator.address,
+          enr: clusterOperator.enr,
+          enr_signature: clusterOperator.enr_signature,
+          config_signature: clusterOperator.config_signature,
           version: clusterDef.version,
           fork_version: clusterDef.fork_version,
         })

@@ -40,7 +40,7 @@ export class Client extends Base {
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L29)
    */
   constructor (
-    config: { baseUrl?: string | undefined, chainId?: number | undefined },
+    config: { baseUrl?: string, chainId?: number },
     signer?: Signer,
   ) {
     super(config)
