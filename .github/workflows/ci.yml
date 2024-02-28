@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install SDK dependancies
+      - name: Install SDK dependencies
         run: yarn install --frozen-lockfile
 
       - name: Check eslint rules
@@ -22,7 +22,7 @@ jobs:
       - name: Run unit tests
         run: yarn run test
       
-      - name: Install e2e dependancies
+      - name: Install e2e dependencies
         working-directory: ./test/sdk-package-test
         run: yarn install --frozen-lockfile
 

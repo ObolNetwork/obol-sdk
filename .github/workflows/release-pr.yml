@@ -39,6 +39,10 @@ jobs:
           TYPE_ARG: ${{ fromJSON('{"auto":"", "patch":"patch", "minor":"minor", "major":"major"}')[github.event.inputs.type] }}
         run: yarn run release $TYPE_ARG --ci --verbose --no-git.push --no-git.commit --no-git.tag --no-github
       
+      - name: Update e2e dependencies
+        working-directory: ./test/sdk-package-test
+        run: yarn install
+
       - name: Show git status
         if: failure()
         run: git status && git diff
