@@ -51,6 +51,7 @@
     "ethers": "^6.4.0",
     "nock": "^13.5.3",
     "release-it": "^17.1.1",
+    "semver": "^7.6.0",
     "typescript-eslint": "^7.1.0",
     "uuid": "^9.0.0"
   },

@@ -75,8 +75,11 @@ export interface ClusterPayload {
   /** The cluster nodes operators addresses. */
   operators: ClusterOperator[]
 
-  /** The clusters validators information. */
+  /** The cluster validators information. */
   validators: ClusterValidator[]
+
+  /** The cluster partial deposits in gwei or 32000000000. */
+  deposit_amounts?: string[]
 }
 
 /**
@@ -109,6 +112,9 @@ export interface ClusterDefintion extends ClusterPayload {
 
   /** The number of distributed validators in the cluster. */
   num_validators: number
+
+  /** The cluster partial deposits in gwei or 32000000000. */
+  deposit_amounts?: string[]
 
   /** The hash of the cluster definition. */
   definition_hash?: string
@@ -172,12 +178,16 @@ export interface DistributedValidator {
   /** The public key of the node distributed validator share. */
   public_shares: string[]
 
-  /** The required deposit data for activating the DV. */
-  deposit_data: Partial<DepositData>
+  /** The deposit data for activating the DV. */
+  deposit_data?: Partial<DepositData>
+
+  /** The deposit data with partial amounts or full amount for activating the DV. */
+  partial_deposit_data?: Partial<DepositData>[]
 
   /** pre-generated signed validator builder registration to be sent to builder network. */
   builder_registration: BuilderRegistration
 }
+
 
 /**
  * Cluster Details after DKG is complete

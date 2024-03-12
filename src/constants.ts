@@ -98,7 +98,7 @@ export const signEnrPayload = (
 
 export const DKG_ALGORITHM = 'default'
 
-export const CONFIG_VERSION = 'v1.7.0'
+export const CONFIG_VERSION = 'v1.8.0'
 
 export const SDK_VERSION = pjson.version
 
@@ -116,3 +116,6 @@ export enum DefinitionFlow {
 
 export const DEFAULT_BASE_URL = 'https://api.obol.tech'
 export const DEFAULT_CHAIN_ID = 1
+
+export const ether_to_gwei = 10 ** 9;
+
