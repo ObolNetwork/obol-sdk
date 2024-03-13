@@ -4,17 +4,14 @@ import {
 import elliptic from 'elliptic'
 import {
     init,
-    aggregateSignatures,
-    verifyMultiple,
-    verifyAggregate,
 } from '@chainsafe/bls'
 
-import { FORK_MAPPING, type ClusterDefintion, type ClusterLock, DepositData, BuilderRegistrationMessage, DistributedValidator } from '../types.js'
+import { FORK_MAPPING, type ClusterDefintion, type ClusterLock, type DepositData, type BuilderRegistrationMessage, type DistributedValidator } from '../types.js'
 import * as semver from 'semver'
 import { clusterDefinitionContainerTypeV1X6, hashClusterDefinitionV1X6, hashClusterLockV1X6, verifyDVV1X6 } from './v1.6.0.js'
 import { clusterDefinitionContainerTypeV1X7, hashClusterDefinitionV1X7, hashClusterLockV1X7, verifyDVV1X7 } from './v1.7.0.js'
 import { ethers } from 'ethers'
-import { DOMAIN_APPLICATION_BUILDER, DOMAIN_DEPOSIT, DefinitionFlow, GENESIS_VALIDATOR_ROOT, signCreatorConfigHashPayload, signEnrPayload, signOperatorConfigHashPayload } from '../constants.js'
+import { DOMAIN_APPLICATION_BUILDER, DOMAIN_DEPOSIT, type DefinitionFlow, GENESIS_VALIDATOR_ROOT, signCreatorConfigHashPayload, signEnrPayload, signOperatorConfigHashPayload } from '../constants.js'
 import { SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util'
 import { builderRegistrationMessageType, depositMessageType, forkDataType, signingRootType } from './sszTypes.js'
 import { definitionFlow, hexWithout0x } from '../utils.js'
@@ -51,19 +48,15 @@ export const clusterConfigOrDefinitionHash = (
     }
 
     if (semver.eq(cluster.version, 'v1.8.0')) {
-        definitionType = clusterDefinitionContainerTypeV1X8(configOnly);
-        val = hashClusterDefinitionV1X8(cluster, configOnly);
+        definitionType = clusterDefinitionContainerTypeV1X8(configOnly)
+        val = hashClusterDefinitionV1X8(cluster, configOnly)
         return (
             '0x' + Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
         )
     }
 
-    throw new Error("unsupported version")
-
+    throw new Error('unsupported version')
 }
-
-
-
 
 // cluster-lock hash
 
@@ -74,25 +67,22 @@ export const clusterConfigOrDefinitionHash = (
  */
 export const clusterLockHash = (clusterLock: ClusterLock): string => {
     if (semver.eq(clusterLock.cluster_definition.version, 'v1.6.0')) {
-        return hashClusterLockV1X6(clusterLock);
+        return hashClusterLockV1X6(clusterLock)
     }
 
     if (semver.eq(clusterLock.cluster_definition.version, 'v1.7.0')) {
-        return hashClusterLockV1X7(clusterLock);
+        return hashClusterLockV1X7(clusterLock)
     }
 
     if (semver.eq(clusterLock.cluster_definition.version, 'v1.8.0')) {
-        return hashClusterLockV1X8(clusterLock);
+        return hashClusterLockV1X8(clusterLock)
     }
 
-    //other versions
-    throw new Error('unsupported version');
-};
+    // other versions
+    throw new Error('unsupported version')
+}
 
-
-
-
-//Lock verification 
+// Lock verification
 
 // cluster-definition signatures verificatin
 
@@ -279,32 +269,30 @@ export const verifyDepositData = (
         fromHexString(DOMAIN_DEPOSIT),
         forkVersion,
     )
-    const eth1AddressWithdrawalPrefix = '0x01';
+    const eth1AddressWithdrawalPrefix = '0x01'
     if (
         eth1AddressWithdrawalPrefix +
         '0'.repeat(22) +
         withdrawalAddress.toLowerCase().slice(2) !==
         depositData.withdrawal_credentials
     ) {
-        return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
+        return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) }
     }
 
     if (distributedPublicKey !== depositData.pubkey) {
-        return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
+        return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) }
     }
-
 
     const depositMessageBuffer = computeDepositMsgRoot(
         depositData
-    );
+    )
     const depositDataMessage = signingRoot(
         depositDomain,
         depositMessageBuffer,
-    );
+    )
 
-
-    return { isValidDepositData: true, depositDataMsg: depositDataMessage };
-};
+    return { isValidDepositData: true, depositDataMsg: depositDataMessage }
+}
 
 export const verifyBuilderRegistration = (
     validator: DistributedValidator,
@@ -314,19 +302,19 @@ export const verifyBuilderRegistration = (
 ): { isValidBuilderRegistration: boolean, builderRegistrationMsg: Uint8Array } => {
     const builderDomain = computeDomain(
         fromHexString(DOMAIN_APPLICATION_BUILDER),
-        forkVersion);
+        forkVersion)
 
     if (
         validator.distributed_public_key !==
         validator.builder_registration.message.pubkey
     ) {
-        return { isValidBuilderRegistration: false, builderRegistrationMsg: new Uint8Array(0) };
+        return { isValidBuilderRegistration: false, builderRegistrationMsg: new Uint8Array(0) }
     }
     if (
         feeRecipientAddress.toLowerCase() !==
         validator.builder_registration.message.fee_recipient.toLowerCase()
     ) {
-        return { isValidBuilderRegistration: false, builderRegistrationMsg: new Uint8Array(0) };
+        return { isValidBuilderRegistration: false, builderRegistrationMsg: new Uint8Array(0) }
     }
 
     const builderRegistrationMessageBuffer =
@@ -342,10 +330,9 @@ export const verifyBuilderRegistration = (
     return { isValidBuilderRegistration: true, builderRegistrationMsg: builderRegistrationMessage }
 }
 
-
-export const verifyNodeSignatures = (clusterLock: ClusterLock):boolean => {
-    const ec = new elliptic.ec('secp256k1');
-    const nodeSignatures = clusterLock.node_signatures;
+export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
+    const ec = new elliptic.ec('secp256k1')
+    const nodeSignatures = clusterLock.node_signatures
 
     const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash)
     // node(ENR) signatures
@@ -371,7 +358,6 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock):boolean => {
     return true
 }
 
-
 export const signingRoot = (
     domain: Uint8Array,
     messageBuffer: Buffer,
@@ -379,10 +365,7 @@ export const signingRoot = (
     return computeSigningRoot(messageBuffer, domain)
 }
 
-
-
 const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
-
     await init('herumi')
 
     if (semver.eq(clusterLock.cluster_definition.version, 'v1.6.0')) {
@@ -391,12 +374,10 @@ const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
 
     if (semver.eq(clusterLock.cluster_definition.version, 'v1.7.0')) {
         return verifyDVV1X7(clusterLock)
-
     }
 
     if (semver.eq(clusterLock.cluster_definition.version, 'v1.8.0')) {
         return verifyDVV1X8(clusterLock)
-
     }
     return false
 }
@@ -436,4 +417,3 @@ export const isValidClusterLock = async (
         return false
     }
 }
-

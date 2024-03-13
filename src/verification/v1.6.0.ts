@@ -1,32 +1,32 @@
-import { UintNumberByteLen, UintNumberType } from "@chainsafe/ssz/lib/type/uint";
-import { strToUint8Array } from "../utils"
-import { builderRegistrationContainer, creatorAddressWrapperType, creatorContainerType, depositDataContainer, newCreatorContainerType, newOperatorContainerType, operatorAddressWrapperType, operatorContainerType, validatorsContainerType } from "./sszTypes";
-import { ByteListType, ByteVectorType, ContainerType, ListCompositeType, fromHexString } from "@chainsafe/ssz";
-import { ValueOfFields } from "@chainsafe/ssz/lib/view/container";
-import { ClusterDefintion, ClusterLock, DepositData } from "../types";
-import { verifyDepositData } from "./common";
-import { aggregateSignatures, verifyAggregate, verifyMultiple } from "@chainsafe/bls";
+import { type UintNumberByteLen, UintNumberType } from '@chainsafe/ssz/lib/type/uint'
+import { strToUint8Array } from '../utils'
+import { type creatorAddressWrapperType, type creatorContainerType, newCreatorContainerType, newOperatorContainerType, type operatorAddressWrapperType, type operatorContainerType, validatorsContainerType } from './sszTypes'
+import { ByteListType, ByteVectorType, ContainerType, ListCompositeType, fromHexString } from '@chainsafe/ssz'
+import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container'
+import { type ClusterDefintion, type ClusterLock, type DepositData } from '../types'
+import { verifyDepositData } from './common'
+import { aggregateSignatures, verifyAggregate, verifyMultiple } from '@chainsafe/bls'
 
 // cluster defintion
 type DefinitionFieldsV1X6 = {
-    uuid: ByteListType;
-    name: ByteListType;
-    version: ByteListType;
-    timestamp: ByteListType;
-    num_validators: UintNumberType;
-    threshold: UintNumberType;
-    dkg_algorithm: ByteListType;
-    fork_version: ByteVectorType;
+    uuid: ByteListType
+    name: ByteListType
+    version: ByteListType
+    timestamp: ByteListType
+    num_validators: UintNumberType
+    threshold: UintNumberType
+    dkg_algorithm: ByteListType
+    fork_version: ByteVectorType
     operators: ListCompositeType<
         typeof operatorContainerType | typeof operatorAddressWrapperType
-    >;
-    creator: typeof creatorContainerType | typeof creatorAddressWrapperType;
-    validators: ListCompositeType<typeof validatorsContainerType>;
-    config_hash?: ByteVectorType;
-};
+    >
+    creator: typeof creatorContainerType | typeof creatorAddressWrapperType
+    validators: ListCompositeType<typeof validatorsContainerType>
+    config_hash?: ByteVectorType
+}
 
 type DefinitionContainerTypeV1X6 =
-    ContainerType<DefinitionFieldsV1X6>;
+    ContainerType<DefinitionFieldsV1X6>
 
 /**
  * Returns the containerized cluster definition
@@ -48,35 +48,35 @@ export const clusterDefinitionContainerTypeV1X6 = (
         operators: new ListCompositeType(newOperatorContainerType(configOnly), 256),
         creator: newCreatorContainerType(configOnly),
         validators: new ListCompositeType(validatorsContainerType, 65536),
-    };
+    }
 
     if (!configOnly) {
         returnedContainerType = {
             ...returnedContainerType,
             config_hash: new ByteVectorType(32),
-        };
+        }
     }
 
-    return new ContainerType(returnedContainerType);
-};
+    return new ContainerType(returnedContainerType)
+}
 
 export const hashClusterDefinitionV1X6 = (
     cluster: ClusterDefintion,
     configOnly: boolean,
 ): ValueOfFields<DefinitionFieldsV1X6> => {
-    const definitionType = clusterDefinitionContainerTypeV1X6(configOnly);
+    const definitionType = clusterDefinitionContainerTypeV1X6(configOnly)
 
-    const val = definitionType.defaultValue();
+    const val = definitionType.defaultValue()
 
-    //order should be same as charon https://github.com/ObolNetwork/charon/blob/main/cluster/ssz.go#L276
-    val.uuid = strToUint8Array(cluster.uuid);
-    val.name = strToUint8Array(cluster.name);
-    val.version = strToUint8Array(cluster.version);
-    val.timestamp = strToUint8Array(cluster.timestamp);
-    val.num_validators = cluster.num_validators;
-    val.threshold = cluster.threshold;
-    val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm);
-    val.fork_version = fromHexString(cluster.fork_version);
+    // order should be same as charon https://github.com/ObolNetwork/charon/blob/main/cluster/ssz.go#L276
+    val.uuid = strToUint8Array(cluster.uuid)
+    val.name = strToUint8Array(cluster.name)
+    val.version = strToUint8Array(cluster.version)
+    val.timestamp = strToUint8Array(cluster.timestamp)
+    val.num_validators = cluster.num_validators
+    val.threshold = cluster.threshold
+    val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm)
+    val.fork_version = fromHexString(cluster.fork_version)
     val.operators = cluster.operators.map(operator => {
         return configOnly
             ? { address: fromHexString(operator.address) }
@@ -85,26 +85,26 @@ export const hashClusterDefinitionV1X6 = (
                 enr: strToUint8Array(operator.enr as string),
                 config_signature: fromHexString(operator.config_signature as string),
                 enr_signature: fromHexString(operator.enr_signature as string),
-            };
-    });
+            }
+    })
     val.creator = configOnly
         ? { address: fromHexString(cluster.creator.address) }
         : {
             address: fromHexString(cluster.creator.address),
             config_signature: fromHexString(cluster.creator.config_signature as string),
-        };
+        }
     val.validators = cluster.validators.map((validator) => {
         return {
             fee_recipient_address: fromHexString(validator.fee_recipient_address),
             withdrawal_address: fromHexString(validator.withdrawal_address),
-        };
-    });
+        }
+    })
 
     if (!configOnly) {
-        val.config_hash = fromHexString(cluster.config_hash);
+        val.config_hash = fromHexString(cluster.config_hash)
     }
-    return val;
-};
+    return val
+}
 
 // cluster lock
 
@@ -118,9 +118,9 @@ const dvContainerTypeV1X6 = new ContainerType({
 })
 
 type LockContainerTypeV1X6 = ContainerType<{
-    cluster_definition: DefinitionContainerTypeV1X6;
-    distributed_validators: ListCompositeType<typeof dvContainerTypeV1X6>;
-}>;
+    cluster_definition: DefinitionContainerTypeV1X6
+    distributed_validators: ListCompositeType<typeof dvContainerTypeV1X6>
+}>
 
 /**
  * @returns SSZ Containerized type of cluster lock
@@ -158,27 +158,26 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
             ),
             amount: parseInt(dVaidator.deposit_data?.amount as string),
             signature: fromHexString(dVaidator.deposit_data?.signature as string),
-        };
-    });
+        }
+    })
 
     return '0x' + Buffer.from(lockType.hashTreeRoot(val).buffer).toString('hex')
 }
 
 // DV verification
 export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
-    const validators = clusterLock.distributed_validators;
+    const validators = clusterLock.distributed_validators
     const pubShares = []
     const pubKeys = []
     const builderRegistrationAndDepositDataMessages = []
     const blsSignatures = []
 
-
     for (let i = 0; i < validators.length; i++) {
-        const validator = validators[i];
-        const validatorPublicShares = validator.public_shares;
-        const distributedPublicKey = validator.distributed_public_key;
+        const validator = validators[i]
+        const validatorPublicShares = validator.public_shares
+        const distributedPublicKey = validator.distributed_public_key
 
-        //Needed in signature_aggregate verification
+        // Needed in signature_aggregate verification
         for (const element of validatorPublicShares) {
             pubShares.push(fromHexString(element))
         }
@@ -188,18 +187,17 @@ export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
             validator.deposit_data as Partial<DepositData>,
             clusterLock.cluster_definition.validators[i].withdrawal_address,
             clusterLock.cluster_definition.fork_version
-        );
+        )
 
         if (
             !isValidDepositData
         ) {
-            return false;
+            return false
         }
 
-        pubKeys.push(fromHexString(validator.distributed_public_key));
-        builderRegistrationAndDepositDataMessages.push(depositDataMsg);
-        blsSignatures.push(fromHexString(validator.deposit_data?.signature as string));
-
+        pubKeys.push(fromHexString(validator.distributed_public_key))
+        builderRegistrationAndDepositDataMessages.push(depositDataMsg)
+        blsSignatures.push(fromHexString(validator.deposit_data?.signature as string))
     }
 
     const aggregateBLSSignature = aggregateSignatures(blsSignatures)
@@ -214,7 +212,6 @@ export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
         return false
     }
 
-
     if (
         !verifyAggregate(
             pubShares,
@@ -227,7 +224,3 @@ export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
 
     return true
 }
-
-
-
-

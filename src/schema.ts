@@ -57,10 +57,10 @@ export const definitionSchema = {
       type: 'array',
       items: {
         type: 'string',
-        pattern: "^[0-9]+$",
+        pattern: '^[0-9]+$',
       },
-      validDpositAmounts:true
+      validDpositAmounts: true
     },
   },
-  required: ['name','operators', 'validators'],
+  required: ['name', 'operators', 'validators'],
 }

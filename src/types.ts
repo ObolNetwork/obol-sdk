@@ -182,12 +182,11 @@ export interface DistributedValidator {
   deposit_data?: Partial<DepositData>
 
   /** The deposit data with partial amounts or full amount for activating the DV. */
-  partial_deposit_data?: Partial<DepositData>[]
+  partial_deposit_data?: Array<Partial<DepositData>>
 
   /** pre-generated signed validator builder registration to be sent to builder network. */
   builder_registration: BuilderRegistration
 }
-
 
 /**
  * Cluster Details after DKG is complete

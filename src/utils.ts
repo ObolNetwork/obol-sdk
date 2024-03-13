@@ -1,5 +1,5 @@
-import { DefinitionFlow } from "./constants"
-import { ClusterDefintion } from "./types"
+import { DefinitionFlow } from './constants'
+import { type ClusterDefintion } from './types'
 
 export const hexWithout0x = (hex: string): string => {
   return hex.slice(2, hex.length)

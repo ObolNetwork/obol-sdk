@@ -89,11 +89,9 @@ describe('Cluster Client', () => {
     try {
      await clientInstance.createClusterDefinition({
         ...clusterConfigV1X7,
-        deposit_amounts: ["34000000"]
+        deposit_amounts: ['34000000']
       })
-
     } catch (error: any) {
-      console.log(error.message)
       expect(error.message).toEqual(
         "Schema compilation errors', must pass \"validDpositAmounts\" keyword validation",
       )
@@ -217,8 +215,8 @@ describe('Cluster Client without a signer', () => {
     expect(clusterLock.lock_hash).toEqual(clusterLockV1X8.lock_hash)
   })
 
-  test.each([{ version: "v1.7.0", clusterLock: clusterLockV1X7 }, { version: "v1.8.0", clusterLock: clusterLockV1X8 }])(
-    `$version: 'should return true on verified cluster lock'`,
+  test.each([{ version: 'v1.7.0', clusterLock: clusterLockV1X7 }, { version: 'v1.8.0', clusterLock: clusterLockV1X8 }])(
+    '$version: \'should return true on verified cluster lock\'',
     async ({ clusterLock }) => {
       const isValidLock: boolean = await validateClusterLock(clusterLock)
       expect(isValidLock).toEqual(true)

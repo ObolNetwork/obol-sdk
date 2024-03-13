@@ -1,5 +1,5 @@
-import { ByteListType, ByteVectorType, ContainerType, ListCompositeType, UintNumberType } from "@chainsafe/ssz"
-import { UintNumberByteLen } from "@chainsafe/ssz/lib/type/uint"
+import { ByteListType, ByteVectorType, ContainerType, UintNumberType } from '@chainsafe/ssz'
+import { type UintNumberByteLen } from '@chainsafe/ssz/lib/type/uint'
 
 export const operatorAddressWrapperType = new ContainerType({
     address: new ByteVectorType(20),
