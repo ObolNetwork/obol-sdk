@@ -1,6 +1,6 @@
 import { ethers } from 'ethers'
 import { Client, validateClusterLock } from '../src/index'
-import { clusterConfigV1X8, clusterLockV1X8 } from './fixtures.js'
+import { clusterConfigV1X8, clusterLockV1X7, clusterLockV1X8 } from './fixtures.js'
 import { SDK_VERSION } from '../src/constants'
 import { Base } from '../src/base'
 import { validatePayload } from '../src/ajv'
@@ -183,8 +183,10 @@ describe('Cluster Client without a signer', () => {
     expect(clusterLock.lock_hash).toEqual(clusterLockV1X8.lock_hash)
   })
 
-  it('should return true on verified cluster lock', async () => {
-    const isValidLock: boolean = await validateClusterLock(clusterLockV1X8)
+  test.each([{version:"v1.7.0", clusterLock:clusterLockV1X7},{version:"v1.8.0", clusterLock:clusterLockV1X8}])(
+    `$version: 'should return true on verified cluster lock'`,
+    async ({ clusterLock }) => {
+    const isValidLock: boolean = await validateClusterLock(clusterLock)
     expect(isValidLock).toEqual(true)
   })
 })

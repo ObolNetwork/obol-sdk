@@ -1,6 +1,6 @@
 import request from 'supertest'
 import dotenv from 'dotenv'
-import { clusterConfigV1X8, clusterLockV1X8, enr } from './fixtures'
+import { clusterConfigV1X8, clusterLockV1X7, clusterLockV1X8, enr } from './fixtures'
 import {
   client,
   updateClusterDef,
@@ -192,8 +192,10 @@ describe('Poll Cluster Lock', () => {
     )
   })
 
-  it('should return true on verified cluster lock', async () => {
-    const isValidLock: boolean = await validateClusterLock(clusterLockV1X8)
+  test.each([{version:"v1.7.0", clusterLock:clusterLockV1X7},{version:"v1.8.0", clusterLock:clusterLockV1X8}])(
+    `$version: 'should return true on verified cluster lock'`,
+    async ({ clusterLock }) => {
+    const isValidLock: boolean = await validateClusterLock(clusterLock)
     expect(isValidLock).toEqual(true)
   })
 
