@@ -1,6 +1,6 @@
 import { ethers } from 'ethers'
 import { Client, validateClusterLock } from '../src/index'
-import { clusterConfig, clusterLockV1X7 } from './fixtures.js'
+import { clusterConfigV1X8, clusterLockV1X8 } from './fixtures.js'
 import { SDK_VERSION } from '../src/constants'
 import { Base } from '../src/base'
 import { validatePayload } from '../src/ajv'
@@ -35,23 +35,23 @@ describe('Cluster Client', () => {
       .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }))
 
     const configHash =
-      await clientInstance.createClusterDefinition(clusterConfig)
+      await clientInstance.createClusterDefinition(clusterConfigV1X8)
     expect(configHash).toEqual(mockConfigHash)
   })
 
   test('acceptClusterDefinition should return cluster definition', async () => {
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve(clusterLockV1X7.cluster_definition))
+      .mockReturnValue(Promise.resolve(clusterLockV1X8.cluster_definition))
 
     const clusterDefinition = await clientInstance.acceptClusterDefinition(
       {
-        enr: clusterLockV1X7.cluster_definition.operators[0].enr,
-        version: clusterLockV1X7.cluster_definition.version,
+        enr: clusterLockV1X8.cluster_definition.operators[0].enr,
+        version: clusterLockV1X8.cluster_definition.version,
       },
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
-    expect(clusterDefinition).toEqual(clusterLockV1X7.cluster_definition)
+    expect(clusterDefinition).toEqual(clusterLockV1X8.cluster_definition)
   })
 
   test('createClusterDefinition should throw an error on invalid operators', async () => {
@@ -60,7 +60,7 @@ describe('Cluster Client', () => {
       .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }))
     try {
       await clientInstance.createClusterDefinition({
-        ...clusterConfig,
+        ...clusterConfigV1X8,
         operators: [],
       })
     } catch (error: any) {
@@ -72,7 +72,7 @@ describe('Cluster Client', () => {
 
   test('validatePayload should throw an error on empty schema', async () => {
     try {
-      validatePayload({ ...clusterConfig, operators: [] }, '')
+      validatePayload({ ...clusterConfigV1X8, operators: [] }, '')
     } catch (error: any) {
       expect(error.message).toEqual('schema must be object or boolean')
     }
@@ -81,25 +81,25 @@ describe('Cluster Client', () => {
   test('getClusterdefinition should return cluster definition if config hash exist', async () => {
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve(clusterLockV1X7.cluster_definition))
+      .mockReturnValue(Promise.resolve(clusterLockV1X8.cluster_definition))
 
     const clusterDefinition = await clientInstance.getClusterDefinition(
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
     expect(clusterDefinition.config_hash).toEqual(
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
   })
 
   test('getClusterLock should return lockFile if exist', async () => {
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve(clusterLockV1X7))
+      .mockReturnValue(Promise.resolve(clusterLockV1X8))
 
     const clusterLock = await clientInstance.getClusterLock(
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
-    expect(clusterLock.lock_hash).toEqual(clusterLockV1X7.lock_hash)
+    expect(clusterLock.lock_hash).toEqual(clusterLockV1X8.lock_hash)
   })
 
   test('request method should set user agent header', async () => {
@@ -139,7 +139,7 @@ describe('Cluster Client without a signer', () => {
 
   test('createClusterDefinition should throw an error without signer', async () => {
     try {
-      await clientInstance.createClusterDefinition(clusterConfig)
+      await clientInstance.createClusterDefinition(clusterConfigV1X8)
     } catch (err: any) {
       expect(err.message).toEqual('Signer is required in createClusterDefinition')
     }
@@ -149,10 +149,10 @@ describe('Cluster Client without a signer', () => {
     try {
       await clientInstance.acceptClusterDefinition(
         {
-          enr: clusterLockV1X7.cluster_definition.operators[0].enr,
-          version: clusterLockV1X7.cluster_definition.version,
+          enr: clusterLockV1X8.cluster_definition.operators[0].enr,
+          version: clusterLockV1X8.cluster_definition.version,
         },
-        clusterLockV1X7.cluster_definition.config_hash,
+        clusterLockV1X8.cluster_definition.config_hash,
       )
     } catch (err: any) {
       expect(err.message).toEqual('Signer is required in acceptClusterDefinition')
@@ -162,29 +162,29 @@ describe('Cluster Client without a signer', () => {
   test('getClusterdefinition should return cluster definition if config hash exist', async () => {
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve(clusterLockV1X7.cluster_definition))
+      .mockReturnValue(Promise.resolve(clusterLockV1X8.cluster_definition))
 
     const clusterDefinition = await clientInstance.getClusterDefinition(
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
     expect(clusterDefinition.config_hash).toEqual(
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
   })
 
   test('getClusterLock should return lockFile if exist', async () => {
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve(clusterLockV1X7))
+      .mockReturnValue(Promise.resolve(clusterLockV1X8))
 
     const clusterLock = await clientInstance.getClusterLock(
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
-    expect(clusterLock.lock_hash).toEqual(clusterLockV1X7.lock_hash)
+    expect(clusterLock.lock_hash).toEqual(clusterLockV1X8.lock_hash)
   })
 
   it('should return true on verified cluster lock', async () => {
-    const isValidLock: boolean = await validateClusterLock(clusterLockV1X7)
+    const isValidLock: boolean = await validateClusterLock(clusterLockV1X8)
     expect(isValidLock).toEqual(true)
   })
 })

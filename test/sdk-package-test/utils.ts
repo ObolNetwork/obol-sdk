@@ -15,7 +15,7 @@ const wallet = new ethers.Wallet(privateKey)
 export const signer = wallet.connect(null)
 
 export const client: Client = new Client(
-  { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+  { baseUrl: 'https://b90b-2a01-9700-155f-0-5d1-55a8-b411-54d7.ngrok-free.app', chainId: 17000 },
   signer,
 )
 
