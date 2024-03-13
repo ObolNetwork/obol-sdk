@@ -187,17 +187,21 @@ describe('Poll Cluster Lock', () => {
       await client.getClusterDefinition(
         clusterLockV1X8.cluster_definition.config_hash,
       )
+
+    expect(clusterDefinition.deposit_amounts?.length).toEqual(
+      clusterLockV1X8.cluster_definition.deposit_amounts.length,
+    )
     expect(clusterDefinition.config_hash).toEqual(
       clusterLockV1X8.cluster_definition.config_hash,
     )
   })
 
-  test.each([{version:"v1.7.0", clusterLock:clusterLockV1X7},{version:"v1.8.0", clusterLock:clusterLockV1X8}])(
+  test.each([{ version: "v1.7.0", clusterLock: clusterLockV1X7 }, { version: "v1.8.0", clusterLock: clusterLockV1X8 }])(
     `$version: 'should return true on verified cluster lock'`,
     async ({ clusterLock }) => {
-    const isValidLock: boolean = await validateClusterLock(clusterLock)
-    expect(isValidLock).toEqual(true)
-  })
+      const isValidLock: boolean = await validateClusterLock(clusterLock)
+      expect(isValidLock).toEqual(true)
+    })
 
   afterAll(async () => {
     const configHash = clusterLockV1X8.cluster_definition.config_hash
