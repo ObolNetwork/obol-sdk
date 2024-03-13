@@ -12,7 +12,7 @@ import {
 import { FORK_MAPPING, type ClusterDefintion, type ClusterLock, DepositData, BuilderRegistrationMessage, DistributedValidator } from '../types.js'
 import * as semver from 'semver'
 import { clusterDefinitionContainerTypeV1X6, hashClusterDefinitionV1X6, hashClusterLockV1X6 } from './v1.6.0.js'
-import { clusterDefinitionContainerTypeV1X7, hashClusterLockV1X7 } from './v1.7.0.js'
+import { clusterDefinitionContainerTypeV1X7, hashClusterDefinitionV1X7, hashClusterLockV1X7 } from './v1.7.0.js'
 import { ethers } from 'ethers'
 import { DOMAIN_APPLICATION_BUILDER, DOMAIN_DEPOSIT, DefinitionFlow, GENESIS_VALIDATOR_ROOT, signCreatorConfigHashPayload, signEnrPayload, signOperatorConfigHashPayload } from '../constants.js'
 import { SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util'
@@ -316,10 +316,6 @@ export const signingRoot = (
     messageBuffer: Buffer,
 ): Uint8Array => {
     return computeSigningRoot(messageBuffer, domain)
-}
-
-function hashClusterDefinitionV1X7(cluster: ClusterDefintion, configOnly: boolean): any {
-    throw new Error('Function not implemented.')
 }
 
 

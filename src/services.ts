@@ -1,5 +1,5 @@
 import { type ClusterLock } from './types.js'
-import { isValidClusterLock } from './verification/verify.js'
+import { isValidClusterLock } from './verification/common.js'
 
 /**
  * Verifies Cluster Lock's validity.
