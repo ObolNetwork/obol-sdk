@@ -53,6 +53,14 @@ export const definitionSchema = {
         required: ['fee_recipient_address', 'withdrawal_address'],
       },
     },
+    deposit_amounts: {
+      type: 'array',
+      items: {
+        type: 'string',
+        pattern: "^[0-9]+$",
+      },
+      validDpositAmounts:true
+    },
   },
-  required: ['name', 'operators', 'validators'],
+  required: ['name','operators', 'validators'],
 }

@@ -1,6 +1,6 @@
 import { ethers } from 'ethers'
 import { Client, validateClusterLock } from '../src/index'
-import { clusterConfigV1X8, clusterLockV1X7, clusterLockV1X8 } from './fixtures.js'
+import { clusterConfigV1X7, clusterConfigV1X8, clusterLockV1X7, clusterLockV1X8 } from './fixtures.js'
 import { SDK_VERSION } from '../src/constants'
 import { Base } from '../src/base'
 import { validatePayload } from '../src/ajv'
@@ -66,6 +66,36 @@ describe('Cluster Client', () => {
     } catch (error: any) {
       expect(error.message).toEqual(
         "Schema compilation errors', must NOT have fewer than 4 items",
+      )
+    }
+  })
+
+  test('createClusterDefinition should accept a configuration without deposit_amounts ', async () => {
+    clientInstance['request'] = jest
+      .fn()
+      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }))
+
+    const configHash = await clientInstance.createClusterDefinition({
+      ...clusterConfigV1X7,
+    })
+
+    expect(configHash).toEqual(mockConfigHash)
+  })
+
+  test('createClusterDefinition should throw on not valid deposit_amounts ', async () => {
+    clientInstance['request'] = jest
+      .fn()
+      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }))
+    try {
+     await clientInstance.createClusterDefinition({
+        ...clusterConfigV1X7,
+        deposit_amounts: ["34000000"]
+      })
+
+    } catch (error: any) {
+      console.log(error.message)
+      expect(error.message).toEqual(
+        "Schema compilation errors', must pass \"validDpositAmounts\" keyword validation",
       )
     }
   })

@@ -320,9 +320,10 @@ export const signingRoot = (
 
 
 const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
-    const ec = new elliptic.ec('secp256k1')
-    const validators = clusterLock.distributed_validators
-    const nodeSignatures = clusterLock.node_signatures
+    const ec = new elliptic.ec('secp256k1');
+    const validators = clusterLock.distributed_validators;
+    const nodeSignatures = clusterLock.node_signatures;
+
     const depositDomain = computeDomain(
         fromHexString(DOMAIN_DEPOSIT),
         clusterLock.cluster_definition.fork_version,
@@ -344,7 +345,7 @@ const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
         const validatorPublicShares = validator.public_shares;
         const distributedPublicKey = validator.distributed_public_key;
 
-
+        //Needed in signature_aggregate verification
         for (const element of validatorPublicShares) {
             pubShares.push(fromHexString(element))
         }
