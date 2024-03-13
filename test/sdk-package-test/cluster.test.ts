@@ -27,7 +27,7 @@ describe('Cluster Definition', () => {
   let clusterDefinition: ClusterDefintion
   let secondConfigHash: string
   const clientWithoutAsigner = new Client({
-    baseUrl: 'https://b90b-2a01-9700-155f-0-5d1-55a8-b411-54d7.ngrok-free.app',
+    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 17000,
   })
 
@@ -111,7 +111,7 @@ describe('Poll Cluster Lock', () => {
   const { definition_hash: _, ...rest } = clusterLockV1X8.cluster_definition
   const clusterWithoutDefHash = rest
   const clientWithoutAsigner = new Client({
-    baseUrl: 'https://b90b-2a01-9700-155f-0-5d1-55a8-b411-54d7.ngrok-free.app',
+    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 17000,
   })
 

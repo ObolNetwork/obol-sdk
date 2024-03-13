@@ -3,7 +3,9 @@ import { strToUint8Array } from "../utils"
 import { builderRegistrationContainer, creatorAddressWrapperType, creatorContainerType, depositDataContainer, newCreatorContainerType, newOperatorContainerType, operatorAddressWrapperType, operatorContainerType, validatorsContainerType } from "./sszTypes";
 import { ByteListType, ByteVectorType, ContainerType, ListCompositeType, fromHexString } from "@chainsafe/ssz";
 import { ValueOfFields } from "@chainsafe/ssz/lib/view/container";
-import { ClusterDefintion, ClusterLock } from "../types";
+import { ClusterDefintion, ClusterLock, DepositData } from "../types";
+import { verifyDepositData } from "./common";
+import { aggregateSignatures, verifyAggregate, verifyMultiple } from "@chainsafe/bls";
 
 // cluster defintion
 type DefinitionFieldsV1X6 = {
@@ -162,7 +164,69 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
     return '0x' + Buffer.from(lockType.hashTreeRoot(val).buffer).toString('hex')
 }
 
+// DV verification
+export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
+    const validators = clusterLock.distributed_validators;
+    const pubShares = []
+    const pubKeys = []
+    const builderRegistrationAndDepositDataMessages = []
+    const blsSignatures = []
 
+
+    for (let i = 0; i < validators.length; i++) {
+        const validator = validators[i];
+        const validatorPublicShares = validator.public_shares;
+        const distributedPublicKey = validator.distributed_public_key;
+
+        //Needed in signature_aggregate verification
+        for (const element of validatorPublicShares) {
+            pubShares.push(fromHexString(element))
+        }
+
+        const { isValidDepositData, depositDataMsg } = verifyDepositData(
+            distributedPublicKey,
+            validator.deposit_data as Partial<DepositData>,
+            clusterLock.cluster_definition.validators[i].withdrawal_address,
+            clusterLock.cluster_definition.fork_version
+        );
+
+        if (
+            !isValidDepositData
+        ) {
+            return false;
+        }
+
+        pubKeys.push(fromHexString(validator.distributed_public_key));
+        builderRegistrationAndDepositDataMessages.push(depositDataMsg);
+        blsSignatures.push(fromHexString(validator.deposit_data?.signature as string));
+
+    }
+
+    const aggregateBLSSignature = aggregateSignatures(blsSignatures)
+
+    if (
+        !verifyMultiple(
+            pubKeys,
+            builderRegistrationAndDepositDataMessages,
+            aggregateBLSSignature,
+        )
+    ) {
+        return false
+    }
+
+
+    if (
+        !verifyAggregate(
+            pubShares,
+            fromHexString(clusterLock.lock_hash),
+            fromHexString(clusterLock.signature_aggregate),
+        )
+    ) {
+        return false
+    }
+
+    return true
+}
 
 
 

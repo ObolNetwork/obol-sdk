@@ -11,15 +11,15 @@ import {
 
 import { FORK_MAPPING, type ClusterDefintion, type ClusterLock, DepositData, BuilderRegistrationMessage, DistributedValidator } from '../types.js'
 import * as semver from 'semver'
-import { clusterDefinitionContainerTypeV1X6, hashClusterDefinitionV1X6, hashClusterLockV1X6 } from './v1.6.0.js'
-import { clusterDefinitionContainerTypeV1X7, hashClusterDefinitionV1X7, hashClusterLockV1X7 } from './v1.7.0.js'
+import { clusterDefinitionContainerTypeV1X6, hashClusterDefinitionV1X6, hashClusterLockV1X6, verifyDVV1X6 } from './v1.6.0.js'
+import { clusterDefinitionContainerTypeV1X7, hashClusterDefinitionV1X7, hashClusterLockV1X7, verifyDVV1X7 } from './v1.7.0.js'
 import { ethers } from 'ethers'
 import { DOMAIN_APPLICATION_BUILDER, DOMAIN_DEPOSIT, DefinitionFlow, GENESIS_VALIDATOR_ROOT, signCreatorConfigHashPayload, signEnrPayload, signOperatorConfigHashPayload } from '../constants.js'
 import { SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util'
 import { builderRegistrationMessageType, depositMessageType, forkDataType, signingRootType } from './sszTypes.js'
 import { definitionFlow, hexWithout0x } from '../utils.js'
 import { ENR } from '@chainsafe/discv5'
-import { clusterDefinitionContainerTypeV1X8, hashClusterDefinitionV1X8, hashClusterLockV1X8 } from './v1.8.0.js'
+import { clusterDefinitionContainerTypeV1X8, hashClusterDefinitionV1X8, hashClusterLockV1X8, verifyDVV1X8 } from './v1.8.0.js'
 
 // cluster-definition hash
 
@@ -269,11 +269,16 @@ const computeDomain = (
  * @param {string} withdrawalAddress - withdrawal address in definition file.
  * @returns {boolean} - return if deposit data is valid.
  */
-const verifyDepositData = (
+export const verifyDepositData = (
     distributedPublicKey: string,
     depositData: Partial<DepositData>,
     withdrawalAddress: string,
-): boolean => {
+    forkVersion: string,
+): { isValidDepositData: boolean, depositDataMsg: Uint8Array } => {
+    const depositDomain = computeDomain(
+        fromHexString(DOMAIN_DEPOSIT),
+        forkVersion,
+    )
     const eth1AddressWithdrawalPrefix = '0x01';
     if (
         eth1AddressWithdrawalPrefix +
@@ -281,35 +286,91 @@ const verifyDepositData = (
         withdrawalAddress.toLowerCase().slice(2) !==
         depositData.withdrawal_credentials
     ) {
-        return false;
+        return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
     }
 
     if (distributedPublicKey !== depositData.pubkey) {
-        return false;
+        return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
     }
 
-    return true;
+
+    const depositMessageBuffer = computeDepositMsgRoot(
+        depositData
+    );
+    const depositDataMessage = signingRoot(
+        depositDomain,
+        depositMessageBuffer,
+    );
+
+
+    return { isValidDepositData: true, depositDataMsg: depositDataMessage };
 };
 
-const verifyBuilderRegistration = (
+export const verifyBuilderRegistration = (
     validator: DistributedValidator,
     feeRecipientAddress: string,
-): boolean => {
+    forkVersion: string,
+
+): { isValidBuilderRegistration: boolean, builderRegistrationMsg: Uint8Array } => {
+    const builderDomain = computeDomain(
+        fromHexString(DOMAIN_APPLICATION_BUILDER),
+        forkVersion);
+
     if (
         validator.distributed_public_key !==
         validator.builder_registration.message.pubkey
     ) {
-        return false
+        return { isValidBuilderRegistration: false, builderRegistrationMsg: new Uint8Array(0) };
     }
     if (
         feeRecipientAddress.toLowerCase() !==
         validator.builder_registration.message.fee_recipient.toLowerCase()
     ) {
-        return false
+        return { isValidBuilderRegistration: false, builderRegistrationMsg: new Uint8Array(0) };
+    }
+
+    const builderRegistrationMessageBuffer =
+        computebuilderRegistrationMsgRoot(
+            validator.builder_registration.message,
+        )
+
+    const builderRegistrationMessage = signingRoot(
+        builderDomain,
+        builderRegistrationMessageBuffer,
+    )
+
+    return { isValidBuilderRegistration: true, builderRegistrationMsg: builderRegistrationMessage }
+}
+
+
+export const verifyNodeSignatures = (clusterLock: ClusterLock):boolean => {
+    const ec = new elliptic.ec('secp256k1');
+    const nodeSignatures = clusterLock.node_signatures;
+
+    const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash)
+    // node(ENR) signatures
+    for (let i = 0; i < nodeSignatures.length; i++) {
+        const pubkey = ENR.decodeTxt(
+            clusterLock.cluster_definition.operators[i].enr as string,
+        ).publicKey.toString('hex')
+
+        const ENRsignature = {
+            r: nodeSignatures[i].slice(2, 66),
+            s: nodeSignatures[i].slice(66, 130),
+        }
+
+        const nodeSignatureVerification = ec
+            .keyFromPublic(pubkey, 'hex')
+            .verify(lockHashWithout0x, ENRsignature)
+
+        if (!nodeSignatureVerification) {
+            return false
+        }
     }
 
     return true
 }
+
 
 export const signingRoot = (
     domain: Uint8Array,
@@ -319,176 +380,25 @@ export const signingRoot = (
 }
 
 
+
 const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
-    const ec = new elliptic.ec('secp256k1');
-    const validators = clusterLock.distributed_validators;
-    const nodeSignatures = clusterLock.node_signatures;
-
-    const depositDomain = computeDomain(
-        fromHexString(DOMAIN_DEPOSIT),
-        clusterLock.cluster_definition.fork_version,
-    )
-    const builderDomain = computeDomain(
-        fromHexString(DOMAIN_APPLICATION_BUILDER),
-        clusterLock.cluster_definition.fork_version,
-    )
-
-    const pubShares = []
-    const pubKeys = []
-    const builderRegistrationAndDepositDataMessages = []
-    const blsSignatures = []
 
     await init('herumi')
 
-    for (let i = 0; i < validators.length; i++) {
-        const validator = validators[i];
-        const validatorPublicShares = validator.public_shares;
-        const distributedPublicKey = validator.distributed_public_key;
-
-        //Needed in signature_aggregate verification
-        for (const element of validatorPublicShares) {
-            pubShares.push(fromHexString(element))
-        }
-
-        // Deposit data signature
-        if (
-            semver.gte(clusterLock.cluster_definition.version, 'v1.6.0') &&
-            validator.deposit_data
-        ) {
-            if (
-                !verifyDepositData(
-                    distributedPublicKey,
-                    validator.deposit_data,
-                    clusterLock.cluster_definition.validators[i].withdrawal_address,
-                )
-            ) {
-                return false;
-            }
-
-            const depositMessageBuffer = computeDepositMsgRoot(
-                validator.deposit_data,
-            );
-            const depositDataMessage = signingRoot(
-                depositDomain,
-                depositMessageBuffer,
-            );
-
-            pubKeys.push(fromHexString(validator.distributed_public_key));
-            builderRegistrationAndDepositDataMessages.push(depositDataMessage);
-            blsSignatures.push(fromHexString(validator.deposit_data.signature as string));
-        }
-
-        // Builder registration signature
-        if (semver.gte(clusterLock.cluster_definition.version, 'v1.7.0')) {
-            if (
-                !verifyBuilderRegistration(
-                    validator,
-                    clusterLock.cluster_definition.validators[i].fee_recipient_address,
-                )
-            ) {
-                return false
-            }
-
-            const builderRegistrationMessageBuffer =
-                computebuilderRegistrationMsgRoot(
-                    validator.builder_registration.message,
-                )
-
-            const builderRegistrationMessage = signingRoot(
-                builderDomain,
-                builderRegistrationMessageBuffer,
-            )
-
-            pubKeys.push(fromHexString(validator.distributed_public_key))
-            builderRegistrationAndDepositDataMessages.push(builderRegistrationMessage)
-            blsSignatures.push(
-                fromHexString(validator.builder_registration.signature),
-            )
-        }
-
-        if (
-            semver.gte(clusterLock.cluster_definition.version, 'v1.8.0') &&
-            validator.partial_deposit_data
-        ) {
-            for (let j = 0; j < validator.partial_deposit_data.length; j++) {
-                const depositData = validator.partial_deposit_data[i];
-                if (
-                    !verifyDepositData(
-                        distributedPublicKey,
-                        depositData,
-                        clusterLock.cluster_definition.validators[i].withdrawal_address,
-                    )
-                ) {
-                    return false;
-                }
-
-                const depositMessageBuffer = computeDepositMsgRoot(depositData);
-                const depositDataMessage = signingRoot(
-                    depositDomain,
-                    depositMessageBuffer,
-                );
-
-                pubKeys.push(fromHexString(validator.distributed_public_key));
-                builderRegistrationAndDepositDataMessages.push(depositDataMessage);
-                blsSignatures.push(fromHexString(depositData.signature as string));
-            }
-        }
+    if (semver.eq(clusterLock.cluster_definition.version, 'v1.6.0')) {
+        return verifyDVV1X6(clusterLock)
     }
 
-    if (
-        blsSignatures.length > 0 &&
-        pubKeys.length > 0 &&
-        builderRegistrationAndDepositDataMessages.length > 0
-    ) {
-        // verify all deposit data and builder registration bls signatures
-        const aggregateBLSSignature = aggregateSignatures(blsSignatures)
+    if (semver.eq(clusterLock.cluster_definition.version, 'v1.7.0')) {
+        return verifyDVV1X7(clusterLock)
 
-        if (
-            !verifyMultiple(
-                pubKeys,
-                builderRegistrationAndDepositDataMessages,
-                aggregateBLSSignature,
-            )
-        ) {
-            return false
-        }
     }
 
-    if (semver.gte(clusterLock.cluster_definition.version, 'v1.7.0')) {
-        const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash)
-        // node(ENR) signatures
-        for (let i = 0; i < nodeSignatures.length; i++) {
-            const pubkey = ENR.decodeTxt(
-                clusterLock.cluster_definition.operators[i].enr as string,
-            ).publicKey.toString('hex')
+    if (semver.eq(clusterLock.cluster_definition.version, 'v1.8.0')) {
+        return verifyDVV1X8(clusterLock)
 
-            const ENRsignature = {
-                r: nodeSignatures[i].slice(2, 66),
-                s: nodeSignatures[i].slice(66, 130),
-            }
-
-            const nodeSignatureVerification = ec
-                .keyFromPublic(pubkey, 'hex')
-                .verify(lockHashWithout0x, ENRsignature)
-
-            if (!nodeSignatureVerification) {
-                return false
-            }
-        }
     }
-
-    // signature aggregate
-    if (
-        !verifyAggregate(
-            pubShares,
-            fromHexString(clusterLock.lock_hash),
-            fromHexString(clusterLock.signature_aggregate),
-        )
-    ) {
-        return false
-    }
-
-    return true
+    return false
 }
 
 export const isValidClusterLock = async (
