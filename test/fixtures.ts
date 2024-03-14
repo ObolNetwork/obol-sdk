@@ -1,9 +1,7 @@
-
 export const enr =
   'enr:-HW4QLlrtMjFLGkFT1bwdGbvZQlH8hLi0M2g44JAxEYP3BZmYpcsy9Q56HPPD87fMucjvLv4-obEFacpsg0ehRilbHeAgmlkgnY0iXNlY3AyNTZrMaEDRaa5o2aSgqyFq_ERZcQTztrOij1mFtXX1bJuVI6ieak'
 
-
-//v1.6.0
+// v1.6.0
 export const clusterLockV1X6 = {
   cluster_definition: {
     name: 'test v.1.6',
@@ -90,7 +88,6 @@ export const clusterLockV1X6 = {
   lock_hash:
     '0x6d2b38d098143c8f0bc5076f4e9b6081cbba040a5aea6649e6223e7a4131241b',
 }
-
 
 // v1.7.0
 

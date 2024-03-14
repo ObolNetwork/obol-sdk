@@ -31,7 +31,6 @@ export const clusterConfigOrDefinitionHash = (
 ): string => {
     let definitionType, val
 
-
     if (semver.eq(cluster.version, 'v1.6.0')) {
         definitionType = clusterDefinitionContainerTypeV1X6(configOnly)
         val = hashClusterDefinitionV1X6(cluster, configOnly)
@@ -400,14 +399,12 @@ export const isValidClusterLock = async (
             return false
         }
 
-
         if (
             clusterConfigOrDefinitionHash(clusterLock.cluster_definition, false) !==
             clusterLock.cluster_definition.definition_hash
         ) {
             return false
         }
-
 
         if (clusterLockHash(clusterLock) !== clusterLock.lock_hash) {
             return false

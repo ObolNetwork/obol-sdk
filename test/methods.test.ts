@@ -1,6 +1,6 @@
 import { ethers } from 'ethers'
 import { Client, validateClusterLock } from '../src/index'
-import { clusterConfigV1X7, clusterConfigV1X8, clusterLockV1X6, clusterLockV1X7, clusterLockV1X8 } from './fixtures.js'
+import { clusterConfigV1X7, clusterLockV1X6, clusterLockV1X7, clusterLockV1X8 } from './fixtures.js'
 import { SDK_VERSION } from '../src/constants'
 import { Base } from '../src/base'
 import { validatePayload } from '../src/ajv'
