@@ -1,6 +1,6 @@
 import request from 'supertest'
 import dotenv from 'dotenv'
-import { clusterConfigV1X7, clusterLockV1X7, clusterLockV1X8, enr } from './fixtures'
+import { clusterConfigV1X8, clusterLockV1X7, clusterLockV1X8, enr } from './fixtures'
 import {
   client,
   updateClusterDef,
@@ -27,12 +27,12 @@ describe('Cluster Definition', () => {
   let clusterDefinition: ClusterDefintion
   let secondConfigHash: string
   const clientWithoutAsigner = new Client({
-    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
+    baseUrl: 'https://02d0-2a01-9700-155f-0-31cb-c12e-9908-fe82.ngrok-free.app',
     chainId: 17000,
   })
 
   beforeAll(async () => {
-    configHash = await client.createClusterDefinition(clusterConfigV1X7)
+    configHash = await client.createClusterDefinition(clusterConfigV1X8)
   })
 
   it('should post a cluster definition and return confighash', async () => {
@@ -41,7 +41,7 @@ describe('Cluster Definition', () => {
 
   it('should throw on post a cluster without a signer', async () => {
     try {
-      await clientWithoutAsigner.createClusterDefinition(clusterConfigV1X7)
+      await clientWithoutAsigner.createClusterDefinition(clusterConfigV1X8)
     } catch (err: any) {
       expect(err.message).toEqual('Signer is required in createClusterDefinition')
     }
@@ -71,9 +71,9 @@ describe('Cluster Definition', () => {
 
   it('should update the cluster which the operator belongs to', async () => {
     const signerAddress = await signer.getAddress()
-    clusterConfigV1X7.operators.push({ address: signerAddress })
+    clusterConfigV1X8.operators.push({ address: signerAddress })
 
-    secondConfigHash = await client.createClusterDefinition(clusterConfigV1X7)
+    secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8)
 
     const definitionData: ClusterDefintion =
       await client.acceptClusterDefinition(
@@ -108,10 +108,10 @@ describe('Cluster Definition', () => {
 
 describe('Poll Cluster Lock', () => {
   // Test polling getClusterLock through mimicing the whole flow using obol-api endpoints
-  const { definition_hash: _, ...rest } = clusterLockV1X7.cluster_definition
+  const { definition_hash: _, ...rest } = clusterLockV1X8.cluster_definition
   const clusterWithoutDefHash = rest
   const clientWithoutAsigner = new Client({
-    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
+    baseUrl: 'https://02d0-2a01-9700-155f-0-31cb-c12e-9908-fe82.ngrok-free.app',
     chainId: 17000,
   })
 
@@ -126,7 +126,7 @@ describe('Poll Cluster Lock', () => {
         const pollReqIntervalId = setInterval(async function () {
           try {
             const lockFile = await client.getClusterLock(
-              clusterLockV1X7.cluster_definition.config_hash,
+              clusterLockV1X8.cluster_definition.config_hash,
             )
             if (lockFile?.lock_hash) {
               clearInterval(pollReqIntervalId)
@@ -144,8 +144,8 @@ describe('Poll Cluster Lock', () => {
         }, 5000)
       }),
       (async () => {
-        await updateClusterDef(clusterLockV1X7.cluster_definition)
-        await publishLockFile(clusterLockV1X7)
+        await updateClusterDef(clusterLockV1X8.cluster_definition)
+        await publishLockFile(clusterLockV1X8)
       })(),
     ])
     expect(lockObject).toHaveProperty('lock_hash')
@@ -158,7 +158,7 @@ describe('Poll Cluster Lock', () => {
         const pollReqIntervalId = setInterval(async function () {
           try {
             const lockFile = await clientWithoutAsigner.getClusterLock(
-              clusterLockV1X7.cluster_definition.config_hash,
+              clusterLockV1X8.cluster_definition.config_hash,
             )
             if (lockFile?.lock_hash) {
               clearInterval(pollReqIntervalId)
@@ -175,8 +175,8 @@ describe('Poll Cluster Lock', () => {
         }, 5000)
       }),
       (async () => {
-        await updateClusterDef(clusterLockV1X7.cluster_definition)
-        await publishLockFile(clusterLockV1X7)
+        await updateClusterDef(clusterLockV1X8.cluster_definition)
+        await publishLockFile(clusterLockV1X8)
       })(),
     ])
     expect(lockObject).toHaveProperty('lock_hash')
@@ -185,10 +185,13 @@ describe('Poll Cluster Lock', () => {
   it('should fetch the cluster definition for the configHash', async () => {
     const clusterDefinition: ClusterDefintion =
       await client.getClusterDefinition(
-        clusterLockV1X7.cluster_definition.config_hash,
+        clusterLockV1X8.cluster_definition.config_hash,
       )
+    expect(clusterDefinition.deposit_amounts?.length).toEqual(
+      clusterLockV1X8.cluster_definition.deposit_amounts.length,
+    )
     expect(clusterDefinition.config_hash).toEqual(
-      clusterLockV1X7.cluster_definition.config_hash,
+      clusterLockV1X8.cluster_definition.config_hash,
     )
   })
 
@@ -200,8 +203,8 @@ describe('Poll Cluster Lock', () => {
     })
 
   afterAll(async () => {
-    const configHash = clusterLockV1X7.cluster_definition.config_hash
-    const lockHash = clusterLockV1X7.lock_hash
+    const configHash = clusterLockV1X8.cluster_definition.config_hash
+    const lockHash = clusterLockV1X8.lock_hash
 
     await request(app)
       .delete(`/lock/${lockHash}`)

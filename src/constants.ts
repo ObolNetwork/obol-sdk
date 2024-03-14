@@ -98,7 +98,7 @@ export const signEnrPayload = (
 
 export const DKG_ALGORITHM = 'default'
 
-export const CONFIG_VERSION = 'v1.7.0'
+export const CONFIG_VERSION = 'v1.8.0'
 
 export const SDK_VERSION = pjson.version
 

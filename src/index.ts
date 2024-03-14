@@ -39,7 +39,7 @@ export class Client extends Base {
    * An example of how to instantiate obol-sdk Client:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L29)
    */
-  constructor (
+  constructor(
     config: { baseUrl?: string, chainId?: number },
     signer?: Signer,
   ) {
@@ -56,7 +56,7 @@ export class Client extends Base {
    * An example of how to use createClusterDefinition:
    * [createObolCluster](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
    */
-  async createClusterDefinition (newCluster: ClusterPayload): Promise<string> {
+  async createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
     if (!this.signer) { throw new Error('Signer is required in createClusterDefinition') }
 
     validatePayload(newCluster, definitionSchema)
@@ -70,8 +70,8 @@ export class Client extends Base {
       timestamp: new Date().toISOString(),
       threshold: Math.ceil((2 * newCluster.operators.length) / 3),
       num_validators: newCluster.validators.length,
+      deposit_amounts: newCluster.deposit_amounts ? newCluster.deposit_amounts : ['32000000000']
     }
-
     try {
       const address = await this.signer.getAddress()
 
@@ -114,7 +114,7 @@ export class Client extends Base {
    * An example of how to use acceptClusterDefinition:
    * [acceptClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
    */
-  async acceptClusterDefinition (
+  async acceptClusterDefinition(
     operatorPayload: OperatorPayload,
     configHash: string,
   ): Promise<ClusterDefintion> {
@@ -166,7 +166,7 @@ export class Client extends Base {
    * An example of how to use getClusterDefinition:
    * [getObolClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
    */
-  async getClusterDefinition (configHash: string): Promise<ClusterDefintion> {
+  async getClusterDefinition(configHash: string): Promise<ClusterDefintion> {
     const clusterDefinition: ClusterDefintion = await this.request(
       `/dv/${configHash}`,
       {
@@ -185,7 +185,7 @@ export class Client extends Base {
    * An example of how to use getClusterLock:
    * [getObolClusterLock](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
    */
-  async getClusterLock (configHash: string): Promise<ClusterLock> {
+  async getClusterLock(configHash: string): Promise<ClusterLock> {
     const lock: ClusterLock = await this.request(
       `/lock/configHash/${configHash}`,
       {
