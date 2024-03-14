@@ -171,13 +171,13 @@ export const hashClusterLockV1X8 = (cluster: ClusterLock): string => {
             builder_registration: {
                 message: {
                     fee_recipient: fromHexString(
-                        dVaidator.builder_registration.message.fee_recipient,
+                        dVaidator.builder_registration?.message.fee_recipient as string,
                     ),
-                    gas_limit: dVaidator.builder_registration.message.gas_limit,
-                    timestamp: dVaidator.builder_registration.message.timestamp,
-                    pubkey: fromHexString(dVaidator.builder_registration.message.pubkey),
+                    gas_limit: dVaidator.builder_registration?.message.gas_limit as number,
+                    timestamp: dVaidator.builder_registration?.message.timestamp as number,
+                    pubkey: fromHexString(dVaidator.builder_registration?.message.pubkey as string),
                 },
-                signature: fromHexString(dVaidator.builder_registration.signature),
+                signature: fromHexString(dVaidator.builder_registration?.signature as string),
             },
         }
     })
@@ -240,7 +240,7 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
         pubKeys.push(fromHexString(distributedPublicKey))
         builderRegistrationAndDepositDataMessages.push(builderRegistrationMsg)
         blsSignatures.push(
-            fromHexString(validator.builder_registration.signature),
+            fromHexString(validator.builder_registration?.signature as string),
         )
     }
 
