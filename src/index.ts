@@ -70,7 +70,6 @@ export class Client extends Base {
       timestamp: new Date().toISOString(),
       threshold: Math.ceil((2 * newCluster.operators.length) / 3),
       num_validators: newCluster.validators.length,
-      deposit_amounts: newCluster.deposit_amounts ? newCluster.deposit_amounts : ['32000000000']
     }
 
     try {

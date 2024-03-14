@@ -31,14 +31,6 @@ export const clusterConfigOrDefinitionHash = (
 ): string => {
     let definitionType, val
 
-    if (semver.eq(cluster.version, 'v1.6.0')) {
-        definitionType = clusterDefinitionContainerTypeV1X6(configOnly)
-        val = hashClusterDefinitionV1X6(cluster, configOnly)
-        return (
-            '0x' + Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
-        )
-    }
-
     if (semver.eq(cluster.version, 'v1.7.0')) {
         definitionType = clusterDefinitionContainerTypeV1X7(configOnly)
         val = hashClusterDefinitionV1X7(cluster, configOnly)
