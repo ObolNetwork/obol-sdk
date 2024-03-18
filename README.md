@@ -10,13 +10,13 @@ Checkout our [docs](https://docs.obol.tech/docs/advanced/quickstart-sdk), [examp
 
 ## Contributing
 
-Please take a moment to review the following guidelines:
+Please review the following guidelines:
 
 - [How to Report Bugs](#how-to-report-bugs)
 - [How to Propose Changes](#how-to-propose-changes)
 - [Code Review Process](#code-review-process)
 
-### How to Report Bugs or suggest improvements
+### How to Report Bugs
 
 If you encounter a bug or unexpected behavior, please follow these steps to report it:
 
