@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.label == 'release'
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.label.name == 'release'
     runs-on: ubuntu-latest
 
     steps:
