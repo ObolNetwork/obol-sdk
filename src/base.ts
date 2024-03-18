@@ -16,10 +16,6 @@ export abstract class Base {
     baseUrl = DEFAULT_BASE_URL,
     chainId = DEFAULT_CHAIN_ID,
   }: Config) {
-    if (chainId === 1) {
-      throw new Error('Obol-SDK is in Beta phase, mainnet is not yet supported')
-    }
-
     this.baseUrl = baseUrl
     this.chainId = chainId
     this.fork_version = FORK_MAPPING[this.chainId]

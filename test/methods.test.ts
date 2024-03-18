@@ -21,13 +21,13 @@ describe('Cluster Client', () => {
     mockSigner,
   )
 
-  test('throws invalid ChainId when it is equal to 1', async () => {
-    try {
-      new Client({ chainId: 1 }, mockSigner)
-    } catch (error: any) {
-      expect(error.message).toBe('Obol-SDK is in Beta phase, mainnet is not yet supported')
-    }
-  })
+  // test('throws invalid ChainId when it is equal to 1', async () => {
+  //   try {
+  //     new Client({ chainId: 1 }, mockSigner)
+  //   } catch (error: any) {
+  //     expect(error.message).toBe('Obol-SDK is in Beta phase, mainnet is not yet supported')
+  //   }
+  // })
 
   test('createClusterDefinition should return config_hash', async () => {
     clientInstance['request'] = jest
