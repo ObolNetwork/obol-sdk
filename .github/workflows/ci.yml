@@ -33,3 +33,7 @@ jobs:
       - name: Run e2e tests
         working-directory: ./test/sdk-package-test
         run: yarn run test:e2e
+      
+      - name: Extract release notes
+        id: extract-release-notes
+        uses: ffurrer2/extract-release-notes@v1

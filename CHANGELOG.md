@@ -1,9 +1,9 @@
-### Changelog
+# Changelog
 
-All notable changes to this project will be documented in this file. Dates are displayed in UTC.
+## [v1.0.13](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.12...v1.0.13)
 
-#### [v1.0.13](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.12...v1.0.13)
-
+- Fix release WF [`#36`](https://github.com/ObolNetwork/obol-sdk/pull/36)
+- chore(release): v1.0.13 [`#35`](https://github.com/ObolNetwork/obol-sdk/pull/35)
 - add contribution guidelines [`#34`](https://github.com/ObolNetwork/obol-sdk/pull/34)
 - support v1.8.0 [`#31`](https://github.com/ObolNetwork/obol-sdk/pull/31)
 - update e2e during release [`#25`](https://github.com/ObolNetwork/obol-sdk/pull/25)
@@ -13,9 +13,7 @@ All notable changes to this project will be documented in this file. Dates are d
 - Create label-issues.yml [`0f1252f`](https://github.com/ObolNetwork/obol-sdk/commit/0f1252f24badba89251a3595cb5d57a0790e5faf)
 - change to upgrade [`430bbc0`](https://github.com/ObolNetwork/obol-sdk/commit/430bbc05325f5b5f713b52952fd16954cf1396d6)
 
-#### v1.0.12
-
-> 27 February 2024
+## v1.0.12 (2024-02-27)
 
 - Fix sdk deployment [`#18`](https://github.com/ObolNetwork/obol-sdk/pull/18)
 - Hanan/update sdk [`#17`](https://github.com/ObolNetwork/obol-sdk/pull/17)
