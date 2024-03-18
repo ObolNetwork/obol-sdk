@@ -35,6 +35,6 @@ If you'd like to propose improvements or new features, please follow these steps
 
 ### Code Review Process
 
-All contributions are reviewed before they are merged into the main branch. Please addresses any feedback provided during the review process.
+All contributions are reviewed before they are merged into the main branch. Please address any feedback provided during the review process.
 
 Thank you for contributing to Obol-SDK!
