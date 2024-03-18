@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.13](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.12...v1.0.13)
+## [1.0.13](https://github.com/obolnetwork/obol-sdk/compare/v1.0.12...v1.0.13) (2024-03-18)
 
 - Fix release WF [`#36`](https://github.com/ObolNetwork/obol-sdk/pull/36)
 - chore(release): v1.0.13 [`#35`](https://github.com/ObolNetwork/obol-sdk/pull/35)
