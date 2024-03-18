@@ -145,32 +145,32 @@ export const hashClusterLockV1X7 = (cluster: ClusterLock): string => {
         false,
     )
     val.distributed_validators = cluster.distributed_validators.map(
-        (dVaidator) => {
+        (dValidator) => {
             return {
-                distributed_public_key: fromHexString(dVaidator.distributed_public_key),
-                public_shares: dVaidator.public_shares.map((publicShare) =>
+                distributed_public_key: fromHexString(dValidator.distributed_public_key),
+                public_shares: dValidator.public_shares.map((publicShare) =>
                     fromHexString(publicShare),
                 ),
                 deposit_data: {
-                    pubkey: fromHexString(dVaidator.deposit_data?.pubkey as string),
+                    pubkey: fromHexString(dValidator.deposit_data?.pubkey as string),
                     withdrawal_credentials: fromHexString(
-                        dVaidator.deposit_data?.withdrawal_credentials as string,
+                        dValidator.deposit_data?.withdrawal_credentials as string,
                     ),
-                    amount: parseInt(dVaidator.deposit_data?.amount as string),
-                    signature: fromHexString(dVaidator.deposit_data?.signature as string),
+                    amount: parseInt(dValidator.deposit_data?.amount as string),
+                    signature: fromHexString(dValidator.deposit_data?.signature as string),
                 },
                 builder_registration: {
                     message: {
                         fee_recipient: fromHexString(
-                            dVaidator.builder_registration?.message.fee_recipient as string,
+                            dValidator.builder_registration?.message.fee_recipient as string,
                         ),
-                        gas_limit: dVaidator.builder_registration?.message.gas_limit as number,
-                        timestamp: dVaidator.builder_registration?.message.timestamp as number,
+                        gas_limit: dValidator.builder_registration?.message.gas_limit as number,
+                        timestamp: dValidator.builder_registration?.message.timestamp as number,
                         pubkey: fromHexString(
-                            dVaidator.builder_registration?.message.pubkey as string,
+                            dValidator.builder_registration?.message.pubkey as string,
                         ),
                     },
-                    signature: fromHexString(dVaidator.builder_registration?.signature as string),
+                    signature: fromHexString(dValidator.builder_registration?.signature as string),
                 },
             }
         },
