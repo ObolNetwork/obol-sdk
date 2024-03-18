@@ -1,10 +1,14 @@
 name: Publish Obol-SDK to NPM
 
 on:
-  push
+  pull_request:
+    types:
+      - closed
+  workflow_dispatch:
 
 jobs:
   build:
+    if: (github.event.pull_request.merged == true && github.event.pull_request.head.label.name == 'release') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -31,10 +35,27 @@ jobs:
         id: extract-release-notes
         uses: ffurrer2/extract-release-notes@v1
 
+      ############# TAG RELEASE ##############
+      - name: "Push tag v${{ steps.package-version.outputs.current-version }}"
+        uses: rickstaa/action-create-tag@v1
+        id: tag_version
+        with:
+          tag: "v${{ steps.package-version.outputs.current-version }}"
+      
+      ############# GITHUB RELEASE ##############
+      - name: "Create a GitHub release v${{ steps.package-version.outputs.current-version }}"
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "v${{ steps.package-version.outputs.current-version }}"
+          name: "Release v${{ steps.package-version.outputs.current-version }}"
+          body: |
+            ## Release notes:
+            ${{ steps.extract-release-notes.outputs.release_notes }}
+      
       ############# NPM RELEASE ##############
       - run: yarn install --frozen-lockfile
       - run: yarn run build
-      - run: yarn run generate-typedoc
+      - run: yarn run generate-typedoc 
       - run: yarn run npm:publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
