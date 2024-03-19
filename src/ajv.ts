@@ -1,24 +1,28 @@
 import Ajv, { type ErrorObject } from 'ajv'
+import { parseUnits } from 'ethers';
 
-import { ETHER_TO_GWEI } from './constants'
-
-function validDpositAmounts (data: boolean, deposits: string[]): boolean {
+function validDpositAmounts(data: boolean, deposits: string[]): boolean {
   let sum = 0
-  for (let i = 0; i < deposits.length; i++) {
-    const amount = parseInt(deposits[i])
-    if (amount % ETHER_TO_GWEI !== 0 || amount > 32 * ETHER_TO_GWEI) {
+  //from ether togwei is same as from gwei to wei
+  let maxDeposit = Number(parseUnits("32", "gwei"));
+  let minDeposit = Number(parseUnits("1", "gwei"));
+
+  for (const element of deposits) {
+    const amountInGWei = Number(element);
+
+    if (!Number.isInteger(amountInGWei) || amountInGWei > maxDeposit || amountInGWei < minDeposit) {
       return false
     }
-    sum += amount
+    sum += amountInGWei
   }
-  if (sum !== 32 * ETHER_TO_GWEI) {
+  if ((sum / minDeposit) !== 32) {
     return false
   } else {
     return true
   }
 }
 
-export function validatePayload (
+export function validatePayload(
   data: any,
   schema: any,
 ): ErrorObject[] | undefined | null | boolean {

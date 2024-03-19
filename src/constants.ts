@@ -117,4 +117,3 @@ export enum DefinitionFlow {
 export const DEFAULT_BASE_URL = 'https://api.obol.tech'
 export const DEFAULT_CHAIN_ID = 1
 
-export const ETHER_TO_GWEI = 10 ** 9
