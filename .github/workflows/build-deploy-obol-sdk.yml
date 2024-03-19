@@ -1,12 +1,14 @@
 name: Publish Obol-SDK to NPM
 
 on:
-  push:
-    branches: [main]
+  pull_request:
+    types:
+      - closed
+  workflow_dispatch:
 
 jobs:
   build:
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.label == 'release'
+    if: (github.event.pull_request.merged == true && github.event.pull_request.head.label.name == 'release') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:

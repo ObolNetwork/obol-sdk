@@ -146,18 +146,18 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
         cluster.cluster_definition,
         false,
     )
-    val.distributed_validators = cluster.distributed_validators.map(dVaidator => {
+    val.distributed_validators = cluster.distributed_validators.map(dValdator => {
         return {
-            distributed_public_key: fromHexString(dVaidator.distributed_public_key),
-            public_shares: dVaidator.public_shares.map(publicShare =>
+            distributed_public_key: fromHexString(dValdator.distributed_public_key),
+            public_shares: dValdator.public_shares.map(publicShare =>
                 fromHexString(publicShare),
             ),
-            pubkey: fromHexString(dVaidator.deposit_data?.pubkey as string),
+            pubkey: fromHexString(dValdator.deposit_data?.pubkey as string),
             withdrawal_credentials: fromHexString(
-                dVaidator.deposit_data?.withdrawal_credentials as string,
+                dValdator.deposit_data?.withdrawal_credentials as string,
             ),
-            amount: parseInt(dVaidator.deposit_data?.amount as string),
-            signature: fromHexString(dVaidator.deposit_data?.signature as string),
+            amount: parseInt(dValdator.deposit_data?.amount as string),
+            signature: fromHexString(dValdator.deposit_data?.signature as string),
         }
     })
 

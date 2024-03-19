@@ -185,7 +185,7 @@ export interface DistributedValidator {
   partial_deposit_data?: Array<Partial<DepositData>>
 
   /** pre-generated signed validator builder registration to be sent to builder network. */
-  builder_registration: BuilderRegistration
+  builder_registration?: BuilderRegistration
 }
 
 /**
@@ -205,5 +205,5 @@ export interface ClusterLock {
   lock_hash: string
 
   /** Node Signature for the lock hash by the node secp256k1 key. */
-  node_signatures: string[]
+  node_signatures?: string[]
 }

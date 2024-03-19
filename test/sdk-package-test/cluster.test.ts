@@ -1,6 +1,6 @@
 import request from 'supertest'
 import dotenv from 'dotenv'
-import { clusterConfigV1X8, clusterLockV1X7, clusterLockV1X8, enr } from './fixtures'
+import { clusterConfigV1X8, clusterLockV1X6, clusterLockV1X7, clusterLockV1X8, enr } from '../fixtures'
 import {
   client,
   updateClusterDef,
@@ -27,7 +27,7 @@ describe('Cluster Definition', () => {
   let clusterDefinition: ClusterDefintion
   let secondConfigHash: string
   const clientWithoutAsigner = new Client({
-    baseUrl: 'https://02d0-2a01-9700-155f-0-31cb-c12e-9908-fe82.ngrok-free.app',
+    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 17000,
   })
 
@@ -111,7 +111,7 @@ describe('Poll Cluster Lock', () => {
   const { definition_hash: _, ...rest } = clusterLockV1X8.cluster_definition
   const clusterWithoutDefHash = rest
   const clientWithoutAsigner = new Client({
-    baseUrl: 'https://02d0-2a01-9700-155f-0-31cb-c12e-9908-fe82.ngrok-free.app',
+    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 17000,
   })
 
@@ -195,7 +195,7 @@ describe('Poll Cluster Lock', () => {
     )
   })
 
-  test.each([{ version: 'v1.7.0', clusterLock: clusterLockV1X7 }, { version: 'v1.8.0', clusterLock: clusterLockV1X8 }])(
+  test.each([{ version: 'v1.6.0', clusterLock: clusterLockV1X6 }, { version: 'v1.7.0', clusterLock: clusterLockV1X7 }, { version: 'v1.8.0', clusterLock: clusterLockV1X8 }])(
     '$version: \'should return true on verified cluster lock\'',
     async ({ clusterLock }) => {
       const isValidLock: boolean = await validateClusterLock(clusterLock)

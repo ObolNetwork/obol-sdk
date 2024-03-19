@@ -11,7 +11,7 @@ import * as semver from 'semver'
 import { clusterDefinitionContainerTypeV1X6, hashClusterDefinitionV1X6, hashClusterLockV1X6, verifyDVV1X6 } from './v1.6.0.js'
 import { clusterDefinitionContainerTypeV1X7, hashClusterDefinitionV1X7, hashClusterLockV1X7, verifyDVV1X7 } from './v1.7.0.js'
 import { ethers } from 'ethers'
-import { DOMAIN_APPLICATION_BUILDER, DOMAIN_DEPOSIT, type DefinitionFlow, GENESIS_VALIDATOR_ROOT, signCreatorConfigHashPayload, signEnrPayload, signOperatorConfigHashPayload } from '../constants.js'
+import { DOMAIN_APPLICATION_BUILDER, DOMAIN_DEPOSIT, DefinitionFlow, GENESIS_VALIDATOR_ROOT, signCreatorConfigHashPayload, signEnrPayload, signOperatorConfigHashPayload } from '../constants.js'
 import { SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util'
 import { builderRegistrationMessageType, depositMessageType, forkDataType, signingRootType } from './sszTypes.js'
 import { definitionFlow, hexWithout0x } from '../utils.js'
@@ -30,6 +30,14 @@ export const clusterConfigOrDefinitionHash = (
     configOnly: boolean,
 ): string => {
     let definitionType, val
+
+    if (semver.eq(cluster.version, 'v1.6.0')) {
+        definitionType = clusterDefinitionContainerTypeV1X6(configOnly)
+        val = hashClusterDefinitionV1X6(cluster, configOnly)
+        return (
+            '0x' + Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
+        )
+    }
 
     if (semver.eq(cluster.version, 'v1.7.0')) {
         definitionType = clusterDefinitionContainerTypeV1X7(configOnly)
@@ -137,7 +145,7 @@ const verifyDefinitionSignatures = (
     clusterDefinition: ClusterDefintion,
     definitionType: DefinitionFlow,
 ): boolean => {
-    if (definitionType === 'Charon-Command') {
+    if (definitionType === DefinitionFlow.Charon) {
         return true
     } else {
         const configSigner = getPOSTConfigHashSigner(
@@ -149,7 +157,7 @@ const verifyDefinitionSignatures = (
         if (configSigner !== clusterDefinition.creator.address.toLowerCase()) {
             return false
         }
-        if (definitionType === 'LP-Solo') {
+        if (definitionType === DefinitionFlow.Solo) {
             return true
         }
         return clusterDefinition.operators.every((operator) => {
@@ -185,10 +193,10 @@ const computeSigningRoot = (
     sszObjectRoot: Uint8Array,
     domain: Uint8Array,
 ): Uint8Array => {
-    const val1 = signingRootType.defaultValue()
-    val1.objectRoot = sszObjectRoot
-    val1.domain = domain
-    return Buffer.from(signingRootType.hashTreeRoot(val1).buffer)
+    const signingRootDefaultValue = signingRootType.defaultValue()
+    signingRootDefaultValue.objectRoot = sszObjectRoot
+    signingRootDefaultValue.domain = domain
+    return Buffer.from(signingRootType.hashTreeRoot(signingRootDefaultValue).buffer)
 }
 
 const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
@@ -290,7 +298,6 @@ export const verifyBuilderRegistration = (
     validator: DistributedValidator,
     feeRecipientAddress: string,
     forkVersion: string,
-
 ): { isValidBuilderRegistration: boolean, builderRegistrationMsg: Uint8Array } => {
     const builderDomain = computeDomain(
         fromHexString(DOMAIN_APPLICATION_BUILDER),
@@ -298,7 +305,7 @@ export const verifyBuilderRegistration = (
 
     if (
         validator.distributed_public_key !==
-        validator.builder_registration.message.pubkey
+        validator.builder_registration?.message.pubkey
     ) {
         return { isValidBuilderRegistration: false, builderRegistrationMsg: new Uint8Array(0) }
     }
@@ -328,14 +335,14 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
 
     const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash)
     // node(ENR) signatures
-    for (let i = 0; i < nodeSignatures.length; i++) {
+    for (let i = 0; i < (nodeSignatures as string[]).length; i++) {
         const pubkey = ENR.decodeTxt(
             clusterLock.cluster_definition.operators[i].enr as string,
         ).publicKey.toString('hex')
 
         const ENRsignature = {
-            r: nodeSignatures[i].slice(2, 66),
-            s: nodeSignatures[i].slice(66, 130),
+            r: (nodeSignatures as string[])[i].slice(2, 66),
+            s: (nodeSignatures as string[])[i].slice(66, 130),
         }
 
         const nodeSignatureVerification = ec

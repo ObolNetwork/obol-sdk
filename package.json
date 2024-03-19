@@ -1,6 +1,6 @@
 {
   "name": "@obolnetwork/obol-sdk",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "A package for creating Distributed Validators using the Obol API.",
   "bugs": {
     "url": "https://github.com/obolnetwork/obol-sdk/issues"
@@ -56,6 +56,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@release-it/conventional-changelog": "^8.0.1",
     "@types/elliptic": "^6.4.18",
     "@types/jest": "^28.1.8",
     "@types/node": "^20.2.5",
@@ -81,7 +82,6 @@
   ],
   "release-it": {
     "git": {
-      "changelog": "npx auto-changelog --stdout --commit-limit false --unreleased --template https://raw.githubusercontent.com/release-it/release-it/main/templates/changelog-compact.hbs",
       "commitMessage": "chore(release): v${version}",
       "push": true,
       "commit": true,
@@ -97,8 +97,12 @@
       "publish": false,
       "ignoreVersion": false
     },
-    "hooks": {
-      "after:bump": "npx auto-changelog -p --hide-credit"
+    "plugins": {
+      "@release-it/conventional-changelog": {
+        "preset": "angular",
+        "infile": "CHANGELOG.md",
+        "header": "# Changelog"
+      }
     }
   },
   "jest": {
