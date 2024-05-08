@@ -16,7 +16,7 @@ export const signer = wallet.connect(null)
 
 export const client: Client = new Client(
   { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
-  signer,
+  signer as any,
 )
 
 export const app = client.baseUrl
