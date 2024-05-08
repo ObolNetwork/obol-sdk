@@ -56,7 +56,7 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn run build
       - run: yarn run generate-typedoc 
-      - run: yarn run ds:release
+      - run: yarn run npm:publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           HUSKY: 0
