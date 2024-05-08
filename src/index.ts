@@ -39,7 +39,7 @@ export class Client extends Base {
    * An example of how to instantiate obol-sdk Client:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L29)
    */
-       constructor (
+  constructor(
     config: { baseUrl?: string, chainId?: number },
     signer?: Signer,
   ) {
