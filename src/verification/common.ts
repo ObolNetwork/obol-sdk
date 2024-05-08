@@ -84,7 +84,7 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
 
 // Lock verification
 
-// cluster-definition signatures verificatin
+// cluster-definition signatures verification
 
 const getPOSTConfigHashSigner = (
     signature: string,

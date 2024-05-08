@@ -21,7 +21,8 @@
     "release": "release-it",
     "release:dry": "release-it --dry-run --no-npm",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "lint-ci": "eslint \"{src,apps,libs,test}/**/*.ts\""
+    "lint-ci": "eslint \"{src,apps,libs,test}/**/*.ts\"",
+    "prettier-ci": "prettier --check \"{src,apps,libs,test}/**/*.ts\""
   },
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
@@ -63,7 +64,9 @@
     "@types/node": "^20.2.5",
     "@types/uuid": "^9.0.1",
     "eslint": "^8.57.0",
+    "husky": "^9.0.11",
     "jest": "^28.1.3",
+    "lint-staged": "^15.2.2",
     "msw": "^2.2.1",
     "npm-run-all": "^4.1.5",
     "ts-jest": "^28.0.8",

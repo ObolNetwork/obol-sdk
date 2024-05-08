@@ -16,6 +16,9 @@ jobs:
       - name: Check eslint rules
         run: yarn run lint-ci
 
+      - name: Prettier
+        run: npm run prettier-ci
+
       - name: Build SDK
         run: yarn run build
 
