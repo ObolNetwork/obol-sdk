@@ -1,24 +1,28 @@
-import Ajv, { type ErrorObject } from 'ajv'
+import Ajv, { type ErrorObject } from 'ajv';
 import { parseUnits } from 'ethers';
 
 function validDpositAmounts(data: boolean, deposits: string[]): boolean {
-  let sum = 0
-  //from ether togwei is same as from gwei to wei
-  let maxDeposit = Number(parseUnits("32", "gwei"));
-  let minDeposit = Number(parseUnits("1", "gwei"));
+  let sum = 0;
+  // from ether togwei is same as from gwei to wei
+  const maxDeposit = Number(parseUnits('32', 'gwei'));
+  const minDeposit = Number(parseUnits('1', 'gwei'));
 
   for (const element of deposits) {
     const amountInGWei = Number(element);
 
-    if (!Number.isInteger(amountInGWei) || amountInGWei > maxDeposit || amountInGWei < minDeposit) {
-      return false
+    if (
+      !Number.isInteger(amountInGWei) ||
+      amountInGWei > maxDeposit ||
+      amountInGWei < minDeposit
+    ) {
+      return false;
     }
-    sum += amountInGWei
+    sum += amountInGWei;
   }
-  if ((sum / minDeposit) !== 32) {
-    return false
+  if (sum / minDeposit !== 32) {
+    return false;
   } else {
-    return true
+    return true;
   }
 }
 
@@ -26,18 +30,18 @@ export function validatePayload(
   data: any,
   schema: any,
 ): ErrorObject[] | undefined | null | boolean {
-  const ajv = new Ajv()
+  const ajv = new Ajv();
   ajv.addKeyword({
     keyword: 'validDpositAmounts',
     validate: validDpositAmounts,
     errors: true,
-  })
-  const validate = ajv.compile(schema)
-  const isValid = validate(data)
+  });
+  const validate = ajv.compile(schema);
+  const isValid = validate(data);
   if (!isValid) {
     throw new Error(
       `Schema compilation errors', ${validate.errors?.[0].message}`,
-    )
+    );
   }
-  return isValid
+  return isValid;
 }

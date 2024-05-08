@@ -4,4 +4,4 @@ module.exports = {
       `npx eslint --fix ${filenames.join(' ')}`,
       `npx prettier --write ${filenames.join(' ')}`,
     ],
-  };
+  }

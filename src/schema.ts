@@ -9,7 +9,7 @@ export const operatorPayloadSchema = {
     },
   },
   required: ['version', 'enr'],
-}
+};
 
 export const definitionSchema = {
   type: 'object',
@@ -59,8 +59,8 @@ export const definitionSchema = {
         type: 'string',
         pattern: '^[0-9]+$',
       },
-      validDpositAmounts: true
+      validDpositAmounts: true,
     },
   },
   required: ['name', 'operators', 'validators'],
-}
+};

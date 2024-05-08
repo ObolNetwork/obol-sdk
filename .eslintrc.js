@@ -31,6 +31,5 @@ module.exports = {
         "@typescript-eslint/non-nullable-type-assertion-style": 0,
         "no-useless-catch": 0,
         "new-cap": 0,
-        "space-before-function-paren": ["error", "always"],
     }
 }

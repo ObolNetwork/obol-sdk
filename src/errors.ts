@@ -1,8 +1,8 @@
 export class ConflictError extends Error {
-  name = 'ConflictError'
+  name = 'ConflictError';
 
-  constructor () {
-    super('This Cluster has been already posted.')
-    Object.setPrototypeOf(this, ConflictError.prototype)
+  constructor() {
+    super('This Cluster has been already posted.');
+    Object.setPrototypeOf(this, ConflictError.prototype);
   }
 }

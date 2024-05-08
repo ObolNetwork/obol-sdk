@@ -1,5 +1,5 @@
-import { type ClusterLock } from './types.js'
-import { isValidClusterLock } from './verification/common.js'
+import { type ClusterLock } from './types.js';
+import { isValidClusterLock } from './verification/common.js';
 
 /**
  * Verifies Cluster Lock's validity.
@@ -14,9 +14,9 @@ export const validateClusterLock = async (
   lock: ClusterLock,
 ): Promise<boolean> => {
   try {
-    const isLockValid = await isValidClusterLock(lock)
-    return isLockValid
+    const isLockValid = await isValidClusterLock(lock);
+    return isLockValid;
   } catch (err: any) {
-    throw err
+    throw err;
   }
-}
+};

@@ -20,9 +20,10 @@
     "npm:publish": "npm publish --tag latest",
     "release": "release-it",
     "release:dry": "release-it --dry-run --no-npm",
-    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
-    "lint-ci": "eslint \"{src,test}/**/*.ts\"",
-    "prettier-ci": "prettier --check \"{src,test}/**/*.ts\""
+    "lint": "eslint \"{src,test}/**/*.{js,ts}\" --fix",
+    "lint-ci": "eslint \"{src,test}/**/*.{js,ts}\"",
+    "prettier-ci": "prettier --check \"{src,test}/**/*.{js,ts}\"",
+    "prettier": "prettier --write \"{src,test}/**/*.{js,ts}\""
   },
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
@@ -69,11 +70,12 @@
     "lint-staged": "^15.2.2",
     "msw": "^2.2.1",
     "npm-run-all": "^4.1.5",
+    "prettier": "^3.2.5",
     "ts-jest": "^28.0.8",
     "tsup": "^6.7.0",
     "typedoc": "^0.25.7",
     "typedoc-plugin-markdown": "^4.0.0-next.50",
-    "typescript": "^5.3.3"
+    "typescript": "~5.3.3"
   },
   "engines": {
     "node": ">= 16"

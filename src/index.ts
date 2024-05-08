@@ -1,6 +1,6 @@
-import { type Signer } from 'ethers'
-import { v4 as uuidv4 } from 'uuid'
-import { Base } from './base.js'
+import { type Signer } from 'ethers';
+import { v4 as uuidv4 } from 'uuid';
+import { Base } from './base.js';
 import {
   CONFLICT_ERROR_MSG,
   CreatorConfigHashSigningTypes,
@@ -9,25 +9,25 @@ import {
   CONFIG_VERSION,
   OperatorConfigHashSigningTypes,
   EnrSigningTypes,
-} from './constants.js'
-import { ConflictError } from './errors.js'
+} from './constants.js';
+import { ConflictError } from './errors.js';
 import {
   type ClusterDefinition,
   type ClusterLock,
   type ClusterPayload,
   type OperatorPayload,
-} from './types.js'
-import { clusterConfigOrDefinitionHash } from './verification/common.js'
-import { validatePayload } from './ajv.js'
-import { definitionSchema, operatorPayloadSchema } from './schema.js'
-export * from './types.js'
-export * from './services.js'
+} from './types.js';
+import { clusterConfigOrDefinitionHash } from './verification/common.js';
+import { validatePayload } from './ajv.js';
+import { definitionSchema, operatorPayloadSchema } from './schema.js';
+export * from './types.js';
+export * from './services.js';
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
  */
 export class Client extends Base {
-  private readonly signer: Signer | undefined
+  private readonly signer: Signer | undefined;
 
   /**
    * @param config - Client configurations
@@ -39,12 +39,9 @@ export class Client extends Base {
    * An example of how to instantiate obol-sdk Client:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L29)
    */
-  constructor(
-    config: { baseUrl?: string, chainId?: number },
-    signer?: Signer,
-  ) {
-    super(config)
-    this.signer = signer
+  constructor(config: { baseUrl?: string; chainId?: number }, signer?: Signer) {
+    super(config);
+    this.signer = signer;
   }
 
   /**
@@ -57,9 +54,11 @@ export class Client extends Base {
    * [createObolCluster](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
    */
   async createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
-    if (!this.signer) { throw new Error('Signer is required in createClusterDefinition') }
+    if (!this.signer) {
+      throw new Error('Signer is required in createClusterDefinition');
+    }
 
-    validatePayload(newCluster, definitionSchema)
+    validatePayload(newCluster, definitionSchema);
 
     const clusterConfig: Partial<ClusterDefinition> = {
       ...newCluster,
@@ -70,22 +69,24 @@ export class Client extends Base {
       timestamp: new Date().toISOString(),
       threshold: Math.ceil((2 * newCluster.operators.length) / 3),
       num_validators: newCluster.validators.length,
-      deposit_amounts: newCluster.deposit_amounts ? newCluster.deposit_amounts : ['32000000000']
-    }
+      deposit_amounts: newCluster.deposit_amounts
+        ? newCluster.deposit_amounts
+        : ['32000000000'],
+    };
     try {
-      const address = await this.signer.getAddress()
+      const address = await this.signer.getAddress();
 
-      clusterConfig.creator = { address }
+      clusterConfig.creator = { address };
       clusterConfig.config_hash = clusterConfigOrDefinitionHash(
         clusterConfig as ClusterDefinition,
         true,
-      )
+      );
 
       const creatorConfigSignature = await this.signer.signTypedData(
         Domain(this.chainId),
         CreatorConfigHashSigningTypes,
         { creator_config_hash: clusterConfig.config_hash },
-      )
+      );
 
       const clusterDefinition: ClusterDefinition = await this.request('/dv', {
         method: 'POST',
@@ -94,13 +95,13 @@ export class Client extends Base {
           Authorization: `Bearer ${creatorConfigSignature}`,
           'fork-version': this.fork_version,
         },
-      })
-      return clusterDefinition?.config_hash
+      });
+      return clusterDefinition?.config_hash;
     } catch (err: any) {
       if (err?.message === CONFLICT_ERROR_MSG) {
-        throw new ConflictError()
+        throw new ConflictError();
       }
-      throw err
+      throw err;
     }
   }
 
@@ -118,30 +119,32 @@ export class Client extends Base {
     operatorPayload: OperatorPayload,
     configHash: string,
   ): Promise<ClusterDefinition> {
-    if (!this.signer) { throw new Error('Signer is required in acceptClusterDefinition') }
+    if (!this.signer) {
+      throw new Error('Signer is required in acceptClusterDefinition');
+    }
 
-    validatePayload(operatorPayload, operatorPayloadSchema)
+    validatePayload(operatorPayload, operatorPayloadSchema);
 
     try {
-      const address = await this.signer.getAddress()
+      const address = await this.signer.getAddress();
 
       const operatorConfigSignature = await this.signer.signTypedData(
         Domain(this.chainId),
         OperatorConfigHashSigningTypes,
         { operator_config_hash: configHash },
-      )
+      );
       const operatorENRSignature = await this.signer.signTypedData(
         Domain(this.chainId),
         EnrSigningTypes,
         { enr: operatorPayload.enr },
-      )
+      );
 
       const operatorData: OperatorPayload = {
         ...operatorPayload,
         address,
         enr_signature: operatorENRSignature,
         fork_version: this.fork_version,
-      }
+      };
       const clusterDefinition: ClusterDefinition = await this.request(
         `/dv/${configHash}`,
         {
@@ -151,10 +154,10 @@ export class Client extends Base {
             Authorization: `Bearer ${operatorConfigSignature}`,
           },
         },
-      )
-      return clusterDefinition
+      );
+      return clusterDefinition;
     } catch (err: any) {
-      throw err
+      throw err;
     }
   }
 
@@ -172,9 +175,9 @@ export class Client extends Base {
       {
         method: 'GET',
       },
-    )
+    );
 
-    return clusterDefinition
+    return clusterDefinition;
   }
 
   /**
@@ -191,7 +194,7 @@ export class Client extends Base {
       {
         method: 'GET',
       },
-    )
-    return lock
+    );
+    return lock;
   }
 }
