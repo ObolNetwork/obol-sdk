@@ -3,11 +3,11 @@ import { strToUint8Array } from '../utils'
 import { builderRegistrationContainer, type creatorAddressWrapperType, type creatorContainerType, depositDataContainer, newCreatorContainerType, newOperatorContainerType, type operatorAddressWrapperType, type operatorContainerType, validatorsContainerType } from './sszTypes'
 import { ByteListType, ByteVectorType, ContainerType, ListCompositeType, fromHexString } from '@chainsafe/ssz'
 import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container'
-import { type ClusterDefintion, type ClusterLock, type DepositData } from '../types'
+import { type ClusterDefinition, type ClusterLock, type DepositData } from '../types'
 import { verifyBuilderRegistration, verifyDepositData, verifyNodeSignatures } from './common'
 import { aggregateSignatures, verifyAggregate, verifyMultiple } from '@chainsafe/bls'
 
-// cluster defintion
+// cluster definition
 type DefinitionFieldsV1X7 = {
     uuid: ByteListType
     name: ByteListType
@@ -61,7 +61,7 @@ export const clusterDefinitionContainerTypeV1X7 = (
 }
 
 export const hashClusterDefinitionV1X7 = (
-    cluster: ClusterDefintion,
+    cluster: ClusterDefinition,
     configOnly: boolean,
 ): ValueOfFields<DefinitionFieldsV1X7> => {
     const definitionType = clusterDefinitionContainerTypeV1X7(configOnly)

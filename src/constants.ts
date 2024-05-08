@@ -107,7 +107,7 @@ export const DOMAIN_DEPOSIT = '03000000'
 export const GENESIS_VALIDATOR_ROOT =
   '0000000000000000000000000000000000000000000000000000000000000000'
 
-// Flow used to create defintion
+// Flow used to create definition
 export enum DefinitionFlow {
   Group = 'LP-Group',
   Solo = 'LP-Solo',

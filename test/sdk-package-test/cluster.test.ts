@@ -10,7 +10,7 @@ import {
   signer,
 } from './utils'
 import {
-  type ClusterDefintion,
+  type ClusterDefinition,
   Client,
   validateClusterLock,
 } from '@obolnetwork/obol-sdk'
@@ -24,7 +24,7 @@ jest.setTimeout(10000)
 /* eslint @typescript-eslint/no-misused-promises: 0 */ // --> OFF
 describe('Cluster Definition', () => {
   let configHash: string
-  let clusterDefinition: ClusterDefintion
+  let clusterDefinition: ClusterDefinition
   let secondConfigHash: string
   const clientWithoutAsigner = new Client({
     baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
@@ -75,7 +75,7 @@ describe('Cluster Definition', () => {
 
     secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8)
 
-    const definitionData: ClusterDefintion =
+    const definitionData: ClusterDefinition =
       await client.acceptClusterDefinition(
         { enr, version: clusterDefinition.version },
         secondConfigHash,
@@ -183,7 +183,7 @@ describe('Poll Cluster Lock', () => {
   })
 
   it('should fetch the cluster definition for the configHash', async () => {
-    const clusterDefinition: ClusterDefintion =
+    const clusterDefinition: ClusterDefinition =
       await client.getClusterDefinition(
         clusterLockV1X8.cluster_definition.config_hash,
       )

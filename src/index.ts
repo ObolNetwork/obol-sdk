@@ -12,7 +12,7 @@ import {
 } from './constants.js'
 import { ConflictError } from './errors.js'
 import {
-  type ClusterDefintion,
+  type ClusterDefinition,
   type ClusterLock,
   type ClusterPayload,
   type OperatorPayload,
@@ -61,7 +61,7 @@ export class Client extends Base {
 
     validatePayload(newCluster, definitionSchema)
 
-    const clusterConfig: Partial<ClusterDefintion> = {
+    const clusterConfig: Partial<ClusterDefinition> = {
       ...newCluster,
       fork_version: this.fork_version,
       dkg_algorithm: DKG_ALGORITHM,
@@ -77,7 +77,7 @@ export class Client extends Base {
 
       clusterConfig.creator = { address }
       clusterConfig.config_hash = clusterConfigOrDefinitionHash(
-        clusterConfig as ClusterDefintion,
+        clusterConfig as ClusterDefinition,
         true,
       )
 
@@ -87,7 +87,7 @@ export class Client extends Base {
         { creator_config_hash: clusterConfig.config_hash },
       )
 
-      const clusterDefinition: ClusterDefintion = await this.request('/dv', {
+      const clusterDefinition: ClusterDefinition = await this.request('/dv', {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
         headers: {
@@ -108,7 +108,7 @@ export class Client extends Base {
    * Approves joining a cluster with specific configuration.
    * @param {OperatorPayload} operatorPayload - The operator data including signatures.
    * @param {string} configHash - The config hash of the cluster which the operator confirms joining to.
-   * @returns {Promise<ClusterDefintion>} The cluster definition.
+   * @returns {Promise<ClusterDefinition>} The cluster definition.
    * @throws On unauthorized, duplicate entries, missing keys, not found cluster or invalid data.
    *
    * An example of how to use acceptClusterDefinition:
@@ -117,7 +117,7 @@ export class Client extends Base {
   async acceptClusterDefinition(
     operatorPayload: OperatorPayload,
     configHash: string,
-  ): Promise<ClusterDefintion> {
+  ): Promise<ClusterDefinition> {
     if (!this.signer) { throw new Error('Signer is required in acceptClusterDefinition') }
 
     validatePayload(operatorPayload, operatorPayloadSchema)
@@ -142,7 +142,7 @@ export class Client extends Base {
         enr_signature: operatorENRSignature,
         fork_version: this.fork_version,
       }
-      const clusterDefinition: ClusterDefintion = await this.request(
+      const clusterDefinition: ClusterDefinition = await this.request(
         `/dv/${configHash}`,
         {
           method: 'PUT',
@@ -160,14 +160,14 @@ export class Client extends Base {
 
   /**
    * @param configHash - The configuration hash returned in createClusterDefinition
-   * @returns {Promise<ClusterDefintion>} The  cluster definition for config hash
+   * @returns {Promise<ClusterDefinition>} The  cluster definition for config hash
    * @throws On not found config hash.
    *
    * An example of how to use getClusterDefinition:
    * [getObolClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
    */
-  async getClusterDefinition(configHash: string): Promise<ClusterDefintion> {
-    const clusterDefinition: ClusterDefintion = await this.request(
+  async getClusterDefinition(configHash: string): Promise<ClusterDefinition> {
+    const clusterDefinition: ClusterDefinition = await this.request(
       `/dv/${configHash}`,
       {
         method: 'GET',

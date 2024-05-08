@@ -85,7 +85,7 @@ export interface ClusterPayload {
 /**
  * Cluster definition data needed for dkg
  */
-export interface ClusterDefintion extends ClusterPayload {
+export interface ClusterDefinition extends ClusterPayload {
   /** The creator of the cluster. */
   creator: ClusterCreator
 
@@ -193,7 +193,7 @@ export interface DistributedValidator {
  */
 export interface ClusterLock {
   /** The cluster definition. */
-  cluster_definition: ClusterDefintion
+  cluster_definition: ClusterDefinition
 
   /** The cluster distributed validators. */
   distributed_validators: DistributedValidator[]
