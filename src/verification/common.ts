@@ -6,7 +6,7 @@ import {
     init,
 } from '@chainsafe/bls'
 
-import { FORK_MAPPING, type ClusterDefintion, type ClusterLock, type DepositData, type BuilderRegistrationMessage, type DistributedValidator } from '../types.js'
+import { FORK_MAPPING, type ClusterDefinition, type ClusterLock, type DepositData, type BuilderRegistrationMessage, type DistributedValidator } from '../types.js'
 import * as semver from 'semver'
 import { clusterDefinitionContainerTypeV1X6, hashClusterDefinitionV1X6, hashClusterLockV1X6, verifyDVV1X6 } from './v1.6.0.js'
 import { clusterDefinitionContainerTypeV1X7, hashClusterDefinitionV1X7, hashClusterLockV1X7, verifyDVV1X7 } from './v1.7.0.js'
@@ -26,7 +26,7 @@ import { clusterDefinitionContainerTypeV1X8, hashClusterDefinitionV1X8, hashClus
  * @returns The config hash or the definition hash in of the corresponding cluster
  */
 export const clusterConfigOrDefinitionHash = (
-    cluster: ClusterDefintion,
+    cluster: ClusterDefinition,
     configOnly: boolean,
 ): string => {
     let definitionType, val
@@ -142,7 +142,7 @@ const getEnrSigner = (
 }
 
 const verifyDefinitionSignatures = (
-    clusterDefinition: ClusterDefintion,
+    clusterDefinition: ClusterDefinition,
     definitionType: DefinitionFlow,
 ): boolean => {
     if (definitionType === DefinitionFlow.Charon) {

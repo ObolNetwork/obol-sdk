@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { ethers } from 'ethers'
 import {
-  type ClusterDefintion,
+  type ClusterDefinition,
   Client,
   type ClusterLock,
 } from '@obolnetwork/obol-sdk'
@@ -16,13 +16,13 @@ export const signer = wallet.connect(null)
 
 export const client: Client = new Client(
   { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
-  signer,
+  signer as any,
 )
 
 export const app = client.baseUrl
 
 export const postClusterDef = async (
-  clusterWithoutDefHash: ClusterDefintion,
+  clusterWithoutDefHash: ClusterDefinition,
 ): Promise<any> => {
   const postAuth = clusterWithoutDefHash.creator.config_signature
   const operatorsToPOST = clusterWithoutDefHash.operators.map(
@@ -42,7 +42,7 @@ export const postClusterDef = async (
 }
 
 export const updateClusterDef = async (
-  clusterDef: ClusterDefintion,
+  clusterDef: ClusterDefinition,
 ): Promise<void> => {
   const clusterOperators = clusterDef.operators
   for (const clusterOperator of clusterOperators) {

@@ -1,5 +1,5 @@
 import { DefinitionFlow } from './constants'
-import { type ClusterDefintion } from './types'
+import { type ClusterDefinition } from './types'
 
 export const hexWithout0x = (hex: string): string => {
   return hex.slice(2, hex.length)
@@ -10,7 +10,7 @@ export const strToUint8Array = (str: string): Uint8Array => {
 }
 
 export const definitionFlow = (
-  clusterDefinition: ClusterDefintion,
+  clusterDefinition: ClusterDefinition,
 ): DefinitionFlow | null => {
   if (
     clusterDefinition.creator.address &&
