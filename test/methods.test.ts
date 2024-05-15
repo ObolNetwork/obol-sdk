@@ -30,6 +30,16 @@ describe('Cluster Client', () => {
   //   }
   // })
 
+  test('createTermsAndConditions should return "successful authorization"', async () => {
+    clientInstance['request'] = jest
+      .fn()
+      .mockReturnValue(Promise.resolve({message:"successful authorization"}))
+
+    const isAuthorized =
+      await clientInstance.acceptObolLatestTermsAndConditions()
+    expect(isAuthorized).toEqual("successful authorization")
+  })
+
   test('createClusterDefinition should return config_hash', async () => {
     clientInstance['request'] = jest
       .fn()

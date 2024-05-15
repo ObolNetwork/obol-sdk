@@ -8,6 +8,7 @@ import {
   app,
   postClusterDef,
   signer,
+  secondClient
 } from './utils'
 import {
   type ClusterDefinition,
@@ -27,9 +28,11 @@ describe('Cluster Definition', () => {
   let clusterDefinition: ClusterDefinition
   let secondConfigHash: string
   const clientWithoutAsigner = new Client({
-    baseUrl: 'https://2355-2a01-9700-1547-4800-212b-5ed2-bb3c-d1fb.ngrok-free.app',
+    baseUrl: 'https://40a9-2a01-9700-1547-4800-9db4-db80-11f1-7c07.ngrok-free.app',
     chainId: 17000,
   })
+
+  const notAuthorisedClient = secondClient;
 
 
   it('should post latest terms and conditions acceptance signature', async () => {
@@ -37,20 +40,25 @@ describe('Cluster Definition', () => {
     expect(isAuthorised).toEqual("successful authorization")
   })
 
-  it('should post a cluster definition and return confighash', async () => {
+  it('should post a cluster definition and return confighash for an authorised user', async () => {
     configHash = await client.createClusterDefinition(clusterConfigV1X7)
     expect(configHash).toHaveLength(66)
   })
 
-  it('should post a cluster definition and return confighash', async () => {
-    expect(configHash).toHaveLength(66)
-  })
 
   it('should throw on post a cluster without a signer', async () => {
     try {
       await clientWithoutAsigner.createClusterDefinition(clusterConfigV1X7)
     } catch (err: any) {
       expect(err.message).toEqual('Signer is required in createClusterDefinition')
+    }
+  })
+
+  it('should throw on post a cluster if the user did not sign latest terms and conditions', async () => {
+    try {
+      await notAuthorisedClient.createClusterDefinition(clusterConfigV1X7)
+    } catch (err: any) {
+      expect(err.message).toEqual('Unauthorized')
     }
   })
 
@@ -76,7 +84,18 @@ describe('Cluster Definition', () => {
     }
   })
 
-  it('should update the cluster which the operator belongs to', async () => {
+  it('should throw on accept a cluster if the user did not sign latest terms and conditions', async () => {
+    try {
+      await notAuthorisedClient.acceptClusterDefinition({ enr, version: clusterDefinition.version },
+        configHash,
+      )
+    }
+    catch (err: any) {
+      expect(err.message).toEqual('Unauthorized')
+    }
+  })
+
+  it('should update the cluster which the operator belongs to for an authorised user', async () => {
     const signerAddress = await signer.getAddress()
     clusterConfigV1X7.operators.push({ address: signerAddress })
 
@@ -113,108 +132,108 @@ describe('Cluster Definition', () => {
   })
 })
 
-// describe('Poll Cluster Lock', () => {
-//   // Test polling getClusterLock through mimicing the whole flow using obol-api endpoints
-//   const { definition_hash: _, ...rest } = clusterLockV1X7.cluster_definition
-//   const clusterWithoutDefHash = rest
-//   const clientWithoutAsigner = new Client({
-//     baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
-//     chainId: 17000,
-//   })
+describe('Poll Cluster Lock', () => {
+  // Test polling getClusterLock through mimicing the whole flow using obol-api endpoints
+  const { definition_hash: _, ...rest } = clusterLockV1X7.cluster_definition
+  const clusterWithoutDefHash = rest
+  const clientWithoutAsigner = new Client({
+    baseUrl: 'https://40a9-2a01-9700-1547-4800-9db4-db80-11f1-7c07.ngrok-free.app',
+    chainId: 17000,
+  })
 
-//   beforeAll(async () => {
-//     await postClusterDef(clusterWithoutDefHash)
-//   })
+  beforeAll(async () => {
+    await postClusterDef(clusterWithoutDefHash)
+  })
 
-//   it('should make a GET request to the API periodically until a lock is returned', async () => {
-//     // Call two async operations in parallel, polling to fetch lockFile when exist and the whole process after the creator shares the link with operators
-//     const [lockObject] = await Promise.all([
-//       new Promise((resolve, reject) => {
-//         const pollReqIntervalId = setInterval(async function () {
-//           try {
-//             const lockFile = await client.getClusterLock(
-//               clusterLockV1X7.cluster_definition.config_hash,
-//             )
-//             if (lockFile?.lock_hash) {
-//               clearInterval(pollReqIntervalId)
-//               resolve(lockFile)
-//             }
-//           } catch (err: any) {
-//             // TODO(Hanan) Update this once the errors thrown from obol-api are updated
-//             console.log(err)
-//           }
-//         }, 1000)
+  it('should make a GET request to the API periodically until a lock is returned', async () => {
+    // Call two async operations in parallel, polling to fetch lockFile when exist and the whole process after the creator shares the link with operators
+    const [lockObject] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const pollReqIntervalId = setInterval(async function () {
+          try {
+            const lockFile = await client.getClusterLock(
+              clusterLockV1X7.cluster_definition.config_hash,
+            )
+            if (lockFile?.lock_hash) {
+              clearInterval(pollReqIntervalId)
+              resolve(lockFile)
+            }
+          } catch (err: any) {
+            // TODO(Hanan) Update this once the errors thrown from obol-api are updated
+            console.log(err)
+          }
+        }, 1000)
 
-//         setTimeout(function () {
-//           clearInterval(pollReqIntervalId)
-//           reject(new Error('Time out'))
-//         }, 5000)
-//       }),
-//       (async () => {
-//         await updateClusterDef(clusterLockV1X7.cluster_definition)
-//         await publishLockFile(clusterLockV1X7)
-//       })(),
-//     ])
-//     expect(lockObject).toHaveProperty('lock_hash')
-//   })
+        setTimeout(function () {
+          clearInterval(pollReqIntervalId)
+          reject(new Error('Time out'))
+        }, 5000)
+      }),
+      (async () => {
+        await updateClusterDef(clusterLockV1X7.cluster_definition)
+        await publishLockFile(clusterLockV1X7)
+      })(),
+    ])
+    expect(lockObject).toHaveProperty('lock_hash')
+  })
 
-//   it('fetches a lock successfully without a signer', async () => {
-//     // Call two async operations in parallel, polling to fetch lockFile when exist and the whole process after the creator shares the link with operators
-//     const [lockObject] = await Promise.all([
-//       new Promise((resolve, reject) => {
-//         const pollReqIntervalId = setInterval(async function () {
-//           try {
-//             const lockFile = await clientWithoutAsigner.getClusterLock(
-//               clusterLockV1X7.cluster_definition.config_hash,
-//             )
-//             if (lockFile?.lock_hash) {
-//               clearInterval(pollReqIntervalId)
-//               resolve(lockFile)
-//             }
-//           } catch (err: any) {
-//             console.log(err)
-//           }
-//         }, 1000)
+  it('fetches a lock successfully without a signer', async () => {
+    // Call two async operations in parallel, polling to fetch lockFile when exist and the whole process after the creator shares the link with operators
+    const [lockObject] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const pollReqIntervalId = setInterval(async function () {
+          try {
+            const lockFile = await clientWithoutAsigner.getClusterLock(
+              clusterLockV1X7.cluster_definition.config_hash,
+            )
+            if (lockFile?.lock_hash) {
+              clearInterval(pollReqIntervalId)
+              resolve(lockFile)
+            }
+          } catch (err: any) {
+            console.log(err)
+          }
+        }, 1000)
 
-//         setTimeout(function () {
-//           clearInterval(pollReqIntervalId)
-//           reject(new Error('Time out'))
-//         }, 5000)
-//       }),
-//       (async () => {
-//         await updateClusterDef(clusterLockV1X7.cluster_definition)
-//         await publishLockFile(clusterLockV1X7)
-//       })(),
-//     ])
-//     expect(lockObject).toHaveProperty('lock_hash')
-//   })
+        setTimeout(function () {
+          clearInterval(pollReqIntervalId)
+          reject(new Error('Time out'))
+        }, 5000)
+      }),
+      (async () => {
+        await updateClusterDef(clusterLockV1X7.cluster_definition)
+        await publishLockFile(clusterLockV1X7)
+      })(),
+    ])
+    expect(lockObject).toHaveProperty('lock_hash')
+  })
 
-//   it('should fetch the cluster definition for the configHash', async () => {
-//     const clusterDefinition: ClusterDefinition =
-//       await client.getClusterDefinition(
-//         clusterLockV1X7.cluster_definition.config_hash,
-//       )
-//     expect(clusterDefinition.config_hash).toEqual(
-//       clusterLockV1X7.cluster_definition.config_hash,
-//     )
-//   })
+  it('should fetch the cluster definition for the configHash', async () => {
+    const clusterDefinition: ClusterDefinition =
+      await client.getClusterDefinition(
+        clusterLockV1X7.cluster_definition.config_hash,
+      )
+    expect(clusterDefinition.config_hash).toEqual(
+      clusterLockV1X7.cluster_definition.config_hash,
+    )
+  })
 
-//   test.each([{ version: 'v1.6.0', clusterLock: clusterLockV1X6 }, { version: 'v1.7.0', clusterLock: clusterLockV1X7 }, { version: 'v1.8.0', clusterLock: clusterLockV1X8 }])(
-//     '$version: \'should return true on verified cluster lock\'',
-//     async ({ clusterLock }) => {
-//       const isValidLock: boolean = await validateClusterLock(clusterLock)
-//       expect(isValidLock).toEqual(true)
-//     })
+  test.each([{ version: 'v1.6.0', clusterLock: clusterLockV1X6 }, { version: 'v1.7.0', clusterLock: clusterLockV1X7 }, { version: 'v1.8.0', clusterLock: clusterLockV1X8 }])(
+    '$version: \'should return true on verified cluster lock\'',
+    async ({ clusterLock }) => {
+      const isValidLock: boolean = await validateClusterLock(clusterLock)
+      expect(isValidLock).toEqual(true)
+    })
 
-//   afterAll(async () => {
-//     const configHash = clusterLockV1X7.cluster_definition.config_hash
-//     const lockHash = clusterLockV1X7.lock_hash
+  afterAll(async () => {
+    const configHash = clusterLockV1X7.cluster_definition.config_hash
+    const lockHash = clusterLockV1X7.lock_hash
 
-//     await request(app)
-//       .delete(`/lock/${lockHash}`)
-//       .set('Authorization', `Bearer ${DEL_AUTH}`)
-//     await request(app)
-//       .delete(`/dv/${configHash}`)
-//       .set('Authorization', `Bearer ${DEL_AUTH}`)
-//   })
-// })
+    await request(app)
+      .delete(`/lock/${lockHash}`)
+      .set('Authorization', `Bearer ${DEL_AUTH}`)
+    await request(app)
+      .delete(`/dv/${configHash}`)
+      .set('Authorization', `Bearer ${DEL_AUTH}`)
+  })
+})
