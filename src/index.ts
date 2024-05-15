@@ -62,7 +62,7 @@ export class Client extends Base {
 
 
     try {
-      const termsAndConditionsHash = hashTermsAndConditions();
+      const termsAndConditionsHash = await hashTermsAndConditions();
       const address = await this.signer.getAddress()
       const termsAndConditionsPayload = {
         address,

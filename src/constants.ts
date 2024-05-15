@@ -12,7 +12,7 @@ export const CreatorConfigHashSigningTypes = {
 export const TermsAndConditionsSigningTypes = {
   TermsAndConditions: [
     { name: 'terms_and_conditions_hash', type: 'string' },
-    { name: 'version', type: 'string' },
+    { name: 'version', type: 'uint256' },
   ]
 }
 
@@ -128,7 +128,7 @@ export const DEFAULT_CHAIN_ID = 17000
 
 export const ETHER_TO_GWEI = 10 ** 9
 
-export const terms_and_conditions_version = 'v1.0.0';
-export const terms_and_conditions_url = `https://obol.tech/${terms_and_conditions_version}/terms.pdf`;
+export const terms_and_conditions_version = 1;
+export const terms_and_conditions_url = (terms_and_conditions_version === 1) ? `https://obol.tech/terms.pdf` : `https://obol.tech/${terms_and_conditions_version}/terms.pdf`;
 
 

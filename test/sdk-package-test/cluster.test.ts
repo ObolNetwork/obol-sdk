@@ -35,11 +35,11 @@ describe('Cluster Definition', () => {
     configHash = await client.createClusterDefinition(clusterConfigV1X7)
   })
 
-  // it('should post a cluster definition and return confighash', async () => {
-  //   const isAuthorised= await client.acceptObolLatestTermsAndConditions();
-  //   console.log(isAuthorised,"isAuthorised")
-  //   expect(isAuthorised).toBeTruthy()
-  // })
+  it('should post latest terms and conditions acceptance signature', async () => {
+    const isAuthorised = await client.acceptObolLatestTermsAndConditions();
+    console.log(isAuthorised, "isAuthorised")
+    expect(isAuthorised).toBeTruthy()
+  })
 
   it('should post a cluster definition and return confighash', async () => {
     expect(configHash).toHaveLength(66)

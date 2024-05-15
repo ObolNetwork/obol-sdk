@@ -6,6 +6,7 @@ import { Base } from '../src/base'
 import { validatePayload } from '../src/ajv'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
+import { hashTermsAndConditions } from '../src/verification/termsAndConditions'
 
 /* eslint no-new: 0 */
 describe('Cluster Client', () => {
@@ -190,4 +191,10 @@ describe('Cluster Client without a signer', () => {
       const isValidLock: boolean = await validateClusterLock(clusterLock)
       expect(isValidLock).toEqual(true)
     })
+
+
+  test('Finds the hash of the latest version of terms and conditions', async () => {
+    const termsAndConditionsHash = await hashTermsAndConditions()
+    expect(termsAndConditionsHash).toEqual("0x0015d01710b4d864004320a4826f6846c2db12a7f056a126fa5ae16c0b5e2b65")
+  })
 })
