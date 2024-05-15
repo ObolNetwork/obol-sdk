@@ -15,7 +15,7 @@ const wallet = new ethers.Wallet(privateKey)
 export const signer = wallet.connect(null)
 
 export const client: Client = new Client(
-  { baseUrl: 'https://40a9-2a01-9700-1547-4800-9db4-db80-11f1-7c07.ngrok-free.app', chainId: 17000 },
+  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
   signer as any,
 )
 
@@ -29,7 +29,7 @@ const secondWallet = new ethers.Wallet(secondprivateKey)
 export const secondSigner = secondWallet.connect(null)
 
 export const secondClient: Client = new Client(
-  { baseUrl: 'https://40a9-2a01-9700-1547-4800-9db4-db80-11f1-7c07.ngrok-free.app', chainId: 17000 },
+  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
   secondSigner as any,
 )
 

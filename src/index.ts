@@ -30,8 +30,7 @@ export * from './services.js'
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
  */
 export class Client extends Base {
-  private readonly signer: Signer | undefined
-    ;
+  private readonly signer: Signer | undefined;
 
   /**
    * @param config - Client configurations
