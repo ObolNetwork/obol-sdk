@@ -135,7 +135,7 @@ export class Client extends Base {
         { creator_config_hash: clusterConfig.config_hash },
       )
 
-      const clusterDefinition: ClusterDefinition = await this.request('/dv', {
+      const clusterDefinition: ClusterDefinition = await this.request('/v1/definition', {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
         headers: {
@@ -191,7 +191,7 @@ export class Client extends Base {
         fork_version: this.fork_version,
       }
       const clusterDefinition: ClusterDefinition = await this.request(
-        `/dv/${configHash}`,
+        `/v1/definition/${configHash}`,
         {
           method: 'PUT',
           body: JSON.stringify(operatorData),
