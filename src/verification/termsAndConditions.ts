@@ -1,12 +1,12 @@
 import pdf from 'pdf-parse'
 import { ByteListType, ContainerType } from '@chainsafe/ssz'
-import { terms_and_conditions_url } from '../constants'
+import { TERMS_AND_CONDITIONS_URL } from '../constants'
 import { strToUint8Array } from '../utils'
 
-export const hashTermsAndConditions = async () => {
+export const hashTermsAndConditions = async (): Promise<string | null> => {
   try {
     // read the pdf
-    const response = await fetch(terms_and_conditions_url)
+    const response = await fetch(TERMS_AND_CONDITIONS_URL)
     const pdfBuffarrayBuffer = await response.arrayBuffer()
     const pdfBuffer = Buffer.from(pdfBuffarrayBuffer)
     const data = await pdf(pdfBuffer)

@@ -128,5 +128,5 @@ export const DEFAULT_CHAIN_ID = 17000
 
 export const ETHER_TO_GWEI = 10 ** 9
 
-export const terms_and_conditions_version = 1
-export const terms_and_conditions_url = (terms_and_conditions_version === 1) ? 'https://obol.tech/terms.pdf' : `https://obol.tech/${terms_and_conditions_version}/terms.pdf`
+export const TERMS_AND_CONDITIONS_VERSION = 1
+export const TERMS_AND_CONDITIONS_URL = (TERMS_AND_CONDITIONS_VERSION === 1) ? 'https://obol.tech/terms.pdf' : `https://obol.tech/${TERMS_AND_CONDITIONS_VERSION as number}/terms.pdf`

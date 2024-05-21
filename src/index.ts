@@ -9,7 +9,7 @@ import {
   CONFIG_VERSION,
   OperatorConfigHashSigningTypes,
   EnrSigningTypes,
-  terms_and_conditions_version,
+  TERMS_AND_CONDITIONS_VERSION,
   TermsAndConditionsSigningTypes,
 } from './constants.js'
 import { ConflictError } from './errors.js'
@@ -64,7 +64,7 @@ export class Client extends Base {
       const address = await this.signer.getAddress()
       const termsAndConditionsPayload = {
         address,
-        version: terms_and_conditions_version,
+        version: TERMS_AND_CONDITIONS_VERSION,
         terms_and_conditions_hash: termsAndConditionsHash
       }
 
@@ -73,7 +73,7 @@ export class Client extends Base {
         TermsAndConditionsSigningTypes,
         {
           terms_and_conditions_hash: termsAndConditionsHash,
-          version: terms_and_conditions_version,
+          version: TERMS_AND_CONDITIONS_VERSION,
         },
       )
 
