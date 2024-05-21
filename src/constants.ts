@@ -23,14 +23,14 @@ const EIP712Domain = [
 ]
 
 export const Domain = (chainId?: number): TypedDataDomain => {
-  let typeDataDomain: any = {
+  const typeDataDomain: any = {
     name: EIP712_DOMAIN_NAME,
     version: EIP712_DOMAIN_VERSION,
   }
   if (chainId) {
-    typeDataDomain.chainId = chainId;
+    typeDataDomain.chainId = chainId
   }
-  return typeDataDomain;
+  return typeDataDomain
 }
 
 export const CreatorTypedMessage = {
@@ -128,7 +128,5 @@ export const DEFAULT_CHAIN_ID = 17000
 
 export const ETHER_TO_GWEI = 10 ** 9
 
-export const terms_and_conditions_version = 1;
-export const terms_and_conditions_url = (terms_and_conditions_version === 1) ? `https://obol.tech/terms.pdf` : `https://obol.tech/${terms_and_conditions_version}/terms.pdf`;
-
-
+export const terms_and_conditions_version = 1
+export const terms_and_conditions_url = (terms_and_conditions_version === 1) ? 'https://obol.tech/terms.pdf' : `https://obol.tech/${terms_and_conditions_version}/terms.pdf`

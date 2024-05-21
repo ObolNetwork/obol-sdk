@@ -33,11 +33,11 @@ describe('Cluster Client', () => {
   test('createTermsAndConditions should return "successful authorization"', async () => {
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve({message:"successful authorization"}))
+      .mockReturnValue(Promise.resolve({ message: 'successful authorization' }))
 
     const isAuthorized =
       await clientInstance.acceptObolLatestTermsAndConditions()
-    expect(isAuthorized).toEqual("successful authorization")
+    expect(isAuthorized).toEqual('successful authorization')
   })
 
   test('createClusterDefinition should return config_hash', async () => {
@@ -202,9 +202,8 @@ describe('Cluster Client without a signer', () => {
       expect(isValidLock).toEqual(true)
     })
 
-
   test('Finds the hash of the latest version of terms and conditions', async () => {
     const termsAndConditionsHash = await hashTermsAndConditions()
-    expect(termsAndConditionsHash).toEqual("0x0015d01710b4d864004320a4826f6846c2db12a7f056a126fa5ae16c0b5e2b65")
+    expect(termsAndConditionsHash).toEqual('0x0015d01710b4d864004320a4826f6846c2db12a7f056a126fa5ae16c0b5e2b65')
   })
 })

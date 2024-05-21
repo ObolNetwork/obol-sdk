@@ -19,7 +19,6 @@ export const client: Client = new Client(
   signer as any,
 )
 
-
 const secondMnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? ''
 
 const secondprivateKey = ethers.Wallet.fromPhrase(secondMnemonic).privateKey
@@ -32,7 +31,6 @@ export const secondClient: Client = new Client(
   { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
   secondSigner as any,
 )
-
 
 export const app = client.baseUrl
 

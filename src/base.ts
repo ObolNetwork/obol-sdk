@@ -40,8 +40,8 @@ export abstract class Base {
       if (response.ok) {
         return await response.json()
       } else {
-        const errorResponse = await response.json();
-        throw errorResponse;
+        const errorResponse = await response.json()
+        throw errorResponse
       }
     } catch (e: any) {
       throw e

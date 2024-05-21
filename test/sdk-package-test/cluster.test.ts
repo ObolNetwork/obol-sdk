@@ -32,19 +32,17 @@ describe('Cluster Definition', () => {
     chainId: 17000,
   })
 
-  const unauthorisedClient = secondClient;
-
+  const unauthorisedClient = secondClient
 
   it('should post latest terms and conditions acceptance signature', async () => {
-    const isAuthorised = await client.acceptObolLatestTermsAndConditions();
-    expect(isAuthorised).toEqual("successful authorization")
+    const isAuthorised = await client.acceptObolLatestTermsAndConditions()
+    expect(isAuthorised).toEqual('successful authorization')
   })
 
   it('should post a cluster definition and return confighash for an authorised user', async () => {
     configHash = await client.createClusterDefinition(clusterConfigV1X7)
     expect(configHash).toHaveLength(66)
   })
-
 
   it('should throw on post a cluster without a signer', async () => {
     try {
@@ -58,8 +56,8 @@ describe('Cluster Definition', () => {
     try {
       await unauthorisedClient.createClusterDefinition(clusterConfigV1X7)
     } catch (err: any) {
-      expect(err.message).toEqual('Missing t&c signature');
-      expect(err.statusCode).toEqual(401);
+      expect(err.message).toEqual('Missing t&c signature')
+      expect(err.statusCode).toEqual(401)
     }
   })
 
@@ -90,10 +88,9 @@ describe('Cluster Definition', () => {
       await unauthorisedClient.acceptClusterDefinition({ enr, version: clusterDefinition.version },
         configHash,
       )
-    }
-    catch (err: any) {
-      expect(err.message).toEqual('Missing t&c signature');
-      expect(err.statusCode).toEqual(401);
+    } catch (err: any) {
+      expect(err.message).toEqual('Missing t&c signature')
+      expect(err.statusCode).toEqual(401)
     }
   })
 
