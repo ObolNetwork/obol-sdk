@@ -59,7 +59,6 @@ export class Client extends Base {
   async acceptObolLatestTermsAndConditions(): Promise<string> {
     if (!this.signer) { throw new Error('Signer is required in acceptObolTermsAndConditions') }
 
-
     try {
       const termsAndConditionsHash = await hashTermsAndConditions();
       const address = await this.signer.getAddress()

@@ -39,9 +39,11 @@ export abstract class Base {
       const response = await fetch(url, config)
       if (response.ok) {
         return await response.json()
+      } else {
+        const errorResponse = await response.json();
+        throw errorResponse;
       }
-      throw new Error(response.statusText)
-    } catch (e) {
+    } catch (e: any) {
       throw e
     }
   }

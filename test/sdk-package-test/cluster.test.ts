@@ -32,7 +32,7 @@ describe('Cluster Definition', () => {
     chainId: 17000,
   })
 
-  const notAuthorisedClient = secondClient;
+  const unauthorisedClient = secondClient;
 
 
   it('should post latest terms and conditions acceptance signature', async () => {
@@ -56,9 +56,10 @@ describe('Cluster Definition', () => {
 
   it('should throw on post a cluster if the user did not sign latest terms and conditions', async () => {
     try {
-      await notAuthorisedClient.createClusterDefinition(clusterConfigV1X7)
+      await unauthorisedClient.createClusterDefinition(clusterConfigV1X7)
     } catch (err: any) {
-      expect(err.message).toEqual('Unauthorized')
+      expect(err.message).toEqual('Missing t&c signature');
+      expect(err.statusCode).toEqual(401);
     }
   })
 
@@ -80,18 +81,19 @@ describe('Cluster Definition', () => {
         configHash,
       )
     } catch (err: any) {
-      expect(err.message).toEqual('Not Found')
+      expect(err.message).toEqual('Data not found')
     }
   })
 
   it('should throw on accept a cluster if the user did not sign latest terms and conditions', async () => {
     try {
-      await notAuthorisedClient.acceptClusterDefinition({ enr, version: clusterDefinition.version },
+      await unauthorisedClient.acceptClusterDefinition({ enr, version: clusterDefinition.version },
         configHash,
       )
     }
     catch (err: any) {
-      expect(err.message).toEqual('Unauthorized')
+      expect(err.message).toEqual('Missing t&c signature');
+      expect(err.statusCode).toEqual(401);
     }
   })
 
