@@ -205,7 +205,7 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
 
         // Deposit Data Verification
         for (let j = 0; j < (validator.partial_deposit_data as DepositData[]).length; j++) {
-            const depositData = (validator.partial_deposit_data as DepositData[])[i]
+            const depositData = (validator.partial_deposit_data as DepositData[])[j]
             const { isValidDepositData, depositDataMsg } = verifyDepositData(
                 distributedPublicKey,
                 depositData as Partial<DepositData>,
