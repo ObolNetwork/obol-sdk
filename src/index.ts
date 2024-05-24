@@ -42,7 +42,7 @@ export class Client extends Base {
    * An example of how to instantiate obol-sdk Client:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L29)
    */
-  constructor(
+  constructor (
     config: { baseUrl?: string, chainId?: number },
     signer?: Signer,
   ) {
@@ -58,7 +58,7 @@ export class Client extends Base {
    * An example of how to use acceptObolLatestTermsAndConditions:
    * [acceptObolLatestTermsAndConditions](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L44)
    */
-  async acceptObolLatestTermsAndConditions(): Promise<string> {
+  async acceptObolLatestTermsAndConditions (): Promise<string> {
     if (!this.signer) { throw new Error('Signer is required in acceptObolTermsAndConditions') }
 
     try {
@@ -104,7 +104,7 @@ export class Client extends Base {
    * An example of how to use createClusterDefinition:
    * [createObolCluster](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L59)
    */
-  async createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
+  async createClusterDefinition (newCluster: ClusterPayload): Promise<string> {
     if (!this.signer) { throw new Error('Signer is required in createClusterDefinition') }
 
     validatePayload(newCluster, definitionSchema)
@@ -162,7 +162,7 @@ export class Client extends Base {
    * An example of how to use acceptClusterDefinition:
    * [acceptClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L106)
    */
-  async acceptClusterDefinition(
+  async acceptClusterDefinition (
     operatorPayload: OperatorPayload,
     configHash: string,
   ): Promise<ClusterDefinition> {
@@ -233,7 +233,7 @@ export class Client extends Base {
    * An example of how to use getClusterLock:
    * [getObolClusterLock](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L89)
    */
-  async getClusterLock(configHash: string): Promise<ClusterLock> {
+  async getClusterLock (configHash: string): Promise<ClusterLock> {
     const lock: ClusterLock = await this.request(
       `/lock/configHash/${configHash}`,
       {
