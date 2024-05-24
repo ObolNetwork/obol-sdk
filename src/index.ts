@@ -55,7 +55,7 @@ export class Client extends Base {
    * @returns {Promise<string>} terms and conditions acceptance success message.
    * @throws On unverified signature or wrong hash.
    *
-   * An example of how to instantiate obol-sdk Client:
+   * An example of how to use acceptObolLatestTermsAndConditions:
    * [acceptObolLatestTermsAndConditions](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L44)
    */
   async acceptObolLatestTermsAndConditions(): Promise<string> {
