@@ -214,7 +214,7 @@ export class Client extends Base {
    * An example of how to use getClusterDefinition:
    * [getObolClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L74)
    */
-  async getClusterDefinition(configHash: string): Promise<ClusterDefinition> {
+  async getClusterDefinition (configHash: string): Promise<ClusterDefinition> {
     const clusterDefinition: ClusterDefinition = await this.request(
       `/dv/${configHash}`,
       {
