@@ -18,7 +18,7 @@ export const hashTermsAndConditions = async (): Promise<string | null> => {
 
     const termsHasVal = termsType.defaultValue()
 
-    termsHasVal.terms_and_conditions_hash = strToUint8Array(data?.text)
+    termsHasVal.terms_and_conditions_hash = strToUint8Array(data?.text.replace(/[^a-zA-Z0-9]/g, ''))
 
     return (
       '0x' +

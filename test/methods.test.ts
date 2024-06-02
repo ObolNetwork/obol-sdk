@@ -204,6 +204,6 @@ describe('Cluster Client without a signer', () => {
 
   test('Finds the hash of the latest version of terms and conditions', async () => {
     const termsAndConditionsHash = await hashTermsAndConditions()
-    expect(termsAndConditionsHash).toEqual('0x0015d01710b4d864004320a4826f6846c2db12a7f056a126fa5ae16c0b5e2b65')
+    expect(termsAndConditionsHash).toEqual('0xa27f806434a2a26572582a87baf908bb0c01adcb497a0e61c58867e7c3b6743e')
   })
 })
