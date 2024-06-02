@@ -1,5 +1,7 @@
 # Changelog
 
+## [1.0.16](https://github.com/obolnetwork/obol-sdk/compare/v1.0.15...v1.0.16) (2024-05-24)
+
 ## [1.0.15](https://github.com/obolnetwork/obol-sdk/compare/v1.0.14...v1.0.15) (2024-05-22)
 
 ## [1.0.14](https://github.com/obolnetwork/obol-sdk/compare/v1.0.13...v1.0.14) (2024-05-06)
