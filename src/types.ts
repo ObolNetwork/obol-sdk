@@ -18,7 +18,7 @@ export enum FORK_MAPPING {
 /**
  * Node operator data
  */
-export interface ClusterOperator {
+export type ClusterOperator = {
   /** The operator address. */
   address: string
 
@@ -47,7 +47,7 @@ export type OperatorPayload = Partial<ClusterOperator> &
 /**
  * Cluster creator data
  */
-export interface ClusterCreator {
+export type ClusterCreator = {
   /** The creator address. */
   address: string
   /** The cluster configuration signature. */
@@ -57,7 +57,7 @@ export interface ClusterCreator {
 /**
  * Validator withdrawal configuration
  */
-export interface ClusterValidator {
+export type ClusterValidator = {
   /** The validator fee recipient address. */
   fee_recipient_address: string
 
@@ -68,7 +68,7 @@ export interface ClusterValidator {
 /**
  * Cluster configuration
  */
-export interface ClusterPayload {
+export type ClusterPayload = {
   /** The cluster name. */
   name: string
 
@@ -123,7 +123,7 @@ export interface ClusterDefinition extends ClusterPayload {
 /**
  * Unsigned DV Builder Registration Message
  */
-export interface BuilderRegistrationMessage {
+export type BuilderRegistrationMessage = {
   /** The DV fee recipient. */
   fee_recipient: string
 
@@ -140,7 +140,7 @@ export interface BuilderRegistrationMessage {
 /**
  * Pre-generated Signed Validator Builder Registration
  */
-export interface BuilderRegistration {
+export type BuilderRegistration = {
   /** Builder registration message. */
   message: BuilderRegistrationMessage
 
@@ -151,7 +151,7 @@ export interface BuilderRegistration {
 /**
  * Required deposit data for validator activation
  */
-export interface DepositData {
+export type DepositData = {
   /** The public key of the distributed validator. */
   pubkey: string
 
@@ -171,7 +171,7 @@ export interface DepositData {
 /**
  * Required deposit data for validator activation
  */
-export interface DistributedValidator {
+export type DistributedValidator = {
   /** The public key of the distributed validator. */
   distributed_public_key: string
 
@@ -191,7 +191,7 @@ export interface DistributedValidator {
 /**
  * Cluster Details after DKG is complete
  */
-export interface ClusterLock {
+export type ClusterLock = {
   /** The cluster definition. */
   cluster_definition: ClusterDefinition
 
