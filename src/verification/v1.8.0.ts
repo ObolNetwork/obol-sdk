@@ -7,7 +7,7 @@ import { type ClusterDefinition, type ClusterLock, type DepositData } from '../t
 import { verifyBuilderRegistration, verifyDepositData, verifyNodeSignatures } from './common'
 import { aggregateSignatures, verifyAggregate, verifyMultiple } from '@chainsafe/bls'
 
-// cluster defintion
+// cluster definition
 type DefinitionFieldsV1X8 = {
     uuid: ByteListType
     name: ByteListType
