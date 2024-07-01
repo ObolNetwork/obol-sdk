@@ -1,13 +1,38 @@
-# Changelog
+### Changelog
 
-## [1.0.16](https://github.com/obolnetwork/obol-sdk/compare/v1.0.15...v1.0.16) (2024-05-24)
+All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-## [1.0.15](https://github.com/obolnetwork/obol-sdk/compare/v1.0.14...v1.0.15) (2024-05-22)
+#### [v1.0.17](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.16...v1.0.17)
 
-## [1.0.14](https://github.com/obolnetwork/obol-sdk/compare/v1.0.13...v1.0.14) (2024-05-06)
+- revert back to using git changelog [`#46`](https://github.com/ObolNetwork/obol-sdk/pull/46)
+- Hanan/ta nd c [`#44`](https://github.com/ObolNetwork/obol-sdk/pull/44)
 
-## [1.0.13](https://github.com/obolnetwork/obol-sdk/compare/v1.0.12...v1.0.13) (2024-03-18)
+#### [v1.0.16](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.15...v1.0.16)
 
+> 24 May 2024
+
+- chore(release): v1.0.16 [`#43`](https://github.com/ObolNetwork/obol-sdk/pull/43)
+- Hanan/tandc [`#42`](https://github.com/ObolNetwork/obol-sdk/pull/42)
+
+#### [v1.0.15](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.14...v1.0.15)
+
+> 22 May 2024
+
+- chore(release): v1.0.15 [`#41`](https://github.com/ObolNetwork/obol-sdk/pull/41)
+- add acceptTermsAndConditions method [`#39`](https://github.com/ObolNetwork/obol-sdk/pull/39)
+
+#### [v1.0.14](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.13...v1.0.14)
+
+> 6 May 2024
+
+- chore(release): v1.0.14 [`#40`](https://github.com/ObolNetwork/obol-sdk/pull/40)
+- Fix publish step in release [`#38`](https://github.com/ObolNetwork/obol-sdk/pull/38)
+
+#### [v1.0.13](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.12...v1.0.13)
+
+> 18 March 2024
+
+- Update changelog [`#37`](https://github.com/ObolNetwork/obol-sdk/pull/37)
 - Fix release WF [`#36`](https://github.com/ObolNetwork/obol-sdk/pull/36)
 - chore(release): v1.0.13 [`#35`](https://github.com/ObolNetwork/obol-sdk/pull/35)
 - add contribution guidelines [`#34`](https://github.com/ObolNetwork/obol-sdk/pull/34)
@@ -19,7 +44,9 @@
 - Create label-issues.yml [`0f1252f`](https://github.com/ObolNetwork/obol-sdk/commit/0f1252f24badba89251a3595cb5d57a0790e5faf)
 - change to upgrade [`430bbc0`](https://github.com/ObolNetwork/obol-sdk/commit/430bbc05325f5b5f713b52952fd16954cf1396d6)
 
-## [1.0.12](https://github.com/ObolNetwork/obol-sdk/tree/v1.0.12) (2024-02-27)
+#### v1.0.12
+
+> 27 February 2024
 
 - Fix sdk deployment [`#18`](https://github.com/ObolNetwork/obol-sdk/pull/18)
 - Hanan/update sdk [`#17`](https://github.com/ObolNetwork/obol-sdk/pull/17)
