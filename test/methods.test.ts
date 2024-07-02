@@ -12,7 +12,7 @@ import { Base } from '../src/base';
 import { validatePayload } from '../src/ajv';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { hashTermsAndConditions } from '../src/verification/termsAndConditions'
+import { hashTermsAndConditions } from '../src/verification/termsAndConditions';
 
 /* eslint no-new: 0 */
 describe('Cluster Client', () => {
@@ -39,12 +39,14 @@ describe('Cluster Client', () => {
   test('createTermsAndConditions should return "successful authorization"', async () => {
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve({ message: 'successful authorization' }))
+      .mockReturnValue(
+        Promise.resolve({ message: 'successful authorization' }),
+      );
 
     const isAuthorized =
-      await clientInstance.acceptObolLatestTermsAndConditions()
-    expect(isAuthorized).toEqual('successful authorization')
-  })
+      await clientInstance.acceptObolLatestTermsAndConditions();
+    expect(isAuthorized).toEqual('successful authorization');
+  });
 
   test('createClusterDefinition should return config_hash', async () => {
     clientInstance['request'] = jest
@@ -247,12 +249,15 @@ describe('Cluster Client without a signer', () => {
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {
-      const isValidLock: boolean = await validateClusterLock(clusterLock)
-      expect(isValidLock).toEqual(true)
-    })
+      const isValidLock: boolean = await validateClusterLock(clusterLock);
+      expect(isValidLock).toEqual(true);
+    },
+  );
 
   test('Finds the hash of the latest version of terms and conditions', async () => {
-    const termsAndConditionsHash = await hashTermsAndConditions()
-    expect(termsAndConditionsHash).toEqual('0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273')
-  })
-})
+    const termsAndConditionsHash = await hashTermsAndConditions();
+    expect(termsAndConditionsHash).toEqual(
+      '0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273',
+    );
+  });
+});

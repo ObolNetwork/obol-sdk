@@ -36,7 +36,7 @@ export type ClusterOperator = {
 
   /** The operator configuration signature. */
   config_signature?: string;
-}
+};
 
 /**
  * A partial view of `ClusterOperator` with `enr` and `version` as required properties.
@@ -52,7 +52,7 @@ export type ClusterCreator = {
   address: string;
   /** The cluster configuration signature. */
   config_signature?: string;
-}
+};
 
 /**
  * Validator withdrawal configuration
@@ -63,7 +63,7 @@ export type ClusterValidator = {
 
   /** The validator reward address. */
   withdrawal_address: string;
-}
+};
 
 /**
  * Cluster configuration
@@ -80,7 +80,7 @@ export type ClusterPayload = {
 
   /** The cluster partial deposits in gwei or 32000000000. */
   deposit_amounts?: string[];
-}
+};
 
 /**
  * Cluster definition data needed for dkg
@@ -135,7 +135,7 @@ export type BuilderRegistrationMessage = {
 
   /** The public key of the DV. */
   pubkey: string;
-}
+};
 
 /**
  * Pre-generated Signed Validator Builder Registration
@@ -146,7 +146,7 @@ export type BuilderRegistration = {
 
   /** BLS signature of the builder registration message. */
   signature: string;
-}
+};
 
 /**
  * Required deposit data for validator activation
@@ -166,7 +166,7 @@ export type DepositData = {
 
   /** BLS signature of the deposit message. */
   signature: string;
-}
+};
 
 /**
  * Required deposit data for validator activation
@@ -186,14 +186,14 @@ export type DistributedValidator = {
 
   /** pre-generated signed validator builder registration to be sent to builder network. */
   builder_registration?: BuilderRegistration;
-}
+};
 
 /**
  * Cluster Details after DKG is complete
  */
 export type ClusterLock = {
   /** The cluster definition. */
-  cluster_definition: ClusterDefinition
+  cluster_definition: ClusterDefinition;
 
   /** The cluster distributed validators. */
   distributed_validators: DistributedValidator[];
@@ -206,4 +206,4 @@ export type ClusterLock = {
 
   /** Node Signature for the lock hash by the node secp256k1 key. */
   node_signatures?: string[];
-}
+};

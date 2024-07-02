@@ -8,13 +8,13 @@ export const EIP712_DOMAIN_NAME = 'Obol';
 export const EIP712_DOMAIN_VERSION = '1';
 export const CreatorConfigHashSigningTypes = {
   CreatorConfigHash: [{ name: 'creator_config_hash', type: 'string' }],
-}
+};
 export const TermsAndConditionsSigningTypes = {
   TermsAndConditions: [
     { name: 'terms_and_conditions_hash', type: 'string' },
     { name: 'version', type: 'uint256' },
-  ]
-}
+  ],
+};
 
 const EIP712Domain = [
   { name: 'name', type: 'string' },
@@ -26,12 +26,12 @@ export const Domain = (chainId?: number): TypedDataDomain => {
   const typeDataDomain: any = {
     name: EIP712_DOMAIN_NAME,
     version: EIP712_DOMAIN_VERSION,
-  }
+  };
   if (chainId) {
-    typeDataDomain.chainId = chainId
+    typeDataDomain.chainId = chainId;
   }
-  return typeDataDomain
-}
+  return typeDataDomain;
+};
 
 export const CreatorTypedMessage = {
   EIP712Domain,
@@ -123,13 +123,16 @@ export enum DefinitionFlow {
   Charon = 'Charon-Command',
 }
 
-export const DEFAULT_BASE_URL = 'https://api.obol.tech'
-export const DEFAULT_BASE_VERSION = 'v1'
-export const DEFAULT_CHAIN_ID = 17000
+export const DEFAULT_BASE_URL = 'https://api.obol.tech';
+export const DEFAULT_BASE_VERSION = 'v1';
+export const DEFAULT_CHAIN_ID = 17000;
 
-export const ETHER_TO_GWEI = 10 ** 9
+export const ETHER_TO_GWEI = 10 ** 9;
 
-export const TERMS_AND_CONDITIONS_VERSION = 1
-export const TERMS_AND_CONDITIONS_URL = (TERMS_AND_CONDITIONS_VERSION === 1) ? 'https://obol.org/terms.pdf' : `https://obol.org/${TERMS_AND_CONDITIONS_VERSION as number}/terms.pdf`
+export const TERMS_AND_CONDITIONS_VERSION = 1;
+export const TERMS_AND_CONDITIONS_URL =
+  TERMS_AND_CONDITIONS_VERSION === 1
+    ? 'https://obol.org/terms.pdf'
+    : `https://obol.org/${TERMS_AND_CONDITIONS_VERSION as number}/terms.pdf`;
 export const TERMS_AND_CONDITIONS_HASH =
   '0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273';

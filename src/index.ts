@@ -13,19 +13,19 @@ import {
   TermsAndConditionsSigningTypes,
   DEFAULT_BASE_VERSION,
   TERMS_AND_CONDITIONS_HASH,
-} from './constants.js'
-import { ConflictError } from './errors.js'
+} from './constants.js';
+import { ConflictError } from './errors.js';
 import {
   type ClusterDefinition,
   type ClusterLock,
   type ClusterPayload,
   type OperatorPayload,
-} from './types.js'
-import { clusterConfigOrDefinitionHash } from './verification/common.js'
-import { validatePayload } from './ajv.js'
-import { definitionSchema, operatorPayloadSchema } from './schema.js'
-export * from './types.js'
-export * from './services.js'
+} from './types.js';
+import { clusterConfigOrDefinitionHash } from './verification/common.js';
+import { validatePayload } from './ajv.js';
+import { definitionSchema, operatorPayloadSchema } from './schema.js';
+export * from './types.js';
+export * from './services.js';
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
@@ -56,17 +56,19 @@ export class Client extends Base {
    * An example of how to use acceptObolLatestTermsAndConditions:
    * [acceptObolLatestTermsAndConditions](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L44)
    */
-  async acceptObolLatestTermsAndConditions (): Promise<string> {
-    if (!this.signer) { throw new Error('Signer is required in acceptObolTermsAndConditions') }
+  async acceptObolLatestTermsAndConditions(): Promise<string> {
+    if (!this.signer) {
+      throw new Error('Signer is required in acceptObolTermsAndConditions');
+    }
 
     try {
-      const termsAndConditionsHash = TERMS_AND_CONDITIONS_HASH
-      const address = await this.signer.getAddress()
+      const termsAndConditionsHash = TERMS_AND_CONDITIONS_HASH;
+      const address = await this.signer.getAddress();
       const termsAndConditionsPayload = {
         address,
         version: TERMS_AND_CONDITIONS_VERSION,
-        terms_and_conditions_hash: termsAndConditionsHash
-      }
+        terms_and_conditions_hash: termsAndConditionsHash,
+      };
 
       const termsAndConditionsSignature = await this.signer.signTypedData(
         Domain(),
@@ -75,21 +77,22 @@ export class Client extends Base {
           terms_and_conditions_hash: termsAndConditionsHash,
           version: TERMS_AND_CONDITIONS_VERSION,
         },
-      )
+      );
 
-      const termsAndConditionsResponse: { message: string, success: boolean } = await this.request(`/${DEFAULT_BASE_VERSION}/termsAndConditions`, {
-        method: 'POST',
-        body: JSON.stringify(termsAndConditionsPayload),
-        headers: {
-          Authorization: `Bearer ${termsAndConditionsSignature}`,
-        },
-      })
-      return termsAndConditionsResponse?.message
+      const termsAndConditionsResponse: { message: string; success: boolean } =
+        await this.request(`/${DEFAULT_BASE_VERSION}/termsAndConditions`, {
+          method: 'POST',
+          body: JSON.stringify(termsAndConditionsPayload),
+          headers: {
+            Authorization: `Bearer ${termsAndConditionsSignature}`,
+          },
+        });
+      return termsAndConditionsResponse?.message;
     } catch (err: any) {
       if (err?.message === CONFLICT_ERROR_MSG) {
-        throw new ConflictError()
+        throw new ConflictError();
       }
-      throw err
+      throw err;
     }
   }
 
@@ -137,14 +140,17 @@ export class Client extends Base {
         { creator_config_hash: clusterConfig.config_hash },
       );
 
-      const clusterDefinition: ClusterDefinition = await this.request(`/${DEFAULT_BASE_VERSION}/definition`, {
-        method: 'POST',
-        body: JSON.stringify(clusterConfig),
-        headers: {
-          Authorization: `Bearer ${creatorConfigSignature}`,
-          'fork-version': this.fork_version,
+      const clusterDefinition: ClusterDefinition = await this.request(
+        `/${DEFAULT_BASE_VERSION}/definition`,
+        {
+          method: 'POST',
+          body: JSON.stringify(clusterConfig),
+          headers: {
+            Authorization: `Bearer ${creatorConfigSignature}`,
+            'fork-version': this.fork_version,
+          },
         },
-      });
+      );
       return clusterDefinition?.config_hash;
     } catch (err: any) {
       if (err?.message === CONFLICT_ERROR_MSG) {
@@ -168,7 +174,9 @@ export class Client extends Base {
     operatorPayload: OperatorPayload,
     configHash: string,
   ): Promise<ClusterDefinition> {
-    if (!this.signer) { throw new Error('Signer is required in acceptClusterDefinition') }
+    if (!this.signer) {
+      throw new Error('Signer is required in acceptClusterDefinition');
+    }
 
     validatePayload(operatorPayload, operatorPayloadSchema);
 
@@ -191,7 +199,7 @@ export class Client extends Base {
         address,
         enr_signature: operatorENRSignature,
         fork_version: this.fork_version,
-      }
+      };
       const clusterDefinition: ClusterDefinition = await this.request(
         `/${DEFAULT_BASE_VERSION}/definition/${configHash}`,
         {
@@ -216,7 +224,7 @@ export class Client extends Base {
    * An example of how to use getClusterDefinition:
    * [getObolClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L74)
    */
-  async getClusterDefinition (configHash: string): Promise<ClusterDefinition> {
+  async getClusterDefinition(configHash: string): Promise<ClusterDefinition> {
     const clusterDefinition: ClusterDefinition = await this.request(
       `/${DEFAULT_BASE_VERSION}/definition/${configHash}`,
       {
