@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v1.0.17](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.16...v1.0.17)
+
+- use v1.8.0 in cluster creation [`#32`](https://github.com/ObolNetwork/obol-sdk/pull/32)
+- chore(release): v1.0.17 [`#47`](https://github.com/ObolNetwork/obol-sdk/pull/47)
+- revert back to using git changelog [`#46`](https://github.com/ObolNetwork/obol-sdk/pull/46)
+- Hanan/ta nd c [`#44`](https://github.com/ObolNetwork/obol-sdk/pull/44)
+
 #### [v1.0.16](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.15...v1.0.16)
 
 > 24 May 2024
