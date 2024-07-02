@@ -117,20 +117,20 @@ export const hashClusterDefinitionV1X8 = (
     return configOnly
       ? { address: fromHexString(operator.address) }
       : {
-          address: fromHexString(operator.address),
-          enr: strToUint8Array(operator.enr as string),
-          config_signature: fromHexString(operator.config_signature as string),
-          enr_signature: fromHexString(operator.enr_signature as string),
-        };
+        address: fromHexString(operator.address),
+        enr: strToUint8Array(operator.enr as string),
+        config_signature: fromHexString(operator.config_signature as string),
+        enr_signature: fromHexString(operator.enr_signature as string),
+      };
   });
   val.creator = configOnly
     ? { address: fromHexString(cluster.creator.address) }
     : {
-        address: fromHexString(cluster.creator.address),
-        config_signature: fromHexString(
-          cluster.creator.config_signature as string,
-        ),
-      };
+      address: fromHexString(cluster.creator.address),
+      config_signature: fromHexString(
+        cluster.creator.config_signature as string,
+      ),
+    };
   val.validators = cluster.validators.map(validator => {
     return {
       fee_recipient_address: fromHexString(validator.fee_recipient_address),
@@ -248,49 +248,48 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
 
     // Needed in signature_aggregate verification
     for (const element of validatorPublicShares) {
-      pubShares.push(fromHexString(element));
+      pubShares.push(fromHexString(element))
     }
 
     // Deposit Data Verification
-    for (
-      let j = 0;
-      j < (validator.partial_deposit_data as DepositData[]).length;
-      j++
-    ) {
-      const depositData = (validator.partial_deposit_data as DepositData[])[i];
+    for (const element of validator.partial_deposit_data as DepositData[]) {
+      const depositData = element
       const { isValidDepositData, depositDataMsg } = verifyDepositData(
         distributedPublicKey,
         depositData as Partial<DepositData>,
         clusterLock.cluster_definition.validators[i].withdrawal_address,
-        clusterLock.cluster_definition.fork_version,
-      );
+        clusterLock.cluster_definition.fork_version
+      )
 
-      if (!isValidDepositData) {
-        return false;
+      if (
+        !isValidDepositData
+      ) {
+        return false
       }
 
-      pubKeys.push(fromHexString(distributedPublicKey));
-      builderRegistrationAndDepositDataMessages.push(depositDataMsg);
-      blsSignatures.push(fromHexString(depositData?.signature));
+      pubKeys.push(fromHexString(distributedPublicKey))
+      builderRegistrationAndDepositDataMessages.push(depositDataMsg)
+      blsSignatures.push(fromHexString(depositData?.signature))
     }
 
     // Builder Registration Verification
-    const { isValidBuilderRegistration, builderRegistrationMsg } =
-      verifyBuilderRegistration(
-        validator,
-        clusterLock.cluster_definition.validators[i].fee_recipient_address,
-        clusterLock.cluster_definition.fork_version,
-      );
+    const { isValidBuilderRegistration, builderRegistrationMsg } = verifyBuilderRegistration(
+      validator,
+      clusterLock.cluster_definition.validators[i].fee_recipient_address,
+      clusterLock.cluster_definition.fork_version
+    )
 
-    if (!isValidBuilderRegistration) {
-      return false;
+    if (
+      !isValidBuilderRegistration
+    ) {
+      return false
     }
 
-    pubKeys.push(fromHexString(distributedPublicKey));
-    builderRegistrationAndDepositDataMessages.push(builderRegistrationMsg);
+    pubKeys.push(fromHexString(distributedPublicKey))
+    builderRegistrationAndDepositDataMessages.push(builderRegistrationMsg)
     blsSignatures.push(
       fromHexString(validator.builder_registration?.signature as string),
-    );
+    )
   }
 
   // BLS signatures verification

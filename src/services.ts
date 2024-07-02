@@ -8,7 +8,7 @@ import { isValidClusterLock } from './verification/common.js';
  * @throws on missing keys or values.
  *
  * An example of how to use validateClusterLock:
- * [validateClusterLock](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
+ * [validateClusterLock](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L127)
  */
 export const validateClusterLock = async (
   lock: ClusterLock,

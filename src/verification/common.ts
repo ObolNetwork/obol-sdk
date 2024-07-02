@@ -57,8 +57,8 @@ import {
  * @returns The config hash or the definition hash in of the corresponding cluster
  */
 export const clusterConfigOrDefinitionHash = (
-  cluster: ClusterDefinition,
-  configOnly: boolean,
+    cluster: ClusterDefinition,
+    configOnly: boolean,
 ): string => {
   let definitionType, val;
 
@@ -176,8 +176,8 @@ const getEnrSigner = (
 };
 
 const verifyDefinitionSignatures = (
-  clusterDefinition: ClusterDefinition,
-  definitionType: DefinitionFlow,
+    clusterDefinition: ClusterDefinition,
+    definitionType: DefinitionFlow,
 ): boolean => {
   if (definitionType === DefinitionFlow.Charon) {
     return true;

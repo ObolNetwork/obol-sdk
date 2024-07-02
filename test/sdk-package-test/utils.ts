@@ -18,7 +18,20 @@ export const signer = wallet.connect(null);
 export const client: Client = new Client(
   { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
   signer as any,
-);
+)
+
+const secondMnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? ''
+
+const secondprivateKey = ethers.Wallet.fromPhrase(secondMnemonic).privateKey
+
+const secondWallet = new ethers.Wallet(secondprivateKey)
+
+export const secondSigner = secondWallet.connect(null)
+
+export const secondClient: Client = new Client(
+  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
+  secondSigner as any,
+)
 
 export const app = client.baseUrl;
 
@@ -34,7 +47,7 @@ export const postClusterDef = async (
 
   try {
     await request(app)
-      .post('/dv')
+      .post('/v1/definition')
       .set('Authorization', `Bearer ${postAuth}`)
       .send({ ...clusterWithoutDefHash, operators: operatorsToPOST });
   } catch (error) {
@@ -49,7 +62,7 @@ export const updateClusterDef = async (
   for (const clusterOperator of clusterOperators) {
     try {
       await request(app)
-        .put(`/dv/${clusterDef.config_hash}`)
+        .put(`/v1/definition/${clusterDef.config_hash}`)
         .set('Authorization', `Bearer ${clusterOperator.config_signature}`)
         .send({
           address: clusterOperator.address,

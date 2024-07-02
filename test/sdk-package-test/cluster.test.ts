@@ -14,7 +14,8 @@ import {
   app,
   postClusterDef,
   signer,
-} from './utils';
+  secondClient
+} from './utils'
 import {
   type ClusterDefinition,
   Client,
@@ -29,21 +30,25 @@ jest.setTimeout(10000);
 
 /* eslint @typescript-eslint/no-misused-promises: 0 */ // --> OFF
 describe('Cluster Definition', () => {
-  let configHash: string;
-  let clusterDefinition: ClusterDefinition;
-  let secondConfigHash: string;
+  let configHash: string
+  let clusterDefinition: ClusterDefinition
+  let secondConfigHash: string
   const clientWithoutAsigner = new Client({
     baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 17000,
   });
 
-  beforeAll(async () => {
-    configHash = await client.createClusterDefinition(clusterConfigV1X8);
-  });
+  const unauthorisedClient = secondClient
 
-  it('should post a cluster definition and return confighash', async () => {
-    expect(configHash).toHaveLength(66);
-  });
+  it('should post latest terms and conditions acceptance signature', async () => {
+    const isAuthorised = await client.acceptObolLatestTermsAndConditions()
+    expect(isAuthorised).toEqual('successful authorization')
+  })
+
+  it('should post a cluster definition and return confighash for an authorised user', async () => {
+    configHash = await client.createClusterDefinition(clusterConfigV1X8)
+    expect(configHash).toHaveLength(66)
+  })
 
   it('should throw on post a cluster without a signer', async () => {
     try {
@@ -54,6 +59,15 @@ describe('Cluster Definition', () => {
       );
     }
   });
+
+  it('should throw on post a cluster if the user did not sign latest terms and conditions', async () => {
+    try {
+      await unauthorisedClient.createClusterDefinition(clusterConfigV1X8)
+    } catch (err: any) {
+      expect(err.message).toEqual('Missing t&c signature')
+      expect(err.statusCode).toEqual(401)
+    }
+  })
 
   it('should fetch the cluster definition for the configHash', async () => {
     clusterDefinition = await client.getClusterDefinition(configHash);
@@ -73,13 +87,24 @@ describe('Cluster Definition', () => {
         configHash,
       );
     } catch (err: any) {
-      expect(err.message).toEqual('Not Found');
+      expect(err.message).toEqual('Data not found')
     }
   });
 
-  it('should update the cluster which the operator belongs to', async () => {
-    const signerAddress = await signer.getAddress();
-    clusterConfigV1X8.operators.push({ address: signerAddress });
+  it('should throw on accept a cluster if the user did not sign latest terms and conditions', async () => {
+    try {
+      await unauthorisedClient.acceptClusterDefinition({ enr, version: clusterDefinition.version },
+        configHash,
+      )
+    } catch (err: any) {
+      expect(err.message).toEqual('Missing t&c signature')
+      expect(err.statusCode).toEqual(401)
+    }
+  })
+
+  it('should update the cluster which the operator belongs to for an authorised user', async () => {
+    const signerAddress = await signer.getAddress()
+    clusterConfigV1X8.operators.push({ address: signerAddress })
 
     secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
 
@@ -108,10 +133,10 @@ describe('Cluster Definition', () => {
 
   afterAll(async () => {
     await request(app)
-      .delete(`/dv/${configHash}`)
+      .delete(`/v1/definition/${configHash}`)
       .set('Authorization', `Bearer ${DEL_AUTH}`);
     await request(app)
-      .delete(`/dv/${secondConfigHash}`)
+      .delete(`/v1/definition/${secondConfigHash}`)
       .set('Authorization', `Bearer ${DEL_AUTH}`);
   });
 });
@@ -222,10 +247,10 @@ describe('Poll Cluster Lock', () => {
     const lockHash = clusterLockV1X8.lock_hash;
 
     await request(app)
-      .delete(`/lock/${lockHash}`)
+      .delete(`/v1/lock/${lockHash}`)
       .set('Authorization', `Bearer ${DEL_AUTH}`);
     await request(app)
-      .delete(`/dv/${configHash}`)
+      .delete(`/v1/definition/${configHash}`)
       .set('Authorization', `Bearer ${DEL_AUTH}`);
   });
 });

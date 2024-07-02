@@ -1,11 +1,11 @@
 {
   "name": "@obolnetwork/obol-sdk",
-  "version": "1.0.14",
+  "version": "1.0.16",
   "description": "A package for creating Distributed Validators using the Obol API.",
   "bugs": {
     "url": "https://github.com/obolnetwork/obol-sdk/issues"
   },
-  "homepage": "https://docs.obol.tech/",
+  "homepage": "https://docs.obol.org/",
   "keywords": [
     "Obol",
     "Distributed Validators",
@@ -28,7 +28,7 @@
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
   "typings": "./dist/types/src/index.d.ts",
-  "author": "Obol Labs (https://obol.tech)",
+  "author": "Obol Labs (https://obol.org)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/obolnetwork/obol-sdk.git"
@@ -44,6 +44,7 @@
     "@chainsafe/discv5": "^0.5.1",
     "@chainsafe/ssz": "^0.14.0",
     "@metamask/eth-sig-util": "^7.0.1",
+    "@types/pdf-parse": "^1.1.4",
     "ajv": "^8.12.0",
     "cross-fetch": "^3.1.5",
     "elliptic": "^6.5.4",
@@ -51,9 +52,9 @@
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-n": "^16.6.2",
     "eslint-plugin-promise": "^6.1.1",
-    "ethers": "^6.4.0",
+    "ethers": "6.4.0",
     "nock": "^13.5.3",
-    "release-it": "^17.1.1",
+    "pdf-parse": "^1.1.1",
     "semver": "^7.6.0",
     "typescript-eslint": "^7.1.0",
     "uuid": "^9.0.0"
@@ -63,6 +64,7 @@
     "@types/elliptic": "^6.4.18",
     "@types/jest": "^28.1.8",
     "@types/node": "^20.2.5",
+    "@types/semver": "^7.5.8",
     "@types/uuid": "^9.0.1",
     "eslint": "^8.57.0",
     "husky": "^9.0.11",
@@ -71,6 +73,7 @@
     "msw": "^2.2.1",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.2.5",
+    "release-it": "^17.2.1",
     "ts-jest": "^28.0.8",
     "tsup": "^6.7.0",
     "typedoc": "^0.25.7",
@@ -88,6 +91,7 @@
   ],
   "release-it": {
     "git": {
+      "changelog": "npx auto-changelog --stdout --commit-limit false --unreleased --template https://raw.githubusercontent.com/release-it/release-it/main/templates/changelog-compact.hbs",
       "commitMessage": "chore(release): v${version}",
       "push": true,
       "commit": true,
@@ -103,12 +107,8 @@
       "publish": false,
       "ignoreVersion": false
     },
-    "plugins": {
-      "@release-it/conventional-changelog": {
-        "preset": "angular",
-        "infile": "CHANGELOG.md",
-        "header": "# Changelog"
-      }
+    "hooks": {
+      "after:bump": "npx auto-changelog -p --hide-credit"
     }
   },
   "jest": {

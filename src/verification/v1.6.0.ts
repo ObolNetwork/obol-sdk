@@ -32,6 +32,7 @@ import {
   verifyMultiple,
 } from '@chainsafe/bls';
 
+
 // cluster definition
 type DefinitionFieldsV1X6 = {
   uuid: ByteListType;
@@ -85,8 +86,8 @@ export const clusterDefinitionContainerTypeV1X6 = (
 };
 
 export const hashClusterDefinitionV1X6 = (
-  cluster: ClusterDefinition,
-  configOnly: boolean,
+    cluster: ClusterDefinition,
+    configOnly: boolean,
 ): ValueOfFields<DefinitionFieldsV1X6> => {
   const definitionType = clusterDefinitionContainerTypeV1X6(configOnly);
 

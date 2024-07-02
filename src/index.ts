@@ -9,19 +9,23 @@ import {
   CONFIG_VERSION,
   OperatorConfigHashSigningTypes,
   EnrSigningTypes,
-} from './constants.js';
-import { ConflictError } from './errors.js';
+  TERMS_AND_CONDITIONS_VERSION,
+  TermsAndConditionsSigningTypes,
+  DEFAULT_BASE_VERSION,
+  TERMS_AND_CONDITIONS_HASH,
+} from './constants.js'
+import { ConflictError } from './errors.js'
 import {
   type ClusterDefinition,
   type ClusterLock,
   type ClusterPayload,
   type OperatorPayload,
-} from './types.js';
-import { clusterConfigOrDefinitionHash } from './verification/common.js';
-import { validatePayload } from './ajv.js';
-import { definitionSchema, operatorPayloadSchema } from './schema.js';
-export * from './types.js';
-export * from './services.js';
+} from './types.js'
+import { clusterConfigOrDefinitionHash } from './verification/common.js'
+import { validatePayload } from './ajv.js'
+import { definitionSchema, operatorPayloadSchema } from './schema.js'
+export * from './types.js'
+export * from './services.js'
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
@@ -45,13 +49,58 @@ export class Client extends Base {
   }
 
   /**
+   * Accepts Obol terms and conditions to be able to create or update data.
+   * @returns {Promise<string>} terms and conditions acceptance success message.
+   * @throws On unverified signature or wrong hash.
+   *
+   * An example of how to use acceptObolLatestTermsAndConditions:
+   * [acceptObolLatestTermsAndConditions](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L44)
+   */
+  async acceptObolLatestTermsAndConditions (): Promise<string> {
+    if (!this.signer) { throw new Error('Signer is required in acceptObolTermsAndConditions') }
+
+    try {
+      const termsAndConditionsHash = TERMS_AND_CONDITIONS_HASH
+      const address = await this.signer.getAddress()
+      const termsAndConditionsPayload = {
+        address,
+        version: TERMS_AND_CONDITIONS_VERSION,
+        terms_and_conditions_hash: termsAndConditionsHash
+      }
+
+      const termsAndConditionsSignature = await this.signer.signTypedData(
+        Domain(),
+        TermsAndConditionsSigningTypes,
+        {
+          terms_and_conditions_hash: termsAndConditionsHash,
+          version: TERMS_AND_CONDITIONS_VERSION,
+        },
+      )
+
+      const termsAndConditionsResponse: { message: string, success: boolean } = await this.request(`/${DEFAULT_BASE_VERSION}/termsAndConditions`, {
+        method: 'POST',
+        body: JSON.stringify(termsAndConditionsPayload),
+        headers: {
+          Authorization: `Bearer ${termsAndConditionsSignature}`,
+        },
+      })
+      return termsAndConditionsResponse?.message
+    } catch (err: any) {
+      if (err?.message === CONFLICT_ERROR_MSG) {
+        throw new ConflictError()
+      }
+      throw err
+    }
+  }
+
+  /**
    * Creates a cluster definition which contains cluster configuration.
    * @param {ClusterPayload} newCluster - The new unique cluster.
    * @returns {Promise<string>} config_hash.
    * @throws On duplicate entries, missing or wrong cluster keys.
    *
    * An example of how to use createClusterDefinition:
-   * [createObolCluster](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
+   * [createObolCluster](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L59)
    */
   async createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
     if (!this.signer) {
@@ -88,7 +137,7 @@ export class Client extends Base {
         { creator_config_hash: clusterConfig.config_hash },
       );
 
-      const clusterDefinition: ClusterDefinition = await this.request('/dv', {
+      const clusterDefinition: ClusterDefinition = await this.request(`/${DEFAULT_BASE_VERSION}/definition`, {
         method: 'POST',
         body: JSON.stringify(clusterConfig),
         headers: {
@@ -113,15 +162,13 @@ export class Client extends Base {
    * @throws On unauthorized, duplicate entries, missing keys, not found cluster or invalid data.
    *
    * An example of how to use acceptClusterDefinition:
-   * [acceptClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
+   * [acceptClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L106)
    */
   async acceptClusterDefinition(
     operatorPayload: OperatorPayload,
     configHash: string,
   ): Promise<ClusterDefinition> {
-    if (!this.signer) {
-      throw new Error('Signer is required in acceptClusterDefinition');
-    }
+    if (!this.signer) { throw new Error('Signer is required in acceptClusterDefinition') }
 
     validatePayload(operatorPayload, operatorPayloadSchema);
 
@@ -144,9 +191,9 @@ export class Client extends Base {
         address,
         enr_signature: operatorENRSignature,
         fork_version: this.fork_version,
-      };
+      }
       const clusterDefinition: ClusterDefinition = await this.request(
-        `/dv/${configHash}`,
+        `/${DEFAULT_BASE_VERSION}/definition/${configHash}`,
         {
           method: 'PUT',
           body: JSON.stringify(operatorData),
@@ -167,11 +214,11 @@ export class Client extends Base {
    * @throws On not found config hash.
    *
    * An example of how to use getClusterDefinition:
-   * [getObolClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
+   * [getObolClusterDefinition](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L74)
    */
-  async getClusterDefinition(configHash: string): Promise<ClusterDefinition> {
+  async getClusterDefinition (configHash: string): Promise<ClusterDefinition> {
     const clusterDefinition: ClusterDefinition = await this.request(
-      `/dv/${configHash}`,
+      `/${DEFAULT_BASE_VERSION}/definition/${configHash}`,
       {
         method: 'GET',
       },
@@ -186,11 +233,11 @@ export class Client extends Base {
    * @throws On not found cluster definition or lock.
    *
    * An example of how to use getClusterLock:
-   * [getObolClusterLock](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts)
+   * [getObolClusterLock](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L89)
    */
   async getClusterLock(configHash: string): Promise<ClusterLock> {
     const lock: ClusterLock = await this.request(
-      `/lock/configHash/${configHash}`,
+      `/${DEFAULT_BASE_VERSION}/lock/configHash/${configHash}`,
       {
         method: 'GET',
       },
