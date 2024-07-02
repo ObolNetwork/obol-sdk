@@ -132,5 +132,4 @@ export const ETHER_TO_GWEI = 10 ** 9
 export const TERMS_AND_CONDITIONS_VERSION = 1
 export const TERMS_AND_CONDITIONS_URL = (TERMS_AND_CONDITIONS_VERSION === 1) ? 'https://obol.org/terms.pdf' : `https://obol.org/${TERMS_AND_CONDITIONS_VERSION as number}/terms.pdf`
 export const TERMS_AND_CONDITIONS_HASH =
-  "0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273";
-
+  '0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273';

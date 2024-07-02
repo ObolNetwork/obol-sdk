@@ -59,7 +59,7 @@ export const definitionSchema = {
         type: 'string',
         pattern: '^[0-9]+$',
       },
-      validDpositAmounts: true,
+      validDepositAmounts: true,
     },
   },
   required: ['name', 'operators', 'validators'],

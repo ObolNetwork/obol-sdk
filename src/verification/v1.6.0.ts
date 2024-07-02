@@ -32,7 +32,6 @@ import {
   verifyMultiple,
 } from '@chainsafe/bls';
 
-
 // cluster definition
 type DefinitionFieldsV1X6 = {
   uuid: ByteListType;

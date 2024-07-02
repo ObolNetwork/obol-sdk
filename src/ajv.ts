@@ -1,7 +1,7 @@
 import Ajv, { type ErrorObject } from 'ajv';
 import { parseUnits } from 'ethers';
 
-function validDpositAmounts(data: boolean, deposits: string[]): boolean {
+function validDepositAmounts(data: boolean, deposits: string[]): boolean {
   let sum = 0;
   // from ether togwei is same as from gwei to wei
   const maxDeposit = Number(parseUnits('32', 'gwei'));
@@ -32,8 +32,8 @@ export function validatePayload(
 ): ErrorObject[] | undefined | null | boolean {
   const ajv = new Ajv();
   ajv.addKeyword({
-    keyword: 'validDpositAmounts',
-    validate: validDpositAmounts,
+    keyword: 'validDepositAmounts',
+    validate: validDepositAmounts,
     errors: true,
   });
   const validate = ajv.compile(schema);

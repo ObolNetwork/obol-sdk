@@ -111,7 +111,7 @@ describe('Cluster Client', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Schema compilation errors\', must pass "validDpositAmounts" keyword validation',
+        'Schema compilation errors\', must pass "validDepositAmounts" keyword validation',
       );
     }
   });
