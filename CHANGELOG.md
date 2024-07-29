@@ -1,4 +1,8 @@
-### Changelog
+# Changelog
+
+## [1.0.18](https://github.com/obolnetwork/obol-sdk/compare/v1.0.17...v1.0.18) (2024-07-29)
+
+##
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
