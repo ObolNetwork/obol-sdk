@@ -236,7 +236,10 @@ describe('Poll Cluster Lock', () => {
     { version: 'v1.6.0', clusterLock: clusterLockV1X6 },
     { version: 'v1.7.0', clusterLock: clusterLockV1X7 },
     { version: 'v1.8.0', clusterLock: clusterLockV1X8 },
-    { version: 'null deposit_amounts v1.8.0', clusterLock: nullDepositAmountsClusterLockV1X8 }
+    {
+      version: 'null deposit_amounts v1.8.0',
+      clusterLock: nullDepositAmountsClusterLockV1X8,
+    },
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {
