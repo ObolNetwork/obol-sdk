@@ -91,6 +91,7 @@
   ],
   "release-it": {
     "git": {
+      "changelog": "npx auto-changelog --stdout --commit-limit false --unreleased --template https://raw.githubusercontent.com/release-it/release-it/main/templates/changelog-compact.hbs",
       "commitMessage": "chore(release): v${version}",
       "push": true,
       "commit": true,
@@ -106,12 +107,8 @@
       "publish": false,
       "ignoreVersion": false
     },
-    "plugins": {
-      "@release-it/conventional-changelog": {
-        "preset": "angular",
-        "infile": "CHANGELOG.md",
-        "header": "# Changelog"
-      }
+    "hooks": {
+      "after:bump": "npx auto-changelog -p --hide-credit"
     }
   },
   "jest": {
