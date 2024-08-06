@@ -2,16 +2,23 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-### [v2.0.0](https://github.com/obolnetwork/obol-sdk/compare/v1.0.17...v2.0.0) (2024-07-29)
+#### [v2.0.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.0.0...v2.0.1)
 
-> 29 July 2024
+- Hanan/null deposit amounts [`#54`](https://github.com/ObolNetwork/obol-sdk/pull/54)
+- accept a null value for deposit_amounts [`#52`](https://github.com/ObolNetwork/obol-sdk/pull/52)
 
-- soft launch.
+### [v2.0.0](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.17...v2.0.0)
+
+> 30 July 2024
+
+- [Release] v2.0.0 [`#50`](https://github.com/ObolNetwork/obol-sdk/pull/50)
 
 #### [v1.0.17](https://github.com/ObolNetwork/obol-sdk/compare/v1.0.16...v1.0.17)
 
 > 2 July 2024
 
+- fix release action [`#49`](https://github.com/ObolNetwork/obol-sdk/pull/49)
+- [Release] v1.0.17 [`#48`](https://github.com/ObolNetwork/obol-sdk/pull/48)
 - use v1.8.0 in cluster creation [`#32`](https://github.com/ObolNetwork/obol-sdk/pull/32)
 - chore(release): v1.0.17 [`#47`](https://github.com/ObolNetwork/obol-sdk/pull/47)
 - revert back to using git changelog [`#46`](https://github.com/ObolNetwork/obol-sdk/pull/46)
