@@ -109,6 +109,18 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.8.0')) {
+    if (
+      clusterLock.cluster_definition.deposit_amounts === null &&
+      clusterLock.distributed_validators.some(
+        distributedValidator =>
+          distributedValidator.partial_deposit_data?.length !== 1 ||
+          distributedValidator.partial_deposit_data[0].amount !== '32000000000',
+      )
+    ) {
+      throw new Error(
+        'mismatch between deposit_amounts and partial_deposit_data fields',
+      );
+    }
     return hashClusterLockV1X8(clusterLock);
   }
 

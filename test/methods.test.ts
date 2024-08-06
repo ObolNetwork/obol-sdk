@@ -259,6 +259,21 @@ describe('Cluster Client without a signer', () => {
     },
   );
 
+  test('validateCluster should return false for cluster with null deposit_amounts and incorrect partial_deposits', async () => {
+    const partialDeposit =
+      nullDepositAmountsClusterLockV1X8.distributed_validators[0]
+        .partial_deposit_data[0];
+    const isValidLock: boolean = await validateClusterLock({
+      ...nullDepositAmountsClusterLockV1X8,
+      distributed_validators: [
+        {
+          ...nullDepositAmountsClusterLockV1X8.distributed_validators[0],
+          partial_deposit_data: [partialDeposit, partialDeposit],
+        },
+      ],
+    });
+    expect(isValidLock).toEqual(false);
+  });
   test('Finds the hash of the latest version of terms and conditions', async () => {
     const termsAndConditionsHash = await hashTermsAndConditions();
     expect(termsAndConditionsHash).toEqual(
