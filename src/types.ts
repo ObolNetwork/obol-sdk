@@ -79,7 +79,7 @@ export type ClusterPayload = {
   validators: ClusterValidator[];
 
   /** The cluster partial deposits in gwei or 32000000000. */
-  deposit_amounts?: string[];
+  deposit_amounts?: string[] | null;
 };
 
 /**
@@ -112,9 +112,6 @@ export interface ClusterDefinition extends ClusterPayload {
 
   /** The number of distributed validators in the cluster. */
   num_validators: number;
-
-  /** The cluster partial deposits in gwei or 32000000000. */
-  deposit_amounts?: string[];
 
   /** The hash of the cluster definition. */
   definition_hash?: string;
