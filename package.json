@@ -39,6 +39,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@0xsplits/splits-sdk": "^4.0.5",
     "@chainsafe/bls": "6.0.3",
     "@chainsafe/blst": "^0.2.9",
     "@chainsafe/discv5": "^0.5.1",

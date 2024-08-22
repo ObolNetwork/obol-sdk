@@ -118,6 +118,38 @@ export interface ClusterDefinition extends ClusterPayload {
 }
 
 /**
+ * Split Recipient Keys
+ */
+export type SplitRecipient = {
+  /** The split recipient address. */
+  account: string;
+
+  /** The recipient split. */
+  percentAllocation: number
+}
+
+
+/**
+ * Split Proxy Params
+ */
+export type TotalSplitPayload = {
+  /** The split recipients addresses and splits. */
+  splitRecipients: SplitRecipient[];
+
+  /** Maximum number of validators with this configuration. */
+  validatorsSize: number;
+};
+
+/**
+ * OWR and Split Proxy Params
+ */
+export interface RewardsSplitPayload extends TotalSplitPayload {
+
+  /** Address that will reclaim validator principal after exit. */
+  principalRecipient: string;
+}
+
+/**
  * Unsigned DV Builder Registration Message
  */
 export type BuilderRegistrationMessage = {
@@ -204,3 +236,10 @@ export type ClusterLock = {
   /** Node Signature for the lock hash by the node secp256k1 key. */
   node_signatures?: string[];
 };
+
+
+/**
+ * String expected to be Ethereum Address
+ */
+export type ETH_ADDRESS = string;
+

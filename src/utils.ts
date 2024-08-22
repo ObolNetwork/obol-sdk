@@ -1,3 +1,4 @@
+import { Provider } from 'ethers';
 import { DefinitionFlow } from './constants';
 import { type ClusterDefinition } from './types';
 
@@ -54,3 +55,18 @@ export const definitionFlow = (
   }
   return null;
 };
+
+export const findDeployedBytecode = async (
+  contractAddress: string,
+  provider: Provider,
+) => {
+  return await provider?.getCode(contractAddress);
+}
+
+export const isContractAvailable = async (
+  contractAddress: string,
+  provider: Provider,
+) => {
+  const code = await findDeployedBytecode(contractAddress, provider);
+  return code && code !== "0x" && code !== "0x0";
+}

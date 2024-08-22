@@ -1,4 +1,4 @@
-import { type Signer } from 'ethers';
+import { Provider, type Signer } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
 import {
@@ -16,6 +16,8 @@ import {
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
+  ClusterValidator,
+  RewardsSplitPayload,
   type ClusterDefinition,
   type ClusterLock,
   type ClusterPayload,
@@ -24,6 +26,8 @@ import {
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
 import { definitionSchema, operatorPayloadSchema } from './schema.js';
+import { formatSplitRecipients, handleDeployRewardsSplitter, isSplitterMetadataExist, MULTICALL_ADDRESS, OWR_FACTORY_ADDRESS, predictSplitterAddress, RETROACTIVE_FUNDING_ADDRESS, RETROACTIVE_FUNDING_SPLIT, SPLITMAIN_ADDRESS } from './splitHelpers.js';
+import { isContractAvailable } from './utils.js';
 export * from './types.js';
 export * from './services.js';
 
@@ -94,6 +98,58 @@ export class Client extends Base {
       }
       throw err;
     }
+  }
+
+
+  /**
+   * Deploys OWR and Splitter Proxy.
+   * @param {ClusterPayload} newCluster - The new unique cluster.
+   * @returns {Promise<ClusterValidator>} owr address as withdrawal address and split proxy as fee recipient
+   */
+  //add the example reference
+  async createObolRewardSplit({ splitRecipients, principalRecipient, validatorsSize }: RewardsSplitPayload): Promise<ClusterValidator> {
+    if (!this.signer) {
+      throw new Error('Signer is required in createObolRewardSplit');
+    }
+
+    //Check if we allow splitters on this chainId
+
+    //Double check the deployed addresses (not sure if needed)
+    const checkSplitMainAddress = await isContractAvailable(
+      SPLITMAIN_ADDRESS,
+      this.signer.provider as Provider,
+    );
+
+    const checkMulticallAddress = await isContractAvailable(
+      MULTICALL_ADDRESS,
+      this.signer.provider as Provider,
+    );
+
+    const checkOWRFactoryAddress = await isContractAvailable(
+      OWR_FACTORY_ADDRESS,
+      this.signer.provider as Provider,
+    );
+
+    if (
+      !checkMulticallAddress ||
+      !checkSplitMainAddress ||
+      !checkOWRFactoryAddress
+    ) {
+
+      throw new Error('Something isn not working as expected, check this issue with obol-sdk team');
+    }
+
+    const retroActiveFundingRecipient = { account: RETROACTIVE_FUNDING_ADDRESS, percentAllocation: RETROACTIVE_FUNDING_SPLIT }
+
+    splitRecipients.push(retroActiveFundingRecipient)
+
+    const { accounts, percentAllocations } = formatSplitRecipients(splitRecipients)
+    const predictedSplitterAddress = await predictSplitterAddress({ signer: this.signer, accounts, percentAllocations });
+    const isSplitterDeployed = await isSplitterMetadataExist({ predictedSplitterAddress, chainId: this.chainId })
+    const { withdrawal_address, fee_recipient_address } = await handleDeployRewardsSplitter({ signer: this.signer, isSplitterDeployed, predictedSplitterAddress, accounts, percentAllocations, principalRecipient, validatorsSize })
+
+    return { withdrawal_address, fee_recipient_address }
+
   }
 
   /**
