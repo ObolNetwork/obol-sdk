@@ -1,18 +1,22 @@
 import request from 'supertest';
-import { ethers } from 'ethers';
+import { ethers, JsonRpcProvider } from 'ethers';
 import {
   type ClusterDefinition,
   Client,
   type ClusterLock,
 } from '@obolnetwork/obol-sdk';
+import dotenv from 'dotenv';
 
-const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
+dotenv.config();
 
-const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
+const privateKey = process.env.PRIVATE_KEY as string; //keep it in gh secrets
 
-const wallet = new ethers.Wallet(privateKey);
+const provider = new JsonRpcProvider(`https://ethereum-holesky.publicnode.com`);
 
-export const signer = wallet.connect(null);
+
+const wallet = new ethers.Wallet(privateKey, provider);
+
+export const signer = wallet.connect(provider);
 
 /* eslint-disable */
 export const client: Client = new Client(

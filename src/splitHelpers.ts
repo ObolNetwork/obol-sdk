@@ -1,8 +1,8 @@
-import { splitMainEthereumAbi } from "@0xsplits/splits-sdk/dist/src/constants/abi/splitMain";
 import { ClusterValidator, ETH_ADDRESS, SplitRecipient } from "./types";
-import { Split, SplitsClient } from "@0xsplits/splits-sdk";
 import { Contract, Interface, parseEther, Signer } from "ethers";
 import { OWRFactoryContract } from "./abi/OWR";
+import { splitMainEthereumAbi } from "./abi/SplitMain";
+import { MultiCallContract } from "./abi/Multicall"
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
@@ -15,15 +15,13 @@ export const MULTICALL_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
 export const OWR_FACTORY_ADDRESS = "0xc0961353fcc43a99e3041db07ac646720e116256"
 export const RETROACTIVE_FUNDING_ADDRESS = "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
 
-export const RETROACTIVE_FUNDING_SPLIT = 0.01
+export const RETROACTIVE_FUNDING_SPLIT = 1
 
 //Double check if we need them as params with defaults 
 const DISTRIBUTOR_FEE = 0;
 const RECOVERY_ADDRESS = "0x0000000000000000000000000000000000000000"
 const controller = "0x0000000000000000000000000000000000000000";
 
-//Add to secrets in repo
-const SPLITS_API_KEY = "";
 
 type Call = {
     target: ETH_ADDRESS;
@@ -78,49 +76,6 @@ export const predictSplitterAddress = async ({ signer, accounts, percentAllocati
 
     return predictedSplitAddress
 }
-
-export const isSplitterMetadataExist = async ({
-    predictedSplitterAddress,
-    chainId
-}:
-    {
-        predictedSplitterAddress: ETH_ADDRESS,
-        chainId: number,
-    }): Promise<boolean> => {
-    try {
-        const splitMetadata = await existedSplitMetadata({
-            predictedSplitterAddress,
-            chainId,
-        });
-
-
-        if (!!splitMetadata) {
-            return true;
-        }
-        return false;
-    } catch (e: any) {
-        throw new Error(e);
-    }
-}
-
-const existedSplitMetadata = async ({ chainId, predictedSplitterAddress }: { chainId: number, predictedSplitterAddress: ETH_ADDRESS }): Promise<Split | undefined> => {
-    try {
-        const splitsClient = new SplitsClient({
-            chainId,
-            apiConfig: {
-                apiKey: SPLITS_API_KEY,
-            },
-        });
-        const result = await splitsClient.dataClient?.getSplitMetadata({
-            chainId,
-            splitAddress: predictedSplitterAddress,
-        });
-        return result;
-    } catch (e: any) {
-        throw new Error(e)
-    }
-};
-
 
 
 export const handleDeployRewardsSplitter = async ({ signer, isSplitterDeployed, predictedSplitterAddress, accounts, percentAllocations, validatorsSize, principalRecipient }: { signer: Signer, isSplitterDeployed: boolean, predictedSplitterAddress: ETH_ADDRESS, accounts: ETH_ADDRESS[], percentAllocations: number[], validatorsSize: number, principalRecipient: ETH_ADDRESS }): Promise<ClusterValidator> => {
@@ -269,12 +224,12 @@ export const multicall = async (
     calls: Call[],
     signer: Signer,
 ): Promise<any> => {
-    const multiCallContract = new Contract(
+    const multiCallContractInstance = new Contract(
         MULTICALL_ADDRESS,
         MultiCallContract.abi,
         signer,
     );
-    const tx = await multiCallContract.aggregate(calls);
+    const tx = await multiCallContractInstance.aggregate(calls);
     const receipt = await tx.wait();
     return receipt;
 }

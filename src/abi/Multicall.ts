@@ -1,4 +1,4 @@
-const MultiCallContract = {
+export const MultiCallContract = {
     abi: [
       {
         constant: true,

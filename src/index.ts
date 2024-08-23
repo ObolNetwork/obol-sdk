@@ -26,7 +26,7 @@ import {
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
 import { definitionSchema, operatorPayloadSchema } from './schema.js';
-import { formatSplitRecipients, handleDeployRewardsSplitter, isSplitterMetadataExist, MULTICALL_ADDRESS, OWR_FACTORY_ADDRESS, predictSplitterAddress, RETROACTIVE_FUNDING_ADDRESS, RETROACTIVE_FUNDING_SPLIT, SPLITMAIN_ADDRESS } from './splitHelpers.js';
+import { formatSplitRecipients, handleDeployRewardsSplitter, MULTICALL_ADDRESS, OWR_FACTORY_ADDRESS, predictSplitterAddress, RETROACTIVE_FUNDING_ADDRESS, RETROACTIVE_FUNDING_SPLIT, SPLITMAIN_ADDRESS } from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
 export * from './types.js';
 export * from './services.js';
@@ -108,6 +108,7 @@ export class Client extends Base {
    */
   //add the example reference
   async createObolRewardSplit({ splitRecipients, principalRecipient, validatorsSize }: RewardsSplitPayload): Promise<ClusterValidator> {
+    //This method doesnt require T&C signature
     if (!this.signer) {
       throw new Error('Signer is required in createObolRewardSplit');
     }
@@ -145,8 +146,11 @@ export class Client extends Base {
 
     const { accounts, percentAllocations } = formatSplitRecipients(splitRecipients)
     const predictedSplitterAddress = await predictSplitterAddress({ signer: this.signer, accounts, percentAllocations });
-    const isSplitterDeployed = await isSplitterMetadataExist({ predictedSplitterAddress, chainId: this.chainId })
-    const { withdrawal_address, fee_recipient_address } = await handleDeployRewardsSplitter({ signer: this.signer, isSplitterDeployed, predictedSplitterAddress, accounts, percentAllocations, principalRecipient, validatorsSize })
+    const isSplitterDeployed = await isContractAvailable(
+      predictedSplitterAddress,
+      this.signer.provider as Provider,
+    );
+    const { withdrawal_address, fee_recipient_address } = await handleDeployRewardsSplitter({ signer: this.signer, isSplitterDeployed: !!isSplitterDeployed, predictedSplitterAddress, accounts, percentAllocations, principalRecipient, validatorsSize })
 
     return { withdrawal_address, fee_recipient_address }
 

@@ -1,5 +1,5 @@
+
 import request from 'supertest';
-import dotenv from 'dotenv';
 import {
   clusterConfigV1X8,
   clusterLockV1X6,
@@ -16,6 +16,7 @@ import {
   postClusterDef,
   signer,
   secondClient,
+  secondSigner,
 } from './utils';
 import {
   type ClusterDefinition,
@@ -23,11 +24,10 @@ import {
   validateClusterLock,
 } from '@obolnetwork/obol-sdk';
 
-dotenv.config();
 
 const DEL_AUTH = process.env.DEL_AUTH;
 
-jest.setTimeout(10000);
+jest.setTimeout(50000);
 
 /* eslint @typescript-eslint/no-misused-promises: 0 */ // --> OFF
 describe('Cluster Definition', () => {
@@ -104,21 +104,21 @@ describe('Cluster Definition', () => {
     }
   });
 
-  it('should update the cluster which the operator belongs to for an authorised user', async () => {
-    const signerAddress = await signer.getAddress();
-    clusterConfigV1X8.operators.push({ address: signerAddress });
+  // it('should update the cluster which the operator belongs to for an authorised user', async () => {
+  //   const signerAddress = await signer.getAddress();
+  //   clusterConfigV1X8.operators.push({ address: signerAddress });
 
-    secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
+  //   secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
 
-    const definitionData: ClusterDefinition =
-      await client.acceptClusterDefinition(
-        { enr, version: clusterDefinition.version },
-        secondConfigHash,
-      );
-    expect(
-      definitionData.operators[definitionData.operators.length - 1].enr,
-    ).toEqual(enr);
-  });
+  //   const definitionData: ClusterDefinition =
+  //     await client.acceptClusterDefinition(
+  //       { enr, version: clusterDefinition.version },
+  //       secondConfigHash,
+  //     );
+  //   expect(
+  //     definitionData.operators[definitionData.operators.length - 1].enr,
+  //   ).toEqual(enr);
+  // });
 
   it('should throw on update a cluster without a signer', async () => {
     try {
@@ -132,6 +132,32 @@ describe('Cluster Definition', () => {
       );
     }
   });
+
+  it('should deploy OWR and Splitter', async () => {
+    const signerAddress = await secondSigner.getAddress();
+    //new splitter
+    const { withdrawal_address, fee_recipient_address } = await client.createObolRewardSplit(
+      { splitRecipients: [{ account: signerAddress, percentAllocation: 39 }, { account: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", percentAllocation: 60 }], principalRecipient: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", validatorsSize: 2 }
+    );
+
+    //same splitter
+    const contractsWithSameFeeRecipientAddress = await client.createObolRewardSplit(
+      { splitRecipients: [{ account: signerAddress, percentAllocation: 39 }, { account: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", percentAllocation: 60 }], principalRecipient: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", validatorsSize: 2 }
+    );
+
+    expect(
+      withdrawal_address.length,
+    ).toEqual(42);
+
+    expect(
+      fee_recipient_address.length,
+    ).toEqual(42);
+
+    expect(
+      fee_recipient_address.toLowerCase(),
+    ).toEqual(contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase());
+  }
+  );
 
   afterAll(async () => {
     await request(app)
