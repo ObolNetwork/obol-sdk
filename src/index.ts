@@ -13,6 +13,8 @@ import {
   TermsAndConditionsSigningTypes,
   DEFAULT_BASE_VERSION,
   TERMS_AND_CONDITIONS_HASH,
+  AVAILABLE_SPLITTER_CHAINS,
+  CHAIN_CONFIGURATION,
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
@@ -26,7 +28,7 @@ import {
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
 import { definitionSchema, operatorPayloadSchema } from './schema.js';
-import { formatSplitRecipients, handleDeployRewardsSplitter, MULTICALL_ADDRESS, OWR_FACTORY_ADDRESS, predictSplitterAddress, RETROACTIVE_FUNDING_ADDRESS, RETROACTIVE_FUNDING_SPLIT, SPLITMAIN_ADDRESS } from './splitHelpers.js';
+import { formatSplitRecipients, handleDeployRewardsSplitter, predictSplitterAddress, RETROACTIVE_FUNDING_SPLIT } from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
 export * from './types.js';
 export * from './services.js';
@@ -114,20 +116,23 @@ export class Client extends Base {
     }
 
     //Check if we allow splitters on this chainId
+    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+      throw new Error(`Splitter configuration is not supported on ${this.chainId} chain`);
+    }
 
     //Double check the deployed addresses (not sure if needed)
     const checkSplitMainAddress = await isContractAvailable(
-      SPLITMAIN_ADDRESS,
+      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS,
       this.signer.provider as Provider,
     );
 
     const checkMulticallAddress = await isContractAvailable(
-      MULTICALL_ADDRESS,
+      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS,
       this.signer.provider as Provider,
     );
 
     const checkOWRFactoryAddress = await isContractAvailable(
-      OWR_FACTORY_ADDRESS,
+      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS,
       this.signer.provider as Provider,
     );
 
@@ -140,17 +145,17 @@ export class Client extends Base {
       throw new Error('Something isn not working as expected, check this issue with obol-sdk team');
     }
 
-    const retroActiveFundingRecipient = { account: RETROACTIVE_FUNDING_ADDRESS, percentAllocation: RETROACTIVE_FUNDING_SPLIT }
+    const retroActiveFundingRecipient = { account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS, percentAllocation: RETROACTIVE_FUNDING_SPLIT }
 
     splitRecipients.push(retroActiveFundingRecipient)
 
     const { accounts, percentAllocations } = formatSplitRecipients(splitRecipients)
-    const predictedSplitterAddress = await predictSplitterAddress({ signer: this.signer, accounts, percentAllocations });
+    const predictedSplitterAddress = await predictSplitterAddress({ signer: this.signer, accounts, percentAllocations, chainId:this.chainId });
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
       this.signer.provider as Provider,
     );
-    const { withdrawal_address, fee_recipient_address } = await handleDeployRewardsSplitter({ signer: this.signer, isSplitterDeployed: !!isSplitterDeployed, predictedSplitterAddress, accounts, percentAllocations, principalRecipient, validatorsSize })
+    const { withdrawal_address, fee_recipient_address } = await handleDeployRewardsSplitter({ signer: this.signer, isSplitterDeployed: !!isSplitterDeployed, predictedSplitterAddress, accounts, percentAllocations, principalRecipient, validatorsSize, chainId:this.chainId })
 
     return { withdrawal_address, fee_recipient_address }
 
