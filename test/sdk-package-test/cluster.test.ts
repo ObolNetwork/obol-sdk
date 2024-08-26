@@ -15,6 +15,7 @@ import {
   postClusterDef,
   secondClient,
   secondSigner,
+  signer,
 } from './utils';
 import {
   type ClusterDefinition,
@@ -101,21 +102,21 @@ describe('Cluster Definition', () => {
     }
   });
 
-  // it('should update the cluster which the operator belongs to for an authorised user', async () => {
-  //   const signerAddress = await signer.getAddress();
-  //   clusterConfigV1X8.operators.push({ address: signerAddress });
+  it('should update the cluster which the operator belongs to for an authorised user', async () => {
+    const signerAddress = await signer.getAddress();
+    clusterConfigV1X8.operators.push({ address: signerAddress });
 
-  //   secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
+    secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
 
-  //   const definitionData: ClusterDefinition =
-  //     await client.acceptClusterDefinition(
-  //       { enr, version: clusterDefinition.version },
-  //       secondConfigHash,
-  //     );
-  //   expect(
-  //     definitionData.operators[definitionData.operators.length - 1].enr,
-  //   ).toEqual(enr);
-  // });
+    const definitionData: ClusterDefinition =
+      await client.acceptClusterDefinition(
+        { enr, version: clusterDefinition.version },
+        secondConfigHash,
+      );
+    expect(
+      definitionData.operators[definitionData.operators.length - 1].enr,
+    ).toEqual(enr);
+  });
 
   it('should throw on update a cluster without a signer', async () => {
     try {
