@@ -147,9 +147,10 @@ export class Client extends Base {
 
     const retroActiveFundingRecipient = { account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS, percentAllocation: RETROACTIVE_FUNDING_SPLIT }
 
-    splitRecipients.push(retroActiveFundingRecipient)
+    const copiedSplitRecipients= [...splitRecipients]
+    copiedSplitRecipients.push(retroActiveFundingRecipient)
 
-    const { accounts, percentAllocations } = formatSplitRecipients(splitRecipients)
+    const { accounts, percentAllocations } = formatSplitRecipients(copiedSplitRecipients)
     const predictedSplitterAddress = await predictSplitterAddress({ signer: this.signer, accounts, percentAllocations, chainId:this.chainId });
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
