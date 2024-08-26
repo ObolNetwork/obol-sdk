@@ -125,9 +125,8 @@ export type SplitRecipient = {
   account: string;
 
   /** The recipient split. */
-  percentAllocation: number
-}
-
+  percentAllocation: number;
+};
 
 /**
  * Split Proxy Params
@@ -144,7 +143,6 @@ export type TotalSplitPayload = {
  * OWR and Split Proxy Params
  */
 export interface RewardsSplitPayload extends TotalSplitPayload {
-
   /** Address that will reclaim validator principal after exit. */
   principalRecipient: string;
 }
@@ -237,9 +235,7 @@ export type ClusterLock = {
   node_signatures?: string[];
 };
 
-
 /**
  * String expected to be Ethereum Address
  */
 export type ETH_ADDRESS = string;
-

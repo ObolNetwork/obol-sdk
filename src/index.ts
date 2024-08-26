@@ -1,4 +1,4 @@
-import { Provider, type Signer } from 'ethers';
+import { type Provider, type Signer } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
 import {
@@ -18,8 +18,8 @@ import {
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
-  ClusterValidator,
-  RewardsSplitPayload,
+  type ClusterValidator,
+  type RewardsSplitPayload,
   type ClusterDefinition,
   type ClusterLock,
   type ClusterPayload,
@@ -28,7 +28,12 @@ import {
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
 import { definitionSchema, operatorPayloadSchema } from './schema.js';
-import { formatSplitRecipients, handleDeployRewardsSplitter, predictSplitterAddress, RETROACTIVE_FUNDING_SPLIT } from './splitHelpers.js';
+import {
+  formatSplitRecipients,
+  handleDeployRewardsSplitter,
+  predictSplitterAddress,
+  RETROACTIVE_FUNDING_SPLIT,
+} from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
 export * from './types.js';
 export * from './services.js';
@@ -102,25 +107,30 @@ export class Client extends Base {
     }
   }
 
-
   /**
    * Deploys OWR and Splitter Proxy.
    * @param {ClusterPayload} newCluster - The new unique cluster.
    * @returns {Promise<ClusterValidator>} owr address as withdrawal address and split proxy as fee recipient
    */
-  //add the example reference
-  async createObolRewardSplit({ splitRecipients, principalRecipient, validatorsSize }: RewardsSplitPayload): Promise<ClusterValidator> {
-    //This method doesnt require T&C signature
+  // add the example reference
+  async createObolRewardSplit({
+    splitRecipients,
+    principalRecipient,
+    validatorsSize,
+  }: RewardsSplitPayload): Promise<ClusterValidator> {
+    // This method doesnt require T&C signature
     if (!this.signer) {
       throw new Error('Signer is required in createObolRewardSplit');
     }
 
-    //Check if we allow splitters on this chainId
+    // Check if we allow splitters on this chainId
     if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
-      throw new Error(`Splitter configuration is not supported on ${this.chainId} chain`);
+      throw new Error(
+        `Splitter configuration is not supported on ${this.chainId} chain`,
+      );
     }
 
-    //Double check the deployed addresses (not sure if needed)
+    // Double check the deployed addresses (not sure if needed)
     const checkSplitMainAddress = await isContractAvailable(
       CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS,
       this.signer.provider as Provider,
@@ -141,25 +151,45 @@ export class Client extends Base {
       !checkSplitMainAddress ||
       !checkOWRFactoryAddress
     ) {
-
-      throw new Error('Something isn not working as expected, check this issue with obol-sdk team');
+      throw new Error(
+        'Something isn not working as expected, check this issue with obol-sdk team',
+      );
     }
 
-    const retroActiveFundingRecipient = { account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS, percentAllocation: RETROACTIVE_FUNDING_SPLIT }
+    const retroActiveFundingRecipient = {
+      account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS,
+      percentAllocation: RETROACTIVE_FUNDING_SPLIT,
+    };
 
-    const copiedSplitRecipients= [...splitRecipients]
-    copiedSplitRecipients.push(retroActiveFundingRecipient)
+    const copiedSplitRecipients = [...splitRecipients];
+    copiedSplitRecipients.push(retroActiveFundingRecipient);
 
-    const { accounts, percentAllocations } = formatSplitRecipients(copiedSplitRecipients)
-    const predictedSplitterAddress = await predictSplitterAddress({ signer: this.signer, accounts, percentAllocations, chainId:this.chainId });
+    const { accounts, percentAllocations } = formatSplitRecipients(
+      copiedSplitRecipients,
+    );
+    const predictedSplitterAddress = await predictSplitterAddress({
+      signer: this.signer,
+      accounts,
+      percentAllocations,
+      chainId: this.chainId,
+    });
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
       this.signer.provider as Provider,
     );
-    const { withdrawal_address, fee_recipient_address } = await handleDeployRewardsSplitter({ signer: this.signer, isSplitterDeployed: !!isSplitterDeployed, predictedSplitterAddress, accounts, percentAllocations, principalRecipient, validatorsSize, chainId:this.chainId })
+    const { withdrawal_address, fee_recipient_address } =
+      await handleDeployRewardsSplitter({
+        signer: this.signer,
+        isSplitterDeployed: !!isSplitterDeployed,
+        predictedSplitterAddress,
+        accounts,
+        percentAllocations,
+        principalRecipient,
+        validatorsSize,
+        chainId: this.chainId,
+      });
 
-    return { withdrawal_address, fee_recipient_address }
-
+    return { withdrawal_address, fee_recipient_address };
   }
 
   /**

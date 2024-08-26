@@ -1,4 +1,3 @@
-
 import request from 'supertest';
 import {
   clusterConfigV1X8,
@@ -14,7 +13,6 @@ import {
   publishLockFile,
   app,
   postClusterDef,
-  signer,
   secondClient,
   secondSigner,
 } from './utils';
@@ -23,7 +21,6 @@ import {
   Client,
   validateClusterLock,
 } from '@obolnetwork/obol-sdk';
-
 
 const DEL_AUTH = process.env.DEL_AUTH;
 
@@ -135,29 +132,42 @@ describe('Cluster Definition', () => {
 
   it('should deploy OWR and Splitter', async () => {
     const signerAddress = await secondSigner.getAddress();
-    //new splitter
-    const { withdrawal_address, fee_recipient_address } = await client.createObolRewardSplit(
-      { splitRecipients: [{ account: signerAddress, percentAllocation: 39 }, { account: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", percentAllocation: 60 }], principalRecipient: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", validatorsSize: 2 }
+    // new splitter
+    const { withdrawal_address, fee_recipient_address } =
+      await client.createObolRewardSplit({
+        splitRecipients: [
+          { account: signerAddress, percentAllocation: 39 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        validatorsSize: 2,
+      });
+
+    // same splitter
+    const contractsWithSameFeeRecipientAddress =
+      await client.createObolRewardSplit({
+        splitRecipients: [
+          { account: signerAddress, percentAllocation: 39 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        validatorsSize: 2,
+      });
+
+    expect(withdrawal_address.length).toEqual(42);
+
+    expect(fee_recipient_address.length).toEqual(42);
+
+    expect(fee_recipient_address.toLowerCase()).toEqual(
+      contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase(),
     );
-
-    //same splitter
-    const contractsWithSameFeeRecipientAddress = await client.createObolRewardSplit(
-      { splitRecipients: [{ account: signerAddress, percentAllocation: 39 }, { account: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", percentAllocation: 60 }], principalRecipient: "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966", validatorsSize: 2 }
-    );
-
-    expect(
-      withdrawal_address.length,
-    ).toEqual(42);
-
-    expect(
-      fee_recipient_address.length,
-    ).toEqual(42);
-
-    expect(
-      fee_recipient_address.toLowerCase(),
-    ).toEqual(contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase());
-  }
-  );
+  });
 
   afterAll(async () => {
     await request(app)

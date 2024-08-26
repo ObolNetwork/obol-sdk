@@ -9,10 +9,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const privateKey = process.env.PRIVATE_KEY as string; //keep it in gh secrets
+const privateKey = process.env.PRIVATE_KEY as string; // keep it in gh secrets
 
-const provider = new JsonRpcProvider(`https://ethereum-holesky.publicnode.com`);
-
+const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 
 const wallet = new ethers.Wallet(privateKey, provider);
 

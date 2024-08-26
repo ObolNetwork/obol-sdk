@@ -17,14 +17,15 @@ import { hashTermsAndConditions } from '../src/verification/termsAndConditions';
 import * as utils from '../src/utils';
 import * as splitsHelpers from '../src/splitHelpers';
 
-
 /* eslint no-new: 0 */
 describe('Cluster Client', () => {
   const mockConfigHash =
     '0x1f6c94e6c070393a68c1aa6073a21cb1fd57f0e14d2a475a2958990ab728c2fd';
   const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
   const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-  const provider = new JsonRpcProvider(`https://ethereum-holesky.publicnode.com`);
+  const provider = new JsonRpcProvider(
+    'https://ethereum-holesky.publicnode.com',
+  );
   const wallet = new ethers.Wallet(privateKey, provider);
   const mockSigner = wallet.connect(provider);
 
@@ -279,14 +280,21 @@ describe('Cluster Client without a signer', () => {
 });
 
 describe('createObolRewardSplit', () => {
-
-  jest.spyOn(utils, 'isContractAvailable').mockImplementation(() => Promise.resolve(true));
-  jest.spyOn(splitsHelpers, 'predictSplitterAddress').mockImplementation(() => Promise.resolve("0xPredictedAddress"));
-  jest.spyOn(splitsHelpers, 'handleDeployRewardsSplitter').mockImplementation(() => Promise.resolve({
-    withdrawal_address: '0xWithdrawalAddress',
-    fee_recipient_address: '0xFeeRecipientAddress',
-  }));
-
+  jest
+    .spyOn(utils, 'isContractAvailable')
+    .mockImplementation(async () => await Promise.resolve(true));
+  jest
+    .spyOn(splitsHelpers, 'predictSplitterAddress')
+    .mockImplementation(
+      async () => await Promise.resolve('0xPredictedAddress'),
+    );
+  jest.spyOn(splitsHelpers, 'handleDeployRewardsSplitter').mockImplementation(
+    async () =>
+      await Promise.resolve({
+        withdrawal_address: '0xWithdrawalAddress',
+        fee_recipient_address: '0xFeeRecipientAddress',
+      }),
+  );
 
   // const isContractAvailable = jest.fn().mockReturnValue(
   //   Promise.resolve(true));
@@ -308,7 +316,9 @@ describe('createObolRewardSplit', () => {
 
   const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
   const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-  const provider = new JsonRpcProvider(`https://ethereum-holesky.publicnode.com`);
+  const provider = new JsonRpcProvider(
+    'https://ethereum-holesky.publicnode.com',
+  );
   const wallet = new ethers.Wallet(privateKey, provider);
   const mockSigner = wallet.connect(provider);
 
@@ -317,17 +327,26 @@ describe('createObolRewardSplit', () => {
     mockSigner,
   );
 
-  const clientInstanceWithourSigner = new Client(
-    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
-  );
-  const mockSplitRecipients = [{ account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC', percentAllocation: 99 }];
+  const clientInstanceWithourSigner = new Client({
+    baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+    chainId: 17000,
+  });
+  const mockSplitRecipients = [
+    {
+      account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+      percentAllocation: 99,
+    },
+  ];
   const mockPrincipalRecipient = '0x86B8145c98e5BD25BA722645b15eD65f024a87EC';
   const mockValidatorsSize = 2;
 
-
   it('should throw an error if signer is not defined', async () => {
     await expect(
-      clientInstanceWithourSigner.createObolRewardSplit({ splitRecipients: mockSplitRecipients, principalRecipient: mockPrincipalRecipient, validatorsSize: mockValidatorsSize })
+      clientInstanceWithourSigner.createObolRewardSplit({
+        splitRecipients: mockSplitRecipients,
+        principalRecipient: mockPrincipalRecipient,
+        validatorsSize: mockValidatorsSize,
+      }),
     ).rejects.toThrow('Signer is required in createObolRewardSplit');
   });
 
@@ -337,10 +356,13 @@ describe('createObolRewardSplit', () => {
       mockSigner,
     );
     await expect(
-      unsupportedSplitterChainClient.createObolRewardSplit({ splitRecipients: mockSplitRecipients, principalRecipient: mockPrincipalRecipient, validatorsSize: mockValidatorsSize })
-    ).rejects.toThrow(`Splitter configuration is not supported on 100 chain`);
+      unsupportedSplitterChainClient.createObolRewardSplit({
+        splitRecipients: mockSplitRecipients,
+        principalRecipient: mockPrincipalRecipient,
+        validatorsSize: mockValidatorsSize,
+      }),
+    ).rejects.toThrow('Splitter configuration is not supported on 100 chain');
   });
-
 
   it('should return the correct withdrawal and fee recipient addresses', async () => {
     const result = await clientInstance.createObolRewardSplit({
@@ -354,5 +376,4 @@ describe('createObolRewardSplit', () => {
       fee_recipient_address: '0xFeeRecipientAddress',
     });
   });
-
 });
