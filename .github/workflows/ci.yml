@@ -13,12 +13,6 @@ jobs:
       - name: Install SDK dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Check eslint rules
-        run: yarn run lint-ci
-
-      - name: Prettier
-        run: npm run prettier-ci
-
       - name: Build SDK
         run: yarn run build
 
@@ -38,3 +32,9 @@ jobs:
       - name: Run e2e tests
         working-directory: ./test/sdk-package-test
         run: yarn run test:e2e
+
+      - name: Check eslint rules
+        run: yarn run lint-ci
+
+      - name: Prettier
+        run: npm run prettier-ci
