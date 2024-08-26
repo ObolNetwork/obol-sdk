@@ -59,14 +59,14 @@ export const definitionFlow = (
 export const findDeployedBytecode = async (
   contractAddress: string,
   provider: Provider,
-) => {
+): Promise<string> => {
   return await provider?.getCode(contractAddress);
 };
 
 export const isContractAvailable = async (
   contractAddress: string,
   provider: Provider,
-) => {
+): Promise<string | boolean> => {
   const code = await findDeployedBytecode(contractAddress, provider);
   return code && code !== '0x' && code !== '0x0';
 };

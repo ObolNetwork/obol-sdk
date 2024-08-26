@@ -66,6 +66,17 @@ export type ClusterValidator = {
 };
 
 /**
+ * Splitter withdrawal returned type
+ */
+export type SplitterReturnedType = {
+  /** The validator fee recipient address. */
+  feeRecipientAddress: string;
+
+  /** The validator reward address. */
+  withdrawalAddress: string;
+};
+
+/**
  * Cluster configuration
  */
 export type ClusterPayload = {

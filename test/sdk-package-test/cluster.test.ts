@@ -134,7 +134,7 @@ describe('Cluster Definition', () => {
   it('should deploy OWR and Splitter', async () => {
     const signerAddress = await secondSigner.getAddress();
     // new splitter
-    const { withdrawal_address, fee_recipient_address } =
+    const { withdrawalAddress, feeRecipientAddress } =
       await client.createObolRewardSplit({
         splitRecipients: [
           { account: signerAddress, percentAllocation: 39 },
@@ -161,12 +161,12 @@ describe('Cluster Definition', () => {
         validatorsSize: 2,
       });
 
-    expect(withdrawal_address.length).toEqual(42);
+    expect(withdrawalAddress.length).toEqual(42);
 
-    expect(fee_recipient_address.length).toEqual(42);
+    expect(feeRecipientAddress.length).toEqual(42);
 
-    expect(fee_recipient_address.toLowerCase()).toEqual(
-      contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase(),
+    expect(feeRecipientAddress.toLowerCase()).toEqual(
+      contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
     );
   });
 

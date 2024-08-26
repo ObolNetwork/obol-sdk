@@ -291,28 +291,10 @@ describe('createObolRewardSplit', () => {
   jest.spyOn(splitsHelpers, 'handleDeployRewardsSplitter').mockImplementation(
     async () =>
       await Promise.resolve({
-        withdrawal_address: '0xWithdrawalAddress',
-        fee_recipient_address: '0xFeeRecipientAddress',
+        withdrawalAddress: '0xWithdrawalAddress',
+        feeRecipientAddress: '0xFeeRecipientAddress',
       }),
   );
-
-  // const isContractAvailable = jest.fn().mockReturnValue(
-  //   Promise.resolve(true));
-
-  // jest.mock('../src/splitHelpers', () => ({
-  //   ...jest.requireActual('../src/splitHelpers'),
-  //   predictSplitterAddress: jest.fn().mockReturnValue(
-  //     Promise.resolve("0xPredictedAddress")),
-  //   handleDeployRewardsSplitter: jest.fn().mockReturnValue(
-  //     Promise.resolve({
-  //       withdrawal_address: '0xWithdrawalAddress',
-  //       fee_recipient_address: '0xFeeRecipientAddress',
-  //     })),
-  // }));
-
-  // jest.mock('../src/utils', () =>
-  //   isContractAvailable
-  // );
 
   const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
   const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
@@ -396,8 +378,8 @@ describe('createObolRewardSplit', () => {
     });
 
     expect(result).toEqual({
-      withdrawal_address: '0xWithdrawalAddress',
-      fee_recipient_address: '0xFeeRecipientAddress',
+      withdrawalAddress: '0xWithdrawalAddress',
+      feeRecipientAddress: '0xFeeRecipientAddress',
     });
   });
 });

@@ -2,7 +2,7 @@ import Ajv, { type ErrorObject } from 'ajv';
 import { parseUnits } from 'ethers';
 import { type SplitRecipient } from './types';
 
-function validDepositAmounts(data: boolean, deposits: string[]): boolean {
+const validDepositAmounts = (data: boolean, deposits: string[]): boolean => {
   let sum = 0;
   // from ether togwei is same as from gwei to wei
   const maxDeposit = Number(parseUnits('32', 'gwei'));
@@ -25,15 +25,18 @@ function validDepositAmounts(data: boolean, deposits: string[]): boolean {
   } else {
     return true;
   }
-}
+};
 
-function validateSplitRecipients(_: boolean, data: SplitRecipient[]) {
+const validateSplitRecipients = (
+  _: boolean,
+  data: SplitRecipient[],
+): boolean => {
   const totalPercentage = data.reduce(
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
   return totalPercentage === 99;
-}
+};
 
 export function validatePayload(
   data: any,

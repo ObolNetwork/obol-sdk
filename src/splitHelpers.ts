@@ -1,5 +1,5 @@
 import {
-  type ClusterValidator,
+  type SplitterReturnedType,
   type ETH_ADDRESS,
   type SplitRecipient,
 } from './types';
@@ -98,7 +98,7 @@ export const handleDeployRewardsSplitter = async ({
   validatorsSize: number;
   principalRecipient: ETH_ADDRESS;
   chainId: number;
-}): Promise<ClusterValidator> => {
+}): Promise<SplitterReturnedType> => {
   try {
     if (isSplitterDeployed) {
       const owrAddress = await createOWRContract({
@@ -109,8 +109,8 @@ export const handleDeployRewardsSplitter = async ({
         chainId,
       });
       return {
-        withdrawal_address: owrAddress,
-        fee_recipient_address: predictedSplitterAddress,
+        withdrawalAddress: owrAddress,
+        feeRecipientAddress: predictedSplitterAddress,
       };
     } else {
       const { owrAddress, splitterAddress } =
@@ -129,12 +129,12 @@ export const handleDeployRewardsSplitter = async ({
         });
 
       return {
-        withdrawal_address: owrAddress,
-        fee_recipient_address: splitterAddress,
+        withdrawalAddress: owrAddress,
+        feeRecipientAddress: splitterAddress,
       };
     }
-  } catch (e: any) {
-    throw new Error(e);
+  } catch (e) {
+    throw e;
   }
 };
 
@@ -179,8 +179,8 @@ const createOWRContract = async ({
     await tx.wait();
 
     return OWRContractAddress;
-  } catch (e: any) {
-    throw new Error(e);
+  } catch (e) {
+    throw e;
   }
 };
 
@@ -245,8 +245,8 @@ export const deployImmutableSplitterAndOWRContracts = async ({
       owrAddress: sliceOwrAddress,
       splitterAddress: sliceSplitAddress,
     };
-  } catch (e: any) {
-    throw new Error(e);
+  } catch (e) {
+    throw e;
   }
 };
 

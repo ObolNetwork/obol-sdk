@@ -18,12 +18,12 @@ import {
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
-  type ClusterValidator,
   type RewardsSplitPayload,
   type ClusterDefinition,
   type ClusterLock,
   type ClusterPayload,
   type OperatorPayload,
+  type SplitterReturnedType,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -121,7 +121,7 @@ export class Client extends Base {
     splitRecipients,
     principalRecipient,
     validatorsSize,
-  }: RewardsSplitPayload): Promise<ClusterValidator> {
+  }: RewardsSplitPayload): Promise<SplitterReturnedType> {
     // This method doesnt require T&C signature
     if (!this.signer) {
       throw new Error('Signer is required in createObolRewardSplit');
@@ -190,7 +190,7 @@ export class Client extends Base {
       predictedSplitterAddress,
       this.signer.provider as Provider,
     );
-    const { withdrawal_address, fee_recipient_address } =
+    const { withdrawalAddress, feeRecipientAddress } =
       await handleDeployRewardsSplitter({
         signer: this.signer,
         isSplitterDeployed: !!isSplitterDeployed,
@@ -202,7 +202,7 @@ export class Client extends Base {
         chainId: this.chainId,
       });
 
-    return { withdrawal_address, fee_recipient_address };
+    return { withdrawalAddress, feeRecipientAddress };
   }
 
   /**
