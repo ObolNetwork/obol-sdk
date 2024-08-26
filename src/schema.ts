@@ -64,3 +64,38 @@ export const definitionSchema = {
   },
   required: ['name', 'operators', 'validators'],
 };
+
+export const rewardsSplitterPayloadSchema = {
+  type: 'object',
+  properties: {
+    splitRecipients: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          account: {
+            type: 'string',
+            minLength: 42,
+            maxLength: 42,
+          },
+          percentAllocation: {
+            type: 'number',
+          }
+        },
+        required: ['account', 'percentAllocation'],
+      },
+      validateSplitRecipients: true,
+    },
+    principalRecipient: {
+      type: 'string',
+      minLength: 42,
+      maxLength: 42,
+    },
+    validatorsSize: {
+      type: 'number',
+    },
+  },
+  required: ['splitRecipients', 'principalRecipient', 'validatorsSize'],
+};
+
+

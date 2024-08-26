@@ -1,5 +1,6 @@
 import Ajv, { type ErrorObject } from 'ajv';
 import { parseUnits } from 'ethers';
+import { SplitRecipient } from './types';
 
 function validDepositAmounts(data: boolean, deposits: string[]): boolean {
   let sum = 0;
@@ -26,6 +27,13 @@ function validDepositAmounts(data: boolean, deposits: string[]): boolean {
   }
 }
 
+
+function validateSplitRecipients(_: boolean, data: SplitRecipient[]) {
+  const totalPercentage = data.reduce((acc: number, curr: SplitRecipient) => acc + curr.percentAllocation, 0);
+  return totalPercentage === 99;
+}
+
+
 export function validatePayload(
   data: any,
   schema: any,
@@ -34,6 +42,12 @@ export function validatePayload(
   ajv.addKeyword({
     keyword: 'validDepositAmounts',
     validate: validDepositAmounts,
+    errors: true,
+  });
+
+  ajv.addKeyword({
+    keyword: 'validateSplitRecipients',
+    validate: validateSplitRecipients,
     errors: true,
   });
   const validate = ajv.compile(schema);
