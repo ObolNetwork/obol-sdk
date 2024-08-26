@@ -27,7 +27,11 @@ import {
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
-import { definitionSchema, operatorPayloadSchema, rewardsSplitterPayloadSchema } from './schema.js';
+import {
+  definitionSchema,
+  operatorPayloadSchema,
+  rewardsSplitterPayloadSchema,
+} from './schema.js';
 import {
   formatSplitRecipients,
   handleDeployRewardsSplitter,
@@ -123,11 +127,14 @@ export class Client extends Base {
       throw new Error('Signer is required in createObolRewardSplit');
     }
 
-    validatePayload({
-      splitRecipients,
-      principalRecipient,
-      validatorsSize,
-    }, rewardsSplitterPayloadSchema)
+    validatePayload(
+      {
+        splitRecipients,
+        principalRecipient,
+        validatorsSize,
+      },
+      rewardsSplitterPayloadSchema,
+    );
 
     // Check if we allow splitters on this chainId
     if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {

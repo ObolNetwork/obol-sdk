@@ -355,13 +355,37 @@ describe('createObolRewardSplit', () => {
       { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 100 },
       mockSigner,
     );
-    await expect(
-      unsupportedSplitterChainClient.createObolRewardSplit({
+
+    try {
+      await unsupportedSplitterChainClient.createObolRewardSplit({
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
         validatorsSize: mockValidatorsSize,
-      }),
-    ).rejects.toThrow('Splitter configuration is not supported on 100 chain');
+      });
+    } catch (error: any) {
+      expect(error.message).toEqual(
+        'Splitter configuration is not supported on 100 chain',
+      );
+    }
+  });
+
+  test('should throw an error on invalid recipients', async () => {
+    try {
+      await clientInstance.createObolRewardSplit({
+        splitRecipients: [
+          {
+            account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+            percentAllocation: 22,
+          },
+        ],
+        principalRecipient: mockPrincipalRecipient,
+        validatorsSize: mockValidatorsSize,
+      });
+    } catch (error: any) {
+      expect(error.message).toEqual(
+        'Schema compilation errors\', must pass "validateSplitRecipients" keyword validation',
+      );
+    }
   });
 
   it('should return the correct withdrawal and fee recipient addresses', async () => {

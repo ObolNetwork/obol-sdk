@@ -80,7 +80,7 @@ export const rewardsSplitterPayloadSchema = {
           },
           percentAllocation: {
             type: 'number',
-          }
+          },
         },
         required: ['account', 'percentAllocation'],
       },
@@ -97,5 +97,3 @@ export const rewardsSplitterPayloadSchema = {
   },
   required: ['splitRecipients', 'principalRecipient', 'validatorsSize'],
 };
-
-
