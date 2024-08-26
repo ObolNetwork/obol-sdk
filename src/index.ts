@@ -113,8 +113,8 @@ export class Client extends Base {
 
   /**
    * Deploys OWR and Splitter Proxy.
-   * @param {ClusterPayload} newCluster - The new unique cluster.
-   * @returns {Promise<ClusterValidator>} owr address as withdrawal address and split proxy as fee recipient
+   * @param {RewardsSplitPayload} rewardsSplitPayload - Data needed to deploy owr and splitter.
+   * @returns {Promise<SplitterReturnedType>} owr address as withdrawal address and splitter as fee recipient
    */
   // add the example reference
   async createObolRewardSplit({

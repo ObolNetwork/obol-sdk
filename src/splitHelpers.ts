@@ -12,8 +12,6 @@ import { CHAIN_CONFIGURATION } from './constants';
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
 
-// Define them in constants and map them to each chainId
-
 export const RETROACTIVE_FUNDING_SPLIT = 1;
 
 // Double check if we need them as params with defaults
@@ -137,8 +135,6 @@ export const handleDeployRewardsSplitter = async ({
     throw e;
   }
 };
-
-// Not needed now cause we use MultiCall Contract
 
 const createOWRContract = async ({
   principalRecipient,
