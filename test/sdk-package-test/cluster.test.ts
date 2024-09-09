@@ -13,9 +13,10 @@ import {
   publishLockFile,
   app,
   postClusterDef,
-  secondClient,
-  secondSigner,
+  randomClient,
+  randomSigner,
   signer,
+  secondRandomSigner,
 } from './utils';
 import {
   type ClusterDefinition,
@@ -31,13 +32,13 @@ jest.setTimeout(50000);
 describe('Cluster Definition', () => {
   let configHash: string;
   let clusterDefinition: ClusterDefinition;
-  let secondConfigHash: string;
+  let randomConfigHash: string;
   const clientWithoutAsigner = new Client({
     baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 17000,
   });
 
-  const unauthorisedClient = secondClient;
+  const unauthorisedClient = randomClient;
 
   it('should post latest terms and conditions acceptance signature', async () => {
     const isAuthorised = await client.acceptObolLatestTermsAndConditions();
@@ -106,12 +107,12 @@ describe('Cluster Definition', () => {
     const signerAddress = await signer.getAddress();
     clusterConfigV1X8.operators.push({ address: signerAddress });
 
-    secondConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
+    randomConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
 
     const definitionData: ClusterDefinition =
       await client.acceptClusterDefinition(
         { enr, version: clusterDefinition.version },
-        secondConfigHash,
+        randomConfigHash,
       );
     expect(
       definitionData.operators[definitionData.operators.length - 1].enr,
@@ -132,7 +133,7 @@ describe('Cluster Definition', () => {
   });
 
   it('should deploy OWR and Splitter', async () => {
-    const signerAddress = await secondSigner.getAddress();
+    const signerAddress = await randomSigner.getAddress();
     // new splitter
     const { withdrawalAddress, feeRecipientAddress } =
       await client.createObolRewardSplit({
@@ -170,12 +171,47 @@ describe('Cluster Definition', () => {
     );
   });
 
+  it('should deploy Splitter', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
+    // new splitter
+    const { withdrawalAddress, feeRecipientAddress } =
+      await client.createObolTotalSplit({
+        splitRecipients: [
+          { account: secondRandomSignerAddress, percentAllocation: 39.9 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+      });
+
+    // same splitter
+    const contractsWithSameFeeRecipientAddress =
+      await client.createObolTotalSplit({
+        splitRecipients: [
+          { account: secondRandomSignerAddress, percentAllocation: 39.9 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+      });
+
+    expect(withdrawalAddress.length).toEqual(42);
+
+    expect(feeRecipientAddress.toLowerCase()).toEqual(withdrawalAddress.toLowerCase());
+
+    expect(feeRecipientAddress.toLowerCase()).toEqual(
+      contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
+    );
+  });
+
   afterAll(async () => {
     await request(app)
       .delete(`/v1/definition/${configHash}`)
       .set('Authorization', `Bearer ${DEL_AUTH}`);
     await request(app)
-      .delete(`/v1/definition/${secondConfigHash}`)
+      .delete(`/v1/definition/${randomConfigHash}`)
       .set('Authorization', `Bearer ${DEL_AUTH}`);
   });
 });

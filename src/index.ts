@@ -16,6 +16,7 @@ import {
   AVAILABLE_SPLITTER_CHAINS,
   CHAIN_CONFIGURATION,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+  DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
@@ -25,6 +26,7 @@ import {
   type ClusterPayload,
   type OperatorPayload,
   type SplitterReturnedType,
+  TotalSplitPayload,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -32,10 +34,12 @@ import {
   definitionSchema,
   operatorPayloadSchema,
   rewardsSplitterPayloadSchema,
+  totalSplitterPayloadSchema,
 } from './schema.js';
 import {
+  deploySplitterContract,
   formatSplitRecipients,
-  handleDeployRewardsSplitter,
+  handleDeployOWRAndSplitter,
   predictSplitterAddress,
 } from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
@@ -124,7 +128,6 @@ export class Client extends Base {
     ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     distributorFee = 0,
     controllerAddress = ZeroAddress,
-
   }: RewardsSplitPayload): Promise<SplitterReturnedType> {
     // This method doesnt require T&C signature
     if (!this.signer) {
@@ -150,7 +153,6 @@ export class Client extends Base {
       );
     }
 
-    // Double check the deployed addresses (not sure if needed)
     const checkSplitMainAddress = await isContractAvailable(
       CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS,
       this.signer.provider as Provider,
@@ -187,19 +189,25 @@ export class Client extends Base {
     const { accounts, percentAllocations } = formatSplitRecipients(
       copiedSplitRecipients,
     );
+
     const predictedSplitterAddress = await predictSplitterAddress({
       signer: this.signer,
       accounts,
       percentAllocations,
       chainId: this.chainId,
-      distributorFee
+      distributorFee,
+      controllerAddress
     });
+
+
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
       this.signer.provider as Provider,
     );
+
+
     const { withdrawalAddress, feeRecipientAddress } =
-      await handleDeployRewardsSplitter({
+      await handleDeployOWRAndSplitter({
         signer: this.signer,
         isSplitterDeployed: !!isSplitterDeployed,
         predictedSplitterAddress,
@@ -213,6 +221,96 @@ export class Client extends Base {
       });
 
     return { withdrawalAddress, feeRecipientAddress };
+  }
+
+  /**
+ * Deploys Splitter Proxy.
+ * @param {TotalSplitPayload} totalSplitPayload - Data needed to deploy splitter if it doesnt exist.
+ * @returns {Promise<SplitterReturnedType>} splitter address as withdrawal address and splitter as fee recipient too
+ */
+  // add the example reference
+  async createObolTotalSplit({
+    splitRecipients,
+    ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+    distributorFee = 0,
+    controllerAddress = ZeroAddress,
+
+  }: TotalSplitPayload): Promise<SplitterReturnedType> {
+    // This method doesnt require T&C signature
+    if (!this.signer) {
+      throw new Error('Signer is required in createObolTotalSplit');
+    }
+
+    validatePayload(
+      {
+        splitRecipients,
+        ObolRAFSplit,
+        distributorFee,
+        controllerAddress
+      },
+      totalSplitterPayloadSchema,
+    );
+
+    // Check if we allow splitters on this chainId
+    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+      throw new Error(
+        `Splitter configuration is not supported on ${this.chainId} chain`,
+      );
+    }
+
+    const checkSplitMainAddress = await isContractAvailable(
+      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS,
+      this.signer.provider as Provider,
+    )
+
+    if (
+      !checkSplitMainAddress
+    ) {
+      throw new Error(
+        'Something isn not working as expected, check this issue with obol-sdk team',
+      );
+    }
+
+    const retroActiveFundingRecipient = {
+      account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS,
+      percentAllocation: ObolRAFSplit,
+    };
+
+    const copiedSplitRecipients = [...splitRecipients];
+    copiedSplitRecipients.push(retroActiveFundingRecipient);
+
+    const { accounts, percentAllocations } = formatSplitRecipients(
+      copiedSplitRecipients,
+    );
+    const predictedSplitterAddress = await predictSplitterAddress({
+      signer: this.signer,
+      accounts,
+      percentAllocations,
+      chainId: this.chainId,
+      distributorFee,
+      controllerAddress
+    });
+
+    const isSplitterDeployed = await isContractAvailable(
+      predictedSplitterAddress,
+      this.signer.provider as Provider,
+    );
+
+    if (!isSplitterDeployed) {
+      const splitterAddress =
+        await deploySplitterContract({
+          signer: this.signer,
+          accounts,
+          percentAllocations,
+          chainId: this.chainId,
+          distributorFee,
+          controllerAddress
+        });
+      return { withdrawalAddress: splitterAddress, feeRecipientAddress: splitterAddress };
+
+    }
+
+    return { withdrawalAddress: predictedSplitterAddress, feeRecipientAddress: predictedSplitterAddress };
   }
 
   /**

@@ -66,7 +66,7 @@ export const findDeployedBytecode = async (
 export const isContractAvailable = async (
   contractAddress: string,
   provider: Provider,
-): Promise<string | boolean> => {
+): Promise<boolean> => {
   const code = await findDeployedBytecode(contractAddress, provider);
-  return code && code !== '0x' && code !== '0x0';
+  return !!code && code !== '0x' && code !== '0x0';
 };

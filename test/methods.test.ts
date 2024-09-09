@@ -288,7 +288,7 @@ describe('createObolRewardSplit', () => {
     .mockImplementation(
       async () => await Promise.resolve('0xPredictedAddress'),
     );
-  jest.spyOn(splitsHelpers, 'handleDeployRewardsSplitter').mockImplementation(
+  jest.spyOn(splitsHelpers, 'handleDeployOWRAndSplitter').mockImplementation(
     async () =>
       await Promise.resolve({
         withdrawalAddress: '0xWithdrawalAddress',
@@ -376,7 +376,7 @@ describe('createObolRewardSplit', () => {
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
         validatorsSize: mockValidatorsSize,
-        ObolRAFSplit:0.5
+        ObolRAFSplit: 0.5
       });
     } catch (error: any) {
       expect(error.message).toEqual(
@@ -395,6 +395,127 @@ describe('createObolRewardSplit', () => {
     expect(result).toEqual({
       withdrawalAddress: '0xWithdrawalAddress',
       feeRecipientAddress: '0xFeeRecipientAddress',
+    });
+  });
+});
+
+describe('createObolTotalSplit', () => {
+  jest
+    .spyOn(utils, 'isContractAvailable')
+    .mockImplementation(async () => await Promise.resolve(true));
+  jest
+    .spyOn(splitsHelpers, 'predictSplitterAddress')
+    .mockImplementation(
+      async () => await Promise.resolve('0xPredictedAddress'),
+    );
+  jest.spyOn(splitsHelpers, 'deploySplitterContract').mockImplementation(
+    async () =>
+      await Promise.resolve(
+        '0xSplitterAddress',
+      ),
+  );
+
+  const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
+  const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
+  const provider = new JsonRpcProvider(
+    'https://ethereum-holesky.publicnode.com',
+  );
+  const wallet = new ethers.Wallet(privateKey, provider);
+  const mockSigner = wallet.connect(provider);
+
+  const clientInstance = new Client(
+    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+    mockSigner,
+  );
+
+  const clientInstanceWithourSigner = new Client({
+    baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+    chainId: 17000,
+  });
+  const mockSplitRecipients = [
+    {
+      account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+      percentAllocation: 99.9,
+    },
+  ];
+
+  it('should throw an error if signer is not defined', async () => {
+    await expect(
+      clientInstanceWithourSigner.createObolTotalSplit({
+        splitRecipients: mockSplitRecipients,
+      }),
+    ).rejects.toThrow('Signer is required in createObolTotalSplit');
+  });
+
+  it('should throw an error if chainId is not supported', async () => {
+    const unsupportedSplitterChainClient = new Client(
+      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 100 },
+      mockSigner,
+    );
+
+    try {
+      await unsupportedSplitterChainClient.createObolTotalSplit({
+        splitRecipients: mockSplitRecipients,
+      });
+    } catch (error: any) {
+      expect(error.message).toEqual(
+        'Splitter configuration is not supported on 100 chain',
+      );
+    }
+  });
+
+  test('should throw an error on invalid recipients', async () => {
+    try {
+      await clientInstance.createObolTotalSplit({
+        splitRecipients: [
+          {
+            account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+            percentAllocation: 22,
+          },
+        ],
+      });
+    } catch (error: any) {
+      expect(error.message).toEqual(
+        'Schema compilation errors\', must pass "validateSplitRecipients" keyword validation',
+      );
+    }
+  });
+
+  test('should throw an error if ObolRAFSplit is less than 0.1', async () => {
+    try {
+      await clientInstance.createObolTotalSplit({
+        splitRecipients: mockSplitRecipients,
+        ObolRAFSplit: 0.05
+      });
+    } catch (error: any) {
+      expect(error.message).toEqual(
+        'Schema compilation errors\', must be >= 0.1',
+      );
+    }
+  });
+
+  it('should return the correct withdrawal and fee recipient addresses and ObolRAFSplit', async () => {
+    const result = await clientInstance.createObolTotalSplit({
+      splitRecipients: mockSplitRecipients,
+      ObolRAFSplit: 0.5
+    });
+
+    //0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
+    expect(result).toEqual({
+      withdrawalAddress: '0xPredictedAddress',
+      feeRecipientAddress: '0xPredictedAddress',
+    });
+  });
+
+  it('should return the correct withdrawal and fee recipient addresses without passing ObolRAFSplit', async () => {
+    const result = await clientInstance.createObolTotalSplit({
+      splitRecipients: mockSplitRecipients,
+    });
+
+    //0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
+    expect(result).toEqual({
+      withdrawalAddress: '0xPredictedAddress',
+      feeRecipientAddress: '0xPredictedAddress',
     });
   });
 });

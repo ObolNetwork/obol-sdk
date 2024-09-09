@@ -1,3 +1,5 @@
+import { DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT, DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT } from "./constants";
+
 export const operatorPayloadSchema = {
   type: 'object',
   properties: {
@@ -63,7 +65,7 @@ export const definitionSchema = {
   required: ['name', 'operators', 'validators'],
 };
 
-export const rewardsSplitterPayloadSchema = {
+export const totalSplitterPayloadSchema = {
   type: 'object',
   properties: {
     splitRecipients: {
@@ -82,17 +84,9 @@ export const rewardsSplitterPayloadSchema = {
         required: ['account', 'percentAllocation'],
       },
     },
-    principalRecipient: {
-      type: 'string',
-      minLength: 42,
-      maxLength: 42,
-    },
-    validatorsSize: {
-      type: 'number',
-    },
     ObolRAFSplit: {
       type: 'number',
-      minimum: 1
+      minimum: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT
     },
     distributorFee: {
       type: "number",
@@ -106,5 +100,24 @@ export const rewardsSplitterPayloadSchema = {
     validateSplitRecipients: true,
 
   },
-  required: ['splitRecipients', 'principalRecipient', 'validatorsSize'], 
+  required: ['splitRecipients'],
+}
+
+export const rewardsSplitterPayloadSchema = {
+  ...totalSplitterPayloadSchema,
+  properties: {
+    ...totalSplitterPayloadSchema.properties,
+    ObolRAFSplit: {
+      type: 'number',
+      minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT
+    },
+    validatorsSize: {
+      type: 'number',
+    },
+    principalRecipient: {
+      type: 'string',
+      pattern: "^0x[a-fA-F0-9]{40}$"
+    }
+  },
+  required: ['splitRecipients', 'principalRecipient', 'validatorsSize'],
 }

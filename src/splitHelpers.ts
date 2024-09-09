@@ -3,7 +3,7 @@ import {
   type ETH_ADDRESS,
   type SplitRecipient,
 } from './types';
-import { Contract, Interface, parseEther, type Signer } from 'ethers';
+import { Contract, Interface, parseEther, ZeroAddress, type Signer } from 'ethers';
 import { OWRFactoryContract } from './abi/OWR';
 import { splitMainEthereumAbi } from './abi/SplitMain';
 import { MultiCallContract } from './abi/Multicall';
@@ -31,7 +31,7 @@ type SplitArgs = {
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
   distributorFee?: number;
-  controller?: ETH_ADDRESS;
+  controllerAddress?: ETH_ADDRESS;
 };
 
 export const formatSplitRecipients = (
@@ -52,31 +52,54 @@ export const predictSplitterAddress = async ({
   accounts,
   percentAllocations,
   chainId,
-  distributorFee
+  distributorFee,
+  controllerAddress
 }: {
   signer: Signer;
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
   chainId: number;
-  distributorFee: number
+  distributorFee: number,
+  controllerAddress: ETH_ADDRESS
 }): Promise<ETH_ADDRESS> => {
-  const splitMainContractInstance = new Contract(
-    CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS,
-    splitMainEthereumAbi,
-    signer,
-  );
-
-  const predictedSplitAddress =
-    await splitMainContractInstance.predictImmutableSplitAddress(
-      accounts,
-      percentAllocations,
-      distributorFee,
+  try {
+    let predictedSplitterAddress: string;
+    const splitMainContractInstance = new Contract(
+      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS,
+      splitMainEthereumAbi,
+      signer,
     );
 
-  return predictedSplitAddress;
+
+    if (controllerAddress === ZeroAddress) {
+      predictedSplitterAddress =
+        await splitMainContractInstance.predictImmutableSplitAddress(
+          accounts,
+          percentAllocations,
+          distributorFee,
+        );
+    } else {
+      //It throws on deployed Immutable splitter
+      predictedSplitterAddress =
+        await splitMainContractInstance.createSplit.staticCall(
+          accounts,
+          percentAllocations,
+          distributorFee,
+          controllerAddress,
+        )
+    }
+
+
+    console.log(predictedSplitterAddress, "predictedSplitterAddress")
+
+    return predictedSplitterAddress;
+  } catch (e) {
+    console.log(e, "eeee")
+    throw e
+  }
 };
 
-export const handleDeployRewardsSplitter = async ({
+export const handleDeployOWRAndSplitter = async ({
   signer,
   isSplitterDeployed,
   predictedSplitterAddress,
@@ -114,7 +137,7 @@ export const handleDeployRewardsSplitter = async ({
       };
     } else {
       const { owrAddress, splitterAddress } =
-        await deployImmutableSplitterAndOWRContracts({
+        await deploySplitterAndOWRContracts({
           owrArgs: {
             principalRecipient,
             amountOfPrincipalStake: validatorsSize * 32,
@@ -160,15 +183,6 @@ const createOWRContract = async ({
       signer,
     );
 
-    // check we need staticCall or staticCallResult
-    const OWRContractAddress =
-      await OWRFactoryInstance.createOWRecipient.staticCall(
-        RECOVERY_ADDRESS,
-        principalRecipient,
-        splitterAddress,
-        parseEther(amountOfPrincipalStake.toString()),
-      );
-
     const tx = await OWRFactoryInstance.createOWRecipient(
       RECOVERY_ADDRESS,
       principalRecipient,
@@ -176,15 +190,57 @@ const createOWRContract = async ({
       parseEther(amountOfPrincipalStake.toString()),
     );
 
-    await tx.wait();
+    const receipt = await tx.wait();
+    const OWRAddressData = receipt?.logs[0]?.topics[1];
+    const formattedOWRAddress = '0x' + OWRAddressData?.slice(26, 66);
 
-    return OWRContractAddress;
+    return formattedOWRAddress;
   } catch (e) {
     throw e;
   }
 };
 
-export const deployImmutableSplitterAndOWRContracts = async ({
+export const deploySplitterContract = async ({
+  signer,
+  accounts,
+  percentAllocations,
+  chainId,
+  distributorFee,
+  controllerAddress
+}: {
+  signer: Signer;
+  accounts: ETH_ADDRESS[];
+  percentAllocations: number[];
+  chainId: number;
+  distributorFee: number,
+  controllerAddress: ETH_ADDRESS
+}) => {
+
+  try {
+
+    const splitMainContractInstance = new Contract(
+      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS,
+      splitMainEthereumAbi,
+      signer,
+    );
+    const tx = await splitMainContractInstance.createSplit(
+      accounts,
+      percentAllocations,
+      distributorFee,
+      controllerAddress,
+    );
+
+    const receipt = await tx.wait();
+    const splitterAddressData = receipt?.logs[0]?.topics[1];
+    const formattedSplitterAddress = "0x" + splitterAddressData?.slice(26, 66);
+
+    return formattedSplitterAddress;
+  } catch (e) {
+    throw e;
+  }
+
+}
+export const deploySplitterAndOWRContracts = async ({
   owrArgs,
   splitterArgs,
   signer,
@@ -201,7 +257,7 @@ export const deployImmutableSplitterAndOWRContracts = async ({
 }): Promise<{ owrAddress: ETH_ADDRESS; splitterAddress: ETH_ADDRESS }> => {
   const executeCalls: Call[] = [];
   splitterArgs.distributorFee = distributorFee;
-  splitterArgs.controller = controllerAddress;
+  splitterArgs.controllerAddress = controllerAddress;
 
   owrArgs.recoveryAddress = RECOVERY_ADDRESS;
   try {
@@ -209,7 +265,7 @@ export const deployImmutableSplitterAndOWRContracts = async ({
       splitterArgs.accounts,
       splitterArgs.percentAllocations,
       splitterArgs.distributorFee,
-      splitterArgs.controller,
+      splitterArgs.controllerAddress,
     );
 
     const owrTxData = encodeCreateOWRecipientTxData(
@@ -238,16 +294,13 @@ export const deployImmutableSplitterAndOWRContracts = async ({
     );
 
     const splitAddressData = executeMultiCalls?.logs[0]?.topics[1];
-
-    const sliceSplitAddress = '0x' + splitAddressData?.slice(26, 66);
-
-    const owrAddress = executeMultiCalls?.logs[1]?.topics[1];
-
-    const sliceOwrAddress = '0x' + owrAddress?.slice(26, 66);
+    const formattedSplitterAddress = '0x' + splitAddressData?.slice(26, 66);
+    const owrAddressData = executeMultiCalls?.logs[1]?.topics[1];
+    const formattedOwrAddress = '0x' + owrAddressData?.slice(26, 66);
 
     return {
-      owrAddress: sliceOwrAddress,
-      splitterAddress: sliceSplitAddress,
+      owrAddress: formattedOwrAddress,
+      splitterAddress: formattedSplitterAddress,
     };
   } catch (e) {
     throw e;

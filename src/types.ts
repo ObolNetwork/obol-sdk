@@ -147,9 +147,6 @@ export type TotalSplitPayload = {
   splitRecipients: SplitRecipient[];
 
   /** Maximum number of validators with this configuration. */
-  validatorsSize: number;
-
-  /** Maximum number of validators with this configuration. */
   ObolRAFSplit?: number,
 
   /** Fees paid to the distributor. */
@@ -165,6 +162,9 @@ export type TotalSplitPayload = {
 export interface RewardsSplitPayload extends TotalSplitPayload {
   /** Address that will reclaim validator principal after exit. */
   principalRecipient: string;
+
+  /** Maximum number of validators needed for the OWR configuration. */
+  validatorsSize: number;
 }
 
 /**
