@@ -36,5 +36,5 @@ jobs:
       - name: Run e2e tests
         working-directory: ./test/sdk-package-test
         run: yarn run test:e2e
-         env:
+        env:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
