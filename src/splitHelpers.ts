@@ -12,12 +12,8 @@ import { CHAIN_CONFIGURATION } from './constants';
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
 
-export const RETROACTIVE_FUNDING_SPLIT = 1;
-
 // Double check if we need them as params with defaults
-const DISTRIBUTOR_FEE = 0;
 const RECOVERY_ADDRESS = '0x0000000000000000000000000000000000000000';
-const controller = '0x0000000000000000000000000000000000000000';
 
 type Call = {
   target: ETH_ADDRESS;
@@ -56,11 +52,13 @@ export const predictSplitterAddress = async ({
   accounts,
   percentAllocations,
   chainId,
+  distributorFee
 }: {
   signer: Signer;
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
   chainId: number;
+  distributorFee: number
 }): Promise<ETH_ADDRESS> => {
   const splitMainContractInstance = new Contract(
     CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS,
@@ -72,7 +70,7 @@ export const predictSplitterAddress = async ({
     await splitMainContractInstance.predictImmutableSplitAddress(
       accounts,
       percentAllocations,
-      DISTRIBUTOR_FEE,
+      distributorFee,
     );
 
   return predictedSplitAddress;
@@ -87,6 +85,8 @@ export const handleDeployRewardsSplitter = async ({
   validatorsSize,
   principalRecipient,
   chainId,
+  distributorFee,
+  controllerAddress
 }: {
   signer: Signer;
   isSplitterDeployed: boolean;
@@ -96,6 +96,8 @@ export const handleDeployRewardsSplitter = async ({
   validatorsSize: number;
   principalRecipient: ETH_ADDRESS;
   chainId: number;
+  distributorFee: number;
+  controllerAddress: ETH_ADDRESS
 }): Promise<SplitterReturnedType> => {
   try {
     if (isSplitterDeployed) {
@@ -124,6 +126,8 @@ export const handleDeployRewardsSplitter = async ({
           },
           signer,
           chainId,
+          distributorFee,
+          controllerAddress
         });
 
       return {
@@ -185,15 +189,19 @@ export const deployImmutableSplitterAndOWRContracts = async ({
   splitterArgs,
   signer,
   chainId,
+  distributorFee,
+  controllerAddress
 }: {
   owrArgs: OWRArgs;
   splitterArgs: SplitArgs;
   signer: Signer;
   chainId: number;
+  distributorFee: number,
+  controllerAddress: ETH_ADDRESS
 }): Promise<{ owrAddress: ETH_ADDRESS; splitterAddress: ETH_ADDRESS }> => {
   const executeCalls: Call[] = [];
-  splitterArgs.distributorFee = DISTRIBUTOR_FEE;
-  splitterArgs.controller = controller;
+  splitterArgs.distributorFee = distributorFee;
+  splitterArgs.controller = controllerAddress;
 
   owrArgs.recoveryAddress = RECOVERY_ADDRESS;
   try {

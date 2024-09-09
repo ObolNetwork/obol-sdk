@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const privateKey = process.env.PRIVATE_KEY as string; // keep it in gh secrets
+const privateKey = process.env.PRIVATE_KEY as string;
 
 const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 

@@ -370,6 +370,21 @@ describe('createObolRewardSplit', () => {
     }
   });
 
+  test('should throw an error if ObolRAFSplit is less than 1', async () => {
+    try {
+      await clientInstance.createObolRewardSplit({
+        splitRecipients: mockSplitRecipients,
+        principalRecipient: mockPrincipalRecipient,
+        validatorsSize: mockValidatorsSize,
+        ObolRAFSplit:0.5
+      });
+    } catch (error: any) {
+      expect(error.message).toEqual(
+        'Schema compilation errors\', must be >= 1',
+      );
+    }
+  });
+
   it('should return the correct withdrawal and fee recipient addresses', async () => {
     const result = await clientInstance.createObolRewardSplit({
       splitRecipients: mockSplitRecipients,

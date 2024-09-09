@@ -41,13 +41,11 @@ export const definitionSchema = {
         properties: {
           fee_recipient_address: {
             type: 'string',
-            minLength: 42,
-            maxLength: 42,
+            pattern: "^0x[a-fA-F0-9]{40}$"
           },
           withdrawal_address: {
             type: 'string',
-            minLength: 42,
-            maxLength: 42,
+            pattern: "^0x[a-fA-F0-9]{40}$"
           },
         },
         required: ['fee_recipient_address', 'withdrawal_address'],
@@ -75,8 +73,7 @@ export const rewardsSplitterPayloadSchema = {
         properties: {
           account: {
             type: 'string',
-            minLength: 42,
-            maxLength: 42,
+            pattern: "^0x[a-fA-F0-9]{40}$"
           },
           percentAllocation: {
             type: 'number',
@@ -84,7 +81,6 @@ export const rewardsSplitterPayloadSchema = {
         },
         required: ['account', 'percentAllocation'],
       },
-      validateSplitRecipients: true,
     },
     principalRecipient: {
       type: 'string',
@@ -94,6 +90,21 @@ export const rewardsSplitterPayloadSchema = {
     validatorsSize: {
       type: 'number',
     },
+    ObolRAFSplit: {
+      type: 'number',
+      minimum: 1
+    },
+    distributorFee: {
+      type: "number",
+      maximum: 10,
+      multipleOf: 0.01
+    },
+    controllerAddress: {
+      type: 'string',
+      pattern: "^0x[a-fA-F0-9]{40}$"
+    },
+    validateSplitRecipients: true,
+
   },
-  required: ['splitRecipients', 'principalRecipient', 'validatorsSize'],
-};
+  required: ['splitRecipients', 'principalRecipient', 'validatorsSize'], 
+}

@@ -1,4 +1,4 @@
-import { type Provider, type Signer } from 'ethers';
+import { ZeroAddress, type Provider, type Signer } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
 import {
@@ -15,6 +15,7 @@ import {
   TERMS_AND_CONDITIONS_HASH,
   AVAILABLE_SPLITTER_CHAINS,
   CHAIN_CONFIGURATION,
+  DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
@@ -36,7 +37,6 @@ import {
   formatSplitRecipients,
   handleDeployRewardsSplitter,
   predictSplitterAddress,
-  RETROACTIVE_FUNDING_SPLIT,
 } from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
 export * from './types.js';
@@ -121,6 +121,10 @@ export class Client extends Base {
     splitRecipients,
     principalRecipient,
     validatorsSize,
+    ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+    distributorFee = 0,
+    controllerAddress = ZeroAddress,
+
   }: RewardsSplitPayload): Promise<SplitterReturnedType> {
     // This method doesnt require T&C signature
     if (!this.signer) {
@@ -132,6 +136,9 @@ export class Client extends Base {
         splitRecipients,
         principalRecipient,
         validatorsSize,
+        ObolRAFSplit,
+        distributorFee,
+        controllerAddress
       },
       rewardsSplitterPayloadSchema,
     );
@@ -171,7 +178,7 @@ export class Client extends Base {
 
     const retroActiveFundingRecipient = {
       account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS,
-      percentAllocation: RETROACTIVE_FUNDING_SPLIT,
+      percentAllocation: ObolRAFSplit,
     };
 
     const copiedSplitRecipients = [...splitRecipients];
@@ -185,6 +192,7 @@ export class Client extends Base {
       accounts,
       percentAllocations,
       chainId: this.chainId,
+      distributorFee
     });
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
@@ -200,6 +208,8 @@ export class Client extends Base {
         principalRecipient,
         validatorsSize,
         chainId: this.chainId,
+        distributorFee,
+        controllerAddress
       });
 
     return { withdrawalAddress, feeRecipientAddress };

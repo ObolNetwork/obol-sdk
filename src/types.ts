@@ -148,6 +148,15 @@ export type TotalSplitPayload = {
 
   /** Maximum number of validators with this configuration. */
   validatorsSize: number;
+
+  /** Maximum number of validators with this configuration. */
+  ObolRAFSplit?: number,
+
+  /** Fees paid to the distributor. */
+  distributorFee?: number,
+
+  /** Address that can mutate the split, should be ZeroAddress for immutable split. */
+  controllerAddress?: string,
 };
 
 /**
