@@ -163,11 +163,53 @@ describe('Cluster Definition', () => {
       });
 
     expect(withdrawalAddress.length).toEqual(42);
-
     expect(feeRecipientAddress.length).toEqual(42);
-
+    expect(contractsWithSameFeeRecipientAddress.withdrawalAddress.length).toEqual(42);
     expect(feeRecipientAddress.toLowerCase()).toEqual(
       contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
+    );
+  });
+
+  it('should deploy OWR and Splitter with a controller address and a distributorFee', async () => {
+    const signerAddress = await randomSigner.getAddress();
+    // new splitter
+    const { withdrawalAddress, feeRecipientAddress } =
+      await client.createObolRewardSplit({
+        splitRecipients: [
+          { account: signerAddress, percentAllocation: 39 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        validatorsSize: 2,
+        distributorFee: 2,
+        controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966'
+      });
+
+    // same splitter
+    const contractsWithDifferentFeeRecipient =
+      await client.createObolRewardSplit({
+        splitRecipients: [
+          { account: signerAddress, percentAllocation: 39 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        validatorsSize: 2,
+        distributorFee: 2,
+        controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966'
+      });
+
+    expect(withdrawalAddress.length).toEqual(42);
+    expect(feeRecipientAddress.length).toEqual(42);
+    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(42);
+    expect(contractsWithDifferentFeeRecipient.feeRecipientAddress.length).toEqual(42);
+    expect(feeRecipientAddress.toLowerCase()).not.toEqual(
+      contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
     );
   });
 
@@ -203,6 +245,43 @@ describe('Cluster Definition', () => {
 
     expect(feeRecipientAddress.toLowerCase()).toEqual(
       contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
+    );
+  });
+
+  it('should deploy Splitter with distributorFee and controller address', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
+    // new splitter
+    const { withdrawalAddress, feeRecipientAddress } =
+      await client.createObolTotalSplit({
+        splitRecipients: [
+          { account: secondRandomSignerAddress, percentAllocation: 39.9 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+        distributorFee: 2,
+        controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+      });
+
+    // same splitter
+    const contractsWithDifferentFeeRecipient =
+      await client.createObolTotalSplit({
+        splitRecipients: [
+          { account: secondRandomSignerAddress, percentAllocation: 39.9 },
+          {
+            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+            percentAllocation: 60,
+          },
+        ],
+      });
+
+    expect(withdrawalAddress.length).toEqual(42);
+    expect(feeRecipientAddress.toLowerCase()).toEqual(withdrawalAddress.toLowerCase());
+    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(42);
+    expect(contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase()).toEqual(contractsWithDifferentFeeRecipient.withdrawalAddress.toLowerCase());
+    expect(feeRecipientAddress.toLowerCase()).not.toEqual(
+      contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
     );
   });
 
