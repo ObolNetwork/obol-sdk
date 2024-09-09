@@ -3,7 +3,13 @@ import {
   type ETH_ADDRESS,
   type SplitRecipient,
 } from './types';
-import { Contract, Interface, parseEther, ZeroAddress, type Signer } from 'ethers';
+import {
+  Contract,
+  Interface,
+  parseEther,
+  ZeroAddress,
+  type Signer,
+} from 'ethers';
 import { OWRFactoryContract } from './abi/OWR';
 import { splitMainEthereumAbi } from './abi/SplitMain';
 import { MultiCallContract } from './abi/Multicall';
@@ -53,14 +59,14 @@ export const predictSplitterAddress = async ({
   percentAllocations,
   chainId,
   distributorFee,
-  controllerAddress
+  controllerAddress,
 }: {
   signer: Signer;
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
   chainId: number;
-  distributorFee: number,
-  controllerAddress: ETH_ADDRESS
+  distributorFee: number;
+  controllerAddress: ETH_ADDRESS;
 }): Promise<ETH_ADDRESS> => {
   try {
     let predictedSplitterAddress: string;
@@ -70,7 +76,6 @@ export const predictSplitterAddress = async ({
       signer,
     );
 
-
     if (controllerAddress === ZeroAddress) {
       predictedSplitterAddress =
         await splitMainContractInstance.predictImmutableSplitAddress(
@@ -79,19 +84,19 @@ export const predictSplitterAddress = async ({
           distributorFee,
         );
     } else {
-      //It throws on deployed Immutable splitter
+      // It throws on deployed Immutable splitter
       predictedSplitterAddress =
         await splitMainContractInstance.createSplit.staticCall(
           accounts,
           percentAllocations,
           distributorFee,
           controllerAddress,
-        )
+        );
     }
 
     return predictedSplitterAddress;
   } catch (e) {
-    throw e
+    throw e;
   }
 };
 
@@ -105,7 +110,7 @@ export const handleDeployOWRAndSplitter = async ({
   principalRecipient,
   chainId,
   distributorFee,
-  controllerAddress
+  controllerAddress,
 }: {
   signer: Signer;
   isSplitterDeployed: boolean;
@@ -116,7 +121,7 @@ export const handleDeployOWRAndSplitter = async ({
   principalRecipient: ETH_ADDRESS;
   chainId: number;
   distributorFee: number;
-  controllerAddress: ETH_ADDRESS
+  controllerAddress: ETH_ADDRESS;
 }): Promise<SplitterReturnedType> => {
   try {
     if (isSplitterDeployed) {
@@ -146,7 +151,7 @@ export const handleDeployOWRAndSplitter = async ({
           signer,
           chainId,
           distributorFee,
-          controllerAddress
+          controllerAddress,
         });
 
       return {
@@ -202,18 +207,16 @@ export const deploySplitterContract = async ({
   percentAllocations,
   chainId,
   distributorFee,
-  controllerAddress
+  controllerAddress,
 }: {
   signer: Signer;
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
   chainId: number;
-  distributorFee: number,
-  controllerAddress: ETH_ADDRESS
-}) => {
-
+  distributorFee: number;
+  controllerAddress: ETH_ADDRESS;
+}): Promise<ETH_ADDRESS> => {
   try {
-
     const splitMainContractInstance = new Contract(
       CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS,
       splitMainEthereumAbi,
@@ -228,28 +231,27 @@ export const deploySplitterContract = async ({
 
     const receipt = await tx.wait();
     const splitterAddressData = receipt?.logs[0]?.topics[1];
-    const formattedSplitterAddress = "0x" + splitterAddressData?.slice(26, 66);
+    const formattedSplitterAddress = '0x' + splitterAddressData?.slice(26, 66);
 
     return formattedSplitterAddress;
   } catch (e) {
     throw e;
   }
-
-}
+};
 export const deploySplitterAndOWRContracts = async ({
   owrArgs,
   splitterArgs,
   signer,
   chainId,
   distributorFee,
-  controllerAddress
+  controllerAddress,
 }: {
   owrArgs: OWRArgs;
   splitterArgs: SplitArgs;
   signer: Signer;
   chainId: number;
-  distributorFee: number,
-  controllerAddress: ETH_ADDRESS
+  distributorFee: number;
+  controllerAddress: ETH_ADDRESS;
 }): Promise<{ owrAddress: ETH_ADDRESS; splitterAddress: ETH_ADDRESS }> => {
   const executeCalls: Call[] = [];
   splitterArgs.distributorFee = distributorFee;

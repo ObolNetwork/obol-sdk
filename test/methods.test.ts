@@ -376,12 +376,10 @@ describe('createObolRewardSplit', () => {
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
         validatorsSize: mockValidatorsSize,
-        ObolRAFSplit: 0.5
+        ObolRAFSplit: 0.5,
       });
     } catch (error: any) {
-      expect(error.message).toEqual(
-        'Schema compilation errors\', must be >= 1',
-      );
+      expect(error.message).toEqual("Schema compilation errors', must be >= 1");
     }
   });
 
@@ -408,12 +406,9 @@ describe('createObolTotalSplit', () => {
     .mockImplementation(
       async () => await Promise.resolve('0xPredictedAddress'),
     );
-  jest.spyOn(splitsHelpers, 'deploySplitterContract').mockImplementation(
-    async () =>
-      await Promise.resolve(
-        '0xSplitterAddress',
-      ),
-  );
+  jest
+    .spyOn(splitsHelpers, 'deploySplitterContract')
+    .mockImplementation(async () => await Promise.resolve('0xSplitterAddress'));
 
   const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
   const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
@@ -485,11 +480,11 @@ describe('createObolTotalSplit', () => {
     try {
       await clientInstance.createObolTotalSplit({
         splitRecipients: mockSplitRecipients,
-        ObolRAFSplit: 0.05
+        ObolRAFSplit: 0.05,
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Schema compilation errors\', must be >= 0.1',
+        "Schema compilation errors', must be >= 0.1",
       );
     }
   });
@@ -497,10 +492,10 @@ describe('createObolTotalSplit', () => {
   it('should return the correct withdrawal and fee recipient addresses and ObolRAFSplit', async () => {
     const result = await clientInstance.createObolTotalSplit({
       splitRecipients: mockSplitRecipients,
-      ObolRAFSplit: 0.5
+      ObolRAFSplit: 0.5,
     });
 
-    //0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
+    // 0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
     expect(result).toEqual({
       withdrawalAddress: '0xPredictedAddress',
       feeRecipientAddress: '0xPredictedAddress',
@@ -512,7 +507,7 @@ describe('createObolTotalSplit', () => {
       splitRecipients: mockSplitRecipients,
     });
 
-    //0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
+    // 0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
     expect(result).toEqual({
       withdrawalAddress: '0xPredictedAddress',
       feeRecipientAddress: '0xPredictedAddress',

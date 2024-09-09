@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-//known signer
+// known signer
 const privateKey = process.env.PRIVATE_KEY as string;
 const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 const wallet = new ethers.Wallet(privateKey, provider);
@@ -30,8 +30,10 @@ export const randomClient: Client = new Client(
 );
 
 //second random signer
-const secondRandomMnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
-const secondRandomprivateKey = ethers.Wallet.fromPhrase(randomMnemonic).privateKey;
+const secondRandomMnemonic =
+  ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
+const secondRandomprivateKey =
+  ethers.Wallet.fromPhrase(randomMnemonic).privateKey;
 const secondRandomWallet = new ethers.Wallet(randomprivateKey);
 export const secondRandomSigner = randomWallet.connect(null);
 export const secondRandomClient: Client = new Client(

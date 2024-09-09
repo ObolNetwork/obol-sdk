@@ -147,13 +147,13 @@ export type TotalSplitPayload = {
   splitRecipients: SplitRecipient[];
 
   /** Maximum number of validators with this configuration. */
-  ObolRAFSplit?: number,
+  ObolRAFSplit?: number;
 
   /** Fees paid to the distributor. */
-  distributorFee?: number,
+  distributorFee?: number;
 
   /** Address that can mutate the split, should be ZeroAddress for immutable split. */
-  controllerAddress?: string,
+  controllerAddress?: string;
 };
 
 /**

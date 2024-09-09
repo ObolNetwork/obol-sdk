@@ -1,4 +1,7 @@
-import { DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT, DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT } from "./constants";
+import {
+  DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+  DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+} from './constants';
 
 export const operatorPayloadSchema = {
   type: 'object',
@@ -43,11 +46,11 @@ export const definitionSchema = {
         properties: {
           fee_recipient_address: {
             type: 'string',
-            pattern: "^0x[a-fA-F0-9]{40}$"
+            pattern: '^0x[a-fA-F0-9]{40}$',
           },
           withdrawal_address: {
             type: 'string',
-            pattern: "^0x[a-fA-F0-9]{40}$"
+            pattern: '^0x[a-fA-F0-9]{40}$',
           },
         },
         required: ['fee_recipient_address', 'withdrawal_address'],
@@ -75,7 +78,7 @@ export const totalSplitterPayloadSchema = {
         properties: {
           account: {
             type: 'string',
-            pattern: "^0x[a-fA-F0-9]{40}$"
+            pattern: '^0x[a-fA-F0-9]{40}$',
           },
           percentAllocation: {
             type: 'number',
@@ -86,22 +89,21 @@ export const totalSplitterPayloadSchema = {
     },
     ObolRAFSplit: {
       type: 'number',
-      minimum: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT
+      minimum: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
     },
     distributorFee: {
-      type: "number",
+      type: 'number',
       maximum: 10,
-      multipleOf: 0.01
+      multipleOf: 0.01,
     },
     controllerAddress: {
       type: 'string',
-      pattern: "^0x[a-fA-F0-9]{40}$"
+      pattern: '^0x[a-fA-F0-9]{40}$',
     },
     validateSplitRecipients: true,
-
   },
   required: ['splitRecipients'],
-}
+};
 
 export const rewardsSplitterPayloadSchema = {
   ...totalSplitterPayloadSchema,
@@ -109,15 +111,15 @@ export const rewardsSplitterPayloadSchema = {
     ...totalSplitterPayloadSchema.properties,
     ObolRAFSplit: {
       type: 'number',
-      minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT
+      minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     },
     validatorsSize: {
       type: 'number',
     },
     principalRecipient: {
       type: 'string',
-      pattern: "^0x[a-fA-F0-9]{40}$"
-    }
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
   },
   required: ['splitRecipients', 'principalRecipient', 'validatorsSize'],
-}
+};

@@ -1,7 +1,14 @@
 import Ajv, { type ErrorObject } from 'ajv';
 import { parseUnits } from 'ethers';
-import { RewardsSplitPayload, SplitRecipient, TotalSplitPayload } from './types';
-import { DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT, DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT } from './constants';
+import {
+  type RewardsSplitPayload,
+  type SplitRecipient,
+  type TotalSplitPayload,
+} from './types';
+import {
+  DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+  DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+} from './constants';
 
 const validDepositAmounts = (data: boolean, deposits: string[]): boolean => {
   let sum = 0;
@@ -36,7 +43,11 @@ const validateSplitRecipients = (
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
-  const ObolRAFSplitParam = data.ObolRAFSplit || ('principalRecipient' in data ? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT : DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT)
+  const ObolRAFSplitParam = data.ObolRAFSplit
+    ? data.ObolRAFSplit
+    : 'principalRecipient' in data
+      ? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT
+      : DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
   return splitPercentage + ObolRAFSplitParam === 100;
 };
 

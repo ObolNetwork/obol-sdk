@@ -26,7 +26,7 @@ import {
   type ClusterPayload,
   type OperatorPayload,
   type SplitterReturnedType,
-  TotalSplitPayload,
+  type TotalSplitPayload,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -141,7 +141,7 @@ export class Client extends Base {
         validatorsSize,
         ObolRAFSplit,
         distributorFee,
-        controllerAddress
+        controllerAddress,
       },
       rewardsSplitterPayloadSchema,
     );
@@ -196,15 +196,13 @@ export class Client extends Base {
       percentAllocations,
       chainId: this.chainId,
       distributorFee,
-      controllerAddress
+      controllerAddress,
     });
-
 
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
       this.signer.provider as Provider,
     );
-
 
     const { withdrawalAddress, feeRecipientAddress } =
       await handleDeployOWRAndSplitter({
@@ -217,24 +215,23 @@ export class Client extends Base {
         validatorsSize,
         chainId: this.chainId,
         distributorFee,
-        controllerAddress
+        controllerAddress,
       });
 
     return { withdrawalAddress, feeRecipientAddress };
   }
 
   /**
- * Deploys Splitter Proxy.
- * @param {TotalSplitPayload} totalSplitPayload - Data needed to deploy splitter if it doesnt exist.
- * @returns {Promise<SplitterReturnedType>} splitter address as withdrawal address and splitter as fee recipient too
- */
+   * Deploys Splitter Proxy.
+   * @param {TotalSplitPayload} totalSplitPayload - Data needed to deploy splitter if it doesnt exist.
+   * @returns {Promise<SplitterReturnedType>} splitter address as withdrawal address and splitter as fee recipient too
+   */
   // add the example reference
   async createObolTotalSplit({
     splitRecipients,
     ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
     distributorFee = 0,
     controllerAddress = ZeroAddress,
-
   }: TotalSplitPayload): Promise<SplitterReturnedType> {
     // This method doesnt require T&C signature
     if (!this.signer) {
@@ -246,7 +243,7 @@ export class Client extends Base {
         splitRecipients,
         ObolRAFSplit,
         distributorFee,
-        controllerAddress
+        controllerAddress,
       },
       totalSplitterPayloadSchema,
     );
@@ -261,11 +258,9 @@ export class Client extends Base {
     const checkSplitMainAddress = await isContractAvailable(
       CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS,
       this.signer.provider as Provider,
-    )
+    );
 
-    if (
-      !checkSplitMainAddress
-    ) {
+    if (!checkSplitMainAddress) {
       throw new Error(
         'Something isn not working as expected, check this issue with obol-sdk team',
       );
@@ -288,7 +283,7 @@ export class Client extends Base {
       percentAllocations,
       chainId: this.chainId,
       distributorFee,
-      controllerAddress
+      controllerAddress,
     });
 
     const isSplitterDeployed = await isContractAvailable(
@@ -297,20 +292,24 @@ export class Client extends Base {
     );
 
     if (!isSplitterDeployed) {
-      const splitterAddress =
-        await deploySplitterContract({
-          signer: this.signer,
-          accounts,
-          percentAllocations,
-          chainId: this.chainId,
-          distributorFee,
-          controllerAddress
-        });
-      return { withdrawalAddress: splitterAddress, feeRecipientAddress: splitterAddress };
-
+      const splitterAddress = await deploySplitterContract({
+        signer: this.signer,
+        accounts,
+        percentAllocations,
+        chainId: this.chainId,
+        distributorFee,
+        controllerAddress,
+      });
+      return {
+        withdrawalAddress: splitterAddress,
+        feeRecipientAddress: splitterAddress,
+      };
     }
 
-    return { withdrawalAddress: predictedSplitterAddress, feeRecipientAddress: predictedSplitterAddress };
+    return {
+      withdrawalAddress: predictedSplitterAddress,
+      feeRecipientAddress: predictedSplitterAddress,
+    };
   }
 
   /**

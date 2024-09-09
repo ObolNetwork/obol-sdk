@@ -164,7 +164,9 @@ describe('Cluster Definition', () => {
 
     expect(withdrawalAddress.length).toEqual(42);
     expect(feeRecipientAddress.length).toEqual(42);
-    expect(contractsWithSameFeeRecipientAddress.withdrawalAddress.length).toEqual(42);
+    expect(
+      contractsWithSameFeeRecipientAddress.withdrawalAddress.length,
+    ).toEqual(42);
     expect(feeRecipientAddress.toLowerCase()).toEqual(
       contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
     );
@@ -185,7 +187,7 @@ describe('Cluster Definition', () => {
         principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
         validatorsSize: 2,
         distributorFee: 2,
-        controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966'
+        controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
       });
 
     // same splitter
@@ -201,13 +203,17 @@ describe('Cluster Definition', () => {
         principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
         validatorsSize: 2,
         distributorFee: 2,
-        controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966'
+        controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
       });
 
     expect(withdrawalAddress.length).toEqual(42);
     expect(feeRecipientAddress.length).toEqual(42);
-    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(42);
-    expect(contractsWithDifferentFeeRecipient.feeRecipientAddress.length).toEqual(42);
+    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(
+      42,
+    );
+    expect(
+      contractsWithDifferentFeeRecipient.feeRecipientAddress.length,
+    ).toEqual(42);
     expect(feeRecipientAddress.toLowerCase()).not.toEqual(
       contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
     );
@@ -241,7 +247,9 @@ describe('Cluster Definition', () => {
 
     expect(withdrawalAddress.length).toEqual(42);
 
-    expect(feeRecipientAddress.toLowerCase()).toEqual(withdrawalAddress.toLowerCase());
+    expect(feeRecipientAddress.toLowerCase()).toEqual(
+      withdrawalAddress.toLowerCase(),
+    );
 
     expect(feeRecipientAddress.toLowerCase()).toEqual(
       contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
@@ -277,9 +285,17 @@ describe('Cluster Definition', () => {
       });
 
     expect(withdrawalAddress.length).toEqual(42);
-    expect(feeRecipientAddress.toLowerCase()).toEqual(withdrawalAddress.toLowerCase());
-    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(42);
-    expect(contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase()).toEqual(contractsWithDifferentFeeRecipient.withdrawalAddress.toLowerCase());
+    expect(feeRecipientAddress.toLowerCase()).toEqual(
+      withdrawalAddress.toLowerCase(),
+    );
+    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(
+      42,
+    );
+    expect(
+      contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
+    ).toEqual(
+      contractsWithDifferentFeeRecipient.withdrawalAddress.toLowerCase(),
+    );
     expect(feeRecipientAddress.toLowerCase()).not.toEqual(
       contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
     );
