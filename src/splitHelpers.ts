@@ -89,12 +89,8 @@ export const predictSplitterAddress = async ({
         )
     }
 
-
-    console.log(predictedSplitterAddress, "predictedSplitterAddress")
-
     return predictedSplitterAddress;
   } catch (e) {
-    console.log(e, "eeee")
     throw e
   }
 };
