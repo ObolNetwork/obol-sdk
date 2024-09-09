@@ -19,7 +19,7 @@ const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
 
 // Double check if we need them as params with defaults
-const RECOVERY_ADDRESS = '0x0000000000000000000000000000000000000000';
+const RECOVERY_ADDRESS = ZeroAddress;
 
 type Call = {
   target: ETH_ADDRESS;
