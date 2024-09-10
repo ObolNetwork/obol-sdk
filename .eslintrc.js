@@ -32,5 +32,6 @@ module.exports = {
     '@typescript-eslint/member-delimiter-style': 'off',
     'no-useless-catch': 0,
     'new-cap': 0,
+    "@typescript-eslint/naming-convention": 'off'
   },
 };

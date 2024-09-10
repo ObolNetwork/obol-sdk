@@ -161,3 +161,5 @@ export const CHAIN_CONFIGURATION = {
 export const DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT = 1;
 
 export const DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT = 0.1;
+
+export const OBOL_SDK_EMAIL="sdk@dvlabs.tech"

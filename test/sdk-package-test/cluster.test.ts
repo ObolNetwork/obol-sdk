@@ -135,7 +135,7 @@ describe('Cluster Definition', () => {
   it('should deploy OWR and Splitter', async () => {
     const signerAddress = await randomSigner.getAddress();
     // new splitter
-    const { withdrawalAddress, feeRecipientAddress } =
+    const { withdrawal_address, fee_recipient_address } =
       await client.createObolRewardSplit({
         splitRecipients: [
           { account: signerAddress, percentAllocation: 39 },
@@ -145,7 +145,7 @@ describe('Cluster Definition', () => {
           },
         ],
         principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        validatorsSize: 2,
+        etherAmount: 2,
       });
 
     // same splitter
@@ -159,23 +159,23 @@ describe('Cluster Definition', () => {
           },
         ],
         principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        validatorsSize: 2,
+        etherAmount: 2,
       });
 
-    expect(withdrawalAddress.length).toEqual(42);
-    expect(feeRecipientAddress.length).toEqual(42);
+    expect(withdrawal_address.length).toEqual(42);
+    expect(fee_recipient_address.length).toEqual(42);
     expect(
-      contractsWithSameFeeRecipientAddress.withdrawalAddress.length,
+      contractsWithSameFeeRecipientAddress.withdrawal_address.length,
     ).toEqual(42);
-    expect(feeRecipientAddress.toLowerCase()).toEqual(
-      contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
+    expect(fee_recipient_address.toLowerCase()).toEqual(
+      contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase(),
     );
   });
 
   it('should deploy OWR and Splitter with a controller address and a distributorFee', async () => {
     const signerAddress = await randomSigner.getAddress();
     // new splitter
-    const { withdrawalAddress, feeRecipientAddress } =
+    const { withdrawal_address, fee_recipient_address } =
       await client.createObolRewardSplit({
         splitRecipients: [
           { account: signerAddress, percentAllocation: 39 },
@@ -185,7 +185,7 @@ describe('Cluster Definition', () => {
           },
         ],
         principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        validatorsSize: 2,
+        etherAmount: 2,
         distributorFee: 2,
         controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
       });
@@ -201,28 +201,28 @@ describe('Cluster Definition', () => {
           },
         ],
         principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        validatorsSize: 2,
+        etherAmount: 2,
         distributorFee: 2,
         controllerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
       });
 
-    expect(withdrawalAddress.length).toEqual(42);
-    expect(feeRecipientAddress.length).toEqual(42);
-    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(
+    expect(withdrawal_address.length).toEqual(42);
+    expect(fee_recipient_address.length).toEqual(42);
+    expect(contractsWithDifferentFeeRecipient.withdrawal_address.length).toEqual(
       42,
     );
     expect(
-      contractsWithDifferentFeeRecipient.feeRecipientAddress.length,
+      contractsWithDifferentFeeRecipient.fee_recipient_address.length,
     ).toEqual(42);
-    expect(feeRecipientAddress.toLowerCase()).not.toEqual(
-      contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
+    expect(fee_recipient_address.toLowerCase()).not.toEqual(
+      contractsWithDifferentFeeRecipient.fee_recipient_address.toLowerCase(),
     );
   });
 
   it('should deploy Splitter', async () => {
     const secondRandomSignerAddress = await secondRandomSigner.getAddress();
     // new splitter
-    const { withdrawalAddress, feeRecipientAddress } =
+    const { withdrawal_address, fee_recipient_address } =
       await client.createObolTotalSplit({
         splitRecipients: [
           { account: secondRandomSignerAddress, percentAllocation: 39.9 },
@@ -245,21 +245,21 @@ describe('Cluster Definition', () => {
         ],
       });
 
-    expect(withdrawalAddress.length).toEqual(42);
+    expect(withdrawal_address.length).toEqual(42);
 
-    expect(feeRecipientAddress.toLowerCase()).toEqual(
-      withdrawalAddress.toLowerCase(),
+    expect(fee_recipient_address.toLowerCase()).toEqual(
+      withdrawal_address.toLowerCase(),
     );
 
-    expect(feeRecipientAddress.toLowerCase()).toEqual(
-      contractsWithSameFeeRecipientAddress.feeRecipientAddress.toLowerCase(),
+    expect(fee_recipient_address.toLowerCase()).toEqual(
+      contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase(),
     );
   });
 
   it('should deploy Splitter with distributorFee and controller address', async () => {
     const secondRandomSignerAddress = await secondRandomSigner.getAddress();
     // new splitter
-    const { withdrawalAddress, feeRecipientAddress } =
+    const { withdrawal_address, fee_recipient_address } =
       await client.createObolTotalSplit({
         splitRecipients: [
           { account: secondRandomSignerAddress, percentAllocation: 39.9 },
@@ -284,20 +284,20 @@ describe('Cluster Definition', () => {
         ],
       });
 
-    expect(withdrawalAddress.length).toEqual(42);
-    expect(feeRecipientAddress.toLowerCase()).toEqual(
-      withdrawalAddress.toLowerCase(),
+    expect(withdrawal_address.length).toEqual(42);
+    expect(fee_recipient_address.toLowerCase()).toEqual(
+      withdrawal_address.toLowerCase(),
     );
-    expect(contractsWithDifferentFeeRecipient.withdrawalAddress.length).toEqual(
+    expect(contractsWithDifferentFeeRecipient.withdrawal_address.length).toEqual(
       42,
     );
     expect(
-      contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
+      contractsWithDifferentFeeRecipient.fee_recipient_address.toLowerCase(),
     ).toEqual(
-      contractsWithDifferentFeeRecipient.withdrawalAddress.toLowerCase(),
+      contractsWithDifferentFeeRecipient.withdrawal_address.toLowerCase(),
     );
-    expect(feeRecipientAddress.toLowerCase()).not.toEqual(
-      contractsWithDifferentFeeRecipient.feeRecipientAddress.toLowerCase(),
+    expect(fee_recipient_address.toLowerCase()).not.toEqual(
+      contractsWithDifferentFeeRecipient.fee_recipient_address.toLowerCase(),
     );
   });
 

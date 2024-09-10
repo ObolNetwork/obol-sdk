@@ -113,7 +113,7 @@ export const rewardsSplitterPayloadSchema = {
       type: 'number',
       minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     },
-    validatorsSize: {
+    etherAmount: {
       type: 'number',
     },
     principalRecipient: {
@@ -121,5 +121,5 @@ export const rewardsSplitterPayloadSchema = {
       pattern: '^0x[a-fA-F0-9]{40}$',
     },
   },
-  required: ['splitRecipients', 'principalRecipient', 'validatorsSize'],
+  required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
 };

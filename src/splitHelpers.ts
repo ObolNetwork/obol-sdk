@@ -1,5 +1,5 @@
 import {
-  type SplitterReturnedType,
+  type ClusterValidator,
   type ETH_ADDRESS,
   type SplitRecipient,
 } from './types';
@@ -106,7 +106,7 @@ export const handleDeployOWRAndSplitter = async ({
   predictedSplitterAddress,
   accounts,
   percentAllocations,
-  validatorsSize,
+  etherAmount,
   principalRecipient,
   chainId,
   distributorFee,
@@ -117,31 +117,31 @@ export const handleDeployOWRAndSplitter = async ({
   predictedSplitterAddress: ETH_ADDRESS;
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
-  validatorsSize: number;
+  etherAmount: number;
   principalRecipient: ETH_ADDRESS;
   chainId: number;
   distributorFee: number;
   controllerAddress: ETH_ADDRESS;
-}): Promise<SplitterReturnedType> => {
+}): Promise<ClusterValidator> => {
   try {
     if (isSplitterDeployed) {
       const owrAddress = await createOWRContract({
         principalRecipient,
         splitterAddress: predictedSplitterAddress,
-        amountOfPrincipalStake: validatorsSize * 32,
+        amountOfPrincipalStake: etherAmount,
         signer,
         chainId,
       });
       return {
-        withdrawalAddress: owrAddress,
-        feeRecipientAddress: predictedSplitterAddress,
+        withdrawal_address: owrAddress,
+        fee_recipient_address: predictedSplitterAddress,
       };
     } else {
       const { owrAddress, splitterAddress } =
         await deploySplitterAndOWRContracts({
           owrArgs: {
             principalRecipient,
-            amountOfPrincipalStake: validatorsSize * 32,
+            amountOfPrincipalStake: etherAmount,
             predictedSplitterAddress,
           },
           splitterArgs: {
@@ -155,8 +155,8 @@ export const handleDeployOWRAndSplitter = async ({
         });
 
       return {
-        withdrawalAddress: owrAddress,
-        feeRecipientAddress: splitterAddress,
+        withdrawal_address: owrAddress,
+        fee_recipient_address: splitterAddress,
       };
     }
   } catch (e) {

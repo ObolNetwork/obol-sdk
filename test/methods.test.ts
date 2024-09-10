@@ -291,8 +291,8 @@ describe('createObolRewardSplit', () => {
   jest.spyOn(splitsHelpers, 'handleDeployOWRAndSplitter').mockImplementation(
     async () =>
       await Promise.resolve({
-        withdrawalAddress: '0xWithdrawalAddress',
-        feeRecipientAddress: '0xFeeRecipientAddress',
+        withdrawal_address: '0xWithdrawalAddress',
+        fee_recipient_address: '0xFeeRecipientAddress',
       }),
   );
 
@@ -320,14 +320,14 @@ describe('createObolRewardSplit', () => {
     },
   ];
   const mockPrincipalRecipient = '0x86B8145c98e5BD25BA722645b15eD65f024a87EC';
-  const mockValidatorsSize = 2;
+  const mockEtherAmount = 64;
 
   it('should throw an error if signer is not defined', async () => {
     await expect(
       clientInstanceWithourSigner.createObolRewardSplit({
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
-        validatorsSize: mockValidatorsSize,
+        etherAmount: mockEtherAmount,
       }),
     ).rejects.toThrow('Signer is required in createObolRewardSplit');
   });
@@ -342,7 +342,7 @@ describe('createObolRewardSplit', () => {
       await unsupportedSplitterChainClient.createObolRewardSplit({
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
-        validatorsSize: mockValidatorsSize,
+        etherAmount: mockEtherAmount,
       });
     } catch (error: any) {
       expect(error.message).toEqual(
@@ -361,7 +361,7 @@ describe('createObolRewardSplit', () => {
           },
         ],
         principalRecipient: mockPrincipalRecipient,
-        validatorsSize: mockValidatorsSize,
+        etherAmount: mockEtherAmount,
       });
     } catch (error: any) {
       expect(error.message).toEqual(
@@ -375,7 +375,7 @@ describe('createObolRewardSplit', () => {
       await clientInstance.createObolRewardSplit({
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
-        validatorsSize: mockValidatorsSize,
+        etherAmount: mockEtherAmount,
         ObolRAFSplit: 0.5,
       });
     } catch (error: any) {
@@ -387,12 +387,12 @@ describe('createObolRewardSplit', () => {
     const result = await clientInstance.createObolRewardSplit({
       splitRecipients: mockSplitRecipients,
       principalRecipient: mockPrincipalRecipient,
-      validatorsSize: mockValidatorsSize,
+      etherAmount: mockEtherAmount,
     });
 
     expect(result).toEqual({
-      withdrawalAddress: '0xWithdrawalAddress',
-      feeRecipientAddress: '0xFeeRecipientAddress',
+      withdrawal_address: '0xWithdrawalAddress',
+      fee_recipient_address: '0xFeeRecipientAddress',
     });
   });
 });
@@ -497,8 +497,8 @@ describe('createObolTotalSplit', () => {
 
     // 0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
     expect(result).toEqual({
-      withdrawalAddress: '0xPredictedAddress',
-      feeRecipientAddress: '0xPredictedAddress',
+      withdrawal_address: '0xPredictedAddress',
+      fee_recipient_address: '0xPredictedAddress',
     });
   });
 
@@ -509,8 +509,8 @@ describe('createObolTotalSplit', () => {
 
     // 0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
     expect(result).toEqual({
-      withdrawalAddress: '0xPredictedAddress',
-      feeRecipientAddress: '0xPredictedAddress',
+      withdrawal_address: '0xPredictedAddress',
+      fee_recipient_address: '0xPredictedAddress',
     });
   });
 });

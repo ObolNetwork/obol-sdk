@@ -17,6 +17,7 @@ import {
   CHAIN_CONFIGURATION,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+  OBOL_SDK_EMAIL,
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
@@ -25,8 +26,8 @@ import {
   type ClusterLock,
   type ClusterPayload,
   type OperatorPayload,
-  type SplitterReturnedType,
   type TotalSplitPayload,
+  type ClusterValidator,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -118,17 +119,17 @@ export class Client extends Base {
   /**
    * Deploys OWR and Splitter Proxy.
    * @param {RewardsSplitPayload} rewardsSplitPayload - Data needed to deploy owr and splitter.
-   * @returns {Promise<SplitterReturnedType>} owr address as withdrawal address and splitter as fee recipient
+   * @returns {Promise<ClusterValidator>} owr address as withdrawal address and splitter as fee recipient
    */
   // add the example reference
   async createObolRewardSplit({
     splitRecipients,
     principalRecipient,
-    validatorsSize,
+    etherAmount,
     ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     distributorFee = 0,
     controllerAddress = ZeroAddress,
-  }: RewardsSplitPayload): Promise<SplitterReturnedType> {
+  }: RewardsSplitPayload): Promise<ClusterValidator> {
     // This method doesnt require T&C signature
     if (!this.signer) {
       throw new Error('Signer is required in createObolRewardSplit');
@@ -138,7 +139,7 @@ export class Client extends Base {
       {
         splitRecipients,
         principalRecipient,
-        validatorsSize,
+        etherAmount,
         ObolRAFSplit,
         distributorFee,
         controllerAddress,
@@ -174,7 +175,7 @@ export class Client extends Base {
       !checkOWRFactoryAddress
     ) {
       throw new Error(
-        'Something isn not working as expected, check this issue with obol-sdk team',
+        `Something isn not working as expected, check this issue with obol-sdk team on ${OBOL_SDK_EMAIL}`,
       );
     }
 
@@ -204,7 +205,7 @@ export class Client extends Base {
       this.signer.provider as Provider,
     );
 
-    const { withdrawalAddress, feeRecipientAddress } =
+    const { withdrawal_address, fee_recipient_address } =
       await handleDeployOWRAndSplitter({
         signer: this.signer,
         isSplitterDeployed: !!isSplitterDeployed,
@@ -212,19 +213,19 @@ export class Client extends Base {
         accounts,
         percentAllocations,
         principalRecipient,
-        validatorsSize,
+        etherAmount,
         chainId: this.chainId,
         distributorFee,
         controllerAddress,
       });
 
-    return { withdrawalAddress, feeRecipientAddress };
+    return { withdrawal_address, fee_recipient_address };
   }
 
   /**
    * Deploys Splitter Proxy.
    * @param {TotalSplitPayload} totalSplitPayload - Data needed to deploy splitter if it doesnt exist.
-   * @returns {Promise<SplitterReturnedType>} splitter address as withdrawal address and splitter as fee recipient too
+   * @returns {Promise<ClusterValidator>} splitter address as withdrawal address and splitter as fee recipient too
    */
   // add the example reference
   async createObolTotalSplit({
@@ -232,7 +233,7 @@ export class Client extends Base {
     ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
     distributorFee = 0,
     controllerAddress = ZeroAddress,
-  }: TotalSplitPayload): Promise<SplitterReturnedType> {
+  }: TotalSplitPayload): Promise<ClusterValidator> {
     // This method doesnt require T&C signature
     if (!this.signer) {
       throw new Error('Signer is required in createObolTotalSplit');
@@ -262,7 +263,7 @@ export class Client extends Base {
 
     if (!checkSplitMainAddress) {
       throw new Error(
-        'Something isn not working as expected, check this issue with obol-sdk team',
+        `Something isn not working as expected, check this issue with obol-sdk team on ${OBOL_SDK_EMAIL}`,
       );
     }
 
@@ -301,14 +302,14 @@ export class Client extends Base {
         controllerAddress,
       });
       return {
-        withdrawalAddress: splitterAddress,
-        feeRecipientAddress: splitterAddress,
+        withdrawal_address: splitterAddress,
+        fee_recipient_address: splitterAddress,
       };
     }
 
     return {
-      withdrawalAddress: predictedSplitterAddress,
-      feeRecipientAddress: predictedSplitterAddress,
+      withdrawal_address: predictedSplitterAddress,
+      fee_recipient_address: predictedSplitterAddress,
     };
   }
 

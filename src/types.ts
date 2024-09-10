@@ -66,17 +66,6 @@ export type ClusterValidator = {
 };
 
 /**
- * Splitter withdrawal returned type
- */
-export type SplitterReturnedType = {
-  /** The validator fee recipient address. */
-  feeRecipientAddress: string;
-
-  /** The validator reward address. */
-  withdrawalAddress: string;
-};
-
-/**
  * Cluster configuration
  */
 export type ClusterPayload = {
@@ -146,10 +135,10 @@ export type TotalSplitPayload = {
   /** The split recipients addresses and splits. */
   splitRecipients: SplitRecipient[];
 
-  /** Maximum number of validators with this configuration. */
+  /** Split percentageNumber allocated for obol retroactive funding, minimum is 1%. */
   ObolRAFSplit?: number;
 
-  /** Fees paid to the distributor. */
+  /** The percentageNumber of accrued rewards that is paid to the caller of the distribution function to compensate them for the gas costs of doing so. Cannot be greater than 10%. For example, 5 represents 5%. */
   distributorFee?: number;
 
   /** Address that can mutate the split, should be ZeroAddress for immutable split. */
@@ -163,8 +152,8 @@ export interface RewardsSplitPayload extends TotalSplitPayload {
   /** Address that will reclaim validator principal after exit. */
   principalRecipient: string;
 
-  /** Maximum number of validators needed for the OWR configuration. */
-  validatorsSize: number;
+  /** Amount needed to deploy all validators expected for the OWR/Splitter configuration. */
+  etherAmount: number;
 }
 
 /**
