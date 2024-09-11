@@ -18,7 +18,6 @@ import { CHAIN_CONFIGURATION } from './constants';
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
 
-
 type Call = {
   target: ETH_ADDRESS;
   callData: string;
@@ -109,7 +108,7 @@ export const handleDeployOWRAndSplitter = async ({
   chainId,
   distributorFee,
   controllerAddress,
-  recoveryAddress
+  recoveryAddress,
 }: {
   signer: Signer;
   isSplitterDeployed: boolean;
@@ -130,7 +129,7 @@ export const handleDeployOWRAndSplitter = async ({
           principalRecipient,
           amountOfPrincipalStake: etherAmount,
           predictedSplitterAddress,
-          recoveryAddress
+          recoveryAddress,
         },
         signer,
         chainId,
@@ -146,7 +145,7 @@ export const handleDeployOWRAndSplitter = async ({
             principalRecipient,
             amountOfPrincipalStake: etherAmount,
             predictedSplitterAddress,
-            recoveryAddress
+            recoveryAddress,
           },
           splitterArgs: {
             accounts,
@@ -188,7 +187,7 @@ const createOWRContract = async ({
       owrArgs.recoveryAddress,
       owrArgs.principalRecipient,
       owrArgs.predictedSplitterAddress,
-      parseEther((owrArgs.amountOfPrincipalStake).toString()),
+      parseEther(owrArgs.amountOfPrincipalStake.toString()),
     );
 
     const receipt = await tx.wait();
@@ -275,7 +274,8 @@ export const deploySplitterAndOWRContracts = async ({
         callData: owrTxData,
       },
     );
-    const multicallAddess = CHAIN_CONFIGURATION[chainId].MULTICALL_ADDRESS.address;
+    const multicallAddess =
+      CHAIN_CONFIGURATION[chainId].MULTICALL_ADDRESS.address;
 
     const executeMultiCalls = await multicall(
       executeCalls,

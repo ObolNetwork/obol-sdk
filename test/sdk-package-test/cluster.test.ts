@@ -209,9 +209,9 @@ describe('Cluster Definition', () => {
 
     expect(withdrawal_address.length).toEqual(42);
     expect(fee_recipient_address.length).toEqual(42);
-    expect(contractsWithDifferentFeeRecipient.withdrawal_address.length).toEqual(
-      42,
-    );
+    expect(
+      contractsWithDifferentFeeRecipient.withdrawal_address.length,
+    ).toEqual(42);
     expect(
       contractsWithDifferentFeeRecipient.fee_recipient_address.length,
     ).toEqual(42);
@@ -289,9 +289,9 @@ describe('Cluster Definition', () => {
     expect(fee_recipient_address.toLowerCase()).toEqual(
       withdrawal_address.toLowerCase(),
     );
-    expect(contractsWithDifferentFeeRecipient.withdrawal_address.length).toEqual(
-      42,
-    );
+    expect(
+      contractsWithDifferentFeeRecipient.withdrawal_address.length,
+    ).toEqual(42);
     expect(
       contractsWithDifferentFeeRecipient.fee_recipient_address.toLowerCase(),
     ).toEqual(
