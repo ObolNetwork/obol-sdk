@@ -154,6 +154,10 @@ export interface RewardsSplitPayload extends TotalSplitPayload {
 
   /** Amount needed to deploy all validators expected for the OWR/Splitter configuration. */
   etherAmount: number;
+
+
+  /** Address that can control where the owr erc-20 tokens can be pushed, if set to zero it goes to splitter or principal address. */
+  recoveryAddress?: string;
 }
 
 /**

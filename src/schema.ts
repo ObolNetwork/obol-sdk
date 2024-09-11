@@ -113,6 +113,10 @@ export const rewardsSplitterPayloadSchema = {
       type: 'number',
       minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     },
+    recoveryAddress: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
     etherAmount: {
       type: 'number',
     },

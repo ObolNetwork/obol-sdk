@@ -129,6 +129,7 @@ export class Client extends Base {
     ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     distributorFee = 0,
     controllerAddress = ZeroAddress,
+    recoveryAddress= ZeroAddress
   }: RewardsSplitPayload): Promise<ClusterValidator> {
     // This method doesnt require T&C signature
     if (!this.signer) {
@@ -143,6 +144,7 @@ export class Client extends Base {
         ObolRAFSplit,
         distributorFee,
         controllerAddress,
+        recoveryAddress
       },
       rewardsSplitterPayloadSchema,
     );
@@ -155,18 +157,21 @@ export class Client extends Base {
     }
 
     const checkSplitMainAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS,
+      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.address,
       this.signer.provider as Provider,
+      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.bytecode
     );
 
     const checkMulticallAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS,
+      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS.address,
       this.signer.provider as Provider,
+      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS.bytecode,
     );
 
     const checkOWRFactoryAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS,
+      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS.address,
       this.signer.provider as Provider,
+      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS.bytecode,
     );
 
     if (
@@ -180,7 +185,7 @@ export class Client extends Base {
     }
 
     const retroActiveFundingRecipient = {
-      account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS,
+      account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: ObolRAFSplit,
     };
 
@@ -217,6 +222,7 @@ export class Client extends Base {
         chainId: this.chainId,
         distributorFee,
         controllerAddress,
+        recoveryAddress
       });
 
     return { withdrawal_address, fee_recipient_address };
@@ -257,9 +263,9 @@ export class Client extends Base {
     }
 
     const checkSplitMainAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS,
+      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.address,
       this.signer.provider as Provider,
-    );
+      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.bytecode);
 
     if (!checkSplitMainAddress) {
       throw new Error(
@@ -268,7 +274,7 @@ export class Client extends Base {
     }
 
     const retroActiveFundingRecipient = {
-      account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS,
+      account: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: ObolRAFSplit,
     };
 

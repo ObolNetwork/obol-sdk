@@ -146,6 +146,7 @@ describe('Cluster Definition', () => {
         ],
         principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
         etherAmount: 2,
+        recoveryAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
       });
 
     // same splitter
