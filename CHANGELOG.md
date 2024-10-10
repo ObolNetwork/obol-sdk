@@ -2,8 +2,16 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.1.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.0.1...v2.1.0)
+
+- a warning and some improvements [`#59`](https://github.com/ObolNetwork/obol-sdk/pull/59)
+- Hanan/create split [`#57`](https://github.com/ObolNetwork/obol-sdk/pull/57)
+
 #### [v2.0.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.0.0...v2.0.1)
 
+> 6 August 2024
+
+- chore(release): v2.0.1 [`#55`](https://github.com/ObolNetwork/obol-sdk/pull/55)
 - Hanan/null deposit amounts [`#54`](https://github.com/ObolNetwork/obol-sdk/pull/54)
 - accept a null value for deposit_amounts [`#52`](https://github.com/ObolNetwork/obol-sdk/pull/52)
 
