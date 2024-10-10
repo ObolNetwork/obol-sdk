@@ -11,6 +11,12 @@ Checkout our [docs](https://docs.obol.org/docs/advanced/quickstart-sdk), [exampl
 ## Terms and Conditions
 To use obol-sdk and in order to be able to create a cluster definition or accept an invite to join a cluster, you must accept the [latest Obol terms and conditions](https://obol.org/terms.pdf) by calling acceptObolLatestTermsAndConditions.
 
+## ⚠️ Important Security Notice:
+If you're integrating this SDK with a **backend** (e.g., in Node.js), and you store a private key for executing splitter transactions, handle it with extreme caution. Ensure that:
+
+- The private key is securely stored (e.g., in an `.env` file).
+- Never commit or push your `.env` file containing the private key to version control.
+
 ## Contributing
 
 Please review the following guidelines:

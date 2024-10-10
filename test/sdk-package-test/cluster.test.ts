@@ -136,7 +136,7 @@ describe('Cluster Definition', () => {
     const signerAddress = await randomSigner.getAddress();
     // new splitter
     const { withdrawal_address, fee_recipient_address } =
-      await client.createObolRewardSplit({
+      await client.createObolRewardsSplit({
         splitRecipients: [
           { account: signerAddress, percentAllocation: 39 },
           {
@@ -151,7 +151,7 @@ describe('Cluster Definition', () => {
 
     // same splitter
     const contractsWithSameFeeRecipientAddress =
-      await client.createObolRewardSplit({
+      await client.createObolRewardsSplit({
         splitRecipients: [
           { account: signerAddress, percentAllocation: 39 },
           {
@@ -177,7 +177,7 @@ describe('Cluster Definition', () => {
     const signerAddress = await randomSigner.getAddress();
     // new splitter
     const { withdrawal_address, fee_recipient_address } =
-      await client.createObolRewardSplit({
+      await client.createObolRewardsSplit({
         splitRecipients: [
           { account: signerAddress, percentAllocation: 39 },
           {
@@ -193,7 +193,7 @@ describe('Cluster Definition', () => {
 
     // same splitter
     const contractsWithDifferentFeeRecipient =
-      await client.createObolRewardSplit({
+      await client.createObolRewardsSplit({
         splitRecipients: [
           { account: signerAddress, percentAllocation: 39 },
           {

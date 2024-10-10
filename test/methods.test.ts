@@ -279,7 +279,7 @@ describe('Cluster Client without a signer', () => {
   });
 });
 
-describe('createObolRewardSplit', () => {
+describe('createObolRewardsSplit', () => {
   jest
     .spyOn(utils, 'isContractAvailable')
     .mockImplementation(async () => await Promise.resolve(true));
@@ -324,12 +324,12 @@ describe('createObolRewardSplit', () => {
 
   it('should throw an error if signer is not defined', async () => {
     await expect(
-      clientInstanceWithourSigner.createObolRewardSplit({
+      clientInstanceWithourSigner.createObolRewardsSplit({
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
         etherAmount: mockEtherAmount,
       }),
-    ).rejects.toThrow('Signer is required in createObolRewardSplit');
+    ).rejects.toThrow('Signer is required in createObolRewardsSplit');
   });
 
   it('should throw an error if chainId is not supported', async () => {
@@ -339,7 +339,7 @@ describe('createObolRewardSplit', () => {
     );
 
     try {
-      await unsupportedSplitterChainClient.createObolRewardSplit({
+      await unsupportedSplitterChainClient.createObolRewardsSplit({
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
         etherAmount: mockEtherAmount,
@@ -353,7 +353,7 @@ describe('createObolRewardSplit', () => {
 
   test('should throw an error on invalid recipients', async () => {
     try {
-      await clientInstance.createObolRewardSplit({
+      await clientInstance.createObolRewardsSplit({
         splitRecipients: [
           {
             account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
@@ -372,7 +372,7 @@ describe('createObolRewardSplit', () => {
 
   test('should throw an error if ObolRAFSplit is less than 1', async () => {
     try {
-      await clientInstance.createObolRewardSplit({
+      await clientInstance.createObolRewardsSplit({
         splitRecipients: mockSplitRecipients,
         principalRecipient: mockPrincipalRecipient,
         etherAmount: mockEtherAmount,
@@ -384,7 +384,7 @@ describe('createObolRewardSplit', () => {
   });
 
   it('should return the correct withdrawal and fee recipient addresses', async () => {
-    const result = await clientInstance.createObolRewardSplit({
+    const result = await clientInstance.createObolRewardsSplit({
       splitRecipients: mockSplitRecipients,
       principalRecipient: mockPrincipalRecipient,
       etherAmount: mockEtherAmount,

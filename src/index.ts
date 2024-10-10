@@ -118,11 +118,19 @@ export class Client extends Base {
 
   /**
    * Deploys OWR and Splitter Proxy.
+   * 
+   * @remarks
+   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed 
+   * and not pushed to version control.
+   *
    * @param {RewardsSplitPayload} rewardsSplitPayload - Data needed to deploy owr and splitter.
    * @returns {Promise<ClusterValidator>} owr address as withdrawal address and splitter as fee recipient
+   * 
+   * An example of how to use createObolRewardsSplit:
+   * [createObolRewardsSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L141)
    */
   // add the example reference
-  async createObolRewardSplit({
+  async createObolRewardsSplit({
     splitRecipients,
     principalRecipient,
     etherAmount,
@@ -133,7 +141,7 @@ export class Client extends Base {
   }: RewardsSplitPayload): Promise<ClusterValidator> {
     // This method doesnt require T&C signature
     if (!this.signer) {
-      throw new Error('Signer is required in createObolRewardSplit');
+      throw new Error('Signer is required in createObolRewardsSplit');
     }
 
     validatePayload(
@@ -231,8 +239,16 @@ export class Client extends Base {
 
   /**
    * Deploys Splitter Proxy.
+   * 
+   * @remarks
+   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed 
+   * and not pushed to version control.
+   *
    * @param {TotalSplitPayload} totalSplitPayload - Data needed to deploy splitter if it doesnt exist.
    * @returns {Promise<ClusterValidator>} splitter address as withdrawal address and splitter as fee recipient too
+   * 
+   * An example of how to use createObolTotalSplit:
+   * [createObolTotalSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L168)
    */
   // add the example reference
   async createObolTotalSplit({

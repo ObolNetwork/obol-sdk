@@ -58,10 +58,10 @@ export type ClusterCreator = {
  * Validator withdrawal configuration
  */
 export type ClusterValidator = {
-  /** The validator fee recipient address. */
+  /** Address to receive MEV rewards (if enabled), block proposal and priority fees. */
   fee_recipient_address: string;
 
-  /** The validator reward address. */
+  /** Address to receive skimming rewards and validator principal at exit. */
   withdrawal_address: string;
 };
 
