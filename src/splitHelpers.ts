@@ -1,4 +1,5 @@
 import {
+  type OWRTranches,
   type ClusterValidator,
   type ETH_ADDRESS,
   type SplitRecipient,
@@ -10,7 +11,7 @@ import {
   ZeroAddress,
   type Signer,
 } from 'ethers';
-import { OWRFactoryContract } from './abi/OWR';
+import { OWRContract, OWRFactoryContract } from './abi/OWR';
 import { splitMainEthereumAbi } from './abi/SplitMain';
 import { MultiCallContract } from './abi/Multicall';
 import { CHAIN_CONFIGURATION } from './constants';
@@ -237,6 +238,7 @@ export const deploySplitterContract = async ({
     throw e;
   }
 };
+
 export const deploySplitterAndOWRContracts = async ({
   owrArgs,
   splitterArgs,
@@ -295,6 +297,23 @@ export const deploySplitterAndOWRContracts = async ({
   } catch (e) {
     throw e;
   }
+};
+
+export const getOWRTranches = async ({
+  owrAddress,
+  signer,
+}: {
+  owrAddress: ETH_ADDRESS;
+  signer: Signer;
+}): Promise<OWRTranches> => {
+  const owrContract = new Contract(owrAddress, OWRContract.abi, signer);
+  const res = await owrContract.getTranches();
+
+  return {
+    principalRecipient: res.principalRecipient,
+    rewardRecipient: res.rewardRecipient,
+    amountOfPrincipalStake: res.amountOfPrincipalStake,
+  };
 };
 
 export const multicall = async (

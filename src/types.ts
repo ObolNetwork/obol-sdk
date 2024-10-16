@@ -160,6 +160,20 @@ export interface RewardsSplitPayload extends TotalSplitPayload {
 }
 
 /**
+ * OWR Tranches
+ */
+export type OWRTranches = {
+  /** Address that will reclaim validator principal after exit. */
+  principalRecipient: ETH_ADDRESS;
+
+  /** Address that will reclaim validator rewards during operation. */
+  rewardRecipient: ETH_ADDRESS;
+
+  /** Amount of principal staked. */
+  amountOfPrincipalStake: number;
+};
+
+/**
  * Unsigned DV Builder Registration Message
  */
 export type BuilderRegistrationMessage = {
