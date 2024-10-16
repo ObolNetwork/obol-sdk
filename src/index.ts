@@ -28,8 +28,8 @@ import {
   type OperatorPayload,
   type TotalSplitPayload,
   type ClusterValidator,
-  ETH_ADDRESS,
-  OWRTranches,
+  type ETH_ADDRESS,
+  type OWRTranches,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -358,7 +358,7 @@ export class Client extends Base {
     }
 
     const signer = this.signer;
-    return getOWRTranches({ owrAddress, signer });
+    return await getOWRTranches({ owrAddress, signer });
   }
 
   /**

@@ -1,5 +1,5 @@
 import {
-  OWRTranches,
+  type OWRTranches,
   type ClusterValidator,
   type ETH_ADDRESS,
   type SplitRecipient,
