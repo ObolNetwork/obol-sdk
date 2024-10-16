@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // known signer
-const privateKey = 'a253a1ea3770b1db6d0cc34c2f0ed46a474b51fa0fe9250131b5494f332b5f09' as string;
+const privateKey = process.env.PRIVATE_KEY as string;
 const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);

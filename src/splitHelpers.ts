@@ -312,8 +312,8 @@ export const getOWRTranches = async ({
   return {
     principalRecipient: res.principalRecipient,
     rewardRecipient: res.rewardRecipient,
-    amountOfPrincipalStake: res.amountOfPrincipalStake
-  }
+    amountOfPrincipalStake: res.amountOfPrincipalStake,
+  };
 };
 
 export const multicall = async (
