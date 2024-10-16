@@ -133,44 +133,11 @@ describe('Cluster Definition', () => {
   });
 
   it('should deploy OWR and Splitter', async () => {
-    const signerAddress = await randomSigner.getAddress();
-    // new splitter
-    const { withdrawal_address, fee_recipient_address } =
-      await client.createObolRewardsSplit({
-        splitRecipients: [
-          { account: signerAddress, percentAllocation: 39 },
-          {
-            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-            percentAllocation: 60,
-          },
-        ],
-        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        etherAmount: 2,
-        recoveryAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-      });
+    const res = await client.getOWRTranches("0x9D4c1790972eFBd5c5D892209116667ECA299cF4")
 
-    // same splitter
-    const contractsWithSameFeeRecipientAddress =
-      await client.createObolRewardsSplit({
-        splitRecipients: [
-          { account: signerAddress, percentAllocation: 39 },
-          {
-            account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-            percentAllocation: 60,
-          },
-        ],
-        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        etherAmount: 2,
-      });
-
-    expect(withdrawal_address.length).toEqual(42);
-    expect(fee_recipient_address.length).toEqual(42);
-    expect(
-      contractsWithSameFeeRecipientAddress.withdrawal_address.length,
-    ).toEqual(42);
-    expect(fee_recipient_address.toLowerCase()).toEqual(
-      contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase(),
-    );
+    expect(res.principalRecipient).toEqual("0xc6AE567Aba2314bA3C5bE11F2C3BC7Fc614011f3");
+    expect(res.rewardRecipient).toEqual("0x5B3c8F77305008A8B15C5dAB9E66CDFC10Db4bB5");
+    expect(res.amountOfPrincipalStake).toEqual(BigInt(32000000000000000000));
   });
 
   it('should deploy OWR and Splitter with a controller address and a distributorFee', async () => {

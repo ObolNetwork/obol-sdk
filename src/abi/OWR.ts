@@ -128,3 +128,175 @@ export const OWRFactoryContract = {
     },
   ],
 };
+
+export const OWRContract = {
+  abi: [
+    { inputs: [], stateMutability: 'nonpayable', type: 'constructor' },
+    { inputs: [], name: 'InvalidDistribution_TooLarge', type: 'error' },
+    {
+      inputs: [],
+      name: 'InvalidTokenRecovery_InvalidRecipient',
+      type: 'error',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'principalPayout',
+          type: 'uint256',
+        },
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'rewardPayout',
+          type: 'uint256',
+        },
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'pullFlowFlag',
+          type: 'uint256',
+        },
+      ],
+      name: 'DistributeFunds',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'amount',
+          type: 'uint256',
+        },
+      ],
+      name: 'ReceiveETH',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: false,
+          internalType: 'address',
+          name: 'recoveryAddressToken',
+          type: 'address',
+        },
+        {
+          indexed: false,
+          internalType: 'address',
+          name: 'recipient',
+          type: 'address',
+        },
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'amount',
+          type: 'uint256',
+        },
+      ],
+      name: 'RecoverNonOWRecipientFunds',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: false,
+          internalType: 'address',
+          name: 'account',
+          type: 'address',
+        },
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'amount',
+          type: 'uint256',
+        },
+      ],
+      name: 'Withdrawal',
+      type: 'event',
+    },
+    {
+      inputs: [],
+      name: 'claimedPrincipalFunds',
+      outputs: [{ internalType: 'uint128', name: '', type: 'uint128' }],
+      stateMutability: 'view',
+      type: 'function',
+    },
+    {
+      inputs: [],
+      name: 'distributeFunds',
+      outputs: [],
+      stateMutability: 'payable',
+      type: 'function',
+    },
+    {
+      inputs: [],
+      name: 'distributeFundsPull',
+      outputs: [],
+      stateMutability: 'payable',
+      type: 'function',
+    },
+    {
+      inputs: [],
+      name: 'fundsPendingWithdrawal',
+      outputs: [{ internalType: 'uint128', name: '', type: 'uint128' }],
+      stateMutability: 'view',
+      type: 'function',
+    },
+    {
+      inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+      name: 'getPullBalance',
+      outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+      stateMutability: 'view',
+      type: 'function',
+    },
+    {
+      inputs: [],
+      name: 'getTranches',
+      outputs: [
+        {
+          internalType: 'address',
+          name: 'principalRecipient',
+          type: 'address',
+        },
+        { internalType: 'address', name: 'rewardRecipient', type: 'address' },
+        {
+          internalType: 'uint256',
+          name: 'amountOfPrincipalStake',
+          type: 'uint256',
+        },
+      ],
+      stateMutability: 'pure',
+      type: 'function',
+    },
+    {
+      inputs: [
+        { internalType: 'address', name: 'nonOWRToken', type: 'address' },
+        { internalType: 'address', name: 'recipient', type: 'address' },
+      ],
+      name: 'recoverFunds',
+      outputs: [],
+      stateMutability: 'payable',
+      type: 'function',
+    },
+    {
+      inputs: [],
+      name: 'recoveryAddress',
+      outputs: [{ internalType: 'address', name: '', type: 'address' }],
+      stateMutability: 'pure',
+      type: 'function',
+    },
+    {
+      inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+      name: 'withdraw',
+      outputs: [],
+      stateMutability: 'nonpayable',
+      type: 'function',
+    },
+  ],
+};

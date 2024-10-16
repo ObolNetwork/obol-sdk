@@ -28,6 +28,8 @@ import {
   type OperatorPayload,
   type TotalSplitPayload,
   type ClusterValidator,
+  ETH_ADDRESS,
+  OWRTranches,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -42,6 +44,7 @@ import {
   formatSplitRecipients,
   handleDeployOWRAndSplitter,
   predictSplitterAddress,
+  getOWRTranches,
 } from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
 export * from './types.js';
@@ -336,6 +339,26 @@ export class Client extends Base {
       withdrawal_address: predictedSplitterAddress,
       fee_recipient_address: predictedSplitterAddress,
     };
+  }
+
+  /**
+   * Read OWR Tranches.
+   *
+   * @remarks
+   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
+   * and not pushed to version control.
+   *
+   * @param {ETH_ADDRESS} owrAddress - Address of the Deployed OWR Contract
+   * @returns {Promise<OWRTranches>} owr tranch information about principal and reward reciepient, as well as the principal amount
+   *
+   */
+  async getOWRTranches(owrAddress: ETH_ADDRESS): Promise<OWRTranches> {
+    if (!this.signer) {
+      throw new Error('Signer is required in getOWRTranches');
+    }
+
+    const signer = this.signer;
+    return getOWRTranches({ owrAddress, signer });
   }
 
   /**
