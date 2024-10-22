@@ -189,18 +189,12 @@ describe('Cluster Definition', () => {
         controllerAddress: principalRecipient,
       });
 
-    const res = await client.getOWRTranches(
-      withdrawal_address,
-    );
+    const res = await client.getOWRTranches(withdrawal_address);
 
-    expect(res.principalRecipient).toEqual(
-      principalRecipient.toLowerCase(),
-    );
-    expect(res.rewardRecipient).toEqual(
-      fee_recipient_address.toLowerCase(),
-    );
+    expect(res.principalRecipient).toEqual(principalRecipient.toLowerCase());
+    expect(res.rewardRecipient).toEqual(fee_recipient_address.toLowerCase());
     expect(res.amountOfPrincipalStake).toEqual(BigInt(32000000000000000000));
-  })
+  });
 
   it('should deploy OWR and Splitter with a controller address and a distributorFee', async () => {
     const signerAddress = await randomSigner.getAddress();
