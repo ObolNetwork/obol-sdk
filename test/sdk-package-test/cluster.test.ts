@@ -191,8 +191,12 @@ describe('Cluster Definition', () => {
 
     const res = await client.getOWRTranches(withdrawal_address);
 
-    expect(res.principalRecipient).toEqual(principalRecipient.toLowerCase());
-    expect(res.rewardRecipient).toEqual(fee_recipient_address.toLowerCase());
+    expect(res.principalRecipient.toLowerCase()).toEqual(
+      principalRecipient.toLowerCase(),
+    );
+    expect(res.rewardRecipient.toLowerCase()).toEqual(
+      fee_recipient_address.toLowerCase(),
+    );
     expect(res.amountOfPrincipalStake).toEqual(BigInt(32000000000000000000));
   });
 
