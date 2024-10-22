@@ -197,7 +197,7 @@ describe('Cluster Definition', () => {
     expect(res.rewardRecipient.toLowerCase()).toEqual(
       fee_recipient_address.toLowerCase(),
     );
-    expect(res.amountOfPrincipalStake).toEqual(BigInt(32000000000000000000));
+    expect(res.amountOfPrincipalStake).toEqual(BigInt(2000000000000000000));
   });
 
   it('should deploy OWR and Splitter with a controller address and a distributorFee', async () => {
