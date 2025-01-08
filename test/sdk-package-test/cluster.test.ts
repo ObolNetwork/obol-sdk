@@ -132,45 +132,72 @@ describe('Cluster Definition', () => {
     }
   });
 
-  it('should deploy OWR and Splitter', async () => {
-    const signerAddress = await randomSigner.getAddress();
+  it('should deploy Splitter', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
     // new splitter
     const { withdrawal_address, fee_recipient_address } =
-      await client.createObolRewardsSplit({
+      await client.createObolTotalSplit({
         splitRecipients: [
-          { account: signerAddress, percentAllocation: 39 },
+          { account: secondRandomSignerAddress, percentAllocation: 39.9 },
           {
             account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
             percentAllocation: 60,
           },
         ],
-        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        etherAmount: 2,
-        recoveryAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
       });
 
     // same splitter
     const contractsWithSameFeeRecipientAddress =
-      await client.createObolRewardsSplit({
+      await client.createObolTotalSplit({
         splitRecipients: [
-          { account: signerAddress, percentAllocation: 39 },
+          { account: secondRandomSignerAddress, percentAllocation: 39.9 },
           {
             account: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
             percentAllocation: 60,
           },
         ],
-        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
-        etherAmount: 2,
       });
 
     expect(withdrawal_address.length).toEqual(42);
-    expect(fee_recipient_address.length).toEqual(42);
-    expect(
-      contractsWithSameFeeRecipientAddress.withdrawal_address.length,
-    ).toEqual(42);
+
+    expect(fee_recipient_address.toLowerCase()).toEqual(
+      withdrawal_address.toLowerCase(),
+    );
+
     expect(fee_recipient_address.toLowerCase()).toEqual(
       contractsWithSameFeeRecipientAddress.fee_recipient_address.toLowerCase(),
     );
+  });
+
+  it('should deploy OWR and splitter and get tranches', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
+    const principalRecipient = '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966';
+
+    // new splitter
+    const { withdrawal_address, fee_recipient_address } =
+      await client.createObolRewardsSplit({
+        splitRecipients: [
+          { account: secondRandomSignerAddress, percentAllocation: 39 },
+          {
+            account: principalRecipient,
+            percentAllocation: 60,
+          },
+        ],
+        principalRecipient: principalRecipient,
+        etherAmount: 2,
+        distributorFee: 2,
+        controllerAddress: principalRecipient,
+      });
+
+    const res = await client.getOWRTranches(withdrawal_address);
+
+    expect(res.principalRecipient.toLowerCase()).toEqual(
+      principalRecipient.toLowerCase(),
+    );
+    expect(res.rewardRecipient.toLowerCase()).toEqual(
+      fee_recipient_address.toLowerCase(),
+    );
+    expect(res.amountOfPrincipalStake).toEqual(BigInt(2000000000000000000));
   });
 
   it('should deploy OWR and Splitter with a controller address and a distributorFee', async () => {
