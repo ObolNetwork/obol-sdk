@@ -88,6 +88,7 @@ export class Client extends Base {
         address,
         version: TERMS_AND_CONDITIONS_VERSION,
         terms_and_conditions_hash: termsAndConditionsHash,
+        fork_version: this.fork_version,
       };
 
       const termsAndConditionsSignature = await this.signer.signTypedData(
