@@ -201,8 +201,8 @@ export const DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT = 0.1;
 export const OBOL_SDK_EMAIL = 'sdk@dvlabs.tech';
 
 export const PROVIDER_MAP: Record<number, string> = {
-  1: `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`, // Mainnet
-  17000: `https://eth-holesky.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`, // Holesky
-  11155111: `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`, // Sepolia
-  100: `https://gnosis-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`, // Gnosis
+  1: `${process.env.RPC_MAINNET}`, // Mainnet
+  17000: `${process.env.RPC_HOLESKY}`, // Holesky
+  11155111: `${process.env.RPC_SEPOLIA}`, // Sepolia
+  100: `${process.env.RPC_GNOSIS}`, // Gnosis
 };

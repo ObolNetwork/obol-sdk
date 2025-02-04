@@ -447,7 +447,7 @@ export const isValidClusterLock = async (
     if (definitionType == null) {
       return false;
     }
-    const isValidDefinitionData = verifyDefinitionSignatures(
+    const isValidDefinitionData = await verifyDefinitionSignatures(
       clusterLock.cluster_definition,
       definitionType,
     );
