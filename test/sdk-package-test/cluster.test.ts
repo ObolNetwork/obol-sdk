@@ -26,7 +26,6 @@ import {
   validateClusterLock,
 } from '@obolnetwork/obol-sdk';
 
-
 jest.setTimeout(50000);
 
 /* eslint @typescript-eslint/no-misused-promises: 0 */ // --> OFF
