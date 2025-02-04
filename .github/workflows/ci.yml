@@ -38,3 +38,8 @@ jobs:
         run: yarn run test:e2e
         env:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          DEL_AUTH: ${{ secrets.DEL_AUTH }}
+          RPC_HOLESKY: ${{ secrets.RPC_HOLESKY }}
+          RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
+          RPC_GNOSIS: ${{ secrets.RPC_GNOSIS }}
+          RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}
