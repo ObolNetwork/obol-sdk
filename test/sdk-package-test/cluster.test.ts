@@ -18,6 +18,7 @@ import {
   randomSigner,
   signer,
   secondRandomSigner,
+  DEL_AUTH,
 } from './utils';
 import {
   type ClusterDefinition,
@@ -25,7 +26,6 @@ import {
   validateClusterLock,
 } from '@obolnetwork/obol-sdk';
 
-const DEL_AUTH = process.env.DEL_AUTH;
 
 jest.setTimeout(50000);
 

@@ -43,6 +43,9 @@ export const secondRandomClient: Client = new Client(
 
 export const app = client.baseUrl;
 
+export const DEL_AUTH = process.env.DEL_AUTH;
+
+
 export const postClusterDef = async (
   clusterWithoutDefHash: ClusterDefinition,
 ): Promise<any> => {
