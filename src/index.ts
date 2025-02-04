@@ -49,6 +49,8 @@ import {
 import { isContractAvailable } from './utils.js';
 export * from './types.js';
 export * from './services.js';
+export * from './verification/signature-validator.js';
+
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
