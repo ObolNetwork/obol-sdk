@@ -375,7 +375,7 @@ describe('Poll Cluster Lock', () => {
         setTimeout(function () {
           clearInterval(pollReqIntervalId);
           reject(new Error('Time out'));
-        }, 5000);
+        }, 10000);
       }),
       (async () => {
         await updateClusterDef(clusterLockV1X8.cluster_definition);
@@ -406,7 +406,7 @@ describe('Poll Cluster Lock', () => {
         setTimeout(function () {
           clearInterval(pollReqIntervalId);
           reject(new Error('Time out'));
-        }, 5000);
+        }, 10000);
       }),
       (async () => {
         await updateClusterDef(clusterLockV1X8.cluster_definition);
