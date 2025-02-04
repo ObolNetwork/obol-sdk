@@ -1,6 +1,6 @@
 import { ethers, type Provider } from 'ethers';
 import { DefinitionFlow, PROVIDER_MAP } from './constants';
-import { type ClusterDefinition } from './types';
+import { FORK_NAMES, type ClusterDefinition } from './types';
 
 export const hexWithout0x = (hex: string): string => {
   return hex.slice(2, hex.length);
@@ -79,7 +79,7 @@ export const isContractAvailable = async (
 export const getProvider = (chainId: number): ethers.Provider => {
   const rpcUrl = PROVIDER_MAP[chainId];
   if (!rpcUrl) {
-    throw new Error(`No provider configured for chainId: ${chainId}`);
+    throw new Error(`No provider configured for ${FORK_NAMES[chainId]}`);
   }
   return new ethers.JsonRpcProvider(rpcUrl);
 };

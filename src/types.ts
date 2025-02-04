@@ -13,7 +13,30 @@ export enum FORK_MAPPING {
 
   /** Holesky. */
   '0x01017000' = 17000,
+
+  /** Sepolia. */
+  '0x90000069' = 11155111,
 }
+
+/**
+ * Permitted Chain Names
+ */
+export const FORK_NAMES: Record<number, string> = {
+  /** Mainnet. */
+  [FORK_MAPPING['0x00000000']]: 'mainnet',
+
+  /** Goerli/Prater. */
+  [FORK_MAPPING['0x00001020']]: 'goerli',
+
+  /** Gnosis Chain. */
+  [FORK_MAPPING['0x00000064']]: 'gnosis',
+
+  /** Holesky. */
+  [FORK_MAPPING['0x01017000']]: 'holesky',
+
+  /** Sepolia. */
+  [FORK_MAPPING['0x90000069']]: 'sepolia',
+};
 
 /**
  * Node operator data
