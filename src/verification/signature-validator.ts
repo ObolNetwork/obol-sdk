@@ -2,12 +2,12 @@ import { ethers } from 'ethers';
 import {
   SignTypedDataVersion,
   TypedDataUtils,
-  TypedMessage,
+  type TypedMessage,
 } from '@metamask/eth-sig-util';
 import Safe from '@safe-global/protocol-kit';
 import { PROVIDER_MAP } from '../constants';
 import { hashTypedData } from '@safe-global/protocol-kit/dist/src/utils';
-import { EIP712TypedData } from '@safe-global/safe-core-sdk-types';
+import { type EIP712TypedData } from '@safe-global/safe-core-sdk-types';
 import { isContractAvailable, getProvider } from '../utils';
 
 export const validateAddressSignature = async ({

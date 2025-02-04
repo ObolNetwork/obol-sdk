@@ -540,7 +540,7 @@ export const clusterLockWithSafe = {
           '0x1035b284df3b1d60434bfe2d139f1472ed29663e2af719779bb5da35537f202032ab0f7cdc540c724c8e80bedfba247809d741260201fbb5bcbfc7f0813334241b',
       },
       {
-        address: '0x169212AE1A834C1E0efd8C827Abdbc2b5557B86C', //safe address
+        address: '0x169212AE1A834C1E0efd8C827Abdbc2b5557B86C', // safe address
         enr: 'enr:-HW4QPwheIq51G9r9k-6GYrhp9-y-hN2SSowqgQemvPyBu9cOKERqPeqy0JuZ0yKyWiji406eK8fFeHX5fKU-6OI3u6AgmlkgnY0iXNlY3AyNTZrMaECaARWVFt5KNkHPno5YYdFBUrkLU5EmOB3K0Ns9hp-s-s',
         config_signature:
           '0xf97cc2536afe96e43e07aac140254cea37b0345573b12476f8840e571095d72049aa9e03a099ef2965523f83648c4323cd16ec2ee3f5e6efac177da13bcf6eb21c',

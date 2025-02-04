@@ -23,7 +23,6 @@ import {
   hashClusterLockV1X7,
   verifyDVV1X7,
 } from './v1.7.0.js';
-import { ethers } from 'ethers';
 import {
   DOMAIN_APPLICATION_BUILDER,
   DOMAIN_DEPOSIT,
@@ -33,7 +32,6 @@ import {
   signEnrPayload,
   signOperatorConfigHashPayload,
 } from '../constants.js';
-import { SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util';
 import {
   builderRegistrationMessageType,
   depositMessageType,
@@ -140,7 +138,6 @@ const validatePOSTConfigHashSigner = async (
   chainId: FORK_MAPPING,
 ): Promise<boolean> => {
   try {
-    const sig = ethers.Signature.from(signature);
     const data = signCreatorConfigHashPayload(
       { creator_config_hash: configHash },
       chainId,

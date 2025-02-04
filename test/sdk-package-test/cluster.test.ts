@@ -184,7 +184,7 @@ describe('Cluster Definition', () => {
             percentAllocation: 60,
           },
         ],
-        principalRecipient: principalRecipient,
+        principalRecipient,
         etherAmount: 2,
         distributorFee: 2,
         controllerAddress: principalRecipient,
