@@ -48,6 +48,7 @@ import {
   hashClusterLockV1X8,
   verifyDVV1X8,
 } from './v1.8.0.js';
+import { validateAddressSignature } from './signature-validator.js';
 
 // cluster-definition hash
 
@@ -132,100 +133,102 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
 
 // cluster-definition signatures verification
 
-const getPOSTConfigHashSigner = (
+const validatePOSTConfigHashSigner = async (
+  address: string,
   signature: string,
   configHash: string,
   chainId: FORK_MAPPING,
-): string => {
+): Promise<boolean> => {
   try {
     const sig = ethers.Signature.from(signature);
     const data = signCreatorConfigHashPayload(
       { creator_config_hash: configHash },
       chainId,
     );
-    const digest = TypedDataUtils.eip712Hash(data, SignTypedDataVersion.V4);
 
-    return ethers.recoverAddress(digest, sig).toLowerCase();
+    return await validateAddressSignature({ address, token: signature, data, chainId })
+
   } catch (err) {
     throw err;
   }
 };
 
-const getPUTConfigHashSigner = (
+const validatePUTConfigHashSigner = async (
+  address: string,
   signature: string,
   configHash: string,
   chainId: number,
-): string => {
+): Promise<boolean> => {
   try {
-    const sig = ethers.Signature.from(signature);
     const data = signOperatorConfigHashPayload(
       { operator_config_hash: configHash },
       chainId,
     );
-    const digest = TypedDataUtils.eip712Hash(data, SignTypedDataVersion.V4);
+    return await validateAddressSignature({ address, token: signature, data, chainId })
 
-    return ethers.recoverAddress(digest, sig).toLowerCase();
   } catch (err) {
     throw err;
   }
 };
 
-const getEnrSigner = (
+const validateEnrSigner = async (
+  address: string,
   signature: string,
   payload: string,
   chainId: number,
-): string => {
+): Promise<boolean> => {
   try {
-    const sig = ethers.Signature.from(signature);
 
     const data = signEnrPayload({ enr: payload }, chainId);
-    const digest = TypedDataUtils.eip712Hash(data, SignTypedDataVersion.V4);
 
-    return ethers.recoverAddress(digest, sig).toLowerCase();
+    return await validateAddressSignature({ address, token: signature, data, chainId })
   } catch (err) {
     throw err;
   }
 };
 
-const verifyDefinitionSignatures = (
+const verifyDefinitionSignatures = async (
   clusterDefinition: ClusterDefinition,
   definitionType: DefinitionFlow,
-): boolean => {
+): Promise<boolean> => {
   if (definitionType === DefinitionFlow.Charon) {
     return true;
   } else {
-    const configSigner = getPOSTConfigHashSigner(
+    const isPOSTConfigHashSignerValid = await validatePOSTConfigHashSigner(
+      clusterDefinition.creator.address,
       clusterDefinition.creator.config_signature as string,
       clusterDefinition.config_hash,
       FORK_MAPPING[clusterDefinition.fork_version as keyof typeof FORK_MAPPING],
     );
 
-    if (configSigner !== clusterDefinition.creator.address.toLowerCase()) {
+    if (!isPOSTConfigHashSignerValid) {
       return false;
     }
     if (definitionType === DefinitionFlow.Solo) {
       return true;
     }
-    return clusterDefinition.operators.every(operator => {
-      const configSigner = getPUTConfigHashSigner(
+    return clusterDefinition.operators.every(async (operator) => {
+      const isPUTConfigHashSignerValid = await validatePUTConfigHashSigner(
+        operator.address,
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
-      const enrSigner = getEnrSigner(
+      const isENRSignerValid = await validateEnrSigner(
+        operator.address,
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
       if (
-        configSigner !== operator.address.toLowerCase() ||
-        enrSigner !== operator.address.toLowerCase()
+        !isPUTConfigHashSignerValid ||
+        !isENRSignerValid
       ) {
         return false;
       }
@@ -320,8 +323,8 @@ export const verifyDepositData = (
   const eth1AddressWithdrawalPrefix = '0x01';
   if (
     eth1AddressWithdrawalPrefix +
-      '0'.repeat(22) +
-      withdrawalAddress.toLowerCase().slice(2) !==
+    '0'.repeat(22) +
+    withdrawalAddress.toLowerCase().slice(2) !==
     depositData.withdrawal_credentials
   ) {
     return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
