@@ -251,8 +251,8 @@ describe('Cluster Client without a signer', () => {
     },
     {
       version: 'Cluster with safe address v1.8.0',
-      clusterLock:clusterLockWithSafe
-    }
+      clusterLock: clusterLockWithSafe,
+    },
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {

@@ -14,7 +14,6 @@ import {
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-
 export const CONFLICT_ERROR_MSG = 'Conflict';
 
 export const EIP712_DOMAIN_NAME = 'Obol';

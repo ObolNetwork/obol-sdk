@@ -146,8 +146,12 @@ const validatePOSTConfigHashSigner = async (
       chainId,
     );
 
-    return await validateAddressSignature({ address, token: signature, data, chainId })
-
+    return await validateAddressSignature({
+      address,
+      token: signature,
+      data,
+      chainId,
+    });
   } catch (err) {
     throw err;
   }
@@ -164,8 +168,12 @@ const validatePUTConfigHashSigner = async (
       { operator_config_hash: configHash },
       chainId,
     );
-    return await validateAddressSignature({ address, token: signature, data, chainId })
-
+    return await validateAddressSignature({
+      address,
+      token: signature,
+      data,
+      chainId,
+    });
   } catch (err) {
     throw err;
   }
@@ -178,10 +186,14 @@ const validateEnrSigner = async (
   chainId: number,
 ): Promise<boolean> => {
   try {
-
     const data = signEnrPayload({ enr: payload }, chainId);
 
-    return await validateAddressSignature({ address, token: signature, data, chainId })
+    return await validateAddressSignature({
+      address,
+      token: signature,
+      data,
+      chainId,
+    });
   } catch (err) {
     throw err;
   }
@@ -207,13 +219,13 @@ const verifyDefinitionSignatures = async (
     if (definitionType === DefinitionFlow.Solo) {
       return true;
     }
-    return clusterDefinition.operators.every(async (operator) => {
+    return clusterDefinition.operators.every(async operator => {
       const isPUTConfigHashSignerValid = await validatePUTConfigHashSigner(
         operator.address,
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
@@ -222,14 +234,11 @@ const verifyDefinitionSignatures = async (
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
-      if (
-        !isPUTConfigHashSignerValid ||
-        !isENRSignerValid
-      ) {
+      if (!isPUTConfigHashSignerValid || !isENRSignerValid) {
         return false;
       }
       return true;
@@ -323,8 +332,8 @@ export const verifyDepositData = (
   const eth1AddressWithdrawalPrefix = '0x01';
   if (
     eth1AddressWithdrawalPrefix +
-    '0'.repeat(22) +
-    withdrawalAddress.toLowerCase().slice(2) !==
+      '0'.repeat(22) +
+      withdrawalAddress.toLowerCase().slice(2) !==
     depositData.withdrawal_credentials
   ) {
     return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };

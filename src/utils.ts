@@ -83,5 +83,3 @@ export const getProvider = (chainId: number): ethers.Provider => {
   }
   return new ethers.JsonRpcProvider(rpcUrl);
 };
-
-
