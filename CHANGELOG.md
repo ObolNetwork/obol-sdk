@@ -2,8 +2,9 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### [v2.2.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.2...v2.2.0)
+#### [v2.3.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.2...v2.3.0)
 
+- chore(release): v2.2.0 [`#69`](https://github.com/ObolNetwork/obol-sdk/pull/69)
 - Hanan/support safe [`#68`](https://github.com/ObolNetwork/obol-sdk/pull/68)
 
 #### [v2.1.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.1...v2.1.2)
