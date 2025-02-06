@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.2.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.2...v2.2.0)
+
+- Hanan/support safe [`#68`](https://github.com/ObolNetwork/obol-sdk/pull/68)
+
 #### [v2.1.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.1...v2.1.2)
 
+> 8 January 2025
+
+- chore(release): v2.1.2 [`#66`](https://github.com/ObolNetwork/obol-sdk/pull/66)
 - Hanan/safe fix [`#65`](https://github.com/ObolNetwork/obol-sdk/pull/65)
 
 #### [v2.1.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.0...v2.1.1)
