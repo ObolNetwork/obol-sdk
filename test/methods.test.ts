@@ -18,7 +18,6 @@ import { hashTermsAndConditions } from '../src/verification/termsAndConditions';
 import * as utils from '../src/utils';
 import * as splitsHelpers from '../src/splitHelpers';
 
-
 jest.setTimeout(20000);
 
 /* eslint no-new: 0 */
@@ -292,7 +291,12 @@ describe('Cluster Client without a signer', () => {
 });
 
 describe('createObolRewardsSplit', () => {
-  let clientInstance: Client, clientInstanceWithourSigner: Client, mockSplitRecipients: { account: string; percentAllocation: number; }[], mockPrincipalRecipient: string, mockEtherAmount: number, mockSigner: ethers.Signer | ethers.Wallet | undefined
+  let clientInstance: Client,
+    clientInstanceWithourSigner: Client,
+    mockSplitRecipients: Array<{ account: string; percentAllocation: number }>,
+    mockPrincipalRecipient: string,
+    mockEtherAmount: number,
+    mockSigner: ethers.Signer | ethers.Wallet | undefined;
   beforeAll(() => {
     jest
       .spyOn(utils, 'isContractAvailable')
@@ -334,10 +338,7 @@ describe('createObolRewardsSplit', () => {
     ];
     mockPrincipalRecipient = '0x86B8145c98e5BD25BA722645b15eD65f024a87EC';
     mockEtherAmount = 64;
-
   });
-
-
 
   it('should throw an error if signer is not defined', async () => {
     await expect(
@@ -415,7 +416,10 @@ describe('createObolRewardsSplit', () => {
 });
 
 describe('createObolTotalSplit', () => {
-  let clientInstanceWithourSigner: Client, mockSplitRecipients: { account: string; percentAllocation: number; }[], mockSigner: ethers.Signer | ethers.Wallet | undefined, clientInstance: Client
+  let clientInstanceWithourSigner: Client,
+    mockSplitRecipients: Array<{ account: string; percentAllocation: number }>,
+    mockSigner: ethers.Signer | ethers.Wallet | undefined,
+    clientInstance: Client;
   beforeAll(() => {
     jest
       .spyOn(utils, 'isContractAvailable')
@@ -427,7 +431,9 @@ describe('createObolTotalSplit', () => {
       );
     jest
       .spyOn(splitsHelpers, 'deploySplitterContract')
-      .mockImplementation(async () => await Promise.resolve('0xSplitterAddress'));
+      .mockImplementation(
+        async () => await Promise.resolve('0xSplitterAddress'),
+      );
 
     const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
     const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
@@ -452,7 +458,7 @@ describe('createObolTotalSplit', () => {
         percentAllocation: 99.9,
       },
     ];
-  })
+  });
   it('should throw an error if signer is not defined', async () => {
     await expect(
       clientInstanceWithourSigner.createObolTotalSplit({
