@@ -24,6 +24,11 @@ jobs:
 
       - name: Run unit tests
         run: yarn run test
+        env:
+          RPC_HOLESKY: ${{ secrets.RPC_HOLESKY }}
+          RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
+          RPC_GNOSIS: ${{ secrets.RPC_GNOSIS }}
+          RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}
       
       - name: Install e2e dependencies
         working-directory: ./test/sdk-package-test
