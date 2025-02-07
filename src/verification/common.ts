@@ -216,13 +216,14 @@ const verifyDefinitionSignatures = async (
     if (definitionType === DefinitionFlow.Solo) {
       return true;
     }
-    return clusterDefinition.operators.every(async operator => {
+
+    for (const operator of clusterDefinition.operators) {
       const isPUTConfigHashSignerValid = await validatePUTConfigHashSigner(
         operator.address,
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
@@ -231,15 +232,16 @@ const verifyDefinitionSignatures = async (
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
       if (!isPUTConfigHashSignerValid || !isENRSignerValid) {
         return false;
       }
-      return true;
-    });
+    }
+
+    return true
   }
 };
 
@@ -329,8 +331,8 @@ export const verifyDepositData = (
   const eth1AddressWithdrawalPrefix = '0x01';
   if (
     eth1AddressWithdrawalPrefix +
-      '0'.repeat(22) +
-      withdrawalAddress.toLowerCase().slice(2) !==
+    '0'.repeat(22) +
+    withdrawalAddress.toLowerCase().slice(2) !==
     depositData.withdrawal_credentials
   ) {
     return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };

@@ -18,6 +18,9 @@ import { hashTermsAndConditions } from '../src/verification/termsAndConditions';
 import * as utils from '../src/utils';
 import * as splitsHelpers from '../src/splitHelpers';
 
+
+jest.setTimeout(20000);
+
 /* eslint no-new: 0 */
 describe('Cluster Client', () => {
   const mockConfigHash =
@@ -191,6 +194,10 @@ describe('Cluster Client without a signer', () => {
     chainId: 17000,
   });
 
+  beforeAll(() => {
+    jest.restoreAllMocks();
+  });
+
   test('createClusterDefinition should throw an error without signer', async () => {
     try {
       await clientInstance.createClusterDefinition(clusterConfigV1X8);
@@ -285,47 +292,52 @@ describe('Cluster Client without a signer', () => {
 });
 
 describe('createObolRewardsSplit', () => {
-  jest
-    .spyOn(utils, 'isContractAvailable')
-    .mockImplementation(async () => await Promise.resolve(true));
-  jest
-    .spyOn(splitsHelpers, 'predictSplitterAddress')
-    .mockImplementation(
-      async () => await Promise.resolve('0xPredictedAddress'),
+  let clientInstance: Client, clientInstanceWithourSigner: Client, mockSplitRecipients: { account: string; percentAllocation: number; }[], mockPrincipalRecipient: string, mockEtherAmount: number, mockSigner: ethers.Signer | ethers.Wallet | undefined
+  beforeAll(() => {
+    jest
+      .spyOn(utils, 'isContractAvailable')
+      .mockImplementation(async () => await Promise.resolve(true));
+    jest
+      .spyOn(splitsHelpers, 'predictSplitterAddress')
+      .mockImplementation(
+        async () => await Promise.resolve('0xPredictedAddress'),
+      );
+    jest.spyOn(splitsHelpers, 'handleDeployOWRAndSplitter').mockImplementation(
+      async () =>
+        await Promise.resolve({
+          withdrawal_address: '0xWithdrawalAddress',
+          fee_recipient_address: '0xFeeRecipientAddress',
+        }),
     );
-  jest.spyOn(splitsHelpers, 'handleDeployOWRAndSplitter').mockImplementation(
-    async () =>
-      await Promise.resolve({
-        withdrawal_address: '0xWithdrawalAddress',
-        fee_recipient_address: '0xFeeRecipientAddress',
-      }),
-  );
+    const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
+    const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
+    const provider = new JsonRpcProvider(
+      'https://ethereum-holesky.publicnode.com',
+    );
+    const wallet = new ethers.Wallet(privateKey, provider);
+    mockSigner = wallet.connect(provider);
 
-  const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
-  const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-  const provider = new JsonRpcProvider(
-    'https://ethereum-holesky.publicnode.com',
-  );
-  const wallet = new ethers.Wallet(privateKey, provider);
-  const mockSigner = wallet.connect(provider);
+    clientInstance = new Client(
+      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+      mockSigner,
+    );
 
-  const clientInstance = new Client(
-    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
-    mockSigner,
-  );
+    clientInstanceWithourSigner = new Client({
+      baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+      chainId: 17000,
+    });
+    mockSplitRecipients = [
+      {
+        account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+        percentAllocation: 99,
+      },
+    ];
+    mockPrincipalRecipient = '0x86B8145c98e5BD25BA722645b15eD65f024a87EC';
+    mockEtherAmount = 64;
 
-  const clientInstanceWithourSigner = new Client({
-    baseUrl: 'https://obol-api-dev.gcp.obol.tech',
-    chainId: 17000,
   });
-  const mockSplitRecipients = [
-    {
-      account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
-      percentAllocation: 99,
-    },
-  ];
-  const mockPrincipalRecipient = '0x86B8145c98e5BD25BA722645b15eD65f024a87EC';
-  const mockEtherAmount = 64;
+
+
 
   it('should throw an error if signer is not defined', async () => {
     await expect(
@@ -403,42 +415,44 @@ describe('createObolRewardsSplit', () => {
 });
 
 describe('createObolTotalSplit', () => {
-  jest
-    .spyOn(utils, 'isContractAvailable')
-    .mockImplementation(async () => await Promise.resolve(true));
-  jest
-    .spyOn(splitsHelpers, 'predictSplitterAddress')
-    .mockImplementation(
-      async () => await Promise.resolve('0xPredictedAddress'),
+  let clientInstanceWithourSigner: Client, mockSplitRecipients: { account: string; percentAllocation: number; }[], mockSigner: ethers.Signer | ethers.Wallet | undefined, clientInstance: Client
+  beforeAll(() => {
+    jest
+      .spyOn(utils, 'isContractAvailable')
+      .mockImplementation(async () => await Promise.resolve(true));
+    jest
+      .spyOn(splitsHelpers, 'predictSplitterAddress')
+      .mockImplementation(
+        async () => await Promise.resolve('0xPredictedAddress'),
+      );
+    jest
+      .spyOn(splitsHelpers, 'deploySplitterContract')
+      .mockImplementation(async () => await Promise.resolve('0xSplitterAddress'));
+
+    const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
+    const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
+    const provider = new JsonRpcProvider(
+      'https://ethereum-holesky.publicnode.com',
     );
-  jest
-    .spyOn(splitsHelpers, 'deploySplitterContract')
-    .mockImplementation(async () => await Promise.resolve('0xSplitterAddress'));
+    const wallet = new ethers.Wallet(privateKey, provider);
+    mockSigner = wallet.connect(provider);
 
-  const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
-  const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-  const provider = new JsonRpcProvider(
-    'https://ethereum-holesky.publicnode.com',
-  );
-  const wallet = new ethers.Wallet(privateKey, provider);
-  const mockSigner = wallet.connect(provider);
+    clientInstance = new Client(
+      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+      mockSigner,
+    );
 
-  const clientInstance = new Client(
-    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
-    mockSigner,
-  );
-
-  const clientInstanceWithourSigner = new Client({
-    baseUrl: 'https://obol-api-dev.gcp.obol.tech',
-    chainId: 17000,
-  });
-  const mockSplitRecipients = [
-    {
-      account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
-      percentAllocation: 99.9,
-    },
-  ];
-
+    clientInstanceWithourSigner = new Client({
+      baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+      chainId: 17000,
+    });
+    mockSplitRecipients = [
+      {
+        account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+        percentAllocation: 99.9,
+      },
+    ];
+  })
   it('should throw an error if signer is not defined', async () => {
     await expect(
       clientInstanceWithourSigner.createObolTotalSplit({
