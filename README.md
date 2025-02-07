@@ -17,6 +17,11 @@ If you're integrating this SDK with a **backend** (e.g., in Node.js), and you st
 - The private key is securely stored (e.g., in an `.env` file).
 - Never commit or push your `.env` file containing the private key to version control.
 
+## ⚡️ Integration with Safe Wallet
+
+When integrating the Obol SDK with a **Safe Wallet**, you will need to provide the `RPC_MAINNET` or `RPC_HOLESKY` or `RPC_GNOSIS` or `RPC_SEPOLIA` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
+
+
 ## Contributing
 
 Please review the following guidelines:

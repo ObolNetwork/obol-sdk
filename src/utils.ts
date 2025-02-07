@@ -78,7 +78,7 @@ export const isContractAvailable = async (
 
 export const getProvider = (chainId: number): ethers.Provider => {
   const rpcUrl = PROVIDER_MAP[chainId];
-  if (!rpcUrl) {
+  if (!rpcUrl || rpcUrl=="undefined") {
     throw new Error(`No provider configured for ${FORK_NAMES[chainId]}`);
   }
   return new ethers.JsonRpcProvider(rpcUrl);
