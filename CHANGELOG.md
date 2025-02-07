@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.2.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.1...v2.2.2)
+
+- fix environment variable check and update readme [`#73`](https://github.com/ObolNetwork/obol-sdk/pull/73)
+
 #### [v2.2.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.0...v2.2.1)
 
+> 7 February 2025
+
+- chore(release): v2.2.1 [`#72`](https://github.com/ObolNetwork/obol-sdk/pull/72)
 - fix verify eoa and safe signatures when publishing a lock [`#71`](https://github.com/ObolNetwork/obol-sdk/pull/71)
 
 #### [v2.2.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.2...v2.2.0)
