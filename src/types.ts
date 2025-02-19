@@ -285,7 +285,7 @@ export type ClusterLock = {
 };
 
 /**
- * Incentives 
+ * Incentives
  */
 export type Incentives = {
   /** Operator Address. */

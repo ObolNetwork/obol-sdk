@@ -30,7 +30,7 @@ import {
   type ClusterValidator,
   type ETH_ADDRESS,
   type OWRTranches,
-  Incentives,
+  type Incentives,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
