@@ -528,7 +528,7 @@ export class Client extends Base {
    */
   async getIncentivesByAddress(address: string): Promise<Incentives> {
     const incentives: Incentives = await this.request(
-      `/${DEFAULT_BASE_VERSION}/address/incentives/:address/${address}`,
+      `/${DEFAULT_BASE_VERSION}/address/incentives/${address}`,
       {
         method: 'GET',
       },

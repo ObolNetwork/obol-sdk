@@ -574,7 +574,13 @@ describe('getIncentivesByAddress', () => {
 
   test('should return incentives for a valid address', async () => {
     const mockAddress = '0x1234567890abcdef1234567890abcdef12345678';
-    const mockIncentives = { rewards: 100, penalties: 5 };
+    const mockIncentives = {
+      operator_address: '0x8c00157cae72c4ed6a1f8bfb60205601f0252e26',
+      amount: '100',
+      index: 1,
+      merkle_proof: ['hash1', 'hash2'],
+      contract_address: '0xContract',
+    };
 
     clientInstance['request'] = jest
       .fn()
