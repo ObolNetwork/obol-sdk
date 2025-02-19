@@ -30,6 +30,7 @@ import {
   type ClusterValidator,
   type ETH_ADDRESS,
   type OWRTranches,
+  Incentives,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -518,5 +519,20 @@ export class Client extends Base {
       },
     );
     return lock;
+  }
+
+  /**
+   * @param address - Operator address
+   * @returns {Promise<Incentives>} The matched incentives from DB
+   * @throws On not found if address not found.
+   */
+  async getIncentivesByAddress(address: string): Promise<Incentives> {
+    const incentives: Incentives = await this.request(
+      `/${DEFAULT_BASE_VERSION}/address/incentives/:address/${address}`,
+      {
+        method: 'GET',
+      },
+    );
+    return incentives;
   }
 }

@@ -539,3 +539,83 @@ describe('createObolTotalSplit', () => {
     });
   });
 });
+
+describe('getIncentivesByAddress', () => {
+  let clientInstanceWithourSigner: Client,
+    mockSplitRecipients: Array<{ account: string; percentAllocation: number }>,
+    mockSigner: ethers.Signer | ethers.Wallet | undefined,
+    clientInstance: Client;
+  beforeAll(() => {
+    jest
+      .spyOn(utils, 'isContractAvailable')
+      .mockImplementation(async () => await Promise.resolve(true));
+    jest
+      .spyOn(splitsHelpers, 'predictSplitterAddress')
+      .mockImplementation(
+        async () => await Promise.resolve('0xPredictedAddress'),
+      );
+    jest
+      .spyOn(splitsHelpers, 'deploySplitterContract')
+      .mockImplementation(
+        async () => await Promise.resolve('0xSplitterAddress'),
+      );
+
+    const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
+    const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
+    const provider = new JsonRpcProvider(
+      'https://ethereum-holesky.publicnode.com',
+    );
+    const wallet = new ethers.Wallet(privateKey, provider);
+    mockSigner = wallet.connect(provider);
+
+    clientInstance = new Client(
+      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+      mockSigner,
+    );
+
+    clientInstanceWithourSigner = new Client({
+      baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+      chainId: 17000,
+    });
+    mockSplitRecipients = [
+      {
+        account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+        percentAllocation: 99.9,
+      },
+    ];
+  });
+
+  test('should return incentives for a valid address', async () => {
+    const mockAddress = '0x1234567890abcdef1234567890abcdef12345678';
+    const mockIncentives = { rewards: 100, penalties: 5 };
+
+    clientInstance['request'] = jest
+      .fn()
+      .mockReturnValue(Promise.resolve(mockIncentives));
+
+    const incentives = await clientInstance.getIncentivesByAddress(mockAddress);
+    expect(incentives).toEqual(mockIncentives);
+  });
+
+  test('should throw an error if address is not found', async () => {
+    const invalidAddress = '0x0000000000000000000000000000000000000000';
+    clientInstance['request'] = jest
+      .fn()
+      .mockRejectedValue(new Error('Not found'));
+
+    await expect(
+      clientInstance.getIncentivesByAddress(invalidAddress),
+    ).rejects.toThrow('Not found');
+  });
+
+  test('should throw an error if request fails', async () => {
+    const mockAddress = '0x1234567890abcdef1234567890abcdef12345678';
+    clientInstance['request'] = jest
+      .fn()
+      .mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      clientInstance.getIncentivesByAddress(mockAddress),
+    ).rejects.toThrow('Network error');
+  });
+});

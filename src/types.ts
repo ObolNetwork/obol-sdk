@@ -285,6 +285,26 @@ export type ClusterLock = {
 };
 
 /**
+ * Incentives 
+ */
+export type Incentives = {
+  /** Operator Address. */
+  operator_address: string;
+
+  /** The amount the recipient is entitled to. */
+  amount: string;
+
+  /** The recipient’s index in the Merkle tree. */
+  index: number;
+
+  /** The Merkle proof (an array of hashes) generated for the recipient. */
+  merkle_proof: string[];
+
+  /** The MerkleDistributor contract address. */
+  contract_address: string;
+};
+
+/**
  * String expected to be Ethereum Address
  */
 export type ETH_ADDRESS = string;
