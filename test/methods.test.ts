@@ -541,9 +541,7 @@ describe('createObolTotalSplit', () => {
 });
 
 describe('getIncentivesByAddress', () => {
-  let clientInstanceWithourSigner: Client,
-    mockSplitRecipients: Array<{ account: string; percentAllocation: number }>,
-    mockSigner: ethers.Signer | ethers.Wallet | undefined,
+  let mockSigner: ethers.Signer | ethers.Wallet | undefined,
     clientInstance: Client;
   beforeAll(() => {
     jest
@@ -572,17 +570,6 @@ describe('getIncentivesByAddress', () => {
       { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
       mockSigner,
     );
-
-    clientInstanceWithourSigner = new Client({
-      baseUrl: 'https://obol-api-dev.gcp.obol.tech',
-      chainId: 17000,
-    });
-    mockSplitRecipients = [
-      {
-        account: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
-        percentAllocation: 99.9,
-      },
-    ];
   });
 
   test('should return incentives for a valid address', async () => {
