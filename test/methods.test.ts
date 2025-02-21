@@ -3,6 +3,7 @@ import { Client, validateClusterLock } from '../src/index';
 import {
   clusterConfigV1X7,
   clusterConfigV1X8,
+  clusterLockV1X10,
   clusterLockV1X6,
   clusterLockV1X7,
   clusterLockV1X8,
@@ -259,6 +260,7 @@ describe('Cluster Client without a signer', () => {
       version: 'Cluster with safe address v1.8.0',
       clusterLock: clusterLockWithSafe,
     },
+    { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {

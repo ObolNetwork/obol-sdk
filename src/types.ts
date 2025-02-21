@@ -138,6 +138,12 @@ export interface ClusterDefinition extends ClusterPayload {
 
   /** The hash of the cluster definition. */
   definition_hash?: string;
+
+  /** The consensus protocol e.g qbft. */
+  consensus_protocol?: string;
+
+  /** The target gas limit where default is 30M. */
+  target_gas_limit?: number;
 }
 
 /**
