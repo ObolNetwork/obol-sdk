@@ -2,8 +2,16 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.2.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.2...v2.2.3)
+
+- v1.10.0 [`#81`](https://github.com/ObolNetwork/obol-sdk/pull/81)
+- feat: add renovate.json [`#75`](https://github.com/ObolNetwork/obol-sdk/pull/75)
+
 #### [v2.2.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.1...v2.2.2)
 
+> 7 February 2025
+
+- chore(release): v2.2.2 [`#74`](https://github.com/ObolNetwork/obol-sdk/pull/74)
 - fix environment variable check and update readme [`#73`](https://github.com/ObolNetwork/obol-sdk/pull/73)
 
 #### [v2.2.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.0...v2.2.1)
