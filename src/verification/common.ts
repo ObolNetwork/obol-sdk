@@ -47,7 +47,12 @@ import {
   verifyDVV1X8,
 } from './v1.8.0.js';
 import { validateAddressSignature } from './signature-validator.js';
-import { clusterDefinitionContainerTypeV1X10, hashClusterDefinitionV1X10, hashClusterLockV1X10, verifyDVV1X10 } from './v1.10.0.js';
+import {
+  clusterDefinitionContainerTypeV1X10,
+  hashClusterDefinitionV1X10,
+  hashClusterLockV1X10,
+  verifyDVV1X10,
+} from './v1.10.0.js';
 
 // cluster-definition hash
 
@@ -92,10 +97,10 @@ export const clusterConfigOrDefinitionHash = (
   if (semver.eq(cluster.version, 'v1.10.0')) {
     definitionType = clusterDefinitionContainerTypeV1X10(configOnly);
     val = hashClusterDefinitionV1X10(cluster, configOnly);
-    const x = '0x' +
-      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
-    return x
-
+    const x =
+      '0x' +
+      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex');
+    return x;
   }
 
   throw new Error('unsupported version');
@@ -249,7 +254,7 @@ const verifyDefinitionSignatures = async (
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
@@ -258,7 +263,7 @@ const verifyDefinitionSignatures = async (
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
       );
 
@@ -357,13 +362,14 @@ export const verifyDepositData = (
   const eth1AddressWithdrawalPrefix = '0x01';
   const compoundingWithdrawalPrefix = '0x02';
   if (
-    (eth1AddressWithdrawalPrefix +
+    eth1AddressWithdrawalPrefix +
       '0'.repeat(22) +
       withdrawalAddress.toLowerCase().slice(2) !==
-      depositData.withdrawal_credentials) && (compoundingWithdrawalPrefix +
-        '0'.repeat(22) +
-        withdrawalAddress.toLowerCase().slice(2) !==
-        depositData.withdrawal_credentials)
+      depositData.withdrawal_credentials &&
+    compoundingWithdrawalPrefix +
+      '0'.repeat(22) +
+      withdrawalAddress.toLowerCase().slice(2) !==
+      depositData.withdrawal_credentials
   ) {
     return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
   }
