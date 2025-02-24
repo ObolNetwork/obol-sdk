@@ -443,8 +443,10 @@ describe('Poll Cluster Lock', () => {
       clusterLock: clusterLockWithSafe,
     },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
-    { version: 'v1.10.0 with compunding withdrawals', clusterLock: clusterLockWithCompoundingWithdrawals },
-
+    {
+      version: 'v1.10.0 with compunding withdrawals',
+      clusterLock: clusterLockWithCompoundingWithdrawals,
+    },
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {

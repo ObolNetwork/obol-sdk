@@ -117,20 +117,20 @@ export const hashClusterDefinitionV1X8 = (
     return configOnly
       ? { address: fromHexString(operator.address) }
       : {
-        address: fromHexString(operator.address),
-        enr: strToUint8Array(operator.enr as string),
-        config_signature: fromHexString(operator.config_signature as string),
-        enr_signature: fromHexString(operator.enr_signature as string),
-      };
+          address: fromHexString(operator.address),
+          enr: strToUint8Array(operator.enr as string),
+          config_signature: fromHexString(operator.config_signature as string),
+          enr_signature: fromHexString(operator.enr_signature as string),
+        };
   });
   val.creator = configOnly
     ? { address: fromHexString(cluster.creator.address) }
     : {
-      address: fromHexString(cluster.creator.address),
-      config_signature: fromHexString(
-        cluster.creator.config_signature as string,
-      ),
-    };
+        address: fromHexString(cluster.creator.address),
+        config_signature: fromHexString(
+          cluster.creator.config_signature as string,
+        ),
+      };
   val.validators = cluster.validators.map(validator => {
     return {
       fee_recipient_address: fromHexString(validator.fee_recipient_address),
@@ -259,7 +259,7 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
         depositData as Partial<DepositData>,
         clusterLock.cluster_definition.validators[i].withdrawal_address,
         clusterLock.cluster_definition.fork_version,
-        clusterLock.cluster_definition.compounding
+        clusterLock.cluster_definition.compounding,
       );
 
       if (!isValidDepositData) {
