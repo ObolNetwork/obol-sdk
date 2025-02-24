@@ -7,6 +7,7 @@ import {
   clusterLockV1X6,
   clusterLockV1X7,
   clusterLockV1X8,
+  clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
 } from './fixtures.js';
@@ -261,6 +262,7 @@ describe('Cluster Client without a signer', () => {
       clusterLock: clusterLockWithSafe,
     },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
+    { version: 'v1.10.0 with compunding withdrawals', clusterLock: clusterLockWithCompoundingWithdrawals },
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {
