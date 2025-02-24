@@ -21,6 +21,7 @@ import {
   ListBasicType,
   ListCompositeType,
   fromHexString,
+  BooleanType
 } from '@chainsafe/ssz';
 import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container';
 import {
@@ -48,6 +49,7 @@ type DefinitionFieldsV1X10 = {
   deposit_amounts: ListBasicType<UintNumberType>;
   consensus_protocol: ByteListType;
   target_gas_limit: UintNumberType;
+  compounding: BooleanType,
   config_hash?: ByteVectorType;
 };
 
@@ -79,6 +81,7 @@ export const clusterDefinitionContainerTypeV1X10 = (
     ),
     consensus_protocol: new ByteListType(256),
     target_gas_limit: new UintNumberType(8 as UintNumberByteLen),
+    compounding: new BooleanType(),
   };
 
   if (!configOnly) {
@@ -112,20 +115,20 @@ export const hashClusterDefinitionV1X10 = (
     return configOnly
       ? { address: fromHexString(operator.address) }
       : {
-          address: fromHexString(operator.address),
-          enr: strToUint8Array(operator.enr as string),
-          config_signature: fromHexString(operator.config_signature as string),
-          enr_signature: fromHexString(operator.enr_signature as string),
-        };
+        address: fromHexString(operator.address),
+        enr: strToUint8Array(operator.enr as string),
+        config_signature: fromHexString(operator.config_signature as string),
+        enr_signature: fromHexString(operator.enr_signature as string),
+      };
   });
   val.creator = configOnly
     ? { address: fromHexString(cluster.creator.address) }
     : {
-        address: fromHexString(cluster.creator.address),
-        config_signature: fromHexString(
-          cluster.creator.config_signature as string,
-        ),
-      };
+      address: fromHexString(cluster.creator.address),
+      config_signature: fromHexString(
+        cluster.creator.config_signature as string,
+      ),
+    };
   val.validators = cluster.validators.map(validator => {
     return {
       fee_recipient_address: fromHexString(validator.fee_recipient_address),
@@ -142,6 +145,10 @@ export const hashClusterDefinitionV1X10 = (
   }
   if (cluster.target_gas_limit) {
     val.target_gas_limit = cluster.target_gas_limit;
+  }
+
+  if (cluster.compounding) {
+    val.compounding = cluster.compounding;
   }
 
   if (!configOnly) {

@@ -144,6 +144,9 @@ export interface ClusterDefinition extends ClusterPayload {
 
   /** The target gas limit where default is 30M. */
   target_gas_limit?: number;
+
+  /** A withdrawal mechanism with 0x02 withdrawal credentials. */
+  compounding?: boolean;
 }
 
 /**
