@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.3.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.4...v2.3.0)
+
+- feat: add getIncentivesByAddress method to fetch incentives for a given address [`#77`](https://github.com/ObolNetwork/obol-sdk/pull/77)
+
 #### [v2.2.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.3...v2.2.4)
 
+> 24 February 2025
+
+- chore(release): v2.2.4 [`#87`](https://github.com/ObolNetwork/obol-sdk/pull/87)
 - Hanan/v1.10.0 [`#86`](https://github.com/ObolNetwork/obol-sdk/pull/86)
 
 #### [v2.2.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.2...v2.2.3)
