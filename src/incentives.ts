@@ -41,8 +41,6 @@ export class Incentives {
      * @returns {Promise<{ txHash: string }>} The transaction hash of the claim transaction.
      * @throws Will throw an error if the contract is not available or the claim fails.
      *
-     * An example of how to use acceptObolLatestTermsAndConditions:
-     * [claimIncentives](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L44)
      */
     async claimIncentives(incentivesData: {
         contractAddress: ETH_ADDRESS;
