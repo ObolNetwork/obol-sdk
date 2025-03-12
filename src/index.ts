@@ -30,7 +30,6 @@ import {
   type ClusterValidator,
   type ETH_ADDRESS,
   type OWRTranches,
-  type Incentives,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -48,6 +47,7 @@ import {
   getOWRTranches,
 } from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
+import { Incentives } from './incentives.js';
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
@@ -58,6 +58,7 @@ export * from './verification/common.js';
  */
 export class Client extends Base {
   private readonly signer: Signer | undefined;
+  public incentives: Incentives;
 
   /**
    * @param config - Client configurations
@@ -72,6 +73,7 @@ export class Client extends Base {
   constructor(config: { baseUrl?: string; chainId?: number }, signer?: Signer) {
     super(config);
     this.signer = signer;
+    this.incentives = new Incentives(this.signer, this.chainId, this.request.bind(this));
   }
 
   /**
@@ -520,20 +522,5 @@ export class Client extends Base {
       },
     );
     return lock;
-  }
-
-  /**
-   * @param address - Operator address
-   * @returns {Promise<Incentives>} The matched incentives from DB
-   * @throws On not found if address not found.
-   */
-  async getIncentivesByAddress(address: string): Promise<Incentives> {
-    const incentives: Incentives = await this.request(
-      `/${DEFAULT_BASE_VERSION}/address/incentives/${address}`,
-      {
-        method: 'GET',
-      },
-    );
-    return incentives;
   }
 }
