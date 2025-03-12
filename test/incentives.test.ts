@@ -9,7 +9,7 @@ const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);
-const baseUrl= "https://obol-api-dev.gcp.obol.tech"
+const baseUrl = 'https://obol-api-dev.gcp.obol.tech';
 
 global.fetch = jest.fn();
 
@@ -28,12 +28,8 @@ describe('Client.incentives', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    clientInstance = new Client(
-      { baseUrl, chainId: 17000 },
-      mockSigner,
-    );
+    clientInstance = new Client({ baseUrl, chainId: 17000 }, mockSigner);
     (global.fetch as jest.Mock).mockReset();
-
   });
 
   test('claimIncentives should throw an error without signer', async () => {
@@ -205,13 +201,14 @@ describe('Client.incentives', () => {
       headers: new Headers(),
     });
 
-    const result = await clientInstance.incentives.getIncentivesByAddress(mockAddress);
+    const result =
+      await clientInstance.incentives.getIncentivesByAddress(mockAddress);
 
     expect(result).toEqual(mockIncentives);
 
     expect(global.fetch).toHaveBeenCalledWith(
       `${baseUrl}/${DEFAULT_BASE_VERSION}/address/incentives/${mockAddress}`,
-      expect.objectContaining({ method: 'GET' })
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 
@@ -220,12 +217,9 @@ describe('Client.incentives', () => {
     (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
     await expect(
-      clientInstance.incentives.getIncentivesByAddress(mockAddress)
+      clientInstance.incentives.getIncentivesByAddress(mockAddress),
     ).rejects.toThrow();
 
     expect(global.fetch).toHaveBeenCalled();
   });
-
 });
-
-
