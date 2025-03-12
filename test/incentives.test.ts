@@ -2,8 +2,6 @@ import { ethers, JsonRpcProvider } from 'ethers';
 import { Client } from '../src/index';
 import * as utils from '../src/utils';
 import * as incentivesHelpers from '../src/incentivesHalpers';
-import { DEFAULT_BASE_VERSION } from '../src/constants';
-
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
@@ -26,44 +24,56 @@ describe('Client.incentives', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    clientInstance = new Client({ baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 }, mockSigner);
+    clientInstance = new Client(
+      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+      mockSigner,
+    );
   });
 
   test('claimIncentives should throw an error without signer', async () => {
-    const clientWithoutSigner = new Client({ baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 });
+    const clientWithoutSigner = new Client({
+      baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+      chainId: 17000,
+    });
 
     await expect(
-      clientWithoutSigner.incentives.claimIncentives(mockIncentivesData)
+      clientWithoutSigner.incentives.claimIncentives(mockIncentivesData),
     ).rejects.toThrow('Signer is required in claimIncentives');
   });
 
   test('claimIncentives should throw an error if contract is not available', async () => {
-    jest.spyOn(utils, 'isContractAvailable').mockImplementation(
-      async () => await Promise.resolve(false)
-    );
+    jest
+      .spyOn(utils, 'isContractAvailable')
+      .mockImplementation(async () => await Promise.resolve(false));
 
     await expect(
-      clientInstance.incentives.claimIncentives(mockIncentivesData)
+      clientInstance.incentives.claimIncentives(mockIncentivesData),
     ).rejects.toThrow(
-      `Merkle Distributor contract is not available at address ${mockIncentivesData.contractAddress}`
+      `Merkle Distributor contract is not available at address ${mockIncentivesData.contractAddress}`,
     );
   });
 
   test('claimIncentives should return txHash on successful claim', async () => {
-    const mockTxHash = '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const mockTxHash =
+      '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
-    jest.spyOn(utils, 'isContractAvailable').mockImplementation(
-      async () => await Promise.resolve(true)
-    );
+    jest
+      .spyOn(utils, 'isContractAvailable')
+      .mockImplementation(async () => await Promise.resolve(true));
 
-    jest.spyOn(incentivesHelpers, 'claimIncentivesFromMerkleDistributor').mockImplementation(
-      async () => await Promise.resolve({ txHash: mockTxHash })
-    );
+    jest
+      .spyOn(incentivesHelpers, 'claimIncentivesFromMerkleDistributor')
+      .mockImplementation(
+        async () => await Promise.resolve({ txHash: mockTxHash }),
+      );
 
-    const result = await clientInstance.incentives.claimIncentives(mockIncentivesData);
+    const result =
+      await clientInstance.incentives.claimIncentives(mockIncentivesData);
 
     expect(result).toEqual({ txHash: mockTxHash });
-    expect(incentivesHelpers.claimIncentivesFromMerkleDistributor).toHaveBeenCalledWith({
+    expect(
+      incentivesHelpers.claimIncentivesFromMerkleDistributor,
+    ).toHaveBeenCalledWith({
       signer: mockSigner,
       contractAddress: mockIncentivesData.contractAddress,
       index: mockIncentivesData.index,
@@ -74,67 +84,76 @@ describe('Client.incentives', () => {
   });
 
   test('claimIncentives should throw an error if helper function fails', async () => {
-    jest.spyOn(utils, 'isContractAvailable').mockImplementation(
-      async () => await Promise.resolve(true)
-    );
+    jest
+      .spyOn(utils, 'isContractAvailable')
+      .mockImplementation(async () => await Promise.resolve(true));
 
-    jest.spyOn(incentivesHelpers, 'claimIncentivesFromMerkleDistributor').mockImplementation(
-      async () => { throw new Error('Helper function error'); }
-    );
+    jest
+      .spyOn(incentivesHelpers, 'claimIncentivesFromMerkleDistributor')
+      .mockImplementation(async () => {
+        throw new Error('Helper function error');
+      });
 
     await expect(
-      clientInstance.incentives.claimIncentives(mockIncentivesData)
+      clientInstance.incentives.claimIncentives(mockIncentivesData),
     ).rejects.toThrow('Failed to claim incentives: Helper function error');
   });
 
   test('incentives should be initialized with the same chainId as client', () => {
     const customChainId = 5;
-    const clientWithCustomChain = new Client({ baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: customChainId }, mockSigner);
+    const clientWithCustomChain = new Client(
+      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: customChainId },
+      mockSigner,
+    );
 
     expect(clientWithCustomChain.incentives.chainId).toBe(customChainId);
   });
 
   test('isClaimed should return true when incentive is claimed', async () => {
-    jest.spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor').mockImplementation(
-      async () => await Promise.resolve(true)
-    );
+    jest
+      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
+      .mockImplementation(async () => await Promise.resolve(true));
 
     const result = await clientInstance.incentives.isClaimed(
       mockIncentivesData.contractAddress,
-      mockIncentivesData.index
+      mockIncentivesData.index,
     );
 
     expect(result).toBe(true);
-    expect(incentivesHelpers.isClaimedFromMerkleDistributor).toHaveBeenCalledWith(
+    expect(
+      incentivesHelpers.isClaimedFromMerkleDistributor,
+    ).toHaveBeenCalledWith(
       clientInstance.incentives.chainId,
       mockIncentivesData.contractAddress,
-      mockIncentivesData.index
+      mockIncentivesData.index,
     );
   });
 
   test('isClaimed should return false when incentive is not claimed', async () => {
-    jest.spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor').mockImplementation(
-      async () => await Promise.resolve(false)
-    );
+    jest
+      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
+      .mockImplementation(async () => await Promise.resolve(false));
 
     const result = await clientInstance.incentives.isClaimed(
       mockIncentivesData.contractAddress,
-      mockIncentivesData.index
+      mockIncentivesData.index,
     );
 
     expect(result).toBe(false);
   });
 
   test('isClaimed should throw an error if helper function fails', async () => {
-    jest.spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor').mockImplementation(
-      async () => { throw new Error('Helper function error'); }
-    );
+    jest
+      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
+      .mockImplementation(async () => {
+        throw new Error('Helper function error');
+      });
 
     await expect(
       clientInstance.incentives.isClaimed(
         mockIncentivesData.contractAddress,
-        mockIncentivesData.index
-      )
+        mockIncentivesData.index,
+      ),
     ).rejects.toThrow('Helper function error');
   });
 
@@ -142,23 +161,25 @@ describe('Client.incentives', () => {
     // Create a client without a signer
     const clientWithoutSigner = new Client({
       baseUrl: 'https://obol-api-dev.gcp.obol.tech',
-      chainId: 17000
+      chainId: 17000,
     });
 
-    jest.spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor').mockImplementation(
-      async () => await Promise.resolve(true)
-    );
+    jest
+      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
+      .mockImplementation(async () => await Promise.resolve(true));
 
     const result = await clientWithoutSigner.incentives.isClaimed(
       mockIncentivesData.contractAddress,
-      mockIncentivesData.index
+      mockIncentivesData.index,
     );
 
     expect(result).toBe(true);
-    expect(incentivesHelpers.isClaimedFromMerkleDistributor).toHaveBeenCalledWith(
+    expect(
+      incentivesHelpers.isClaimedFromMerkleDistributor,
+    ).toHaveBeenCalledWith(
       clientWithoutSigner.incentives.chainId,
       mockIncentivesData.contractAddress,
-      mockIncentivesData.index
+      mockIncentivesData.index,
     );
   });
 
@@ -176,7 +197,8 @@ describe('Client.incentives', () => {
       .fn()
       .mockReturnValue(Promise.resolve(mockIncentives));
 
-    const incentives = await clientInstance.incentives.getIncentivesByAddress(mockAddress);
+    const incentives =
+      await clientInstance.incentives.getIncentivesByAddress(mockAddress);
     expect(incentives).toEqual(mockIncentives);
   });
 

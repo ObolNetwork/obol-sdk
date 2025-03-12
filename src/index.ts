@@ -73,7 +73,11 @@ export class Client extends Base {
   constructor(config: { baseUrl?: string; chainId?: number }, signer?: Signer) {
     super(config);
     this.signer = signer;
-    this.incentives = new Incentives(this.signer, this.chainId, this.request.bind(this));
+    this.incentives = new Incentives(
+      this.signer,
+      this.chainId,
+      this.request.bind(this),
+    );
   }
 
   /**
