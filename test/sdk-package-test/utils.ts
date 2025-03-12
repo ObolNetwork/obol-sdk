@@ -11,7 +11,9 @@ dotenv.config();
 
 // known signer
 const privateKey = process.env.PRIVATE_KEY as string;
-const provider = new JsonRpcProvider('https://ethereum-sepolia-rpc.publicnode.com');
+const provider = new JsonRpcProvider(
+  'https://ethereum-sepolia-rpc.publicnode.com',
+);
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);
 /* eslint-disable */
