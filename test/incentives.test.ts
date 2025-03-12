@@ -19,7 +19,7 @@ describe('Client.incentives', () => {
     contractAddress: '0x1234567890abcdef1234567890abcdef12345678',
     index: 5,
     operatorAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
-    amount: '1000000000000000000',
+    amount: 1000000000000000000,
     merkleProof: [
       '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
       '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',

@@ -11,12 +11,12 @@ dotenv.config();
 
 // known signer
 const privateKey = process.env.PRIVATE_KEY as string;
-const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+const provider = new JsonRpcProvider('https://ethereum-sepolia-rpc.publicnode.com');
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);
 /* eslint-disable */
 export const client: Client = new Client(
-  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
+  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 11155111 },
   signer as any,
 );
 
