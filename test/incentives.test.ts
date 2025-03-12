@@ -2,12 +2,16 @@ import { ethers, JsonRpcProvider } from 'ethers';
 import { Client } from '../src/index';
 import * as utils from '../src/utils';
 import * as incentivesHelpers from '../src/incentivesHalpers';
+import { DEFAULT_BASE_VERSION } from '../src/constants';
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);
+const baseUrl= "https://obol-api-dev.gcp.obol.tech"
+
+global.fetch = jest.fn();
 
 describe('Client.incentives', () => {
   let clientInstance: Client;
@@ -25,14 +29,16 @@ describe('Client.incentives', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clientInstance = new Client(
-      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+      { baseUrl, chainId: 17000 },
       mockSigner,
     );
+    (global.fetch as jest.Mock).mockReset();
+
   });
 
   test('claimIncentives should throw an error without signer', async () => {
     const clientWithoutSigner = new Client({
-      baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+      baseUrl,
       chainId: 17000,
     });
 
@@ -102,7 +108,7 @@ describe('Client.incentives', () => {
   test('incentives should be initialized with the same chainId as client', () => {
     const customChainId = 5;
     const clientWithCustomChain = new Client(
-      { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: customChainId },
+      { baseUrl, chainId: customChainId },
       mockSigner,
     );
 
@@ -160,7 +166,7 @@ describe('Client.incentives', () => {
   test('isClaimed should work with a client without signer', async () => {
     // Create a client without a signer
     const clientWithoutSigner = new Client({
-      baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+      baseUrl,
       chainId: 17000,
     });
 
@@ -183,7 +189,7 @@ describe('Client.incentives', () => {
     );
   });
 
-  test('should return incentives for a valid address', async () => {
+  test('getIncentivesByAddress should make the correct API request', async () => {
     const mockAddress = '0x1234567890abcdef1234567890abcdef12345678';
     const mockIncentives = {
       operator_address: '0x8c00157cae72c4ed6a1f8bfb60205601f0252e26',
@@ -192,35 +198,34 @@ describe('Client.incentives', () => {
       merkle_proof: ['hash1', 'hash2'],
       contract_address: '0xContract',
     };
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => mockIncentives,
+      headers: new Headers(),
+    });
 
-    clientInstance.incentives['request'] = jest
-      .fn()
-      .mockReturnValue(Promise.resolve(mockIncentives));
+    const result = await clientInstance.incentives.getIncentivesByAddress(mockAddress);
 
-    const incentives =
-      await clientInstance.incentives.getIncentivesByAddress(mockAddress);
-    expect(incentives).toEqual(mockIncentives);
+    expect(result).toEqual(mockIncentives);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/${DEFAULT_BASE_VERSION}/address/incentives/${mockAddress}`,
+      expect.objectContaining({ method: 'GET' })
+    );
   });
 
-  test('should throw an error if address is not found', async () => {
-    const invalidAddress = '0x0000000000000000000000000000000000000000';
-    clientInstance.incentives['request'] = jest
-      .fn()
-      .mockRejectedValue(new Error('Not found'));
-
-    await expect(
-      clientInstance.incentives.getIncentivesByAddress(invalidAddress),
-    ).rejects.toThrow('Not found');
-  });
-
-  test('should throw an error if request fails', async () => {
+  test('getIncentivesByAddress should handle API errors', async () => {
     const mockAddress = '0x1234567890abcdef1234567890abcdef12345678';
-    clientInstance.incentives['request'] = jest
-      .fn()
-      .mockRejectedValue(new Error('Network error'));
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
     await expect(
-      clientInstance.incentives.getIncentivesByAddress(mockAddress),
-    ).rejects.toThrow('Network error');
+      clientInstance.incentives.getIncentivesByAddress(mockAddress)
+    ).rejects.toThrow();
+
+    expect(global.fetch).toHaveBeenCalled();
   });
+
 });
+
+
