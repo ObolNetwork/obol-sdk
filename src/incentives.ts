@@ -1,4 +1,9 @@
-import { type JsonRpcProvider, type JsonRpcSigner, type Provider, type Signer } from 'ethers';
+import {
+  type JsonRpcProvider,
+  type JsonRpcSigner,
+  type Provider,
+  type Signer,
+} from 'ethers';
 import { isContractAvailable } from './utils';
 import { type Incentives as IncentivesType, type ETH_ADDRESS } from './types';
 import {
@@ -14,8 +19,8 @@ export class Incentives {
     endpoint: string,
     options?: RequestInit,
   ) => Promise<any>;
-  public readonly provider: Provider | JsonRpcProvider | undefined;
 
+  public readonly provider: Provider | JsonRpcProvider | undefined;
 
   constructor(
     signer: Signer | JsonRpcSigner | undefined,
@@ -26,7 +31,7 @@ export class Incentives {
     this.signer = signer;
     this.chainId = chainId;
     this.request = request;
-    this.provider = provider
+    this.provider = provider;
   }
 
   /**
@@ -100,7 +105,7 @@ export class Incentives {
       this.chainId,
       contractAddress,
       index,
-      this.provider
+      this.provider,
     );
   }
 

@@ -1,4 +1,10 @@
-import { ZeroAddress, type Provider, type Signer, type JsonRpcSigner, type JsonRpcProvider } from 'ethers';
+import {
+  ZeroAddress,
+  type Provider,
+  type Signer,
+  type JsonRpcSigner,
+  type JsonRpcProvider,
+} from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
 import {
@@ -71,7 +77,11 @@ export class Client extends Base {
    * An example of how to instantiate obol-sdk Client:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L29)
    */
-  constructor(config: { baseUrl?: string; chainId?: number }, signer?: Signer | JsonRpcSigner, provider?: Provider | JsonRpcProvider) {
+  constructor(
+    config: { baseUrl?: string; chainId?: number },
+    signer?: Signer | JsonRpcSigner,
+    provider?: Provider | JsonRpcProvider,
+  ) {
     super(config);
     this.signer = signer;
     this.provider = provider;
@@ -79,7 +89,7 @@ export class Client extends Base {
       this.signer,
       this.chainId,
       this.request.bind(this),
-      this.provider = provider,
+      (this.provider = provider),
     );
   }
 

@@ -1,5 +1,5 @@
 import { type ETH_ADDRESS } from './types';
-import { Contract, JsonRpcProvider, Provider, type Signer } from 'ethers';
+import { Contract, type JsonRpcProvider, type Provider, type Signer } from 'ethers';
 import { MerkleDistributorABI } from './abi/MerkleDistributorWithDeadline';
 import { getProvider } from './utils';
 
@@ -38,7 +38,7 @@ export const isClaimedFromMerkleDistributor = async (
   chainId: number,
   contractAddress: ETH_ADDRESS,
   index: number,
-  provider: Provider | JsonRpcProvider | undefined
+  provider: Provider | JsonRpcProvider | undefined,
 ): Promise<boolean> => {
   try {
     const clientProvider = provider ? provider : getProvider(chainId);

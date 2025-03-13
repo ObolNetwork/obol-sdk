@@ -128,7 +128,7 @@ describe('Client.incentives', () => {
       clientInstance.incentives.chainId,
       mockIncentivesData.contractAddress,
       mockIncentivesData.index,
-      undefined
+      undefined,
     );
   });
 
@@ -162,10 +162,14 @@ describe('Client.incentives', () => {
 
   test('isClaimed should work with a provider and a without signer', async () => {
     // Create a client without a signer
-    const clientWithoutSigner = new Client({
-      baseUrl,
-      chainId: 17000,
-    }, undefined, provider);
+    const clientWithoutSigner = new Client(
+      {
+        baseUrl,
+        chainId: 17000,
+      },
+      undefined,
+      provider,
+    );
 
     jest
       .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
@@ -183,7 +187,7 @@ describe('Client.incentives', () => {
       clientWithoutSigner.incentives.chainId,
       mockIncentivesData.contractAddress,
       mockIncentivesData.index,
-      provider
+      provider,
     );
   });
 
