@@ -47,7 +47,7 @@ export const isClaimedFromMerkleDistributor = async (
   provider: Provider | JsonRpcProvider | JsonRpcApiProvider | undefined | null,
 ): Promise<boolean> => {
   try {
-    const clientProvider = provider ? provider : getProvider(chainId);
+    const clientProvider = provider ?? getProvider(chainId);
 
     const contract = new Contract(
       contractAddress,
