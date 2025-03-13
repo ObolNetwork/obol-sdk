@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.4.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.0...v2.4.1)
+
+- expect a provider in client [`#93`](https://github.com/ObolNetwork/obol-sdk/pull/93)
+
 #### [v2.4.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.3.0...v2.4.0)
 
+> 13 March 2025
+
+- chore(release): v2.4.0 [`#92`](https://github.com/ObolNetwork/obol-sdk/pull/92)
 - incentives methods [`#90`](https://github.com/ObolNetwork/obol-sdk/pull/90)
 
 #### [v2.3.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.4...v2.3.0)
