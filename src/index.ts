@@ -4,7 +4,7 @@ import {
   type Signer,
   type JsonRpcSigner,
   type JsonRpcProvider,
-  JsonRpcApiProvider,
+  type JsonRpcApiProvider,
 } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
@@ -66,7 +66,12 @@ export * from './verification/common.js';
 export class Client extends Base {
   private readonly signer: Signer | JsonRpcSigner | undefined;
   public incentives: Incentives;
-  public provider: Provider | JsonRpcProvider | JsonRpcApiProvider | undefined | null;
+  public provider:
+    | Provider
+    | JsonRpcProvider
+    | JsonRpcApiProvider
+    | undefined
+    | null;
 
   /**
    * @param config - Client configurations
@@ -86,7 +91,9 @@ export class Client extends Base {
     super(config);
     this.signer = signer;
     // Use the provided provider, or fall back to signer.provider if available
-    this.provider = provider ? provider : (signer && 'provider' in signer ? signer.provider : undefined);
+    this.provider = provider ? provider : (signer && 'provider' in signer
+      ? signer.provider
+      : undefined);
     this.incentives = new Incentives(
       this.signer,
       this.chainId,

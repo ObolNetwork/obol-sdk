@@ -1,5 +1,11 @@
 import { type ETH_ADDRESS } from './types';
-import { Contract, JsonRpcApiProvider, type JsonRpcProvider, type Provider, type Signer } from 'ethers';
+import {
+  Contract,
+  type JsonRpcApiProvider,
+  type JsonRpcProvider,
+  type Provider,
+  type Signer,
+} from 'ethers';
 import { MerkleDistributorABI } from './abi/MerkleDistributorWithDeadline';
 import { getProvider } from './utils';
 

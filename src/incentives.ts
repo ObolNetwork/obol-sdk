@@ -1,5 +1,5 @@
 import {
-  JsonRpcApiProvider,
+  type JsonRpcApiProvider,
   type JsonRpcProvider,
   type JsonRpcSigner,
   type Provider,
@@ -21,13 +21,23 @@ export class Incentives {
     options?: RequestInit,
   ) => Promise<any>;
 
-  public readonly provider: Provider | JsonRpcProvider | JsonRpcApiProvider | undefined | null;
+  public readonly provider:
+    | Provider
+    | JsonRpcProvider
+    | JsonRpcApiProvider
+    | undefined
+    | null;
 
   constructor(
     signer: Signer | JsonRpcSigner | undefined,
     chainId: number,
     request: (endpoint: string, options?: RequestInit) => Promise<any>,
-    provider: Provider | JsonRpcProvider | JsonRpcApiProvider | undefined | null,
+    provider:
+      | Provider
+      | JsonRpcProvider
+      | JsonRpcApiProvider
+      | undefined
+      | null,
   ) {
     this.signer = signer;
     this.chainId = chainId;
