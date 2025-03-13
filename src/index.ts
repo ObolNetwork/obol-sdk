@@ -91,9 +91,9 @@ export class Client extends Base {
     super(config);
     this.signer = signer;
     // Use the provided provider, or fall back to signer.provider if available
-    this.provider = provider ?? (signer && 'provider' in signer
-      ? signer.provider
-      : undefined);
+    this.provider =
+      provider ??
+      (signer && 'provider' in signer ? signer.provider : undefined);
     this.incentives = new Incentives(
       this.signer,
       this.chainId,
