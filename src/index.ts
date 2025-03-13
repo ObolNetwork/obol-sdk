@@ -1,4 +1,4 @@
-import { ZeroAddress, type Provider, type Signer } from 'ethers';
+import { ZeroAddress, type Provider, type Signer, type JsonRpcSigner, type JsonRpcProvider } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
 import {
@@ -57,8 +57,9 @@ export * from './verification/common.js';
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
  */
 export class Client extends Base {
-  private readonly signer: Signer | undefined;
+  private readonly signer: Signer | JsonRpcSigner | undefined;
   public incentives: Incentives;
+  public provider: Provider | JsonRpcProvider | undefined;
 
   /**
    * @param config - Client configurations
@@ -70,13 +71,15 @@ export class Client extends Base {
    * An example of how to instantiate obol-sdk Client:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L29)
    */
-  constructor(config: { baseUrl?: string; chainId?: number }, signer?: Signer) {
+  constructor(config: { baseUrl?: string; chainId?: number }, signer?: Signer | JsonRpcSigner, provider?: Provider | JsonRpcProvider) {
     super(config);
     this.signer = signer;
+    this.provider = provider;
     this.incentives = new Incentives(
       this.signer,
       this.chainId,
       this.request.bind(this),
+      this.provider = provider,
     );
   }
 

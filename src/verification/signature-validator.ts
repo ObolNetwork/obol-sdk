@@ -23,7 +23,7 @@ export const validateAddressSignature = async ({
   chainId: number;
 }): Promise<boolean> => {
   try {
-    const provider = getProvider(chainId);
+    const provider = getProvider(chainId); //[TODO Hanan], should expect it from signer.provider, or passed in client
     if (provider) {
       const contractAddress = await isContractAvailable(address, provider);
       if (contractAddress) {

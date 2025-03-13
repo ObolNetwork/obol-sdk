@@ -1,6 +1,6 @@
 import { type TypedMessage } from '@metamask/eth-sig-util';
 import { type TypedDataDomain } from 'ethers';
-import * as pjson from '../package.json';
+import pjson from '../package.json';
 import { FORK_MAPPING } from './types';
 import {
   HOLESKY_MULTICALL_BYTECODE,
