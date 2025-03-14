@@ -1,5 +1,5 @@
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client, FORK_NAMES } from '../src/index';
+import { Client } from '../src/index';
 import * as utils from '../src/utils';
 import * as incentivesHelpers from '../src/incentivesHalpers';
 import { DEFAULT_BASE_VERSION } from '../src/constants';
