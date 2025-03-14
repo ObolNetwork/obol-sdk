@@ -6,7 +6,7 @@ import {
   type Signer,
 } from 'ethers';
 import { isContractAvailable } from './utils';
-import { type Incentives as IncentivesType, type ETH_ADDRESS } from './types';
+import { type Incentives as IncentivesType, type ETH_ADDRESS, FORK_NAMES } from './types';
 import {
   claimIncentivesFromMerkleDistributor,
   isClaimedFromMerkleDistributor,
@@ -126,8 +126,9 @@ export class Incentives {
    * @throws On not found if address not found.
    */
   async getIncentivesByAddress(address: string): Promise<IncentivesType> {
+    const network= FORK_NAMES[this.chainId]
     const incentives: IncentivesType = await this.request(
-      `/${DEFAULT_BASE_VERSION}/address/incentives/${address}`,
+      `/${DEFAULT_BASE_VERSION}/address/incentives/${network}/${address}`,
       {
         method: 'GET',
       },
