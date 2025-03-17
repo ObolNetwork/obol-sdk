@@ -79,7 +79,9 @@ describe('Client.migrate', () => {
   });
 
   test('createMigrateValidator should handle conflict errors', async () => {
-    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('This Cluster has been already posted'));
+    (global.fetch as jest.Mock).mockRejectedValueOnce(
+      new Error('This Cluster has been already posted'),
+    );
 
     await expect(
       clientInstance.migrate.createMigrateValidator(mockMigrateData),
@@ -109,9 +111,7 @@ describe('Client.migrate', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => {
-          mockResponse;
-        },
+        json: async () => mockResponse,
         headers: new Headers(),
       });
       const networkData = { ...mockMigrateData, network };
