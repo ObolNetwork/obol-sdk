@@ -2,7 +2,6 @@ import { type Signer, type JsonRpcSigner } from 'ethers';
 import { DEFAULT_BASE_VERSION, CONFLICT_ERROR_MSG } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
-  type NetworkName,
   type CreateMigrateValidatorDto,
   type MigrateValidator,
 } from './types.js';
