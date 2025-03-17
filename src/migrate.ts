@@ -54,4 +54,4 @@ export class Migrate extends Base {
       throw err;
     }
   }
-} 
+}
