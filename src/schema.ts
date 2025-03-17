@@ -127,3 +127,22 @@ export const rewardsSplitterPayloadSchema = {
   },
   required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
 };
+
+export const migrateValidatorSchema = {
+  type: 'object',
+  properties: {
+    target_pubkey: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{96}$',
+    },
+    lock_hash: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{64}$',
+    },
+    withdrawal_address: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+  },
+  required: ['target_pubkey', 'lock_hash', 'withdrawal_address'],
+};
