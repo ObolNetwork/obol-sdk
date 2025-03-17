@@ -16,6 +16,9 @@ export enum FORK_MAPPING {
 
   /** Sepolia. */
   '0x90000069' = 11155111,
+
+  /** Hoodi Chain. */
+  '0x10000910' = 560048,
 }
 
 /**
@@ -36,6 +39,9 @@ export const FORK_NAMES: Record<number, string> = {
 
   /** Sepolia. */
   [FORK_MAPPING['0x90000069']]: 'sepolia',
+
+  /** Hoodi. */
+  [FORK_MAPPING['0x10000910']]: 'hoodi',
 };
 
 /**
