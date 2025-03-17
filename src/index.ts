@@ -55,10 +55,13 @@ import {
 } from './splitHelpers.js';
 import { isContractAvailable } from './utils.js';
 import { Incentives } from './incentives.js';
+import { Migrate } from './migrate.js';
+
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
 export * from './verification/common.js';
+export * from './migrate.js';
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
@@ -66,6 +69,7 @@ export * from './verification/common.js';
 export class Client extends Base {
   private readonly signer: Signer | JsonRpcSigner | undefined;
   public incentives: Incentives;
+  public migrate: Migrate;
   public provider:
     | Provider
     | JsonRpcProvider
@@ -100,6 +104,7 @@ export class Client extends Base {
       this.request.bind(this),
       (this.provider = provider),
     );
+    this.migrate = new Migrate(this.signer);
   }
 
   /**

@@ -323,3 +323,47 @@ export type Incentives = {
  * String expected to be Ethereum Address
  */
 export type ETH_ADDRESS = string;
+
+/**
+ * Network name for migrate validator
+ */
+export type NetworkName =
+  | 'mainnet'
+  | 'goerli'
+  | 'gnosis'
+  | 'sepolia'
+  | 'holesky';
+
+/**
+ * Create migrate validator payload
+ */
+export type CreateMigrateValidatorDto = {
+  /** The target public key of the validator */
+  target_pubkey: string;
+
+  /** The network the validator is on */
+  network: NetworkName;
+
+  /** The lock hash of the cluster */
+  lock_hash: string;
+
+  /** The withdrawal address for the validator */
+  withdrawal_address: string;
+};
+
+/**
+ * Migrate validator response
+ */
+export type MigrateValidator = {
+  /** The target public key of the validator */
+  target_pubkey: string;
+
+  /** The lock hash of the cluster */
+  lock_hash: string;
+
+  /** The withdrawal address for the validator */
+  withdrawal_address: string;
+
+  /** The network the validator is on */
+  network: NetworkName;
+};
