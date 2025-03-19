@@ -33,7 +33,7 @@ export enum FORK_MAPPING {
 /**
  * Permitted Chain Names
  */
-export const FORK_NAMES: Record<number, string> = {
+export const FORK_NAMES = {
   /** Mainnet. */
   [FORK_MAPPING['0x00000000']]: 'mainnet',
 
@@ -51,7 +51,7 @@ export const FORK_NAMES: Record<number, string> = {
 
   /** Hoodi. */
   [FORK_MAPPING['0x10000910']]: 'hoodi',
-};
+} as const;
 
 /**
  * Node operator data
