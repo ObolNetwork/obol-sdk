@@ -23,7 +23,8 @@
     "lint": "eslint \"{src,test}/**/*.{js,ts}\" --fix",
     "lint-ci": "eslint \"{src,test}/**/*.{js,ts}\"",
     "prettier-ci": "prettier --check \"{src,test}/**/*.{js,ts}\"",
-    "prettier": "prettier --write \"{src,test}/**/*.{js,ts}\""
+    "prettier": "prettier --write \"{src,test}/**/*.{js,ts}\"",
+    "docs": "typedoc"
   },
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
@@ -79,8 +80,8 @@
     "release-it": "^17.2.1",
     "ts-jest": "^28.0.8",
     "tsup": "^6.7.0",
-    "typedoc": "^0.25.7",
-    "typedoc-plugin-markdown": "^4.0.0-next.50",
+    "typedoc": "^0.28.0",
+    "typedoc-plugin-markdown": "^4.5.2",
     "typescript": "~5.3.3"
   },
   "engines": {
