@@ -128,7 +128,7 @@ describe('Client.incentives', () => {
       clientInstance.incentives.chainId,
       mockIncentivesData.contractAddress,
       mockIncentivesData.index,
-      undefined,
+      {},
     );
   });
 
