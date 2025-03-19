@@ -1,8 +1,8 @@
-import type { JsonRpcApiProvider, JsonRpcProvider, JsonRpcSigner, Provider, Signer } from "ethers"
-import { isContractAvailable } from "./utils"
-import { type Incentives as IncentivesType, type ETH_ADDRESS, FORK_NAMES } from "./types"
-import { claimIncentivesFromMerkleDistributor, isClaimedFromMerkleDistributor } from "./incentiveHelpers"
-import { DEFAULT_BASE_VERSION } from "./constants"
+import type { JsonRpcApiProvider, JsonRpcProvider, JsonRpcSigner, Provider, Signer } from 'ethers'
+import { isContractAvailable } from './utils'
+import { type Incentives as IncentivesType, type ETH_ADDRESS, FORK_NAMES } from './types'
+import { claimIncentivesFromMerkleDistributor, isClaimedFromMerkleDistributor } from './incentiveHelpers'
+import { DEFAULT_BASE_VERSION } from './constants'
 
 export class Incentives {
   private readonly signer: Signer | JsonRpcSigner | undefined
@@ -37,13 +37,13 @@ export class Incentives {
    */
   async claimIncentives(address: string): Promise<{ txHash: string } | { alreadyClaimed: true }> {
     if (!this.signer) {
-      throw new Error("Signer is required in claimIncentives")
+      throw new Error('Signer is required in claimIncentives')
     }
 
     try {
       const incentivesData = await this.getIncentivesByAddress(address)
 
-      if (!incentivesData || !incentivesData.contract_address) {
+      if (!incentivesData?.contract_address) {
         throw new Error(`No incentives found for address ${address}`)
       }
 
@@ -73,7 +73,7 @@ export class Incentives {
 
       return { txHash }
     } catch (error: any) {
-      console.log("Error claiming incentives:", error)
+      console.log('Error claiming incentives:', error)
       throw new Error(`Failed to claim incentives: ${error.message}`)
     }
   }
@@ -100,10 +100,9 @@ export class Incentives {
     const incentives: IncentivesType = await this.request(
       `/${DEFAULT_BASE_VERSION}/address/incentives/${network}/${address}`,
       {
-        method: "GET",
+        method: 'GET',
       },
     )
     return incentives
   }
 }
-
