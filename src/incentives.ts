@@ -3,8 +3,8 @@ import {
   type Incentives as IncentivesType,
   type ETH_ADDRESS,
   FORK_NAMES,
-  ProviderType,
-  SignerType,
+  type ProviderType,
+  type SignerType,
 } from './types';
 import {
   claimIncentivesFromMerkleDistributor,
@@ -20,19 +20,13 @@ export class Incentives {
     options?: RequestInit,
   ) => Promise<any>;
 
-  public readonly provider:
-    ProviderType
-    | undefined
-    | null;
+  public readonly provider: ProviderType | undefined | null;
 
   constructor(
     signer: SignerType | undefined,
     chainId: number,
     request: (endpoint: string, options?: RequestInit) => Promise<any>,
-    provider:
-      ProviderType
-      | undefined
-      | null,
+    provider: ProviderType | undefined | null,
   ) {
     this.signer = signer;
     this.chainId = chainId;

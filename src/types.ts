@@ -1,4 +1,11 @@
-import { ethers, JsonRpcApiProvider, JsonRpcProvider, JsonRpcSigner, Provider, Signer } from "ethers";
+import {
+  type ethers,
+  type JsonRpcApiProvider,
+  type JsonRpcProvider,
+  type JsonRpcSigner,
+  type Provider,
+  type Signer,
+} from 'ethers';
 
 /**
  * Permitted ChainID's
@@ -336,7 +343,6 @@ export type ProviderType =
   | ethers.BrowserProvider;
 
 /**
-* Signer Types
-*/
-export type SignerType =
-  Signer | JsonRpcSigner
+ * Signer Types
+ */
+export type SignerType = Signer | JsonRpcSigner;

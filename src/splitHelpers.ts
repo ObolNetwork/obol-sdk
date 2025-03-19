@@ -3,14 +3,9 @@ import {
   type ClusterValidator,
   type ETH_ADDRESS,
   type SplitRecipient,
-  SignerType,
+  type SignerType,
 } from './types';
-import {
-  Contract,
-  Interface,
-  parseEther,
-  ZeroAddress,
-} from 'ethers';
+import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from './abi/OWR';
 import { splitMainEthereumAbi } from './abi/SplitMain';
 import { MultiCallContract } from './abi/Multicall';

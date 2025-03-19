@@ -1,6 +1,4 @@
-import {
-  ZeroAddress,
-} from 'ethers';
+import { ZeroAddress } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
 import {
@@ -32,8 +30,8 @@ import {
   type ClusterValidator,
   type ETH_ADDRESS,
   type OWRTranches,
-  ProviderType,
-  SignerType,
+  type ProviderType,
+  type SignerType,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
@@ -61,12 +59,9 @@ export * from './verification/common.js';
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
  */
 export class Client extends Base {
-  private readonly signer: SignerType| undefined;
+  private readonly signer: SignerType | undefined;
   public incentives: Incentives;
-  public provider:
-    ProviderType
-    | undefined
-    | null;
+  public provider: ProviderType | undefined | null;
 
   /**
    * @param config - Client configurations
