@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.4.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.3...v2.4.4)
+
+- remove not needed assignment [`#100`](https://github.com/ObolNetwork/obol-sdk/pull/100)
+
 #### [v2.4.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.2...v2.4.3)
 
+> 18 March 2025
+
+- chore(release): v2.4.3 [`#98`](https://github.com/ObolNetwork/obol-sdk/pull/98)
 - add hoodi [`#97`](https://github.com/ObolNetwork/obol-sdk/pull/97)
 
 #### [v2.4.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.1...v2.4.2)
