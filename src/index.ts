@@ -98,7 +98,7 @@ export class Client extends Base {
       this.signer,
       this.chainId,
       this.request.bind(this),
-      (this.provider = provider),
+      this.provider,
     );
   }
 
