@@ -14,7 +14,7 @@ export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
   contractAddress: ETH_ADDRESS;
   index: number;
   operatorAddress: ETH_ADDRESS;
-  amount: number;
+  amount: string;
   merkleProof: string[];
 }): Promise<{ txHash: string }> => {
   try {
