@@ -1,3 +1,5 @@
+import { ethers, JsonRpcApiProvider, JsonRpcProvider, JsonRpcSigner, Provider, Signer } from "ethers";
+
 /**
  * Permitted ChainID's
  */
@@ -323,3 +325,18 @@ export type Incentives = {
  * String expected to be Ethereum Address
  */
 export type ETH_ADDRESS = string;
+
+/**
+ * Provider Types
+ */
+export type ProviderType =
+  | Provider
+  | JsonRpcProvider
+  | JsonRpcApiProvider
+  | ethers.BrowserProvider;
+
+/**
+* Signer Types
+*/
+export type SignerType =
+  Signer | JsonRpcSigner

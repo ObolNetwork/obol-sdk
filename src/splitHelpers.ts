@@ -3,13 +3,13 @@ import {
   type ClusterValidator,
   type ETH_ADDRESS,
   type SplitRecipient,
+  SignerType,
 } from './types';
 import {
   Contract,
   Interface,
   parseEther,
   ZeroAddress,
-  type Signer,
 } from 'ethers';
 import { OWRContract, OWRFactoryContract } from './abi/OWR';
 import { splitMainEthereumAbi } from './abi/SplitMain';
@@ -59,7 +59,7 @@ export const predictSplitterAddress = async ({
   distributorFee,
   controllerAddress,
 }: {
-  signer: Signer;
+  signer: SignerType;
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
   chainId: number;
@@ -111,7 +111,7 @@ export const handleDeployOWRAndSplitter = async ({
   controllerAddress,
   recoveryAddress,
 }: {
-  signer: Signer;
+  signer: SignerType;
   isSplitterDeployed: boolean;
   predictedSplitterAddress: ETH_ADDRESS;
   accounts: ETH_ADDRESS[];
@@ -174,7 +174,7 @@ const createOWRContract = async ({
   chainId,
 }: {
   owrArgs: OWRArgs;
-  signer: Signer;
+  signer: SignerType;
   chainId: number;
 }): Promise<ETH_ADDRESS> => {
   try {
@@ -209,7 +209,7 @@ export const deploySplitterContract = async ({
   distributorFee,
   controllerAddress,
 }: {
-  signer: Signer;
+  signer: SignerType;
   accounts: ETH_ADDRESS[];
   percentAllocations: number[];
   chainId: number;
@@ -247,7 +247,7 @@ export const deploySplitterAndOWRContracts = async ({
 }: {
   owrArgs: OWRArgs;
   splitterArgs: SplitArgs;
-  signer: Signer;
+  signer: SignerType;
   chainId: number;
 }): Promise<{ owrAddress: ETH_ADDRESS; splitterAddress: ETH_ADDRESS }> => {
   const executeCalls: Call[] = [];
@@ -304,7 +304,7 @@ export const getOWRTranches = async ({
   signer,
 }: {
   owrAddress: ETH_ADDRESS;
-  signer: Signer;
+  signer: SignerType;
 }): Promise<OWRTranches> => {
   const owrContract = new Contract(owrAddress, OWRContract.abi, signer);
   const res = await owrContract.getTranches();
@@ -318,7 +318,7 @@ export const getOWRTranches = async ({
 
 export const multicall = async (
   calls: Call[],
-  signer: Signer,
+  signer: SignerType,
   multicallAddress: string,
 ): Promise<any> => {
   const multiCallContractInstance = new Contract(

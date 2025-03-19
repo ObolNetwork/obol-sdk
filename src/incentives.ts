@@ -1,15 +1,10 @@
-import type {
-  JsonRpcApiProvider,
-  JsonRpcProvider,
-  JsonRpcSigner,
-  Provider,
-  Signer,
-} from 'ethers';
 import { isContractAvailable } from './utils';
 import {
   type Incentives as IncentivesType,
   type ETH_ADDRESS,
   FORK_NAMES,
+  ProviderType,
+  SignerType,
 } from './types';
 import {
   claimIncentivesFromMerkleDistributor,
@@ -18,7 +13,7 @@ import {
 import { DEFAULT_BASE_VERSION } from './constants';
 
 export class Incentives {
-  private readonly signer: Signer | JsonRpcSigner | undefined;
+  private readonly signer: SignerType | undefined;
   public readonly chainId: number;
   private readonly request: (
     endpoint: string,
@@ -26,20 +21,16 @@ export class Incentives {
   ) => Promise<any>;
 
   public readonly provider:
-    | Provider
-    | JsonRpcProvider
-    | JsonRpcApiProvider
+    ProviderType
     | undefined
     | null;
 
   constructor(
-    signer: Signer | JsonRpcSigner | undefined,
+    signer: SignerType | undefined,
     chainId: number,
     request: (endpoint: string, options?: RequestInit) => Promise<any>,
     provider:
-      | Provider
-      | JsonRpcProvider
-      | JsonRpcApiProvider
+      ProviderType
       | undefined
       | null,
   ) {
@@ -77,7 +68,7 @@ export class Incentives {
 
       const isContractDeployed = await isContractAvailable(
         incentivesData.contract_address,
-        this.provider as Provider,
+        this.provider as ProviderType,
       );
 
       if (!isContractDeployed) {

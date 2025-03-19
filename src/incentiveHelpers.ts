@@ -1,16 +1,12 @@
-import { type ETH_ADDRESS } from './types';
+import { ProviderType, SignerType, type ETH_ADDRESS } from './types';
 import {
   Contract,
-  type JsonRpcApiProvider,
-  type JsonRpcProvider,
-  type Provider,
-  type Signer,
 } from 'ethers';
 import { MerkleDistributorABI } from './abi/MerkleDistributorWithDeadline';
 import { getProvider } from './utils';
 
 export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
-  signer: Signer;
+  signer: SignerType;
   contractAddress: ETH_ADDRESS;
   index: number;
   operatorAddress: ETH_ADDRESS;
@@ -44,7 +40,7 @@ export const isClaimedFromMerkleDistributor = async (
   chainId: number,
   contractAddress: ETH_ADDRESS,
   index: number,
-  provider: Provider | JsonRpcProvider | JsonRpcApiProvider | undefined | null,
+  provider: ProviderType | undefined | null,
 ): Promise<boolean> => {
   try {
     const clientProvider = provider ?? getProvider(chainId);
