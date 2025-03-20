@@ -56,7 +56,7 @@ export class Incentives {
    * and not pushed to version control.
    *
    * @param {string} address - The address to claim incentives for
-   * @returns {Promise<{ txHash: string } | { alreadyClaimed: true }>} The transaction hash or already claimed status
+   * @returns {Promise<ClaimIncentivesResponse>} The transaction hash or already claimed status
    * @throws Will throw an error if the incentives data is not found or the claim fails
    *
    * An example of how to use claimIncentives:

@@ -84,15 +84,14 @@ describe('Client.incentives', () => {
     jest
       .spyOn(incentivesHelpers, 'claimIncentivesFromMerkleDistributor')
       .mockImplementation(
-        async () =>
-          await Promise.resolve({ txHash: mockTxHash, alreadyClaimed: false }),
+        async () => await Promise.resolve({ txHash: mockTxHash }),
       );
 
     const result = await clientInstance.incentives.claimIncentives(
       mockIncentivesData.operator_address,
     );
 
-    expect(result).toEqual({ txHash: mockTxHash, alreadyClaimed: false });
+    expect(result).toEqual({ txHash: mockTxHash });
     expect(
       incentivesHelpers.claimIncentivesFromMerkleDistributor,
     ).toHaveBeenCalledWith({
@@ -105,7 +104,7 @@ describe('Client.incentives', () => {
     });
   });
 
-  test('claimIncentives should return alreadyClaimed when incentives are already claimed', async () => {
+  test('claimIncentives should return txHash as null when incentives are already claimed', async () => {
     jest
       .spyOn(clientInstance.incentives, 'getIncentivesByAddress')
       .mockResolvedValue(mockIncentivesData);
@@ -116,7 +115,7 @@ describe('Client.incentives', () => {
       mockIncentivesData.operator_address,
     );
 
-    expect(result).toEqual({ alreadyClaimed: true, txHash: null });
+    expect(result).toEqual({ txHash: null });
     expect(
       incentivesHelpers.claimIncentivesFromMerkleDistributor,
     ).not.toHaveBeenCalled();
