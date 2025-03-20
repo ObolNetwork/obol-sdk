@@ -5,6 +5,7 @@ import {
   FORK_NAMES,
   type ProviderType,
   type SignerType,
+  ClaimIncentivesResponse,
 } from './types';
 import {
   claimIncentivesFromMerkleDistributor,
@@ -43,8 +44,12 @@ export class Incentives {
   }
 
   /**
-   * Claims obol incentives from a Merkle Distributor contract using just an address.
-   * The method automatically fetches incentives data and checks if already claimed.
+   * Claims Obol incentives from a Merkle Distributor contract using an address.
+   * 
+   * This method automatically fetches incentive data and verifies whether the incentives have already been claimed.
+   * If `txHash` is `null`, it indicates that the incentives were already claimed.
+   * 
+   * Note: This method is not yet enabled and will throw an error if called.
    *
    * @remarks
    * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
@@ -59,7 +64,7 @@ export class Incentives {
    */
   async claimIncentives(
     address: string,
-  ): Promise<{ txHash: string | null; alreadyClaimed: boolean }> {
+  ): Promise<ClaimIncentivesResponse> {
     if (!this.signer) {
       throw new Error('Signer is required in claimIncentives');
     }
@@ -88,7 +93,7 @@ export class Incentives {
       );
 
       if (claimed) {
-        return { alreadyClaimed: true, txHash: null };
+        return { txHash: null };
       }
 
       const { txHash } = await claimIncentivesFromMerkleDistributor({
@@ -100,7 +105,7 @@ export class Incentives {
         merkleProof: incentivesData.merkle_proof,
       });
 
-      return { txHash, alreadyClaimed: false };
+      return { txHash };
     } catch (error: any) {
       console.log('Error claiming incentives:', error);
       throw new Error(`Failed to claim incentives: ${error.message}`);
