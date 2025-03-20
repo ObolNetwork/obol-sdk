@@ -5,7 +5,7 @@ import {
   FORK_NAMES,
   type ProviderType,
   type SignerType,
-  ClaimIncentivesResponse,
+  type ClaimIncentivesResponse,
 } from './types';
 import {
   claimIncentivesFromMerkleDistributor,
@@ -45,10 +45,10 @@ export class Incentives {
 
   /**
    * Claims Obol incentives from a Merkle Distributor contract using an address.
-   * 
+   *
    * This method automatically fetches incentive data and verifies whether the incentives have already been claimed.
    * If `txHash` is `null`, it indicates that the incentives were already claimed.
-   * 
+   *
    * Note: This method is not yet enabled and will throw an error if called.
    *
    * @remarks
@@ -62,9 +62,7 @@ export class Incentives {
    * An example of how to use claimIncentives:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L281)
    */
-  async claimIncentives(
-    address: string,
-  ): Promise<ClaimIncentivesResponse> {
+  async claimIncentives(address: string): Promise<ClaimIncentivesResponse> {
     if (!this.signer) {
       throw new Error('Signer is required in claimIncentives');
     }

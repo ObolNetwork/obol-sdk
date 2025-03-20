@@ -336,5 +336,4 @@ export type SignerType = Signer | JsonRpcSigner;
 /**
  * claimIncentives Response
  */
-export type ClaimIncentivesResponse =
-  { txHash: string | null }
+export type ClaimIncentivesResponse = { txHash: string | null };
