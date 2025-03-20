@@ -54,13 +54,27 @@ export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
 export * from './verification/common.js';
+export { Incentives } from './incentives.js';
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
  */
 export class Client extends Base {
+  /**
+   * The signer used for signing transactions.
+   */
   private readonly signer: SignerType | undefined;
+
+  /**
+   * The incentives module, responsible for managing Obol tokens distribution.
+   * @type {Incentives}
+   */
   public incentives: Incentives;
+
+  /**
+   * The blockchain provider, used to interact with the network.
+   * It can be null, undefined, or a valid provider instance and defaults to the Signer provider if Signer is passed.
+   */
   public provider: ProviderType | undefined | null;
 
   /**

@@ -30,26 +30,12 @@ export enum FORK_MAPPING {
   '0x10000910' = 560048,
 }
 
-/**
- * Permitted Chain Names
- */
-export const FORK_NAMES = {
-  /** Mainnet. */
+export const FORK_NAMES: Record<number, string> = {
   [FORK_MAPPING['0x00000000']]: 'mainnet',
-
-  /** Goerli/Prater. */
   [FORK_MAPPING['0x00001020']]: 'goerli',
-
-  /** Gnosis Chain. */
   [FORK_MAPPING['0x00000064']]: 'gnosis',
-
-  /** Holesky. */
   [FORK_MAPPING['0x01017000']]: 'holesky',
-
-  /** Sepolia. */
   [FORK_MAPPING['0x90000069']]: 'sepolia',
-
-  /** Hoodi. */
   [FORK_MAPPING['0x10000910']]: 'hoodi',
 } as const;
 

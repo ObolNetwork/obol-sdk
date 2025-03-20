@@ -12,6 +12,14 @@ import {
 } from './incentiveHelpers';
 import { DEFAULT_BASE_VERSION } from './constants';
 
+/**
+ * Incentives can be used for fetching and claiming Obol incentives.
+ * @class
+ * @internal Access it through Client.incentives.
+ * @example
+ * const obolClient = new Client(config);
+ * await obolClient.incentives.claimIncentives(address);
+ */
 export class Incentives {
   private readonly signer: SignerType | undefined;
   public readonly chainId: number;
@@ -45,6 +53,9 @@ export class Incentives {
    * @param {string} address - The address to claim incentives for
    * @returns {Promise<{ txHash: string } | { alreadyClaimed: true }>} The transaction hash or already claimed status
    * @throws Will throw an error if the incentives data is not found or the claim fails
+   *
+   * An example of how to use claimIncentives:
+   * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L281)
    */
   async claimIncentives(
     address: string,
@@ -103,6 +114,9 @@ export class Incentives {
    * @param {ETH_ADDRESS} index - operator index in merkle tree
    * @returns {Promise<boolean>} true if incentives are already claime
    *
+   *
+   * An example of how to use isClaimed:
+   * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L266)
    */
   async isClaimed(
     contractAddress: ETH_ADDRESS,
@@ -120,6 +134,9 @@ export class Incentives {
    * @param address - Operator address
    * @returns {Promise<IncentivesType>} The matched incentives from DB
    * @throws On not found if address not found.
+   *
+   * An example of how to use getIncentivesByAddress:
+   * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L250)
    */
   async getIncentivesByAddress(address: string): Promise<IncentivesType> {
     const network = FORK_NAMES[this.chainId];

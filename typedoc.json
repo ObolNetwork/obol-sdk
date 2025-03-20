@@ -10,7 +10,7 @@
   "hidePageTitle": true,
   "excludeNotDocumented": true,
   "sort": ["source-order"],
-  "skipErrorChecking": true,
   "plugin": ["typedoc-plugin-markdown"],
-  "entryFileName": "index.md"
+  "entryFileName": "index.md",
+  "excludeInternal": false,
 }
