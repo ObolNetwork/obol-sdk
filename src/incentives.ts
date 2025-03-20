@@ -59,7 +59,7 @@ export class Incentives {
    */
   async claimIncentives(
     address: string,
-  ): Promise<{ txHash: string } | { alreadyClaimed: true }> {
+  ): Promise<{ txHash: string | null, alreadyClaimed: boolean }> {
     if (!this.signer) {
       throw new Error('Signer is required in claimIncentives');
     }
@@ -88,7 +88,7 @@ export class Incentives {
       );
 
       if (claimed) {
-        return { alreadyClaimed: true };
+        return { alreadyClaimed: true, txHash: null };
       }
 
       const { txHash } = await claimIncentivesFromMerkleDistributor({
@@ -100,7 +100,7 @@ export class Incentives {
         merkleProof: incentivesData.merkle_proof,
       });
 
-      return { txHash };
+      return { txHash, alreadyClaimed: false };
     } catch (error: any) {
       console.log('Error claiming incentives:', error);
       throw new Error(`Failed to claim incentives: ${error.message}`);
