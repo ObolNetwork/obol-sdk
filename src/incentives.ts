@@ -59,7 +59,7 @@ export class Incentives {
    */
   async claimIncentives(
     address: string,
-  ): Promise<{ txHash: string | null, alreadyClaimed: boolean }> {
+  ): Promise<{ txHash: string | null; alreadyClaimed: boolean }> {
     if (!this.signer) {
       throw new Error('Signer is required in claimIncentives');
     }
