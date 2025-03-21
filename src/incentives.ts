@@ -1,6 +1,6 @@
 import { isContractAvailable } from './utils';
 import {
-  type Incentives as IncentivesType,
+  type ClaimableIncentives,
   type ETH_ADDRESS,
   FORK_NAMES,
   type ProviderType,
@@ -141,9 +141,9 @@ export class Incentives {
    * An example of how to use getIncentivesByAddress:
    * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L250)
    */
-  async getIncentivesByAddress(address: string): Promise<IncentivesType> {
+  async getIncentivesByAddress(address: string): Promise<ClaimableIncentives> {
     const network = FORK_NAMES[this.chainId];
-    const incentives: IncentivesType = await this.request(
+    const incentives: ClaimableIncentives = await this.request(
       `/${DEFAULT_BASE_VERSION}/address/incentives/${network}/${address}`,
       {
         method: 'GET',

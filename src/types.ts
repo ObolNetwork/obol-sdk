@@ -295,9 +295,9 @@ export type ClusterLock = {
 };
 
 /**
- * Incentives
+ * Claimable Obol Incentives
  */
-export type Incentives = {
+export type ClaimableIncentives = {
   /** Operator Address. */
   operator_address: string;
 
