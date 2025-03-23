@@ -76,9 +76,12 @@ export const isContractAvailable = async (
   return !!code && code !== '0x' && code !== '0x0';
 };
 
-export const getProvider = (chainId: number, rpcUrl?: string): ethers.JsonRpcProvider => {
+export const getProvider = (
+  chainId: number,
+  rpcUrl?: string,
+): ethers.JsonRpcProvider => {
   const resolvedRpcUrl = rpcUrl ?? PROVIDER_MAP[chainId];
-  if (chainId && !resolvedRpcUrl || resolvedRpcUrl === 'undefined') {
+  if (chainId && (!resolvedRpcUrl || resolvedRpcUrl === 'undefined')) {
     throw new Error(`No provider configured for ${FORK_NAMES[chainId]}`);
   }
   return new ethers.JsonRpcProvider(resolvedRpcUrl);

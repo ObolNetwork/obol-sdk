@@ -10,7 +10,7 @@ import { PROVIDER_MAP } from '../constants';
 import { hashTypedData } from '@safe-global/protocol-kit/dist/src/utils';
 import { type EIP712TypedData } from '@safe-global/safe-core-sdk-types';
 import { isContractAvailable, getProvider } from '../utils';
-import { SafeRpcUrl } from '../types';
+import { type SafeRpcUrl } from '../types';
 
 export const validateAddressSignature = async ({
   address,
@@ -23,10 +23,10 @@ export const validateAddressSignature = async ({
   token: string;
   data: TypedMessage<any>;
   chainId: number;
-  safeRpcUrl?: SafeRpcUrl,
+  safeRpcUrl?: SafeRpcUrl;
 }): Promise<boolean> => {
   try {
-    const provider = getProvider(chainId,safeRpcUrl);
+    const provider = getProvider(chainId, safeRpcUrl);
     if (provider) {
       const contractAddress = await isContractAvailable(address, provider);
       if (contractAddress) {
@@ -35,7 +35,7 @@ export const validateAddressSignature = async ({
           data: data as unknown as EIP712TypedData,
           address,
           chainId,
-          safeRpcUrl
+          safeRpcUrl,
         });
       }
     }
@@ -73,13 +73,13 @@ export const validateSmartContractSignature = async ({
   data,
   address,
   chainId,
-  safeRpcUrl
+  safeRpcUrl,
 }: {
   token: string;
   data: EIP712TypedData;
   address: string;
   chainId: number;
-  safeRpcUrl?: SafeRpcUrl,
+  safeRpcUrl?: SafeRpcUrl;
 }): Promise<boolean> => {
   try {
     const safeProvider = safeRpcUrl ?? PROVIDER_MAP[chainId];

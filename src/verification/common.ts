@@ -167,7 +167,7 @@ const validatePOSTConfigHashSigner = async (
   signature: string,
   configHash: string,
   chainId: FORK_MAPPING,
-  safeRpcUrl?: SafeRpcUrl
+  safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
     const data = signCreatorConfigHashPayload(
@@ -216,7 +216,7 @@ const validateEnrSigner = async (
   signature: string,
   payload: string,
   chainId: number,
-  safeRpcUrl?: SafeRpcUrl
+  safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
     const data = signEnrPayload({ enr: payload }, chainId);
@@ -236,7 +236,7 @@ const validateEnrSigner = async (
 const verifyDefinitionSignatures = async (
   clusterDefinition: ClusterDefinition,
   definitionType: DefinitionFlow,
-  safeRpcUrl?: SafeRpcUrl
+  safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   if (definitionType === DefinitionFlow.Charon) {
     return true;
@@ -262,7 +262,7 @@ const verifyDefinitionSignatures = async (
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
         safeRpcUrl,
       );
@@ -272,7 +272,7 @@ const verifyDefinitionSignatures = async (
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
         safeRpcUrl,
       );

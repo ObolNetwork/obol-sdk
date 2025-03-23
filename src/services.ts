@@ -1,4 +1,4 @@
-import { SafeRpcUrl, type ClusterLock } from './types.js';
+import { type SafeRpcUrl, type ClusterLock } from './types.js';
 import { isValidClusterLock } from './verification/common.js';
 
 /**

@@ -39,7 +39,6 @@ export const isClaimedFromMerkleDistributor = async (
   provider: ProviderType | undefined | null,
 ): Promise<boolean> => {
   try {
-
     const contract = new Contract(
       contractAddress,
       MerkleDistributorABI.abi,

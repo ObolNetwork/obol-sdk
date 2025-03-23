@@ -202,7 +202,6 @@ describe('Cluster Client without a signer', () => {
     jest.resetModules();
   });
 
-
   test('createClusterDefinition should throw an error without signer', async () => {
     try {
       await clientInstance.createClusterDefinition(clusterConfigV1X8);
@@ -279,12 +278,17 @@ describe('Cluster Client without a signer', () => {
   );
 
   test('should return true on verified cluster lock with Safe wallet and safe rpc url', async () => {
-    process.env.RPC_HOLESKY = undefined
+    process.env.RPC_HOLESKY = undefined;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const {
+      validateClusterLock: validateLockWithRpcUrl,
+    } = require('../src/index');
 
-    const { validateClusterLock:validateLockWithRpcUrl } = require('../src/index');
-
-    const safeRpcUrl = "https://ethereum-holesky-rpc.publicnode.com"
-    const isValidLock: boolean = await validateLockWithRpcUrl(clusterLockWithSafe, safeRpcUrl);
+    const safeRpcUrl = 'https://ethereum-holesky-rpc.publicnode.com';
+    const isValidLock: boolean = await validateLockWithRpcUrl(
+      clusterLockWithSafe,
+      safeRpcUrl,
+    );
     expect(isValidLock).toEqual(true);
   });
 
