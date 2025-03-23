@@ -279,7 +279,7 @@ describe('Cluster Client without a signer', () => {
 
   test('should return true on verified cluster lock with Safe wallet and safe rpc url', async () => {
     process.env.RPC_HOLESKY = undefined;
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    /* eslint-disable @typescript-eslint/no-var-requires */
     const {
       validateClusterLock: validateLockWithRpcUrl,
     } = require('../src/index');
