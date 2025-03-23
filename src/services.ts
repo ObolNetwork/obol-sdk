@@ -1,9 +1,10 @@
-import { type ClusterLock } from './types.js';
+import { SafeRpcUrl, type ClusterLock } from './types.js';
 import { isValidClusterLock } from './verification/common.js';
 
 /**
  * Verifies Cluster Lock's validity.
  * @param lock - cluster lock
+ * @param safeRpcUrl - optional safeRpcUrl for safe wallet verification
  * @returns {Promise<{ result: boolean }> } boolean result to indicate if lock is valid
  * @throws on missing keys or values.
  *
@@ -12,9 +13,10 @@ import { isValidClusterLock } from './verification/common.js';
  */
 export const validateClusterLock = async (
   lock: ClusterLock,
+  safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
-    const isLockValid = await isValidClusterLock(lock);
+    const isLockValid = await isValidClusterLock(lock, safeRpcUrl);
     return isLockValid;
   } catch (err: any) {
     throw err;

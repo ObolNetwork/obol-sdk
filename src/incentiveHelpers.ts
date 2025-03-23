@@ -1,7 +1,6 @@
 import { type ProviderType, type SignerType, type ETH_ADDRESS } from './types';
 import { Contract } from 'ethers';
 import { MerkleDistributorABI } from './abi/MerkleDistributorWithDeadline';
-import { getProvider } from './utils';
 
 export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
   signer: SignerType;
@@ -35,18 +34,16 @@ export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
 };
 
 export const isClaimedFromMerkleDistributor = async (
-  chainId: number,
   contractAddress: ETH_ADDRESS,
   index: number,
   provider: ProviderType | undefined | null,
 ): Promise<boolean> => {
   try {
-    const clientProvider = provider ?? getProvider(chainId);
 
     const contract = new Contract(
       contractAddress,
       MerkleDistributorABI.abi,
-      clientProvider,
+      provider,
     );
 
     const claimed = await contract.isClaimed(BigInt(index));

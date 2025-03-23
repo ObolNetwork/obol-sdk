@@ -126,7 +126,6 @@ export class Incentives {
     index: number,
   ): Promise<boolean> {
     return await isClaimedFromMerkleDistributor(
-      this.chainId,
       contractAddress,
       index,
       this.provider,

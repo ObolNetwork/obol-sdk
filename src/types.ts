@@ -1,4 +1,5 @@
 import {
+  Wallet,
   type ethers,
   type JsonRpcApiProvider,
   type JsonRpcProvider,
@@ -326,12 +327,17 @@ export type ProviderType =
   | Provider
   | JsonRpcProvider
   | JsonRpcApiProvider
-  | ethers.BrowserProvider;
+  | ethers.BrowserProvider
+
+/**
+  * Safe Wallet Provider Types
+  */
+export type SafeRpcUrl = string
 
 /**
  * Signer Types
  */
-export type SignerType = Signer | JsonRpcSigner;
+export type SignerType = Signer | JsonRpcSigner | Wallet;
 
 /**
  * claimIncentives Response

@@ -10,20 +10,23 @@ import { PROVIDER_MAP } from '../constants';
 import { hashTypedData } from '@safe-global/protocol-kit/dist/src/utils';
 import { type EIP712TypedData } from '@safe-global/safe-core-sdk-types';
 import { isContractAvailable, getProvider } from '../utils';
+import { SafeRpcUrl } from '../types';
 
 export const validateAddressSignature = async ({
   address,
   token,
   data,
   chainId,
+  safeRpcUrl,
 }: {
   address: string;
   token: string;
   data: TypedMessage<any>;
   chainId: number;
+  safeRpcUrl?: SafeRpcUrl,
 }): Promise<boolean> => {
   try {
-    const provider = getProvider(chainId); // [TODO Hanan], should expect it from signer.provider, or passed in client
+    const provider = getProvider(chainId,safeRpcUrl);
     if (provider) {
       const contractAddress = await isContractAvailable(address, provider);
       if (contractAddress) {
@@ -32,6 +35,7 @@ export const validateAddressSignature = async ({
           data: data as unknown as EIP712TypedData,
           address,
           chainId,
+          safeRpcUrl
         });
       }
     }
@@ -69,16 +73,19 @@ export const validateSmartContractSignature = async ({
   data,
   address,
   chainId,
+  safeRpcUrl
 }: {
   token: string;
   data: EIP712TypedData;
   address: string;
   chainId: number;
+  safeRpcUrl?: SafeRpcUrl,
 }): Promise<boolean> => {
   try {
-    const provider = PROVIDER_MAP[chainId];
+    const safeProvider = safeRpcUrl ?? PROVIDER_MAP[chainId];
+
     const protocolKit = await Safe.init({
-      provider,
+      provider: safeProvider,
       safeAddress: address,
     });
     const messageHash = hashTypedData(data);

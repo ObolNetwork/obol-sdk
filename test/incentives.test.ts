@@ -183,7 +183,6 @@ describe('Client.incentives', () => {
     expect(
       incentivesHelpers.isClaimedFromMerkleDistributor,
     ).toHaveBeenCalledWith(
-      clientInstance.incentives.chainId,
       mockIncentivesData.contract_address,
       mockIncentivesData.index,
       {},
@@ -241,7 +240,6 @@ describe('Client.incentives', () => {
     expect(
       incentivesHelpers.isClaimedFromMerkleDistributor,
     ).toHaveBeenCalledWith(
-      clientWithoutSigner.incentives.chainId,
       mockIncentivesData.contract_address,
       mockIncentivesData.index,
       provider,

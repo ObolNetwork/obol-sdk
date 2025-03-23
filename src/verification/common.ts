@@ -1,7 +1,6 @@
 import { fromHexString } from '@chainsafe/ssz';
 import elliptic from 'elliptic';
 import { init } from '@chainsafe/bls';
-
 import {
   FORK_MAPPING,
   type ClusterDefinition,
@@ -9,6 +8,7 @@ import {
   type DepositData,
   type BuilderRegistrationMessage,
   type DistributedValidator,
+  type SafeRpcUrl,
 } from '../types.js';
 import * as semver from 'semver';
 import {
@@ -167,6 +167,7 @@ const validatePOSTConfigHashSigner = async (
   signature: string,
   configHash: string,
   chainId: FORK_MAPPING,
+  safeRpcUrl?: SafeRpcUrl
 ): Promise<boolean> => {
   try {
     const data = signCreatorConfigHashPayload(
@@ -179,6 +180,7 @@ const validatePOSTConfigHashSigner = async (
       token: signature,
       data,
       chainId,
+      safeRpcUrl,
     });
   } catch (err) {
     throw err;
@@ -190,6 +192,7 @@ const validatePUTConfigHashSigner = async (
   signature: string,
   configHash: string,
   chainId: number,
+  safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
     const data = signOperatorConfigHashPayload(
@@ -201,6 +204,7 @@ const validatePUTConfigHashSigner = async (
       token: signature,
       data,
       chainId,
+      safeRpcUrl,
     });
   } catch (err) {
     throw err;
@@ -212,6 +216,7 @@ const validateEnrSigner = async (
   signature: string,
   payload: string,
   chainId: number,
+  safeRpcUrl?: SafeRpcUrl
 ): Promise<boolean> => {
   try {
     const data = signEnrPayload({ enr: payload }, chainId);
@@ -221,6 +226,7 @@ const validateEnrSigner = async (
       token: signature,
       data,
       chainId,
+      safeRpcUrl,
     });
   } catch (err) {
     throw err;
@@ -230,6 +236,7 @@ const validateEnrSigner = async (
 const verifyDefinitionSignatures = async (
   clusterDefinition: ClusterDefinition,
   definitionType: DefinitionFlow,
+  safeRpcUrl?: SafeRpcUrl
 ): Promise<boolean> => {
   if (definitionType === DefinitionFlow.Charon) {
     return true;
@@ -239,6 +246,7 @@ const verifyDefinitionSignatures = async (
       clusterDefinition.creator.config_signature as string,
       clusterDefinition.config_hash,
       FORK_MAPPING[clusterDefinition.fork_version as keyof typeof FORK_MAPPING],
+      safeRpcUrl,
     );
 
     if (!isPOSTConfigHashSignerValid) {
@@ -254,8 +262,9 @@ const verifyDefinitionSignatures = async (
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
+        safeRpcUrl,
       );
 
       const isENRSignerValid = await validateEnrSigner(
@@ -263,8 +272,9 @@ const verifyDefinitionSignatures = async (
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
+        safeRpcUrl,
       );
 
       if (!isPUTConfigHashSignerValid || !isENRSignerValid) {
@@ -485,6 +495,7 @@ const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
 
 export const isValidClusterLock = async (
   clusterLock: ClusterLock,
+  safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
     const definitionType = definitionFlow(clusterLock.cluster_definition);
@@ -494,6 +505,7 @@ export const isValidClusterLock = async (
     const isValidDefinitionData = await verifyDefinitionSignatures(
       clusterLock.cluster_definition,
       definitionType,
+      safeRpcUrl,
     );
     if (!isValidDefinitionData) {
       return false;
