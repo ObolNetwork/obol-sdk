@@ -1,4 +1,5 @@
 import {
+  type Wallet,
   type ethers,
   type JsonRpcApiProvider,
   type JsonRpcProvider,
@@ -295,9 +296,9 @@ export type ClusterLock = {
 };
 
 /**
- * Incentives
+ * Claimable Obol Incentives
  */
-export type Incentives = {
+export type ClaimableIncentives = {
   /** Operator Address. */
   operator_address: string;
 
@@ -329,9 +330,14 @@ export type ProviderType =
   | ethers.BrowserProvider;
 
 /**
+ * Safe Wallet Provider Types
+ */
+export type SafeRpcUrl = string;
+
+/**
  * Signer Types
  */
-export type SignerType = Signer | JsonRpcSigner;
+export type SignerType = Signer | JsonRpcSigner | Wallet;
 
 /**
  * claimIncentives Response
