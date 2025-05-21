@@ -2,6 +2,7 @@ import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
 } from './constants';
+import { validateDepositAmounts } from './validators';
 
 export const operatorPayloadSchema = {
   type: 'object',
@@ -34,8 +35,17 @@ export const definitionSchema = {
             minLength: 42,
             maxLength: 42,
           },
+          enr: {
+            type: 'string',
+          },
+          config_signature: {
+            type: 'string',
+          },
+          enr_signature: {
+            type: 'string',
+          }
         },
-        required: ['address'],
+        required: [],
       },
     },
     validators: {
@@ -64,6 +74,20 @@ export const definitionSchema = {
       },
       validDepositAmounts: true,
     },
+    compounding: {
+      type: 'boolean',
+      default: true
+    },
+    target_gas_limit: {
+      type: 'number',
+      minimum: 1,
+      default: 36000000
+    },
+    consensus_protocol: {
+      type: 'string',
+      enum: ['qbft', ''],
+      default: ''
+    }
   },
   required: ['name', 'operators', 'validators'],
 };

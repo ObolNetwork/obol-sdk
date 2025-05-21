@@ -10,29 +10,28 @@ import {
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
 } from './constants';
 
-const validDepositAmounts = (data: boolean, deposits: string[]): boolean => {
-  let sum = 0;
-  // from ether togwei is same as from gwei to wei
-  const maxDeposit = Number(parseUnits('32', 'gwei'));
-  const minDeposit = Number(parseUnits('1', 'gwei'));
+const VALID_DEPOSIT_AMOUNTS = {
+  COMPOUNDING: [
+    Number(parseUnits('1', 'gwei')).toString(),
+    Number(parseUnits('32', 'gwei')).toString(),
+    Number(parseUnits('8', 'gwei')).toString(),
+    Number(parseUnits('256', 'gwei')).toString()
+  ],
+  NON_COMPOUNDING: [
+    Number(parseUnits('1', 'gwei')).toString(),
+    Number(parseUnits('32', 'gwei')).toString()
+  ]
+};
 
-  for (const element of deposits) {
-    const amountInGWei = Number(element);
+const validDepositAmounts = (data: boolean, deposits: string[], parent: any): boolean => {
+  // If deposits is null or empty, it's valid
+  if (!deposits || deposits.length === 0) return true;
 
-    if (
-      !Number.isInteger(amountInGWei) ||
-      amountInGWei > maxDeposit ||
-      amountInGWei < minDeposit
-    ) {
-      return false;
-    }
-    sum += amountInGWei;
-  }
-  if (sum / minDeposit !== 32) {
-    return false;
-  } else {
-    return true;
-  }
+  const isCompounding = parent?.compounding ?? true;
+  const validAmounts = isCompounding ? VALID_DEPOSIT_AMOUNTS.COMPOUNDING : VALID_DEPOSIT_AMOUNTS.NON_COMPOUNDING;
+
+  // Check if all amounts are in the valid list
+  return deposits.every((amount) => validAmounts.includes(amount));
 };
 
 const validateSplitRecipients = (
