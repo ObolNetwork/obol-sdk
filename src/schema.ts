@@ -25,18 +25,9 @@ export const definitionSchema = {
         properties: {
           address: {
             type: 'string',
-            oneOf: [
-              {
-                minLength: 42,
-                maxLength: 42
-              },
-              {
-                enum: [""]
-              }
-            ]
           },
         },
-        required: [],
+        required: ["address"],
       },
       validateUniqueAddresses: true
     },

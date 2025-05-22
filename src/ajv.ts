@@ -16,18 +16,13 @@ const VALID_DEPOSIT_AMOUNTS = [
 ]
 
 const validDepositAmounts = (
-  _: any,
-  data: any,
+  _: boolean,
+  deposit_amounts: string[],
 ): boolean => {
-  const deposits = Array.isArray(data?.deposit_amounts) ? data.deposit_amounts : [];
 
-  if (deposits.length === 0) return true;
+  if (deposit_amounts === null) return true;
 
-  const isCompounding = data?.compounding ?? true;
-  console.log(isCompounding, "isCompounding")
-  const validAmounts = VALID_DEPOSIT_AMOUNTS
-
-  return deposits.every((amount: string) => validAmounts.includes(amount));
+  return deposit_amounts.every((amount: string) => VALID_DEPOSIT_AMOUNTS.includes(amount));
 };
 
 const validateSplitRecipients = (
@@ -43,21 +38,29 @@ const validateSplitRecipients = (
 
 const validateUniqueAddresses = (
   _: boolean,
-  data: { operators: Array<{ address: string }> },
+  operators: Array<{ address: string }>,
 ): boolean => {
-  if (!data?.operators?.length) return true;
-  
-  // Get all non-empty addresses
-  const validAddresses = data.operators
-    .map(op => op.address)
-    .filter(addr => addr.length === 42);
-    
-  // If no valid addresses, validation passes
-  if (validAddresses.length === 0) return true;
-    
-  // Check if all valid addresses are unique
-  const uniqueAddresses = new Set(validAddresses);
-  return uniqueAddresses.size === validAddresses.length;
+
+  if (!operators) {
+    return false;
+  }
+
+  if (operators.length < 4) {
+    return false;
+  }
+
+  if (operators.every(op => op.address === "")) {
+    return true;
+  }
+
+  if (operators.some(op => op.address.length !== 42)) {
+    return false;
+  }
+
+  const addresses = operators.map(op => op.address);
+  const uniqueAddresses = new Set(addresses);
+  const isUnique = uniqueAddresses.size === addresses.length;
+  return isUnique;
 };
 
 const ajv = new Ajv({ allErrors: true, useDefaults: true, strict: false });

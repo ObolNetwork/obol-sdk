@@ -85,7 +85,7 @@ describe('Cluster Client', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        "Validation failed: /operators must NOT have fewer than 4 items",
+        "Validation failed: /operators must pass \"validateUniqueAddresses\" keyword validation, /operators must NOT have fewer than 4 items",
       );
     }
   });
@@ -114,7 +114,7 @@ describe('Cluster Client', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Schema compilation errors\', must pass "validDepositAmounts" keyword validation',
+        'Validation failed: /deposit_amounts must pass \"validDepositAmounts\" keyword validation',
       );
     }
   });

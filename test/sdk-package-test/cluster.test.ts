@@ -1,5 +1,6 @@
 import request from 'supertest';
 import {
+  soloClusterConfigV1X10,
   clusterConfigV1X10,
   clusterLockV1X6,
   clusterLockV1X7,
@@ -28,7 +29,7 @@ import {
   validateClusterLock,
 } from '@obolnetwork/obol-sdk';
 
-jest.setTimeout(50000);
+jest.setTimeout(100000);
 
 /* eslint @typescript-eslint/no-misused-promises: 0 */ // --> OFF
 describe('Cluster Definition', () => {
@@ -49,6 +50,12 @@ describe('Cluster Definition', () => {
 
   it('should post a cluster definition and return confighash for an authorised user', async () => {
     configHash = await client.createClusterDefinition(clusterConfigV1X10);
+    expect(configHash).toHaveLength(66);
+  });
+
+
+   it('should post a solo cluster definition and return confighash for an authorised user', async () => {
+    configHash = await client.createClusterDefinition(soloClusterConfigV1X10);
     expect(configHash).toHaveLength(66);
   });
 

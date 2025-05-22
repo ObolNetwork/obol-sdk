@@ -213,25 +213,6 @@ export const clusterLockV1X7 = {
 
 // v1.8.0
 
-export const clusterConfigV1X10 = {
-  name: 'testSDK',
-  operators: [
-    { address: '0xC35CfCd67b9C27345a54EDEcC1033F2284148c81' },
-    { address: '0x33807D6F1DCe44b9C599fFE03640762A6F08C496' },
-    { address: '0xc6e76F72Ea672FAe05C357157CfC37720F0aF26f' },
-    { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966' },
-  ],
-  validators: [
-    {
-      fee_recipient_address: '0x3CD4958e76C317abcEA19faDd076348808424F99',
-      withdrawal_address: '0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e',
-    },
-  ],
-  deposit_amounts: ['8000000000', '16000000000', '8000000000'],
-  compounding: true,
-  target_gas_limit: 36000000,
-  consensus_protocol: ""
-};
 export const clusterLockV1X8 = {
   cluster_definition: {
     name: 'xxxx',
@@ -614,6 +595,43 @@ export const clusterLockWithSafe = {
     '0xf3633a8e59db2e8d253ffe1b284f9edab1c1c1aca6288c3a3b2e9cb4eb7e789e23366fc325274f13b7311b9faf53665c80b5cb1f93810713f7b094cd2bec1d9900',
     '0x4067921a5257efe4ceb103f2129faaa7a502781157b3b54e5efca559c558c2b43b89f30962e87df88fbf62250049a31888fcd62735d54b7553e5dc75c3b6ae0901',
   ],
+};
+
+export const clusterConfigV1X10 = {
+  name: 'testSDK',
+  operators: [
+    { address: '0xC35CfCd67b9C27345a54EDEcC1033F2284148c81' },
+    { address: '0x33807D6F1DCe44b9C599fFE03640762A6F08C496' },
+    { address: '0xc6e76F72Ea672FAe05C357157CfC37720F0aF26f' },
+    { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966' },
+  ],
+  validators: [
+    {
+      fee_recipient_address: '0x3CD4958e76C317abcEA19faDd076348808424F99',
+      withdrawal_address: '0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e',
+    },
+  ],
+  deposit_amounts: ['8000000000', '32000000000', '8000000000'],
+  compounding: true,
+  target_gas_limit: 36000000,
+  consensus_protocol: ""
+};
+
+export const soloClusterConfigV1X10 = {
+  name: 'testSDK',
+  operators: [
+    { address: '' },
+    { address: '' },
+    { address: '' },
+    { address: '' },
+  ],
+  validators: [
+    {
+      fee_recipient_address: '0x3CD4958e76C317abcEA19faDd076348808424F99',
+      withdrawal_address: '0xE0C5ceA4D3869F156717C66E188Ae81C80914a6e',
+    },
+  ],
+
 };
 
 export const clusterLockV1X10 = {
