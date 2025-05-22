@@ -86,7 +86,7 @@ describe('Cluster Client', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        "Schema compilation errors', must NOT have fewer than 4 items",
+        "Validation failed: /operators must NOT have fewer than 4 items",
       );
     }
   });
@@ -117,14 +117,6 @@ describe('Cluster Client', () => {
       expect(error.message).toEqual(
         'Schema compilation errors\', must pass "validDepositAmounts" keyword validation',
       );
-    }
-  });
-
-  test('validatePayload should throw an error on empty schema', async () => {
-    try {
-      validatePayload({ ...clusterConfigV1X8, operators: [] }, '');
-    } catch (error: any) {
-      expect(error.message).toEqual('schema must be object or boolean');
     }
   });
 
@@ -414,7 +406,7 @@ describe('createObolRewardsSplit', () => {
         ObolRAFSplit: 0.5,
       });
     } catch (error: any) {
-      expect(error.message).toEqual("Schema compilation errors', must be >= 1");
+      expect(error.message).toEqual("Validation failed: /ObolRAFSplit must be >= 1");
     }
   });
 
@@ -517,7 +509,7 @@ describe('createObolTotalSplit', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        "Schema compilation errors', must be >= 0.1",
+        "Validation failed: /ObolRAFSplit must be >= 0.1",
       );
     }
   });

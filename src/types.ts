@@ -105,6 +105,15 @@ export type ClusterPayload = {
 
   /** The cluster partial deposits in gwei or 32000000000. */
   deposit_amounts?: string[] | null;
+
+  /** A withdrawal mechanism with 0x02 withdrawal credentials. */
+  compounding?: boolean;
+
+  /** The target gas limit where default is 36M. */
+  target_gas_limit?: number;
+
+  /** The consensus protocol e.g qbft. */
+  consensus_protocol?: string;
 };
 
 /**
@@ -142,13 +151,13 @@ export interface ClusterDefinition extends ClusterPayload {
   definition_hash?: string;
 
   /** The consensus protocol e.g qbft. */
-  consensus_protocol: string;
+  consensus_protocol?: string;
 
   /** The target gas limit where default is 36M. */
-  target_gas_limit: number;
+  target_gas_limit?: number;
 
   /** A withdrawal mechanism with 0x02 withdrawal credentials. */
-  compounding: boolean;
+  compounding?: boolean;
 }
 
 /**

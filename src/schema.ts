@@ -1,18 +1,14 @@
+import { ZeroAddress } from 'ethers';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
 } from './constants';
-import { validateDepositAmounts } from './validators';
 
 export const operatorPayloadSchema = {
   type: 'object',
   properties: {
-    version: {
-      type: 'string',
-    },
-    enr: {
-      type: 'string',
-    },
+    version: { type: 'string' },
+    enr: { type: 'string' },
   },
   required: ['version', 'enr'],
 };
@@ -20,9 +16,7 @@ export const operatorPayloadSchema = {
 export const definitionSchema = {
   type: 'object',
   properties: {
-    name: {
-      type: 'string',
-    },
+    name: { type: 'string' },
     operators: {
       type: 'array',
       minItems: 4,
@@ -35,15 +29,9 @@ export const definitionSchema = {
             minLength: 42,
             maxLength: 42,
           },
-          enr: {
-            type: 'string',
-          },
-          config_signature: {
-            type: 'string',
-          },
-          enr_signature: {
-            type: 'string',
-          }
+          enr: { type: 'string' },
+          config_signature: { type: 'string' },
+          enr_signature: { type: 'string' },
         },
         required: [],
       },
@@ -67,27 +55,28 @@ export const definitionSchema = {
       },
     },
     deposit_amounts: {
-      type: 'array',
+      type: ['array', 'null'],
       items: {
         type: 'string',
         pattern: '^[0-9]+$',
       },
       validDepositAmounts: true,
+      default: null,
     },
     compounding: {
       type: 'boolean',
-      default: true
+      default: true,
     },
     target_gas_limit: {
       type: 'number',
       minimum: 1,
-      default: 36000000
+      default: 36000000,
     },
     consensus_protocol: {
       type: 'string',
       enum: ['qbft', ''],
-      default: ''
-    }
+      default: '',
+    },
   },
   required: ['name', 'operators', 'validators'],
 };
@@ -104,9 +93,7 @@ export const totalSplitterPayloadSchema = {
             type: 'string',
             pattern: '^0x[a-fA-F0-9]{40}$',
           },
-          percentAllocation: {
-            type: 'number',
-          },
+          percentAllocation: { type: 'number' },
         },
         required: ['account', 'percentAllocation'],
       },
@@ -114,15 +101,18 @@ export const totalSplitterPayloadSchema = {
     ObolRAFSplit: {
       type: 'number',
       minimum: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+      default: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
     },
     distributorFee: {
       type: 'number',
       maximum: 10,
       multipleOf: 0.01,
+      default: 0,
     },
     controllerAddress: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
+      default: ZeroAddress,
     },
     validateSplitRecipients: true,
   },
@@ -136,14 +126,14 @@ export const rewardsSplitterPayloadSchema = {
     ObolRAFSplit: {
       type: 'number',
       minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+      default: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     },
     recoveryAddress: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
+      default: ZeroAddress,
     },
-    etherAmount: {
-      type: 'number',
-    },
+    etherAmount: { type: 'number' },
     principalRecipient: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',

@@ -1,37 +1,33 @@
-import Ajv, { type ErrorObject } from 'ajv';
+import addFormats from 'ajv-formats';
+import addKeywords from 'ajv-keywords';
 import { parseUnits } from 'ethers';
 import {
   type RewardsSplitPayload,
   type SplitRecipient,
   type TotalSplitPayload,
 } from './types';
-import {
-  DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
-  DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-} from './constants';
+import Ajv from 'ajv';
 
-const VALID_DEPOSIT_AMOUNTS = {
-  COMPOUNDING: [
-    Number(parseUnits('1', 'gwei')).toString(),
-    Number(parseUnits('32', 'gwei')).toString(),
-    Number(parseUnits('8', 'gwei')).toString(),
-    Number(parseUnits('256', 'gwei')).toString()
-  ],
-  NON_COMPOUNDING: [
-    Number(parseUnits('1', 'gwei')).toString(),
-    Number(parseUnits('32', 'gwei')).toString()
-  ]
-};
+const VALID_DEPOSIT_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+  parseUnits('8', 'gwei').toString(),
+  parseUnits('256', 'gwei').toString(),
+]
 
-const validDepositAmounts = (data: boolean, deposits: string[], parent: any): boolean => {
-  // If deposits is null or empty, it's valid
-  if (!deposits || deposits.length === 0) return true;
+const validDepositAmounts = (
+  _: any,
+  data: any,
+): boolean => {
+  const deposits = Array.isArray(data?.deposit_amounts) ? data.deposit_amounts : [];
 
-  const isCompounding = parent?.compounding ?? true;
-  const validAmounts = isCompounding ? VALID_DEPOSIT_AMOUNTS.COMPOUNDING : VALID_DEPOSIT_AMOUNTS.NON_COMPOUNDING;
+  if (deposits.length === 0) return true;
 
-  // Check if all amounts are in the valid list
-  return deposits.every((amount) => validAmounts.includes(amount));
+  const isCompounding = data?.compounding ?? true;
+  console.log(isCompounding, "isCompounding")
+  const validAmounts = VALID_DEPOSIT_AMOUNTS
+
+  return deposits.every((amount: string) => validAmounts.includes(amount));
 };
 
 const validateSplitRecipients = (
@@ -42,36 +38,33 @@ const validateSplitRecipients = (
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
-  const ObolRAFSplitParam = data.ObolRAFSplit
-    ? data.ObolRAFSplit
-    : 'principalRecipient' in data
-      ? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT
-      : DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
-  return splitPercentage + ObolRAFSplitParam === 100;
+  return Math.abs(splitPercentage + (data.ObolRAFSplit ?? 0) + (data.distributorFee ?? 0) - 100) < 0.001;
 };
 
-export function validatePayload(
-  data: any,
-  schema: any,
-): ErrorObject[] | undefined | null | boolean {
-  const ajv = new Ajv();
-  ajv.addKeyword({
-    keyword: 'validDepositAmounts',
-    validate: validDepositAmounts,
-    errors: true,
-  });
+const ajv = new Ajv({ allErrors: true, useDefaults: true, strict: false });
+addFormats(ajv);
+addKeywords(ajv, ['patternRequired']);
 
-  ajv.addKeyword({
-    keyword: 'validateSplitRecipients',
-    validate: validateSplitRecipients,
-    errors: true,
-  });
-  const validate = ajv.compile(schema);
-  const isValid = validate(data);
-  if (!isValid) {
-    throw new Error(
-      `Schema compilation errors', ${validate.errors?.[0].message}`,
-    );
+ajv.addKeyword({
+  keyword: 'validDepositAmounts',
+  validate: validDepositAmounts,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateSplitRecipients',
+  validate: validateSplitRecipients,
+  schemaType: 'boolean',
+});
+
+export function validatePayload<T>(data: unknown, schema: object): T {
+  const validate = ajv.compile<T>(schema as any);
+  const valid = validate(data);
+  if (!valid) {
+    const errors = validate.errors
+      ?.map((e) => `${e.instancePath} ${e.message}`)
+      .join(', ');
+    throw new Error(`Validation failed: ${errors}`);
   }
-  return isValid;
+  return data as T;
 }

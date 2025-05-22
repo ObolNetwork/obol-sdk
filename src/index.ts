@@ -174,16 +174,16 @@ export class Client extends Base {
     principalRecipient,
     etherAmount,
     ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
-    distributorFee = 0,
-    controllerAddress = ZeroAddress,
-    recoveryAddress = ZeroAddress,
+    distributorFee,
+    controllerAddress,
+    recoveryAddress,
   }: RewardsSplitPayload): Promise<ClusterValidator> {
     // This method doesnt require T&C signature
     if (!this.signer) {
       throw new Error('Signer is required in createObolRewardsSplit');
     }
 
-    validatePayload(
+    const validatedPayload = validatePayload<Required<RewardsSplitPayload>>(
       {
         splitRecipients,
         principalRecipient,
@@ -234,10 +234,10 @@ export class Client extends Base {
     const retroActiveFundingRecipient = {
       account:
         CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
-      percentAllocation: ObolRAFSplit,
+      percentAllocation: validatedPayload.ObolRAFSplit,
     };
 
-    const copiedSplitRecipients = [...splitRecipients];
+    const copiedSplitRecipients = [...validatedPayload.splitRecipients];
     copiedSplitRecipients.push(retroActiveFundingRecipient);
 
     const { accounts, percentAllocations } = formatSplitRecipients(
@@ -249,8 +249,8 @@ export class Client extends Base {
       accounts,
       percentAllocations,
       chainId: this.chainId,
-      distributorFee,
-      controllerAddress,
+      distributorFee: validatedPayload.distributorFee,
+      controllerAddress: validatedPayload.controllerAddress,
     });
 
     const isSplitterDeployed = await isContractAvailable(
@@ -265,12 +265,12 @@ export class Client extends Base {
         predictedSplitterAddress,
         accounts,
         percentAllocations,
-        principalRecipient,
-        etherAmount,
+        principalRecipient: validatedPayload.principalRecipient,
+        etherAmount: validatedPayload.etherAmount,
         chainId: this.chainId,
-        distributorFee,
-        controllerAddress,
-        recoveryAddress,
+        distributorFee: validatedPayload.distributorFee,
+        controllerAddress: validatedPayload.controllerAddress,
+        recoveryAddress: validatedPayload.recoveryAddress,
       });
 
     return { withdrawal_address, fee_recipient_address };
@@ -292,16 +292,16 @@ export class Client extends Base {
   // add the example reference
   async createObolTotalSplit({
     splitRecipients,
-    ObolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-    distributorFee = 0,
-    controllerAddress = ZeroAddress,
+    ObolRAFSplit,
+    distributorFee,
+    controllerAddress,
   }: TotalSplitPayload): Promise<ClusterValidator> {
     // This method doesnt require T&C signature
     if (!this.signer) {
       throw new Error('Signer is required in createObolTotalSplit');
     }
 
-    validatePayload(
+    const validatedPayload = validatePayload<Required<TotalSplitPayload>>(
       {
         splitRecipients,
         ObolRAFSplit,
@@ -333,10 +333,10 @@ export class Client extends Base {
     const retroActiveFundingRecipient = {
       account:
         CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
-      percentAllocation: ObolRAFSplit,
+      percentAllocation: validatedPayload.ObolRAFSplit,
     };
 
-    const copiedSplitRecipients = [...splitRecipients];
+    const copiedSplitRecipients = [...validatedPayload.splitRecipients];
     copiedSplitRecipients.push(retroActiveFundingRecipient);
 
     const { accounts, percentAllocations } = formatSplitRecipients(
@@ -347,8 +347,8 @@ export class Client extends Base {
       accounts,
       percentAllocations,
       chainId: this.chainId,
-      distributorFee,
-      controllerAddress,
+      distributorFee: validatedPayload.distributorFee,
+      controllerAddress: validatedPayload.controllerAddress,
     });
 
     const isSplitterDeployed = await isContractAvailable(
@@ -362,8 +362,8 @@ export class Client extends Base {
         accounts,
         percentAllocations,
         chainId: this.chainId,
-        distributorFee,
-        controllerAddress,
+        distributorFee: validatedPayload.distributorFee,
+        controllerAddress: validatedPayload.controllerAddress,
       });
       return {
         withdrawal_address: splitterAddress,
@@ -411,20 +411,17 @@ export class Client extends Base {
       throw new Error('Signer is required in createClusterDefinition');
     }
 
-    validatePayload(newCluster, definitionSchema);
+    const validatedCluster = validatePayload<ClusterPayload>(newCluster, definitionSchema);
 
     const clusterConfig: Partial<ClusterDefinition> = {
-      ...newCluster,
+      ...validatedCluster,
       fork_version: this.fork_version,
       dkg_algorithm: DKG_ALGORITHM,
       version: CONFIG_VERSION,
       uuid: uuidv4(),
       timestamp: new Date().toISOString(),
-      threshold: Math.ceil((2 * newCluster.operators.length) / 3),
-      num_validators: newCluster.validators.length,
-      deposit_amounts: newCluster.deposit_amounts
-        ? newCluster.deposit_amounts
-        : ['32000000000'],
+      threshold: Math.ceil((2 * validatedCluster.operators.length) / 3),
+      num_validators: validatedCluster.validators.length,
     };
     try {
       const address = await this.signer.getAddress();
@@ -479,7 +476,7 @@ export class Client extends Base {
       throw new Error('Signer is required in acceptClusterDefinition');
     }
 
-    validatePayload(operatorPayload, operatorPayloadSchema);
+    const validatedPayload = validatePayload<OperatorPayload>(operatorPayload, operatorPayloadSchema);
 
     try {
       const address = await this.signer.getAddress();
@@ -492,11 +489,11 @@ export class Client extends Base {
       const operatorENRSignature = await this.signer.signTypedData(
         Domain(this.chainId),
         EnrSigningTypes,
-        { enr: operatorPayload.enr },
+        { enr: validatedPayload.enr },
       );
 
       const operatorData: OperatorPayload = {
-        ...operatorPayload,
+        ...validatedPayload,
         address,
         enr_signature: operatorENRSignature,
         fork_version: this.fork_version,
