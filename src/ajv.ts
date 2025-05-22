@@ -41,6 +41,25 @@ const validateSplitRecipients = (
   return Math.abs(splitPercentage + (data.ObolRAFSplit ?? 0) + (data.distributorFee ?? 0) - 100) < 0.001;
 };
 
+const validateUniqueAddresses = (
+  _: boolean,
+  data: { operators: Array<{ address: string }> },
+): boolean => {
+  if (!data?.operators?.length) return true;
+  
+  // Get all non-empty addresses
+  const validAddresses = data.operators
+    .map(op => op.address)
+    .filter(addr => addr.length === 42);
+    
+  // If no valid addresses, validation passes
+  if (validAddresses.length === 0) return true;
+    
+  // Check if all valid addresses are unique
+  const uniqueAddresses = new Set(validAddresses);
+  return uniqueAddresses.size === validAddresses.length;
+};
+
 const ajv = new Ajv({ allErrors: true, useDefaults: true, strict: false });
 addFormats(ajv);
 addKeywords(ajv, ['patternRequired']);
@@ -54,6 +73,12 @@ ajv.addKeyword({
 ajv.addKeyword({
   keyword: 'validateSplitRecipients',
   validate: validateSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateUniqueAddresses',
+  validate: validateUniqueAddresses,
   schemaType: 'boolean',
 });
 

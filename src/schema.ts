@@ -20,21 +20,25 @@ export const definitionSchema = {
     operators: {
       type: 'array',
       minItems: 4,
-      uniqueItems: true,
       items: {
         type: 'object',
         properties: {
           address: {
             type: 'string',
-            minLength: 42,
-            maxLength: 42,
+            oneOf: [
+              {
+                minLength: 42,
+                maxLength: 42
+              },
+              {
+                enum: [""]
+              }
+            ]
           },
-          enr: { type: 'string' },
-          config_signature: { type: 'string' },
-          enr_signature: { type: 'string' },
         },
         required: [],
       },
+      validateUniqueAddresses: true
     },
     validators: {
       type: 'array',

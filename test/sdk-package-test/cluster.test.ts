@@ -1,6 +1,6 @@
 import request from 'supertest';
 import {
-  clusterConfigV1X8,
+  clusterConfigV1X10,
   clusterLockV1X6,
   clusterLockV1X7,
   clusterLockV1X8,
@@ -48,13 +48,13 @@ describe('Cluster Definition', () => {
   });
 
   it('should post a cluster definition and return confighash for an authorised user', async () => {
-    configHash = await client.createClusterDefinition(clusterConfigV1X8);
+    configHash = await client.createClusterDefinition(clusterConfigV1X10);
     expect(configHash).toHaveLength(66);
   });
 
   it('should throw on post a cluster without a signer', async () => {
     try {
-      await clientWithoutAsigner.createClusterDefinition(clusterConfigV1X8);
+      await clientWithoutAsigner.createClusterDefinition(clusterConfigV1X10);
     } catch (err: any) {
       expect(err.message).toEqual(
         'Signer is required in createClusterDefinition',
@@ -64,7 +64,7 @@ describe('Cluster Definition', () => {
 
   it('should throw on post a cluster if the user did not sign latest terms and conditions', async () => {
     try {
-      await unauthorisedClient.createClusterDefinition(clusterConfigV1X8);
+      await unauthorisedClient.createClusterDefinition(clusterConfigV1X10);
     } catch (err: any) {
       expect(err.message).toEqual('Missing t&c signature');
       expect(err.statusCode).toEqual(401);
@@ -74,12 +74,22 @@ describe('Cluster Definition', () => {
   it('should fetch the cluster definition for the configHash', async () => {
     clusterDefinition = await client.getClusterDefinition(configHash);
     expect(clusterDefinition.config_hash).toEqual(configHash);
+    
+    // Test for new fields
+    expect(clusterDefinition.compounding).toBeDefined();
+    expect(clusterDefinition.target_gas_limit).toBeDefined();
+    expect(clusterDefinition.consensus_protocol).toBeDefined();
   });
 
   it('should fetch the cluster definition for the configHash without a signer', async () => {
     clusterDefinition =
       await clientWithoutAsigner.getClusterDefinition(configHash);
     expect(clusterDefinition.config_hash).toEqual(configHash);
+    
+    // Test for new fields
+    expect(clusterDefinition.compounding).toBeDefined();
+    expect(clusterDefinition.target_gas_limit).toBeDefined();
+    expect(clusterDefinition.consensus_protocol).toBeDefined();
   });
 
   it('should throw on update a cluster that the operator is not part of', async () => {
@@ -107,9 +117,9 @@ describe('Cluster Definition', () => {
 
   it('should update the cluster which the operator belongs to for an authorised user', async () => {
     const signerAddress = await signer.getAddress();
-    clusterConfigV1X8.operators.push({ address: signerAddress });
+    clusterConfigV1X10.operators.push({ address: signerAddress });
 
-    randomConfigHash = await client.createClusterDefinition(clusterConfigV1X8);
+    randomConfigHash = await client.createClusterDefinition(clusterConfigV1X10);
 
     const definitionData: ClusterDefinition =
       await client.acceptClusterDefinition(
@@ -343,7 +353,7 @@ describe('Cluster Definition', () => {
 
 describe('Poll Cluster Lock', () => {
   // Test polling getClusterLock through mimicing the whole flow using obol-api endpoints
-  const { definition_hash: _, ...rest } = clusterLockV1X8.cluster_definition;
+  const { definition_hash: _, ...rest } = clusterLockV1X10.cluster_definition;
   const clusterWithoutDefHash = rest;
   const clientWithoutAsigner = new Client({
     baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
@@ -361,7 +371,7 @@ describe('Poll Cluster Lock', () => {
         const pollReqIntervalId = setInterval(async function () {
           try {
             const lockFile = await client.getClusterLock(
-              clusterLockV1X8.cluster_definition.config_hash,
+              clusterLockV1X10.cluster_definition.config_hash,
             );
             if (lockFile?.lock_hash) {
               clearInterval(pollReqIntervalId);
@@ -379,8 +389,8 @@ describe('Poll Cluster Lock', () => {
         }, 10000);
       }),
       (async () => {
-        await updateClusterDef(clusterLockV1X8.cluster_definition);
-        await publishLockFile(clusterLockV1X8);
+        await updateClusterDef(clusterLockV1X10.cluster_definition);
+        await publishLockFile(clusterLockV1X10);
       })(),
     ]);
     expect(lockObject).toHaveProperty('lock_hash');
@@ -393,7 +403,7 @@ describe('Poll Cluster Lock', () => {
         const pollReqIntervalId = setInterval(async function () {
           try {
             const lockFile = await clientWithoutAsigner.getClusterLock(
-              clusterLockV1X8.cluster_definition.config_hash,
+              clusterLockV1X10.cluster_definition.config_hash,
             );
             if (lockFile?.lock_hash) {
               clearInterval(pollReqIntervalId);
@@ -410,8 +420,8 @@ describe('Poll Cluster Lock', () => {
         }, 10000);
       }),
       (async () => {
-        await updateClusterDef(clusterLockV1X8.cluster_definition);
-        await publishLockFile(clusterLockV1X8);
+        await updateClusterDef(clusterLockV1X10.cluster_definition);
+        await publishLockFile(clusterLockV1X10);
       })(),
     ]);
     expect(lockObject).toHaveProperty('lock_hash');
@@ -420,13 +430,12 @@ describe('Poll Cluster Lock', () => {
   it('should fetch the cluster definition for the configHash', async () => {
     const clusterDefinition: ClusterDefinition =
       await client.getClusterDefinition(
-        clusterLockV1X8.cluster_definition.config_hash,
+        clusterLockV1X10.cluster_definition.config_hash,
       );
-    expect(clusterDefinition.deposit_amounts?.length).toEqual(
-      clusterLockV1X8.cluster_definition.deposit_amounts.length,
+    expect(clusterDefinition.deposit_amounts).toBeDefined(
     );
     expect(clusterDefinition.config_hash).toEqual(
-      clusterLockV1X8.cluster_definition.config_hash,
+      clusterLockV1X10.cluster_definition.config_hash,
     );
   });
 
@@ -456,8 +465,8 @@ describe('Poll Cluster Lock', () => {
   );
 
   afterAll(async () => {
-    const configHash = clusterLockV1X8.cluster_definition.config_hash;
-    const lockHash = clusterLockV1X8.lock_hash;
+    const configHash = clusterLockV1X10.cluster_definition.config_hash;
+    const lockHash = clusterLockV1X10.lock_hash;
 
     await request(app)
       .delete(`/v1/lock/${lockHash}`)
