@@ -54,6 +54,7 @@ export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
 export * from './verification/common.js';
+export * from './constants.js';
 export { Incentives } from './incentives.js';
 
 /**
