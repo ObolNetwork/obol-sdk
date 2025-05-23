@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.6...v3.0.0)
+
+- default to v1.10.0 [`#111`](https://github.com/ObolNetwork/obol-sdk/pull/111)
+
 #### [v2.4.6](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.5...v2.4.6)
 
+> 24 March 2025
+
+- chore(release): v2.4.6 [`#105`](https://github.com/ObolNetwork/obol-sdk/pull/105)
 - fix incentives type and accept rpcul in validateClusterLock [`#104`](https://github.com/ObolNetwork/obol-sdk/pull/104)
 
 #### [v2.4.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.4...v2.4.5)
