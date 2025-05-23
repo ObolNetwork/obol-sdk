@@ -27,7 +27,7 @@ export const definitionSchema = {
             type: 'string',
           },
         },
-        required: ["address"],
+        required: ['address'],
       },
       validateUniqueAddresses: true
     },

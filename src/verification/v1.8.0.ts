@@ -246,8 +246,6 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
     const validatorPublicShares = validator.public_shares;
     const distributedPublicKey = validator.distributed_public_key;
 
-
-
     // Needed in signature_aggregate verification
     for (const element of validatorPublicShares) {
       pubShares.push(fromHexString(element));
@@ -261,8 +259,8 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
         return false;
       }
       // Check that both arrays contain exactly the same elements
-      const sortedDepositAmounts = [...depositAmounts].sort();
-      const sortedPartialAmounts = [...partialDepositAmounts].sort();
+      const sortedDepositAmounts = [...depositAmounts].map(Number).sort((a, b) => a - b);
+      const sortedPartialAmounts = [...partialDepositAmounts].map(Number).sort((a, b) => a - b);
       if (!sortedDepositAmounts.every((amount, index) => amount === sortedPartialAmounts[index])) {
         return false;
       }

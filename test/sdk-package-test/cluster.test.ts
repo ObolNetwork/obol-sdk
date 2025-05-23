@@ -53,7 +53,6 @@ describe('Cluster Definition', () => {
     expect(configHash).toHaveLength(66);
   });
 
-
    it('should post a solo cluster definition and return confighash for an authorised user', async () => {
     configHash = await client.createClusterDefinition(soloClusterConfigV1X10);
     expect(configHash).toHaveLength(66);
@@ -81,7 +80,7 @@ describe('Cluster Definition', () => {
   it('should fetch the cluster definition for the configHash', async () => {
     clusterDefinition = await client.getClusterDefinition(configHash);
     expect(clusterDefinition.config_hash).toEqual(configHash);
-    
+
     // Test for new fields
     expect(clusterDefinition.compounding).toBeDefined();
     expect(clusterDefinition.target_gas_limit).toBeDefined();
@@ -92,7 +91,7 @@ describe('Cluster Definition', () => {
     clusterDefinition =
       await clientWithoutAsigner.getClusterDefinition(configHash);
     expect(clusterDefinition.config_hash).toEqual(configHash);
-    
+
     // Test for new fields
     expect(clusterDefinition.compounding).toBeDefined();
     expect(clusterDefinition.target_gas_limit).toBeDefined();

@@ -1,4 +1,3 @@
-import { ZeroAddress } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { Base } from './base.js';
 import {
@@ -16,7 +15,6 @@ import {
   AVAILABLE_SPLITTER_CHAINS,
   CHAIN_CONFIGURATION,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
-  DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
   OBOL_SDK_EMAIL,
 } from './constants.js';
 import { ConflictError } from './errors.js';

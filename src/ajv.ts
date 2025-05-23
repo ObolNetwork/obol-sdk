@@ -19,7 +19,6 @@ const validDepositAmounts = (
   _: boolean,
   deposit_amounts: string[],
 ): boolean => {
-
   if (deposit_amounts === null) return true;
 
   return deposit_amounts.every((amount: string) => VALID_DEPOSIT_AMOUNTS.includes(amount));
@@ -40,7 +39,6 @@ const validateUniqueAddresses = (
   _: boolean,
   operators: Array<{ address: string }>,
 ): boolean => {
-
   if (!operators) {
     return false;
   }
@@ -49,7 +47,7 @@ const validateUniqueAddresses = (
     return false;
   }
 
-  if (operators.every(op => op.address === "")) {
+  if (operators.every(op => op.address === '')) {
     return true;
   }
 
@@ -86,7 +84,7 @@ ajv.addKeyword({
 });
 
 export function validatePayload<T>(data: unknown, schema: object): T {
-  const validate = ajv.compile<T>(schema as any);
+  const validate = ajv.compile<T>(schema);
   const valid = validate(data);
   if (!valid) {
     const errors = validate.errors
@@ -94,5 +92,5 @@ export function validatePayload<T>(data: unknown, schema: object): T {
       .join(', ');
     throw new Error(`Validation failed: ${errors}`);
   }
-  return data as T;
+  return data;
 }

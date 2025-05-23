@@ -13,10 +13,10 @@ export const validateDepositAmounts: JSONSchemaType<any> = {
   },
   validate: function(data: any, parent: any) {
     if (!data || data.length === 0) return true;
-    
+
     const isCompounding = parent?.compounding ?? true;
     const validAmounts = isCompounding ? VALID_DEPOSIT_AMOUNTS.COMPOUNDING : VALID_DEPOSIT_AMOUNTS.NON_COMPOUNDING;
-    
+
     return data.every((amount: string) => validAmounts.includes(amount));
   }
-}; 
+};
