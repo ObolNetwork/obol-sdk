@@ -8,23 +8,17 @@ import {
 } from './types';
 import Ajv from 'ajv';
 
-const VALID_DEPOSIT_AMOUNTS = [
+export const VALID_DEPOSIT_AMOUNTS = [
   parseUnits('1', 'gwei').toString(),
   parseUnits('32', 'gwei').toString(),
   parseUnits('8', 'gwei').toString(),
   parseUnits('256', 'gwei').toString(),
 ];
 
-const validDepositAmounts = (
-  _: boolean,
-  deposit_amounts: string[],
-): boolean => {
-  if (deposit_amounts === null) return true;
-
-  return deposit_amounts.every((amount: string) =>
-    VALID_DEPOSIT_AMOUNTS.includes(amount),
-  );
-};
+export const VALID_NON_COMPOUNDING_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+];
 
 const validateSplitRecipients = (
   _: boolean,
@@ -70,15 +64,14 @@ const validateUniqueAddresses = (
   return isUnique;
 };
 
-const ajv = new Ajv({ allErrors: true, useDefaults: true, strict: false });
+const ajv = new Ajv({
+  allErrors: true,
+  useDefaults: true,
+  strict: false,
+  $data: true,
+});
 addFormats(ajv);
 addKeywords(ajv, ['patternRequired']);
-
-ajv.addKeyword({
-  keyword: 'validDepositAmounts',
-  validate: validDepositAmounts,
-  schemaType: 'boolean',
-});
 
 ajv.addKeyword({
   keyword: 'validateSplitRecipients',

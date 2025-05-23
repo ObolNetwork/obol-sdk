@@ -3,6 +3,7 @@ import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
 } from './constants';
+import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv';
 
 export const operatorPayloadSchema = {
   type: 'object',
@@ -55,7 +56,19 @@ export const definitionSchema = {
         type: 'string',
         pattern: '^[0-9]+$',
       },
-      validDepositAmounts: true,
+      if: {
+        $data: '1/compounding',
+      },
+      then: {
+        items: {
+          enum: VALID_DEPOSIT_AMOUNTS,
+        },
+      },
+      else: {
+        items: {
+          enum: VALID_NON_COMPOUNDING_AMOUNTS,
+        },
+      },
       default: null,
     },
     compounding: {

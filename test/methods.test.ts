@@ -114,7 +114,7 @@ describe('Cluster Client', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Validation failed: /deposit_amounts must pass "validDepositAmounts" keyword validation',
+        'Validation failed: /deposit_amounts/0 must be equal to one of the allowed values, /deposit_amounts must match "then" schema',
       );
     }
   });
