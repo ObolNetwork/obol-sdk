@@ -7,6 +7,10 @@ import {
   type TotalSplitPayload,
 } from './types';
 import Ajv from 'ajv';
+import {
+  DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+  DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+} from './constants';
 
 export const VALID_DEPOSIT_AMOUNTS = [
   parseUnits('1', 'gwei').toString(),
@@ -20,15 +24,31 @@ export const VALID_NON_COMPOUNDING_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
 ];
 
-const validateSplitRecipients = (
+// They dont see defaults set in schema
+const validateRewardsSplitRecipients = (
   _: boolean,
-  data: RewardsSplitPayload | TotalSplitPayload,
+  data: RewardsSplitPayload,
 ): boolean => {
+  const obolRAFSplit =
+    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
   const splitPercentage = data.splitRecipients.reduce(
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
-  return splitPercentage + (data.ObolRAFSplit ?? 0) === 100;
+  return splitPercentage + obolRAFSplit === 100;
+};
+
+const validateTotalSplitRecipients = (
+  _: boolean,
+  data: TotalSplitPayload,
+): boolean => {
+  const obolRAFSplit =
+    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
+  const splitPercentage = data.splitRecipients.reduce(
+    (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
+    0,
+  );
+  return splitPercentage + obolRAFSplit === 100;
 };
 
 const validateUniqueAddresses = (
@@ -67,8 +87,14 @@ addFormats(ajv);
 addKeywords(ajv, ['patternRequired']);
 
 ajv.addKeyword({
-  keyword: 'validateSplitRecipients',
-  validate: validateSplitRecipients,
+  keyword: 'validateRewardsSplitRecipients',
+  validate: validateRewardsSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateTotalSplitRecipients',
+  validate: validateTotalSplitRecipients,
   schemaType: 'boolean',
 });
 

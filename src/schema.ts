@@ -122,13 +122,13 @@ export const totalSplitterPayloadSchema = {
       pattern: '^0x[a-fA-F0-9]{40}$',
       default: ZeroAddress,
     },
-    validateSplitRecipients: true,
   },
+  validateTotalSplitRecipients: true,
   required: ['splitRecipients'],
 };
 
 export const rewardsSplitterPayloadSchema = {
-  ...totalSplitterPayloadSchema,
+  type: 'object',
   properties: {
     ...totalSplitterPayloadSchema.properties,
     ObolRAFSplit: {
@@ -147,5 +147,6 @@ export const rewardsSplitterPayloadSchema = {
       pattern: '^0x[a-fA-F0-9]{40}$',
     },
   },
+  validateRewardsSplitRecipients: true,
   required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
 };

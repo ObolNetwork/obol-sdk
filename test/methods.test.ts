@@ -394,7 +394,7 @@ describe('createObolRewardsSplit', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Schema compilation errors\', must pass "validateSplitRecipients" keyword validation',
+        'Validation failed:  must pass "validateRewardsSplitRecipients" keyword validation',
       );
     }
   });
@@ -409,7 +409,7 @@ describe('createObolRewardsSplit', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Validation failed: /ObolRAFSplit must be >= 1',
+        'Validation failed:  must pass "validateRewardsSplitRecipients" keyword validation, /ObolRAFSplit must be >= 1',
       );
     }
   });
@@ -500,7 +500,7 @@ describe('createObolTotalSplit', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Schema compilation errors\', must pass "validateSplitRecipients" keyword validation',
+        'Validation failed:  must pass "validateTotalSplitRecipients" keyword validation',
       );
     }
   });
@@ -513,7 +513,7 @@ describe('createObolTotalSplit', () => {
       });
     } catch (error: any) {
       expect(error.message).toEqual(
-        'Validation failed: /ObolRAFSplit must be >= 0.1',
+        'Validation failed:  must pass "validateTotalSplitRecipients" keyword validation, /ObolRAFSplit must be >= 0.1',
       );
     }
   });
@@ -521,7 +521,7 @@ describe('createObolTotalSplit', () => {
   it('should return the correct withdrawal and fee recipient addresses and ObolRAFSplit', async () => {
     const result = await clientInstance.createObolTotalSplit({
       splitRecipients: mockSplitRecipients,
-      ObolRAFSplit: 0.5,
+      ObolRAFSplit: 0.1,
     });
 
     // 0xPredictedAddress and not 0xSplitterAddress since were mocking isContractAvailable response to be true
