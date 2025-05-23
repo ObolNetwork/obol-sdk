@@ -53,7 +53,7 @@ describe('Cluster Definition', () => {
     expect(configHash).toHaveLength(66);
   });
 
-   it('should post a solo cluster definition and return confighash for an authorised user', async () => {
+  it('should post a solo cluster definition and return confighash for an authorised user', async () => {
     configHash = await client.createClusterDefinition(soloClusterConfigV1X10);
     expect(configHash).toHaveLength(66);
   });
@@ -438,8 +438,7 @@ describe('Poll Cluster Lock', () => {
       await client.getClusterDefinition(
         clusterLockV1X10.cluster_definition.config_hash,
       );
-    expect(clusterDefinition.deposit_amounts).toBeDefined(
-    );
+    expect(clusterDefinition.deposit_amounts).toBeDefined();
     expect(clusterDefinition.config_hash).toEqual(
       clusterLockV1X10.cluster_definition.config_hash,
     );

@@ -29,7 +29,7 @@ export const definitionSchema = {
         },
         required: ['address'],
       },
-      validateUniqueAddresses: true
+      validateUniqueAddresses: true,
     },
     validators: {
       type: 'array',

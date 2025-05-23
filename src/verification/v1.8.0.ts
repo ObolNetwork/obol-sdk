@@ -117,20 +117,20 @@ export const hashClusterDefinitionV1X8 = (
     return configOnly
       ? { address: fromHexString(operator.address) }
       : {
-        address: fromHexString(operator.address),
-        enr: strToUint8Array(operator.enr as string),
-        config_signature: fromHexString(operator.config_signature as string),
-        enr_signature: fromHexString(operator.enr_signature as string),
-      };
+          address: fromHexString(operator.address),
+          enr: strToUint8Array(operator.enr as string),
+          config_signature: fromHexString(operator.config_signature as string),
+          enr_signature: fromHexString(operator.enr_signature as string),
+        };
   });
   val.creator = configOnly
     ? { address: fromHexString(cluster.creator.address) }
     : {
-      address: fromHexString(cluster.creator.address),
-      config_signature: fromHexString(
-        cluster.creator.config_signature as string,
-      ),
-    };
+        address: fromHexString(cluster.creator.address),
+        config_signature: fromHexString(
+          cluster.creator.config_signature as string,
+        ),
+      };
   val.validators = cluster.validators.map(validator => {
     return {
       fee_recipient_address: fromHexString(validator.fee_recipient_address),
@@ -254,14 +254,24 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
     // Check deposit amounts match exactly if they are defined
     const depositAmounts = clusterLock.cluster_definition.deposit_amounts;
     if (depositAmounts !== null) {
-      const partialDepositAmounts = (validator.partial_deposit_data as DepositData[]).map(d => d.amount);
+      const partialDepositAmounts = (
+        validator.partial_deposit_data as DepositData[]
+      ).map(d => d.amount);
       if (depositAmounts?.length !== partialDepositAmounts.length) {
         return false;
       }
       // Check that both arrays contain exactly the same elements
-      const sortedDepositAmounts = [...depositAmounts].map(Number).sort((a, b) => a - b);
-      const sortedPartialAmounts = [...partialDepositAmounts].map(Number).sort((a, b) => a - b);
-      if (!sortedDepositAmounts.every((amount, index) => amount === sortedPartialAmounts[index])) {
+      const sortedDepositAmounts = [...depositAmounts]
+        .map(Number)
+        .sort((a, b) => a - b);
+      const sortedPartialAmounts = [...partialDepositAmounts]
+        .map(Number)
+        .sort((a, b) => a - b);
+      if (
+        !sortedDepositAmounts.every(
+          (amount, index) => amount === sortedPartialAmounts[index],
+        )
+      ) {
         return false;
       }
     }

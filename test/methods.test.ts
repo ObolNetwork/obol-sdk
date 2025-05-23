@@ -128,8 +128,7 @@ describe('Cluster Client', () => {
       clusterLockV1X10.cluster_definition.config_hash,
     );
 
-    expect(clusterDefinition.deposit_amounts).toBeDefined(
-    );
+    expect(clusterDefinition.deposit_amounts).toBeDefined();
 
     expect(clusterDefinition.config_hash).toEqual(
       clusterLockV1X10.cluster_definition.config_hash,
@@ -409,7 +408,9 @@ describe('createObolRewardsSplit', () => {
         ObolRAFSplit: 0.5,
       });
     } catch (error: any) {
-      expect(error.message).toEqual('Validation failed: /ObolRAFSplit must be >= 1');
+      expect(error.message).toEqual(
+        'Validation failed: /ObolRAFSplit must be >= 1',
+      );
     }
   });
 

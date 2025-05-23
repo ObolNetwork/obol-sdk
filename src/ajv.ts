@@ -13,7 +13,7 @@ const VALID_DEPOSIT_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
   parseUnits('8', 'gwei').toString(),
   parseUnits('256', 'gwei').toString(),
-]
+];
 
 const validDepositAmounts = (
   _: boolean,
@@ -21,7 +21,9 @@ const validDepositAmounts = (
 ): boolean => {
   if (deposit_amounts === null) return true;
 
-  return deposit_amounts.every((amount: string) => VALID_DEPOSIT_AMOUNTS.includes(amount));
+  return deposit_amounts.every((amount: string) =>
+    VALID_DEPOSIT_AMOUNTS.includes(amount),
+  );
 };
 
 const validateSplitRecipients = (
@@ -32,7 +34,14 @@ const validateSplitRecipients = (
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
-  return Math.abs(splitPercentage + (data.ObolRAFSplit ?? 0) + (data.distributorFee ?? 0) - 100) < 0.001;
+  return (
+    Math.abs(
+      splitPercentage +
+        (data.ObolRAFSplit ?? 0) +
+        (data.distributorFee ?? 0) -
+        100,
+    ) < 0.001
+  );
 };
 
 const validateUniqueAddresses = (
@@ -88,7 +97,7 @@ export function validatePayload<T>(data: unknown, schema: object): T {
   const valid = validate(data);
   if (!valid) {
     const errors = validate.errors
-      ?.map((e) => `${e.instancePath} ${e.message}`)
+      ?.map(e => `${e.instancePath} ${e.message}`)
       .join(', ');
     throw new Error(`Validation failed: ${errors}`);
   }

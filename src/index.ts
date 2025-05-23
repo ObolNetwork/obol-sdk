@@ -410,7 +410,10 @@ export class Client extends Base {
       throw new Error('Signer is required in createClusterDefinition');
     }
 
-    const validatedCluster = validatePayload<ClusterPayload>(newCluster, definitionSchema);
+    const validatedCluster = validatePayload<ClusterPayload>(
+      newCluster,
+      definitionSchema,
+    );
 
     const clusterConfig: Partial<ClusterDefinition> = {
       ...validatedCluster,
@@ -475,7 +478,10 @@ export class Client extends Base {
       throw new Error('Signer is required in acceptClusterDefinition');
     }
 
-    const validatedPayload = validatePayload<OperatorPayload>(operatorPayload, operatorPayloadSchema);
+    const validatedPayload = validatePayload<OperatorPayload>(
+      operatorPayload,
+      operatorPayloadSchema,
+    );
 
     try {
       const address = await this.signer.getAddress();
