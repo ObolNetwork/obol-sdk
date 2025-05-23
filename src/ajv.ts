@@ -28,14 +28,7 @@ const validateSplitRecipients = (
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
-  return (
-    Math.abs(
-      splitPercentage +
-        (data.ObolRAFSplit ?? 0) +
-        (data.distributorFee ?? 0) -
-        100,
-    ) < 0.001
-  );
+  return splitPercentage + (data.ObolRAFSplit ?? 0) === 100;
 };
 
 const validateUniqueAddresses = (
