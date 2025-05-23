@@ -105,6 +105,15 @@ export type ClusterPayload = {
 
   /** The cluster partial deposits in gwei or 32000000000. */
   deposit_amounts?: string[] | null;
+
+  /** A withdrawal mechanism with 0x02 withdrawal credentials. */
+  compounding?: boolean;
+
+  /** The target gas limit where default is 36M. */
+  target_gas_limit?: number;
+
+  /** The consensus protocol e.g qbft. */
+  consensus_protocol?: string;
 };
 
 /**
@@ -144,7 +153,7 @@ export interface ClusterDefinition extends ClusterPayload {
   /** The consensus protocol e.g qbft. */
   consensus_protocol?: string;
 
-  /** The target gas limit where default is 30M. */
+  /** The target gas limit where default is 36M. */
   target_gas_limit?: number;
 
   /** A withdrawal mechanism with 0x02 withdrawal credentials. */
@@ -305,7 +314,7 @@ export type ClaimableIncentives = {
   /** The amount the recipient is entitled to. */
   amount: string;
 
-  /** The recipient’s index in the Merkle tree. */
+  /** The recipient's index in the Merkle tree. */
   index: number;
 
   /** The Merkle proof (an array of hashes) generated for the recipient. */

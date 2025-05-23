@@ -1,78 +1,117 @@
-import Ajv, { type ErrorObject } from 'ajv';
+import addFormats from 'ajv-formats';
+import addKeywords from 'ajv-keywords';
 import { parseUnits } from 'ethers';
 import {
   type RewardsSplitPayload,
   type SplitRecipient,
   type TotalSplitPayload,
 } from './types';
+import Ajv from 'ajv';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
 } from './constants';
 
-const validDepositAmounts = (data: boolean, deposits: string[]): boolean => {
-  let sum = 0;
-  // from ether togwei is same as from gwei to wei
-  const maxDeposit = Number(parseUnits('32', 'gwei'));
-  const minDeposit = Number(parseUnits('1', 'gwei'));
+export const VALID_DEPOSIT_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+  parseUnits('8', 'gwei').toString(),
+  parseUnits('256', 'gwei').toString(),
+];
 
-  for (const element of deposits) {
-    const amountInGWei = Number(element);
+export const VALID_NON_COMPOUNDING_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+];
 
-    if (
-      !Number.isInteger(amountInGWei) ||
-      amountInGWei > maxDeposit ||
-      amountInGWei < minDeposit
-    ) {
-      return false;
-    }
-    sum += amountInGWei;
-  }
-  if (sum / minDeposit !== 32) {
-    return false;
-  } else {
-    return true;
-  }
-};
-
-const validateSplitRecipients = (
+// They dont see defaults set in schema
+const validateRewardsSplitRecipients = (
   _: boolean,
-  data: RewardsSplitPayload | TotalSplitPayload,
+  data: RewardsSplitPayload,
 ): boolean => {
+  const obolRAFSplit =
+    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
   const splitPercentage = data.splitRecipients.reduce(
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
-  const ObolRAFSplitParam = data.ObolRAFSplit
-    ? data.ObolRAFSplit
-    : 'principalRecipient' in data
-      ? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT
-      : DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
-  return splitPercentage + ObolRAFSplitParam === 100;
+  return splitPercentage + obolRAFSplit === 100;
 };
 
-export function validatePayload(
-  data: any,
-  schema: any,
-): ErrorObject[] | undefined | null | boolean {
-  const ajv = new Ajv();
-  ajv.addKeyword({
-    keyword: 'validDepositAmounts',
-    validate: validDepositAmounts,
-    errors: true,
-  });
+const validateTotalSplitRecipients = (
+  _: boolean,
+  data: TotalSplitPayload,
+): boolean => {
+  const obolRAFSplit =
+    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
+  const splitPercentage = data.splitRecipients.reduce(
+    (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
+    0,
+  );
+  return splitPercentage + obolRAFSplit === 100;
+};
 
-  ajv.addKeyword({
-    keyword: 'validateSplitRecipients',
-    validate: validateSplitRecipients,
-    errors: true,
-  });
-  const validate = ajv.compile(schema);
-  const isValid = validate(data);
-  if (!isValid) {
-    throw new Error(
-      `Schema compilation errors', ${validate.errors?.[0].message}`,
-    );
+const validateUniqueAddresses = (
+  _: boolean,
+  operators: Array<{ address: string }>,
+): boolean => {
+  if (!operators) {
+    return false;
   }
-  return isValid;
+
+  if (operators.length < 4) {
+    return false;
+  }
+
+  if (operators.every(op => op.address === '')) {
+    return true;
+  }
+
+  if (operators.some(op => op.address.length !== 42)) {
+    return false;
+  }
+
+  const addresses = operators.map(op => op.address);
+  const uniqueAddresses = new Set(addresses);
+  const isUnique = uniqueAddresses.size === addresses.length;
+  return isUnique;
+};
+
+const ajv = new Ajv({
+  allErrors: true,
+  useDefaults: true,
+  strict: false,
+  $data: true,
+});
+addFormats(ajv);
+addKeywords(ajv, ['patternRequired']);
+
+ajv.addKeyword({
+  keyword: 'validateRewardsSplitRecipients',
+  validate: validateRewardsSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateTotalSplitRecipients',
+  validate: validateTotalSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateUniqueAddresses',
+  validate: validateUniqueAddresses,
+  schemaType: 'boolean',
+});
+
+export function validatePayload<T>(data: unknown, schema: object): T {
+  const validate = ajv.compile<T>(schema);
+  const valid = validate(data);
+  if (!valid) {
+    const errors = validate.errors
+      ?.map(e => `${e.instancePath} ${e.message}`)
+      .join(', ');
+    throw new Error(`Validation failed: ${errors}`);
+  }
+  return data;
 }
