@@ -276,7 +276,7 @@ describe('Cluster Client without a signer', () => {
     /* eslint-disable @typescript-eslint/no-var-requires */
     const {
       validateClusterLock: validateLockWithRpcUrl,
-    } = require('../src/index');
+    } = require('../../src/index');
 
     const safeRpcUrl = 'https://ethereum-holesky-rpc.publicnode.com';
     const isValidLock: boolean = await validateLockWithRpcUrl(
