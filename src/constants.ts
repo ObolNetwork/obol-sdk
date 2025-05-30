@@ -205,3 +205,37 @@ export const PROVIDER_MAP: Record<number, string> = {
   11155111: `${process.env.RPC_SEPOLIA}`, // Sepolia
   100: `${process.env.RPC_GNOSIS}`, // Gnosis
 };
+
+/**
+ * Maps base fork versions to their corresponding Capella fork versions.
+ * Example: Mainnet Capella fork version.
+ */
+export const CAPELLA_FORK_MAPPING: Record<string, string> = {
+  '0x00000000': '0x03000000', // Mainnet
+  '0x00001020': '0x03001020', // Goerli
+  '0x00000064': '0x03000064', // Gnosis
+  '0x90000069': '0x90000072', // Sepolia
+  '0x01017000': '0x04017000', // Holesky
+  '0x10000910': '0x40000910', // Hoodi
+};
+
+/**
+ * Maps network names to their base fork versions.
+ * This is the primary mapping for network to fork version.
+ */
+export const NETWORK_NAME_TO_FORK_VERSION: Record<string, string> = {
+  mainnet: '0x00000000',
+  goerli: '0x00001020',
+  gnosis: '0x00000064',
+  sepolia: '0x90000069',
+  holesky: '0x01017000',
+  hoodi: '0x10000910',
+};
+
+/**
+ * Maps base fork versions to their corresponding network names.
+ * This is the reverse of NETWORK_NAME_TO_FORK_VERSION for convenience.
+ */
+export const FORK_VERSION_TO_NETWORK_NAME: Record<string, string> = Object.fromEntries(
+  Object.entries(NETWORK_NAME_TO_FORK_VERSION).map(([name, version]) => [version, name])
+);

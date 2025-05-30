@@ -1,8 +1,8 @@
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client } from '../src/index';
-import * as utils from '../src/utils';
-import * as incentivesHelpers from '../src/incentiveHelpers';
-import { DEFAULT_BASE_VERSION } from '../src/constants';
+import { Client } from '../../src/index';
+import * as utils from '../../src/utils';
+import * as incentivesHelpers from '../../src/incentives/incentiveHelpers';
+import { DEFAULT_BASE_VERSION } from '../../src/constants';
 import { jest, describe, beforeEach, test, expect } from '@jest/globals';
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';

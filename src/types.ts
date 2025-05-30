@@ -352,3 +352,95 @@ export type SignerType = Signer | JsonRpcSigner | Wallet;
  * claimIncentives Response
  */
 export type ClaimIncentivesResponse = { txHash: string | null };
+
+/**
+ * Represents the structure of an Ethereum operator for exit validation, primarily their ENR.
+ */
+export interface ExitOperator {
+  enr: string;
+}
+
+/**
+ * Represents the core definition of a cluster relevant for exit validation.
+ */
+export interface ExitClusterDefinition {
+  operators: ExitOperator[];
+  fork_version: string;
+  threshold: number;
+}
+
+/**
+ * Represents a distributed validator's information relevant for exit validation.
+ */
+export interface ExitDistributedValidator {
+  distributed_public_key: string;
+  public_shares: string[];
+}
+
+/**
+ * Combined cluster information needed for exit validation in the SDK.
+ */
+export interface ExitClusterConfig {
+  definition: ExitClusterDefinition;
+  distributed_validators: ExitDistributedValidator[];
+}
+
+/**
+ * Represents the message part of a signed exit for exit validation.
+ */
+export interface ExitValidationMessage {
+  epoch: string;
+  validator_index: string;
+}
+
+/**
+ * Represents a signed exit message for exit validation.
+ */
+export interface SignedExitValidationMessage {
+  message: ExitValidationMessage;
+  signature: string;
+}
+
+/**
+ * Represents a single partial exit blob for exit validation.
+ */
+export interface ExitValidationBlob {
+  public_key: string;
+  signed_exit_message: SignedExitValidationMessage;
+}
+
+/**
+ * Represents the overall exit payload structure for exit validation.
+ */
+export interface ExitValidationPayload {
+  partial_exits: ExitValidationBlob[];
+  share_idx: number; // Operator's share index (1-based)
+  signature: string; // Signature of the ExitValidationPayload by the operator
+}
+
+/**
+ * Represents the data structure for an already existing exit blob for exit validation.
+ */
+export interface ExistingExitValidationBlobData {
+  publickey: string;
+  epoch: string;
+  validator_index: string;
+  shares_exit_data: Array<
+    Record<string, { partial_exit_signature: string }>
+  >;
+}
+
+/**
+ * Generic HTTP request function type.
+ * Args:
+ *  url: string - The URL to request.
+ *  config?: Record<string, any> - Optional request configuration (e.g., method, headers, body for POST).
+ * Returns:
+ *  Promise<any> - The response data.
+ */
+export type HttpRequestFunc = (
+  url: string,
+  config?: Record<string, any>,
+) => Promise<any>;
+
+// Add other SDK-specific types below or import from other type files

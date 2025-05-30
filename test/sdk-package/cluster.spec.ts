@@ -81,10 +81,13 @@ describe('Cluster Definition', () => {
     clusterDefinition = await client.getClusterDefinition(configHash);
     expect(clusterDefinition.config_hash).toEqual(configHash);
 
+    // Re-assert type
+    const typedClusterDef = clusterDefinition as ClusterDefinition;
+
     // Test for new fields
-    expect(clusterDefinition.compounding).toBeDefined();
-    expect(clusterDefinition.target_gas_limit).toBeDefined();
-    expect(clusterDefinition.consensus_protocol).toBeDefined();
+    expect(typedClusterDef.compounding).toBeDefined();
+    expect(typedClusterDef.target_gas_limit).toBeDefined();
+    expect(typedClusterDef.consensus_protocol).toBeDefined();
   });
 
   it('should fetch the cluster definition for the configHash without a signer', async () => {
@@ -92,10 +95,13 @@ describe('Cluster Definition', () => {
       await clientWithoutAsigner.getClusterDefinition(configHash);
     expect(clusterDefinition.config_hash).toEqual(configHash);
 
+    // Re-assert type
+    const typedClusterDefWithoutSigner = clusterDefinition as ClusterDefinition;
+
     // Test for new fields
-    expect(clusterDefinition.compounding).toBeDefined();
-    expect(clusterDefinition.target_gas_limit).toBeDefined();
-    expect(clusterDefinition.consensus_protocol).toBeDefined();
+    expect(typedClusterDefWithoutSigner.compounding).toBeDefined();
+    expect(typedClusterDefWithoutSigner.target_gas_limit).toBeDefined();
+    expect(typedClusterDefWithoutSigner.consensus_protocol).toBeDefined();
   });
 
   it('should throw on update a cluster that the operator is not part of', async () => {

@@ -1,5 +1,5 @@
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client, validateClusterLock } from '../src/index';
+import { Client, validateClusterLock } from '../../src/index';
 import {
   clusterConfigV1X7,
   clusterConfigV1X10,
@@ -10,14 +10,14 @@ import {
   clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
-} from './fixtures.js';
-import { SDK_VERSION } from '../src/constants';
-import { Base } from '../src/base';
+} from '../fixtures.js';
+import { SDK_VERSION } from '../../src/constants';
+import { Base } from '../../src/base';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { hashTermsAndConditions } from '../src/verification/termsAndConditions';
-import * as utils from '../src/utils';
-import * as splitsHelpers from '../src/splitHelpers';
+import { hashTermsAndConditions } from '../../src/verification/termsAndConditions';
+import * as utils from '../../src/utils';
+import * as splitsHelpers from '../../src/splits/splitHelpers';
 
 jest.setTimeout(20000);
 

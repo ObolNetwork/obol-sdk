@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "moduleResolution":"node",
   },
-  "exclude": ["node_modules", "dist", "test/sdk-package-test"]
+  "exclude": ["node_modules", "dist", "test/sdk-package"]
 }

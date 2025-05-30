@@ -4,12 +4,12 @@ import {
   type ETH_ADDRESS,
   type SplitRecipient,
   type SignerType,
-} from './types';
+} from '../types';
 import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
-import { OWRContract, OWRFactoryContract } from './abi/OWR';
-import { splitMainEthereumAbi } from './abi/SplitMain';
-import { MultiCallContract } from './abi/Multicall';
-import { CHAIN_CONFIGURATION } from './constants';
+import { OWRContract, OWRFactoryContract } from '../abi/OWR';
+import { splitMainEthereumAbi } from '../abi/SplitMain';
+import { MultiCallContract } from '../abi/Multicall';
+import { CHAIN_CONFIGURATION } from '../constants';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
