@@ -54,7 +54,7 @@ export class Exit {
 
   constructor(
     chainId: number,
-    request: HttpRequestFunc, // Assuming HttpRequestFunc is (endpoint: string, options?: RequestInit) => Promise<any>
+    request: HttpRequestFunc,
     provider: ProviderType | undefined | null,
   ) {
     this.chainId = chainId;

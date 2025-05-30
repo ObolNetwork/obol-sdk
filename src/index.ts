@@ -48,6 +48,7 @@ import {
 } from './splits/splitHelpers.js';
 import { isContractAvailable } from './utils.js';
 import { Incentives } from './incentives/incentives.js';
+import { Exit } from './exits/exit.js';
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
@@ -55,14 +56,6 @@ export * from './verification/common.js';
 export * from './constants.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
-
-export { getCapellaFork, getGenesisValidatorsRoot } from './exits/ethUtils.js';
-export {
-  computeDomain,
-  signingRoot,
-  GENESIS_VALIDATOR_ROOT_HEX_STRING,
-} from './exits/verificationHelpers.js';
-
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
  */
@@ -117,12 +110,7 @@ export class Client extends Base {
       this.request.bind(this),
       this.provider,
     );
-    this.exit = new Exit( // Add this instantiation
-      this.signer,
-      this.chainId,
-      this.request.bind(this),
-      this.provider,
-    );
+    this.exit = new Exit(this.chainId, this.request.bind(this), this.provider);
   }
 
   /**
