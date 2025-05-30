@@ -48,4 +48,4 @@ export async function getGenesisValidatorsRoot(
     const errorMessage = e instanceof Error ? e.message : String(e);
     throw new Error(`Failed to fetch genesis validators root: ${errorMessage}`);
   }
-} 
+}

@@ -82,7 +82,7 @@ describe('Cluster Definition', () => {
     expect(clusterDefinition.config_hash).toEqual(configHash);
 
     // Re-assert type
-    const typedClusterDef = clusterDefinition as ClusterDefinition;
+    const typedClusterDef = clusterDefinition;
 
     // Test for new fields
     expect(typedClusterDef.compounding).toBeDefined();
@@ -96,7 +96,7 @@ describe('Cluster Definition', () => {
     expect(clusterDefinition.config_hash).toEqual(configHash);
 
     // Re-assert type
-    const typedClusterDefWithoutSigner = clusterDefinition as ClusterDefinition;
+    const typedClusterDefWithoutSigner = clusterDefinition;
 
     // Test for new fields
     expect(typedClusterDefWithoutSigner.compounding).toBeDefined();

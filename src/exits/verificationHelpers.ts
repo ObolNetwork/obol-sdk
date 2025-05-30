@@ -104,4 +104,4 @@ export function signingRoot(
 ): Uint8Array {
   const sszObjectRootU8 = Uint8Array.from(messageBuffer);
   return computeSigningRoot(sszObjectRootU8, domain);
-} 
+}

@@ -271,12 +271,12 @@ describe('exit', () => {
           return {
             publickey: mockExitBlob.public_key,
             epoch: mockExitMessage.epoch,
-            epoch: mockExitMessage.epoch, 
+            epoch: mockExitMessage.epoch,
             validator_index: mockExitMessage.validator_index,
-            shares_exit_data: [], 
+            shares_exit_data: [],
           };
         }
-        return null; 
+        return null;
       });
       const result = await validateExitBlobs(
         mockClusterConfig,
