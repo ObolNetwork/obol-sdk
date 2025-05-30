@@ -262,7 +262,7 @@ describe('exit', () => {
       mockedBls.verify.mockReturnValue(false);
       await expect(
         validateExitBlobs(mockClusterConfig, mockExitPayload, MOCK_BEACON_API_URL, mockHttpRequest, mockGetExistingBlobData),
-      ).rejects.toThrowError(expect.stringContaining('Invalid partial exit signature for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd by operator index 0.'));
+      ).rejects.toThrow('Invalid partial exit signature for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd by operator index 0.');
     });
 
     it('should return an empty array if an exit blob has already been processed (epoch match)', async () => {
@@ -270,7 +270,6 @@ describe('exit', () => {
         if (pubKey === mockExitBlob.public_key) {
           return {
             publickey: mockExitBlob.public_key,
-            epoch: mockExitMessage.epoch,
             epoch: mockExitMessage.epoch,
             validator_index: mockExitMessage.validator_index,
             shares_exit_data: [],
@@ -302,7 +301,7 @@ describe('exit', () => {
       });
       await expect(
         validateExitBlobs(mockClusterConfig, mockExitPayload, MOCK_BEACON_API_URL, mockHttpRequest, mockGetExistingBlobData),
-      ).rejects.toThrowError(expect.stringContaining('Validator index mismatch for already processed exit for public key 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd. Expected 11, got 10.'));
+      ).rejects.toThrow('Validator index mismatch for already processed exit for public key 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd. Expected 11, got 10.');
     });
 
     it('should throw if an exit blob has been processed with a higher epoch', async () => {
@@ -315,7 +314,7 @@ describe('exit', () => {
       // currentExitBlob (from mockExitPayload) has mockExitMessage.epoch (e.g. '1')
       await expect(
         validateExitBlobs(mockClusterConfig, mockExitPayload, MOCK_BEACON_API_URL, mockHttpRequest, mockGetExistingBlobData),
-      ).rejects.toThrowError(expect.stringContaining('New exit epoch is not greater than existing exit epoch'));
+      ).rejects.toThrow('New exit epoch is not greater than existing exit epoch');
     });
 
     it('should successfully validate if an exit blob has been processed with a lower epoch', async () => {
