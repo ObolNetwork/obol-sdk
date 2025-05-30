@@ -1,5 +1,5 @@
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client, SignerType, validateClusterLock } from '../../src/index';
+import { Client, type SignerType, validateClusterLock } from '../../src/index';
 import {
   clusterConfigV1X7,
   clusterConfigV1X10,
