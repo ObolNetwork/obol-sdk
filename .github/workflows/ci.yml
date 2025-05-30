@@ -31,15 +31,15 @@ jobs:
           RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}
       
       - name: Install e2e dependencies
-        working-directory: ./test/sdk-package-test
+        working-directory: ./test/sdk-package
         run: yarn install --frozen-lockfile
 
       - name: Build e2e
-        working-directory: ./test/sdk-package-test
+        working-directory: ./test/sdk-package
         run: yarn run build
 
       - name: Run e2e tests
-        working-directory: ./test/sdk-package-test
+        working-directory: ./test/sdk-package
         run: yarn run test:e2e
         env:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
