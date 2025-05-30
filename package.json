@@ -131,7 +131,7 @@
       "^bn.js$": "<rootDir>/node_modules/bn.js",
       "^asn1.js$": "<rootDir>/node_modules/asn1.js",
       "^hash.js$": "<rootDir>/node_modules/hash.js",
-      "^(\\.{1,2}/.*)\\.js$": "$1"
+      "(.+)\\.js": "$1"
     },
     "extensionsToTreatAsEsm": [
       ".ts"

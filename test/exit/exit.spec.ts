@@ -345,7 +345,7 @@ describe('exit', () => {
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow(
-        'Invalid partial exit signature for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd by operator index 0.',
+        'Invalid partial exit signature for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd by operator index 0.',
       );
     });
 
@@ -394,7 +394,7 @@ describe('exit', () => {
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow(
-        'Validator index mismatch for already processed exit for public key 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd. Expected 11, got 10.',
+        'Validator index mismatch for already processed exit for public key 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd. Expected 11, got 10.',
       );
     });
 
