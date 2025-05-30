@@ -235,11 +235,9 @@ describe('exit', () => {
     >;
 
     beforeEach(() => {
-      mockHttpRequest = jest
-        .fn()
-        .mockResolvedValue({
-          data: { genesis_validators_root: MOCK_GENESIS_ROOT },
-        });
+      mockHttpRequest = jest.fn().mockResolvedValue({
+        data: { genesis_validators_root: MOCK_GENESIS_ROOT },
+      });
       mockGetExistingBlobData = jest
         .fn<Promise<ExistingExitValidationBlobData | null>, [string]>()
         .mockResolvedValue(null);
