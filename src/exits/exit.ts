@@ -89,9 +89,7 @@ export class Exit {
             10,
           ),
         },
-        signature: fromHexString(
-          pe.signed_exit_message.signature.substring(2),
-        ),
+        signature: fromHexString(pe.signed_exit_message.signature.substring(2)),
       },
     }));
     sszValue.share_idx = exits.share_idx;
@@ -126,7 +124,10 @@ export class Exit {
       fromHexString(genesisValidatorsRootString.substring(2)),
     );
 
-    const messageSigningRoot = signingRoot(exitDomain, partialExitMessageBuffer);
+    const messageSigningRoot = signingRoot(
+      exitDomain,
+      partialExitMessageBuffer,
+    );
 
     return verify(
       fromHexString(publicShareKey.substring(2)),
@@ -174,7 +175,9 @@ export class Exit {
           enrSignature as elliptic.ec.SignatureOptions,
         );
     } catch (e: any) {
-      throw new Error(`Signature verification failed: ${e.message || String(e)}`);
+      throw new Error(
+        `Signature verification failed: ${e.message || String(e)}`,
+      );
     }
   }
 
@@ -214,9 +217,13 @@ export class Exit {
       throw new Error('Could not retrieve genesis validators root.');
     }
 
-    const capellaForkVersionString = await getCapellaFork(clusterConfig.definition.fork_version);
+    const capellaForkVersionString = await getCapellaFork(
+      clusterConfig.definition.fork_version,
+    );
     if (!capellaForkVersionString) {
-        throw new Error(`Unsupported network: Could not determine Capella fork for ${clusterConfig.definition.fork_version}`);
+      throw new Error(
+        `Unsupported network: Could not determine Capella fork for ${clusterConfig.definition.fork_version}`,
+      );
     }
 
     const validNonDuplicateBlobs: ExitValidationBlob[] = [];
@@ -248,7 +255,9 @@ export class Exit {
         );
       }
 
-      const existingBlob = await getExistingBlobData(currentExitBlob.public_key);
+      const existingBlob = await getExistingBlobData(
+        currentExitBlob.public_key,
+      );
       let alreadyProcessed = false;
 
       if (existingBlob) {

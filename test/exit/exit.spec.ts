@@ -315,7 +315,9 @@ describe('exit', () => {
           MOCK_BEACON_API_URL,
           mockGetExistingBlobData,
         ),
-      ).rejects.toThrow('Unsupported network: Could not determine Capella fork');
+      ).rejects.toThrow(
+        'Unsupported network: Could not determine Capella fork',
+      );
     });
 
     it('should throw if a public key in an exit blob is not found in cluster config', async () => {
