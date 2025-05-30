@@ -73,7 +73,7 @@ export const definitionSchema = {
     },
     compounding: {
       type: 'boolean',
-      default: true,
+      default: false,
     },
     target_gas_limit: {
       type: 'number',
