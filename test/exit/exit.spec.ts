@@ -415,7 +415,7 @@ describe('exit', () => {
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow(
-        'New exit epoch is not greater than existing exit epoch',
+        'New exit epoch is not greater tNew exit epoch 1 is not greater than existing exit epoch 2 for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd.han existing exit epoch',
       );
     });
 
