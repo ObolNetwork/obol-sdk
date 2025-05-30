@@ -54,7 +54,7 @@ const SSZPartialExitsPayloadType = new ContainerType({
         signature: new ByteVectorType(96),
       }),
     }),
-    65536
+    65536,
   ),
   share_idx: new UintNumberType(8),
 });
@@ -84,15 +84,19 @@ export async function verifyPartialExitSignature(
 
   const capellaForkVersionString = await getCapellaFork(forkVersion);
   if (!capellaForkVersionString) {
-    throw new Error(`Could not determine Capella fork version for base fork: ${forkVersion}`);
+    throw new Error(
+      `Could not determine Capella fork version for base fork: ${forkVersion}`,
+    );
   }
 
-  const partialExitMessageBuffer = computePartialExitMessageRoot(signedExitMessage.message);
+  const partialExitMessageBuffer = computePartialExitMessageRoot(
+    signedExitMessage.message,
+  );
 
   const exitDomain = computeDomain(
     fromHexString(DOMAIN_VOLUNTARY_EXIT.substring(2)), // Assumes 0x prefix
     capellaForkVersionString,
-    fromHexString(genesisValidatorsRootString.substring(2)) // Assumes 0x prefix
+    fromHexString(genesisValidatorsRootString.substring(2)), // Assumes 0x prefix
   );
 
   const messageSigningRoot = signingRoot(exitDomain, partialExitMessageBuffer);
@@ -100,7 +104,7 @@ export async function verifyPartialExitSignature(
   return verify(
     fromHexString(publicShareKey.substring(2)), // Assumes 0x prefix
     messageSigningRoot,
-    fromHexString(signedExitMessage.signature.substring(2)) // Assumes 0x prefix
+    fromHexString(signedExitMessage.signature.substring(2)), // Assumes 0x prefix
   );
 }
 
@@ -120,14 +124,19 @@ function computeExitPayloadRoot(exits: ExitValidationPayload): string {
     signed_exit_message: {
       message: {
         epoch: parseInt(pe.signed_exit_message.message.epoch, 10),
-        validator_index: parseInt(pe.signed_exit_message.message.validator_index, 10),
+        validator_index: parseInt(
+          pe.signed_exit_message.message.validator_index,
+          10,
+        ),
       },
       signature: fromHexString(pe.signed_exit_message.signature.substring(2)), // Assumes 0x prefix
     },
   }));
   sszValue.share_idx = exits.share_idx;
 
-  return Buffer.from(SSZPartialExitsPayloadType.hashTreeRoot(sszValue).buffer).toString('hex');
+  return Buffer.from(
+    SSZPartialExitsPayloadType.hashTreeRoot(sszValue).buffer,
+  ).toString('hex');
 }
 
 /**
@@ -144,7 +153,9 @@ export async function verifyExitPayloadSignature(
   try {
     pubKeyHex = ENR.decodeTxt(enrString).publicKey.toString('hex');
   } catch (e: any) {
-    throw new Error(`Invalid ENR string: ${enrString}. Error: ${e.message || String(e)}`);
+    throw new Error(
+      `Invalid ENR string: ${enrString}. Error: ${e.message || String(e)}`,
+    );
   }
 
   const sigHex = exitsPayload.signature.startsWith('0x')
@@ -152,7 +163,9 @@ export async function verifyExitPayloadSignature(
     : exitsPayload.signature;
 
   if (sigHex.length !== 128) {
-     throw new Error(`Invalid signature length. Expected 128 hex chars (r + s), got ${sigHex.length}`);
+    throw new Error(
+      `Invalid signature length. Expected 128 hex chars (r + s), got ${sigHex.length}`,
+    );
   }
 
   const r = sigHex.slice(0, 64);
@@ -161,7 +174,12 @@ export async function verifyExitPayloadSignature(
   const enrSignature = { r, s };
 
   try {
-    return ec.keyFromPublic(pubKeyHex, 'hex').verify(partialExitsDtoHashRoot, enrSignature as elliptic.ec.SignatureOptions);
+    return ec
+      .keyFromPublic(pubKeyHex, 'hex')
+      .verify(
+        partialExitsDtoHashRoot,
+        enrSignature as elliptic.ec.SignatureOptions,
+      );
   } catch (e: any) {
     throw new Error(`Signature verification failed: ${e.message || String(e)}`);
   }
@@ -175,17 +193,25 @@ export async function validateExitBlobs(
   exitsPayload: ExitValidationPayload,
   beaconNodeApiUrl: string, // For getGenesisValidatorsRoot
   httpRequest: HttpRequestFunc, // Correctly typed
-  getExistingBlobData: (publicKey: string) => Promise<ExistingExitValidationBlobData | null>,
+  getExistingBlobData: (
+    publicKey: string,
+  ) => Promise<ExistingExitValidationBlobData | null>,
 ): Promise<ExitValidationBlob[]> {
   const operatorIndex = exitsPayload.share_idx - 1;
-  if (operatorIndex < 0 || operatorIndex >= clusterConfig.definition.operators.length) {
+  if (
+    operatorIndex < 0 ||
+    operatorIndex >= clusterConfig.definition.operators.length
+  ) {
     throw new Error(
       `Invalid share_idx ${exitsPayload.share_idx} for ${clusterConfig.definition.operators.length} operators.`,
     );
   }
   const operatorEnr = clusterConfig.definition.operators[operatorIndex].enr;
 
-  const isPayloadSignatureValid = await verifyExitPayloadSignature(operatorEnr, exitsPayload);
+  const isPayloadSignatureValid = await verifyExitPayloadSignature(
+    operatorEnr,
+    exitsPayload,
+  );
   if (!isPayloadSignatureValid) {
     throw new Error('Incorrect payload signature for partial exits.');
   }
@@ -208,8 +234,15 @@ export async function validateExitBlobs(
 
   for (const currentExitBlob of exitsPayload.partial_exits) {
     const validatorInCluster = clusterConfig.distributed_validators.find(
-      dv => (dv.distributed_public_key.startsWith('0x') ? dv.distributed_public_key : '0x' + dv.distributed_public_key).toLowerCase() ===
-            (currentExitBlob.public_key.startsWith('0x') ? currentExitBlob.public_key : '0x' + currentExitBlob.public_key).toLowerCase()
+      dv =>
+        (dv.distributed_public_key.startsWith('0x')
+          ? dv.distributed_public_key
+          : '0x' + dv.distributed_public_key
+        ).toLowerCase() ===
+        (currentExitBlob.public_key.startsWith('0x')
+          ? currentExitBlob.public_key
+          : '0x' + currentExitBlob.public_key
+        ).toLowerCase(),
     );
 
     if (!validatorInCluster) {
@@ -218,9 +251,12 @@ export async function validateExitBlobs(
       );
     }
 
-    const publicShareForOperator = validatorInCluster.public_shares[operatorIndex];
+    const publicShareForOperator =
+      validatorInCluster.public_shares[operatorIndex];
     if (!publicShareForOperator) {
-        throw new Error(`Public share for operator index ${operatorIndex} not found for validator ${currentExitBlob.public_key}`);
+      throw new Error(
+        `Public share for operator index ${operatorIndex} not found for validator ${currentExitBlob.public_key}`,
+      );
     }
 
     const existingBlob = await getExistingBlobData(currentExitBlob.public_key);
@@ -228,19 +264,25 @@ export async function validateExitBlobs(
 
     if (existingBlob) {
       // Check 1: Validator index must match if blob exists for this public key
-      if (existingBlob.validator_index !== currentExitBlob.signed_exit_message.message.validator_index) {
+      if (
+        existingBlob.validator_index !==
+        currentExitBlob.signed_exit_message.message.validator_index
+      ) {
         throw new Error(
-          `Validator index mismatch for already processed exit for public key ${currentExitBlob.public_key}. Expected ${existingBlob.validator_index}, got ${currentExitBlob.signed_exit_message.message.validator_index}.`
+          `Validator index mismatch for already processed exit for public key ${currentExitBlob.public_key}. Expected ${existingBlob.validator_index}, got ${currentExitBlob.signed_exit_message.message.validator_index}.`,
         );
       }
 
       // Check 2: Epoch comparison
-      const currentEpoch = parseInt(currentExitBlob.signed_exit_message.message.epoch, 10);
+      const currentEpoch = parseInt(
+        currentExitBlob.signed_exit_message.message.epoch,
+        10,
+      );
       const existingEpoch = parseInt(existingBlob.epoch, 10);
 
       if (currentEpoch < existingEpoch) {
         throw new Error(
-          `New exit epoch ${currentEpoch} is not greater than existing exit epoch ${existingEpoch} for validator ${currentExitBlob.public_key}.`
+          `New exit epoch ${currentEpoch} is not greater than existing exit epoch ${existingEpoch} for validator ${currentExitBlob.public_key}.`,
         );
       } else if (currentEpoch === existingEpoch) {
         // Same epoch and validator index means this exit event is already known.
@@ -253,11 +295,14 @@ export async function validateExitBlobs(
         // If it's not recorded, this operator is newly contributing, but the core event is known.
         const operatorShareIndexString = String(operatorIndex);
         if (
-          existingBlob.shares_exit_data?.[0]?.[operatorShareIndexString]?.partial_exit_signature &&
-          existingBlob.shares_exit_data[0][operatorShareIndexString].partial_exit_signature !== currentExitBlob.signed_exit_message.signature
+          existingBlob.shares_exit_data?.[0]?.[operatorShareIndexString]
+            ?.partial_exit_signature &&
+          existingBlob.shares_exit_data[0][operatorShareIndexString]
+            .partial_exit_signature !==
+            currentExitBlob.signed_exit_message.signature
         ) {
           throw new Error(
-            `Signature mismatch for validator ${currentExitBlob.public_key}, operator index ${operatorIndex} at epoch ${currentEpoch}. Received different signature than existing.`
+            `Signature mismatch for validator ${currentExitBlob.public_key}, operator index ${operatorIndex} at epoch ${currentEpoch}. Received different signature than existing.`,
           );
         }
       }

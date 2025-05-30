@@ -425,9 +425,7 @@ export interface ExistingExitValidationBlobData {
   publickey: string;
   epoch: string;
   validator_index: string;
-  shares_exit_data: Array<
-    Record<string, { partial_exit_signature: string }>
-  >;
+  shares_exit_data: Array<Record<string, { partial_exit_signature: string }>>;
 }
 
 /**

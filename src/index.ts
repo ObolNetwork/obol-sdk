@@ -57,18 +57,15 @@ export { Incentives } from './incentives/incentives.js';
 
 // Export exit validation and utility functions
 export {
-    validateExitBlobs,
-    verifyExitPayloadSignature,
-    verifyPartialExitSignature
+  validateExitBlobs,
+  verifyExitPayloadSignature,
+  verifyPartialExitSignature,
 } from './exits/exit.js';
+export { getCapellaFork, getGenesisValidatorsRoot } from './exits/ethUtils.js';
 export {
-    getCapellaFork,
-    getGenesisValidatorsRoot
-} from './exits/ethUtils.js';
-export {
-    computeDomain,
-    signingRoot,
-    GENESIS_VALIDATOR_ROOT_HEX_STRING
+  computeDomain,
+  signingRoot,
+  GENESIS_VALIDATOR_ROOT_HEX_STRING,
 } from './exits/verificationHelpers.js';
 
 /**
