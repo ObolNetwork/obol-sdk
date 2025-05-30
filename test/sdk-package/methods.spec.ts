@@ -1,5 +1,5 @@
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client, type SignerType, validateClusterLock } from '../../src/index';
+import { Client, validateClusterLock } from '../../src/index';
 import {
   clusterConfigV1X7,
   clusterConfigV1X10,
@@ -25,7 +25,7 @@ const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 const wallet = new ethers.Wallet(privateKey, provider);
-const mockSigner: SignerType = wallet.connect(provider) as SignerType;
+const mockSigner = wallet.connect(provider);
 
 /* eslint no-new: 0 */
 describe('Cluster Client', () => {
