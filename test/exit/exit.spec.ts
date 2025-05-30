@@ -1,8 +1,4 @@
-import {
-  verifyPartialExitSignature,
-  verifyExitPayloadSignature,
-  validateExitBlobs,
-} from '../../src/exits/exit';
+import { Exit } from '../../src/exits/exit';
 import * as ethUtils from '../../src/exits/ethUtils';
 import * as bls from '@chainsafe/bls';
 import { ENR } from '@chainsafe/discv5';
@@ -87,10 +83,18 @@ const mockClusterConfig: ExitClusterConfig = {
 describe('exit', () => {
   let enrDecodeTxtSpy: jest.SpyInstance;
   let ecVerifySpy: jest.SpyInstance;
-  let keyFromPublicSpy: jest.SpyInstance; // Declare spy for keyFromPublic
+  let keyFromPublicSpy: jest.SpyInstance;
+  let exit: Exit;
+  let mockHttpRequest: jest.MockedFunction<HttpRequestFunc>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Initialize Exit instance
+    mockHttpRequest = jest.fn().mockResolvedValue({
+      data: { genesis_validators_root: MOCK_GENESIS_ROOT },
+    });
+    exit = new Exit(1, mockHttpRequest, null);
 
     (mockedBls.init as jest.Mock).mockResolvedValue(undefined);
     (mockedBls.verify as jest.Mock).mockReturnValue(true);
@@ -118,7 +122,6 @@ describe('exit', () => {
 
   afterEach(() => {
     if (enrDecodeTxtSpy) enrDecodeTxtSpy.mockRestore();
-    // keyFromPublicSpy is implicitly restored by jest.restoreAllMocks if it was created with jest.spyOn
     jest.restoreAllMocks();
   });
 
@@ -127,7 +130,7 @@ describe('exit', () => {
       mockClusterConfig.distributed_validators[0].public_shares[0];
 
     it('should return true for a valid signature', async () => {
-      const isValid = await verifyPartialExitSignature(
+      const isValid = await exit.verifyPartialExitSignature(
         publicShareKey,
         mockSignedExitMessage,
         MAINNET_BASE_FORK_VERSION,
@@ -143,7 +146,7 @@ describe('exit', () => {
 
     it('should return false if BLS verification fails', async () => {
       mockedBls.verify.mockReturnValue(false);
-      const isValid = await verifyPartialExitSignature(
+      const isValid = await exit.verifyPartialExitSignature(
         publicShareKey,
         mockSignedExitMessage,
         MAINNET_BASE_FORK_VERSION,
@@ -155,7 +158,7 @@ describe('exit', () => {
     it('should throw if getCapellaFork returns null', async () => {
       mockedEthUtils.getCapellaFork.mockResolvedValue(null);
       await expect(
-        verifyPartialExitSignature(
+        exit.verifyPartialExitSignature(
           publicShareKey,
           mockSignedExitMessage,
           MAINNET_BASE_FORK_VERSION,
@@ -168,7 +171,7 @@ describe('exit', () => {
       const computeDomainSpy = jest.spyOn(verificationHelpers, 'computeDomain');
       const signingRootSpy = jest.spyOn(verificationHelpers, 'signingRoot');
 
-      await verifyPartialExitSignature(
+      await exit.verifyPartialExitSignature(
         publicShareKey,
         mockSignedExitMessage,
         MAINNET_BASE_FORK_VERSION,
@@ -189,7 +192,7 @@ describe('exit', () => {
 
   describe('verifyExitPayloadSignature', () => {
     it('should return true for a valid ECDSA signature', async () => {
-      const isValid = await verifyExitPayloadSignature(
+      const isValid = await exit.verifyExitPayloadSignature(
         mockOperatorEnr,
         mockExitPayload,
       );
@@ -200,7 +203,7 @@ describe('exit', () => {
 
     it('should return false if ECDSA verification fails', async () => {
       ecVerifySpy.mockReturnValue(false);
-      const isValid = await verifyExitPayloadSignature(
+      const isValid = await exit.verifyExitPayloadSignature(
         mockOperatorEnr,
         mockExitPayload,
       );
@@ -212,7 +215,7 @@ describe('exit', () => {
         throw new Error('Invalid ENR');
       });
       await expect(
-        verifyExitPayloadSignature('invalid-enr', mockExitPayload),
+        exit.verifyExitPayloadSignature('invalid-enr', mockExitPayload),
       ).rejects.toThrow('Invalid ENR string');
     });
 
@@ -222,33 +225,28 @@ describe('exit', () => {
         signature: '0x123456',
       };
       await expect(
-        verifyExitPayloadSignature(mockOperatorEnr, payloadWithInvalidSig),
+        exit.verifyExitPayloadSignature(mockOperatorEnr, payloadWithInvalidSig),
       ).rejects.toThrow('Invalid signature length');
     });
   });
 
   describe('validateExitBlobs', () => {
-    let mockHttpRequest: jest.MockedFunction<HttpRequestFunc>;
     let mockGetExistingBlobData: jest.Mock<
       Promise<ExistingExitValidationBlobData | null>,
       [string]
     >;
 
     beforeEach(() => {
-      mockHttpRequest = jest.fn().mockResolvedValue({
-        data: { genesis_validators_root: MOCK_GENESIS_ROOT },
-      });
       mockGetExistingBlobData = jest
         .fn<Promise<ExistingExitValidationBlobData | null>, [string]>()
         .mockResolvedValue(null);
     });
 
     it('should successfully validate a new, valid exit blob', async () => {
-      const result = await validateExitBlobs(
+      const result = await exit.validateExitBlobs(
         mockClusterConfig,
         mockExitPayload,
         MOCK_BEACON_API_URL,
-        mockHttpRequest,
         mockGetExistingBlobData,
       );
       expect(result).toEqual([mockExitBlob]);
@@ -262,11 +260,10 @@ describe('exit', () => {
     it('should throw if operatorIndex (from share_idx) is out of bounds', async () => {
       const invalidPayload = { ...mockExitPayload, share_idx: 0 };
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           invalidPayload,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow('Invalid share_idx');
@@ -276,11 +273,10 @@ describe('exit', () => {
         share_idx: mockClusterConfig.definition.operators.length + 1,
       };
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           invalidPayload2,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow('Invalid share_idx');
@@ -289,11 +285,10 @@ describe('exit', () => {
     it('should throw if payload signature is invalid', async () => {
       ecVerifySpy.mockReturnValue(false);
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow('Incorrect payload signature');
@@ -302,14 +297,25 @@ describe('exit', () => {
     it('should throw if getGenesisValidatorsRoot returns null', async () => {
       mockedEthUtils.getGenesisValidatorsRoot.mockResolvedValue(null);
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow('Could not retrieve genesis validators root');
+    });
+
+    it('should throw if getCapellaFork returns null (unsupported network)', async () => {
+      mockedEthUtils.getCapellaFork.mockResolvedValue(null);
+      await expect(
+        exit.validateExitBlobs(
+          mockClusterConfig,
+          mockExitPayload,
+          MOCK_BEACON_API_URL,
+          mockGetExistingBlobData,
+        ),
+      ).rejects.toThrow('Unsupported network: Could not determine Capella fork');
     });
 
     it('should throw if a public key in an exit blob is not found in cluster config', async () => {
@@ -322,11 +328,10 @@ describe('exit', () => {
         partial_exits: [blobWithUnknownKey],
       };
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           payloadWithUnknownKey,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow(
@@ -337,11 +342,10 @@ describe('exit', () => {
     it('should throw if a partial exit signature is invalid', async () => {
       mockedBls.verify.mockReturnValue(false);
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow(
@@ -361,11 +365,10 @@ describe('exit', () => {
         }
         return null;
       });
-      const result = await validateExitBlobs(
+      const result = await exit.validateExitBlobs(
         mockClusterConfig,
         mockExitPayload,
         MOCK_BEACON_API_URL,
-        mockHttpRequest,
         mockGetExistingBlobData,
       );
       expect(result).toEqual([]);
@@ -386,11 +389,10 @@ describe('exit', () => {
         return null;
       });
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow(
@@ -407,11 +409,10 @@ describe('exit', () => {
       });
       // currentExitBlob (from mockExitPayload) has mockExitMessage.epoch (e.g. '1')
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow(
@@ -426,14 +427,47 @@ describe('exit', () => {
         validator_index: mockExitMessage.validator_index,
         shares_exit_data: [],
       });
-      const result = await validateExitBlobs(
+      const result = await exit.validateExitBlobs(
         mockClusterConfig,
         mockExitPayload,
         MOCK_BEACON_API_URL,
-        mockHttpRequest,
         mockGetExistingBlobData,
       );
       expect(result).toEqual([mockExitBlob]);
+    });
+
+    it('should throw on signature mismatch for existing blob with same epoch', async () => {
+      const operatorIndex = 0;
+      const operatorShareIndexString = String(operatorIndex);
+
+      mockGetExistingBlobData.mockImplementation(async pubKey => {
+        if (pubKey === mockExitBlob.public_key) {
+          return {
+            publickey: mockExitBlob.public_key,
+            epoch: mockExitMessage.epoch,
+            validator_index: mockExitMessage.validator_index,
+            shares_exit_data: [
+              {
+                [operatorShareIndexString]: {
+                  partial_exit_signature: '0x' + 'different'.repeat(16),
+                },
+              },
+            ],
+          };
+        }
+        return null;
+      });
+
+      await expect(
+        exit.validateExitBlobs(
+          mockClusterConfig,
+          mockExitPayload,
+          MOCK_BEACON_API_URL,
+          mockGetExistingBlobData,
+        ),
+      ).rejects.toThrow(
+        'Signature mismatch for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd, operator index 0 at epoch 1.',
+      );
     });
 
     it('should handle multiple blobs, some new, some already processed', async () => {
@@ -471,11 +505,10 @@ describe('exit', () => {
         return null;
       });
 
-      const result = await validateExitBlobs(
+      const result = await exit.validateExitBlobs(
         clusterConfigWithTwoValidators,
         payloadWithTwoBlobs,
         MOCK_BEACON_API_URL,
-        mockHttpRequest,
         mockGetExistingBlobData,
       );
 
@@ -494,14 +527,94 @@ describe('exit', () => {
         new Error('Beacon node unavailable'),
       );
       await expect(
-        validateExitBlobs(
+        exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockHttpRequest,
           mockGetExistingBlobData,
         ),
       ).rejects.toThrow('Beacon node unavailable');
+    });
+
+    // Additional test cases to match API service coverage
+
+    it('should handle public key format differences (with and without 0x prefix)', async () => {
+      const blobWithoutPrefix: ExitValidationBlob = {
+        ...mockExitBlob,
+        public_key: 'cd'.repeat(48), // Without 0x prefix
+      };
+      const payloadWithoutPrefix = {
+        ...mockExitPayload,
+        partial_exits: [blobWithoutPrefix],
+      };
+      const clusterConfigWithoutPrefix: ExitClusterConfig = {
+        ...mockClusterConfig,
+        distributed_validators: [
+          {
+            distributed_public_key: '0x' + 'cd'.repeat(48), // With 0x prefix
+            public_shares: ['0x' + 'aa'.repeat(48)],
+          },
+        ],
+      };
+
+      const result = await exit.validateExitBlobs(
+        clusterConfigWithoutPrefix,
+        payloadWithoutPrefix,
+        MOCK_BEACON_API_URL,
+        mockGetExistingBlobData,
+      );
+      expect(result).toEqual([blobWithoutPrefix]);
+    });
+
+    it('should handle public key case differences', async () => {
+      const blobWithUppercase: ExitValidationBlob = {
+        ...mockExitBlob,
+        public_key: '0x' + 'CD'.repeat(48), // Uppercase
+      };
+      const payloadWithUppercase = {
+        ...mockExitPayload,
+        partial_exits: [blobWithUppercase],
+      };
+      const clusterConfigWithLowercase: ExitClusterConfig = {
+        ...mockClusterConfig,
+        distributed_validators: [
+          {
+            distributed_public_key: '0x' + 'cd'.repeat(48), // Lowercase
+            public_shares: ['0x' + 'aa'.repeat(48)],
+          },
+        ],
+      };
+
+      const result = await exit.validateExitBlobs(
+        clusterConfigWithLowercase,
+        payloadWithUppercase,
+        MOCK_BEACON_API_URL,
+        mockGetExistingBlobData,
+      );
+      expect(result).toEqual([blobWithUppercase]);
+    });
+
+    it('should throw if public share for operator index is not found', async () => {
+      const clusterConfigWithMissingShare: ExitClusterConfig = {
+        ...mockClusterConfig,
+        distributed_validators: [
+          {
+            distributed_public_key: mockExitBlob.public_key,
+            public_shares: [], // Empty public shares array
+          },
+        ],
+      };
+
+      await expect(
+        exit.validateExitBlobs(
+          clusterConfigWithMissingShare,
+          mockExitPayload,
+          MOCK_BEACON_API_URL,
+          mockGetExistingBlobData,
+        ),
+      ).rejects.toThrow(
+        'Public share for operator index 0 not found for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
+      );
     });
   });
 

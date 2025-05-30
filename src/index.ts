@@ -54,13 +54,8 @@ export * from './verification/signature-validator.js';
 export * from './verification/common.js';
 export * from './constants.js';
 export { Incentives } from './incentives/incentives.js';
+export { Exit } from './exits/exit.js';
 
-// Export exit validation and utility functions
-export {
-  validateExitBlobs,
-  verifyExitPayloadSignature,
-  verifyPartialExitSignature,
-} from './exits/exit.js';
 export { getCapellaFork, getGenesisValidatorsRoot } from './exits/ethUtils.js';
 export {
   computeDomain,
@@ -82,6 +77,12 @@ export class Client extends Base {
    * @type {Incentives}
    */
   public incentives: Incentives;
+
+  /**
+   * The exit module, responsible for managing exit validation.
+   * @type {Exit}
+   */
+  public exit: Exit;
 
   /**
    * The blockchain provider, used to interact with the network.
@@ -111,6 +112,12 @@ export class Client extends Base {
       provider ??
       (signer && 'provider' in signer ? signer.provider : undefined);
     this.incentives = new Incentives(
+      this.signer,
+      this.chainId,
+      this.request.bind(this),
+      this.provider,
+    );
+    this.exit = new Exit( // Add this instantiation
       this.signer,
       this.chainId,
       this.request.bind(this),
