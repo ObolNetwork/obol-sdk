@@ -135,21 +135,6 @@
     },
     "extensionsToTreatAsEsm": [
       ".ts"
-    ],
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/dist/"
-    ],
-    "modulePathIgnorePatterns": [
-      "<rootDir>/dist/"
-    ],
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "json",
-      "node"
     ]
   }
 }
