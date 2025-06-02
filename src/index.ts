@@ -56,6 +56,7 @@ export * from './verification/common.js';
 export * from './constants.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
+
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
  */

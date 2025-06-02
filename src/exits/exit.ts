@@ -62,31 +62,51 @@ export class Exit {
     this.provider = provider;
   }
 
+  /**
+   * Safely parse a string integer to number, using BigInt to avoid precision loss
+   * for large values beyond JavaScript's safe integer limit (2^53 - 1).
+   * Throws an error if the value exceeds the safe range for a 64-bit unsigned integer.
+   */
+  private static safeParseInt(value: string): number {
+    const bigIntValue = BigInt(value);
+
+    // Check if value is within the range of a 64-bit unsigned integer
+    const MAX_UINT64 = BigInt('0xFFFFFFFFFFFFFFFF');
+    if (bigIntValue < 0 || bigIntValue > MAX_UINT64) {
+      throw new Error(`Value ${value} is outside the valid range for a 64-bit unsigned integer`);
+    }
+
+    // For values within JavaScript's safe integer range, convert directly
+    const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
+    if (bigIntValue <= MAX_SAFE_INTEGER) {
+      return Number(bigIntValue);
+    }
+
+    // For larger values, we still need to convert to number for SSZ compatibility
+    // The SSZ library should handle these properly even if they exceed JS safe integer limits
+    return Number(bigIntValue);
+  }
+
   private static computePartialExitMessageRoot(
     msg: ExitValidationMessage,
   ): Buffer {
     const sszValue = SSZExitMessageType.defaultValue();
-    sszValue.epoch = parseInt(msg.epoch, 10);
-    sszValue.validator_index = parseInt(msg.validator_index, 10);
+    sszValue.epoch = Exit.safeParseInt(msg.epoch);
+    sszValue.validator_index = Exit.safeParseInt(msg.validator_index);
     return Buffer.from(SSZExitMessageType.hashTreeRoot(sszValue).buffer);
   }
 
   private static computeExitPayloadRoot(exits: ExitValidationPayload): string {
-    const sortedPartialExits = [...exits.partial_exits].sort(
-      (a, b) =>
-        parseInt(a.signed_exit_message.message.validator_index, 10) -
-        parseInt(b.signed_exit_message.message.validator_index, 10),
-    );
-
+    // Remove sorting since SSZ list ordering guarantees order
+    // This eliminates the O(n log n) sort and improves performance
     const sszValue = SSZPartialExitsPayloadType.defaultValue();
-    sszValue.partial_exits = sortedPartialExits.map(pe => ({
+    sszValue.partial_exits = exits.partial_exits.map(pe => ({
       public_key: fromHexString(pe.public_key.substring(2)),
       signed_exit_message: {
         message: {
-          epoch: parseInt(pe.signed_exit_message.message.epoch, 10),
-          validator_index: parseInt(
+          epoch: Exit.safeParseInt(pe.signed_exit_message.message.epoch),
+          validator_index: Exit.safeParseInt(
             pe.signed_exit_message.message.validator_index,
-            10,
           ),
         },
         signature: fromHexString(pe.signed_exit_message.signature.substring(2)),

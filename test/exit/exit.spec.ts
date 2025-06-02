@@ -21,11 +21,15 @@ import * as verificationHelpers from '../../src/exits/verificationHelpers';
 
 // --- Mocks ---
 jest.mock('../../src/exits/ethUtils');
-jest.mock('@chainsafe/bls', () => ({
-  init: jest.fn(),
-  verify: jest.fn(),
-  // Add other functions from @chainsafe/bls that are used, if any
-}));
+jest.mock('@chainsafe/bls', () => {
+  const actual = jest.requireActual('@chainsafe/bls');
+  return {
+    __esModule: true,
+    ...actual,
+    init: jest.fn(),
+    verify: jest.fn(),
+  };
+});
 // ENR and elliptic will be spied on, not fully mocked at module level for more flexibility
 
 const mockedEthUtils = ethUtils as jest.Mocked<typeof ethUtils>;
@@ -88,7 +92,7 @@ describe('exit', () => {
   let mockHttpRequest: jest.MockedFunction<HttpRequestFunc>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
 
     // Initialize Exit instance
     mockHttpRequest = jest.fn().mockResolvedValue({
