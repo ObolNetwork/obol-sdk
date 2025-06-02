@@ -73,7 +73,9 @@ export class Exit {
     // Check if value is within the range of a 64-bit unsigned integer
     const MAX_UINT64 = BigInt('0xFFFFFFFFFFFFFFFF');
     if (bigIntValue < 0 || bigIntValue > MAX_UINT64) {
-      throw new Error(`Value ${value} is outside the valid range for a 64-bit unsigned integer`);
+      throw new Error(
+        `Value ${value} is outside the valid range for a 64-bit unsigned integer`,
+      );
     }
 
     // For values within JavaScript's safe integer range, convert directly

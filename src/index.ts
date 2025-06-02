@@ -252,22 +252,31 @@ export class Client extends Base {
       copiedSplitRecipients,
     );
 
-    const predictedSplitterAddress = await predictSplitterAddress({
-      signer: this.signer,
-      accounts,
-      percentAllocations,
-      chainId: this.chainId,
-      distributorFee: validatedPayload.distributorFee,
-      controllerAddress: validatedPayload.controllerAddress,
-    });
+    let predictedSplitterAddress: string;
+    try {
+      predictedSplitterAddress = await predictSplitterAddress({
+        signer: this.signer,
+        accounts,
+        percentAllocations,
+        chainId: this.chainId,
+        distributorFee: validatedPayload.distributorFee,
+        controllerAddress: validatedPayload.controllerAddress,
+      });
+    } catch (error: any) {
+      throw new Error(
+        `Failed to predict splitter address: ${error.message ?? 'Unknown error occurred while predicting splitter contract address'}`,
+      );
+    }
 
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
       this.signer.provider as ProviderType,
     );
 
-    const { withdrawal_address, fee_recipient_address } =
-      await handleDeployOWRAndSplitter({
+    let withdrawal_address: string;
+    let fee_recipient_address: string;
+    try {
+      const result = await handleDeployOWRAndSplitter({
         signer: this.signer,
         isSplitterDeployed: !!isSplitterDeployed,
         predictedSplitterAddress,
@@ -280,6 +289,13 @@ export class Client extends Base {
         controllerAddress: validatedPayload.controllerAddress,
         recoveryAddress: validatedPayload.recoveryAddress,
       });
+      withdrawal_address = result.withdrawal_address;
+      fee_recipient_address = result.fee_recipient_address;
+    } catch (error: any) {
+      throw new Error(
+        `Failed to deploy OWR and splitter contracts: ${error.message ?? 'Unknown error occurred during contract deployment'}`,
+      );
+    }
 
     return { withdrawal_address, fee_recipient_address };
   }
@@ -350,22 +366,10 @@ export class Client extends Base {
     const { accounts, percentAllocations } = formatSplitRecipients(
       copiedSplitRecipients,
     );
-    const predictedSplitterAddress = await predictSplitterAddress({
-      signer: this.signer,
-      accounts,
-      percentAllocations,
-      chainId: this.chainId,
-      distributorFee: validatedPayload.distributorFee,
-      controllerAddress: validatedPayload.controllerAddress,
-    });
 
-    const isSplitterDeployed = await isContractAvailable(
-      predictedSplitterAddress,
-      this.signer.provider as ProviderType,
-    );
-
-    if (!isSplitterDeployed) {
-      const splitterAddress = await deploySplitterContract({
+    let predictedSplitterAddress: string;
+    try {
+      predictedSplitterAddress = await predictSplitterAddress({
         signer: this.signer,
         accounts,
         percentAllocations,
@@ -373,6 +377,33 @@ export class Client extends Base {
         distributorFee: validatedPayload.distributorFee,
         controllerAddress: validatedPayload.controllerAddress,
       });
+    } catch (error: any) {
+      throw new Error(
+        `Failed to predict splitter address: ${error.message ?? 'Unknown error occurred while predicting splitter contract address'}`,
+      );
+    }
+
+    const isSplitterDeployed = await isContractAvailable(
+      predictedSplitterAddress,
+      this.signer.provider as ProviderType,
+    );
+
+    if (!isSplitterDeployed) {
+      let splitterAddress: string;
+      try {
+        splitterAddress = await deploySplitterContract({
+          signer: this.signer,
+          accounts,
+          percentAllocations,
+          chainId: this.chainId,
+          distributorFee: validatedPayload.distributorFee,
+          controllerAddress: validatedPayload.controllerAddress,
+        });
+      } catch (error: any) {
+        throw new Error(
+          `Failed to deploy splitter contract: ${error.message ?? 'Unknown error occurred during splitter contract deployment'}`,
+        );
+      }
       return {
         withdrawal_address: splitterAddress,
         fee_recipient_address: splitterAddress,
@@ -402,7 +433,13 @@ export class Client extends Base {
     }
 
     const signer = this.signer;
-    return await getOWRTranches({ owrAddress, signer });
+    try {
+      return await getOWRTranches({ owrAddress, signer });
+    } catch (error: any) {
+      throw new Error(
+        `Failed to retrieve OWR tranches for address ${owrAddress}: ${error.message ?? 'Unknown error occurred while fetching OWR tranche information'}`,
+      );
+    }
   }
 
   /**
