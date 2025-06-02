@@ -261,7 +261,10 @@ const createOWRContract = async ({
     const formattedOWRAddress = '0x' + OWRAddressData.slice(26, 66);
 
     // Basic address validation
-    if (formattedOWRAddress.length !== 42 || !formattedOWRAddress.startsWith('0x')) {
+    if (
+      formattedOWRAddress.length !== 42 ||
+      !formattedOWRAddress.startsWith('0x')
+    ) {
       throw new Error(
         `Invalid OWR contract address format: ${formattedOWRAddress}`,
       );
@@ -270,7 +273,11 @@ const createOWRContract = async ({
     return formattedOWRAddress;
   } catch (error: any) {
     // Re-throw if it's already our custom error
-    if (error.message.includes('Failed to') || error.message.includes('OWR contract') || error.message.includes('Invalid OWR')) {
+    if (
+      error.message.includes('Failed to') ||
+      error.message.includes('OWR contract') ||
+      error.message.includes('Invalid OWR')
+    ) {
       throw error;
     }
     // Handle unexpected errors
@@ -341,7 +348,10 @@ export const deploySplitterContract = async ({
     const formattedSplitterAddress = '0x' + splitterAddressData.slice(26, 66);
 
     // Basic address validation
-    if (formattedSplitterAddress.length !== 42 || !formattedSplitterAddress.startsWith('0x')) {
+    if (
+      formattedSplitterAddress.length !== 42 ||
+      !formattedSplitterAddress.startsWith('0x')
+    ) {
       throw new Error(
         `Invalid splitter contract address format: ${formattedSplitterAddress}`,
       );
@@ -350,7 +360,11 @@ export const deploySplitterContract = async ({
     return formattedSplitterAddress;
   } catch (error: any) {
     // Re-throw if it's already our custom error
-    if (error.message.includes('Failed to') || error.message.includes('Splitter contract') || error.message.includes('Invalid splitter')) {
+    if (
+      error.message.includes('Failed to') ||
+      error.message.includes('Splitter contract') ||
+      error.message.includes('Invalid splitter')
+    ) {
       throw error;
     }
     // Handle unexpected errors
@@ -449,7 +463,10 @@ export const getOWRTranches = async ({
     };
   } catch (error: any) {
     // Re-throw if it's already our custom error
-    if (error.message.includes('Failed to') || error.message.includes('OWR contract')) {
+    if (
+      error.message.includes('Failed to') ||
+      error.message.includes('OWR contract')
+    ) {
       throw error;
     }
     // Handle unexpected errors
@@ -498,7 +515,10 @@ export const multicall = async (
     return receipt;
   } catch (error: any) {
     // Re-throw if it's already our custom error
-    if (error.message.includes('Failed to') || error.message.includes('Multicall transaction')) {
+    if (
+      error.message.includes('Failed to') ||
+      error.message.includes('Multicall transaction')
+    ) {
       throw error;
     }
     // Handle unexpected errors
