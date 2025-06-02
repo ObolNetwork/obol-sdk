@@ -43,11 +43,7 @@ describe('verificationHelpers', () => {
 
     it('should use GENESIS_VALIDATOR_ROOT_HEX_STRING when override is undefined', () => {
       const domainType = fromHexString(DOMAIN_VOLUNTARY_EXIT_HEX.substring(2));
-      const domain1 = computeDomain(
-        domainType,
-        MAINNET_CAPELLA_FORK_VERSION,
-        undefined,
-      );
+      const domain1 = computeDomain(domainType, MAINNET_CAPELLA_FORK_VERSION);
       const domain2 = computeDomain(
         domainType,
         MAINNET_CAPELLA_FORK_VERSION,

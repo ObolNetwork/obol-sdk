@@ -148,7 +148,7 @@ export class Exit {
       pubKeyHex = ENR.decodeTxt(enrString).publicKey.toString('hex');
     } catch (e: any) {
       throw new Error(
-        `Invalid ENR string: ${enrString}. Error: ${e.message || String(e)}`,
+        `Invalid ENR string: ${enrString}. Error: ${e.message ?? String(e)}`,
       );
     }
 
@@ -176,7 +176,7 @@ export class Exit {
         );
     } catch (e: any) {
       throw new Error(
-        `Signature verification failed: ${e.message || String(e)}`,
+        `Signature verification failed: ${e.message ?? String(e)}`,
       );
     }
   }

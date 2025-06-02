@@ -61,36 +61,32 @@ export const predictSplitterAddress = async ({
   distributorFee: number;
   controllerAddress: ETH_ADDRESS;
 }): Promise<ETH_ADDRESS> => {
-  try {
-    let predictedSplitterAddress: string;
-    const splitMainContractInstance = new Contract(
-      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
-      splitMainEthereumAbi,
-      signer,
-    );
+  let predictedSplitterAddress: string;
+  const splitMainContractInstance = new Contract(
+    CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+    splitMainEthereumAbi,
+    signer,
+  );
 
-    if (controllerAddress === ZeroAddress) {
-      predictedSplitterAddress =
-        await splitMainContractInstance.predictImmutableSplitAddress(
-          accounts,
-          percentAllocations,
-          distributorFee,
-        );
-    } else {
-      // It throws on deployed Immutable splitter
-      predictedSplitterAddress =
-        await splitMainContractInstance.createSplit.staticCall(
-          accounts,
-          percentAllocations,
-          distributorFee,
-          controllerAddress,
-        );
-    }
-
-    return predictedSplitterAddress;
-  } catch (e) {
-    throw e;
+  if (controllerAddress === ZeroAddress) {
+    predictedSplitterAddress =
+      await splitMainContractInstance.predictImmutableSplitAddress(
+        accounts,
+        percentAllocations,
+        distributorFee,
+      );
+  } else {
+    // It throws on deployed Immutable splitter
+    predictedSplitterAddress =
+      await splitMainContractInstance.createSplit.staticCall(
+        accounts,
+        percentAllocations,
+        distributorFee,
+        controllerAddress,
+      );
   }
+
+  return predictedSplitterAddress;
 };
 
 export const handleDeployOWRAndSplitter = async ({
@@ -118,48 +114,45 @@ export const handleDeployOWRAndSplitter = async ({
   controllerAddress: ETH_ADDRESS;
   recoveryAddress: ETH_ADDRESS;
 }): Promise<ClusterValidator> => {
-  try {
-    if (isSplitterDeployed) {
-      const owrAddress = await createOWRContract({
+  if (isSplitterDeployed) {
+    const owrAddress = await createOWRContract({
+      owrArgs: {
+        principalRecipient,
+        amountOfPrincipalStake: etherAmount,
+        predictedSplitterAddress,
+        recoveryAddress,
+      },
+      signer,
+      chainId,
+    });
+    return {
+      withdrawal_address: owrAddress,
+      fee_recipient_address: predictedSplitterAddress,
+    };
+  } else {
+    const { owrAddress, splitterAddress } = await deploySplitterAndOWRContracts(
+      {
         owrArgs: {
           principalRecipient,
           amountOfPrincipalStake: etherAmount,
           predictedSplitterAddress,
           recoveryAddress,
         },
+        splitterArgs: {
+          accounts,
+          percentAllocations,
+          distributorFee,
+          controllerAddress,
+        },
         signer,
         chainId,
-      });
-      return {
-        withdrawal_address: owrAddress,
-        fee_recipient_address: predictedSplitterAddress,
-      };
-    } else {
-      const { owrAddress, splitterAddress } =
-        await deploySplitterAndOWRContracts({
-          owrArgs: {
-            principalRecipient,
-            amountOfPrincipalStake: etherAmount,
-            predictedSplitterAddress,
-            recoveryAddress,
-          },
-          splitterArgs: {
-            accounts,
-            percentAllocations,
-            distributorFee,
-            controllerAddress,
-          },
-          signer,
-          chainId,
-        });
+      },
+    );
 
-      return {
-        withdrawal_address: owrAddress,
-        fee_recipient_address: splitterAddress,
-      };
-    }
-  } catch (e) {
-    throw e;
+    return {
+      withdrawal_address: owrAddress,
+      fee_recipient_address: splitterAddress,
+    };
   }
 };
 
@@ -172,28 +165,24 @@ const createOWRContract = async ({
   signer: SignerType;
   chainId: number;
 }): Promise<ETH_ADDRESS> => {
-  try {
-    const OWRFactoryInstance = new Contract(
-      CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
-      OWRFactoryContract.abi,
-      signer,
-    );
+  const OWRFactoryInstance = new Contract(
+    CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
+    OWRFactoryContract.abi,
+    signer,
+  );
 
-    const tx = await OWRFactoryInstance.createOWRecipient(
-      owrArgs.recoveryAddress,
-      owrArgs.principalRecipient,
-      owrArgs.predictedSplitterAddress,
-      parseEther(owrArgs.amountOfPrincipalStake.toString()),
-    );
+  const tx = await OWRFactoryInstance.createOWRecipient(
+    owrArgs.recoveryAddress,
+    owrArgs.principalRecipient,
+    owrArgs.predictedSplitterAddress,
+    parseEther(owrArgs.amountOfPrincipalStake.toString()),
+  );
 
-    const receipt = await tx.wait();
-    const OWRAddressData = receipt?.logs[0]?.topics[1];
-    const formattedOWRAddress = '0x' + OWRAddressData?.slice(26, 66);
+  const receipt = await tx.wait();
+  const OWRAddressData = receipt?.logs[0]?.topics[1];
+  const formattedOWRAddress = '0x' + OWRAddressData?.slice(26, 66);
 
-    return formattedOWRAddress;
-  } catch (e) {
-    throw e;
-  }
+  return formattedOWRAddress;
 };
 
 export const deploySplitterContract = async ({
@@ -211,27 +200,23 @@ export const deploySplitterContract = async ({
   distributorFee: number;
   controllerAddress: ETH_ADDRESS;
 }): Promise<ETH_ADDRESS> => {
-  try {
-    const splitMainContractInstance = new Contract(
-      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
-      splitMainEthereumAbi,
-      signer,
-    );
-    const tx = await splitMainContractInstance.createSplit(
-      accounts,
-      percentAllocations,
-      distributorFee,
-      controllerAddress,
-    );
+  const splitMainContractInstance = new Contract(
+    CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+    splitMainEthereumAbi,
+    signer,
+  );
+  const tx = await splitMainContractInstance.createSplit(
+    accounts,
+    percentAllocations,
+    distributorFee,
+    controllerAddress,
+  );
 
-    const receipt = await tx.wait();
-    const splitterAddressData = receipt?.logs[0]?.topics[1];
-    const formattedSplitterAddress = '0x' + splitterAddressData?.slice(26, 66);
+  const receipt = await tx.wait();
+  const splitterAddressData = receipt?.logs[0]?.topics[1];
+  const formattedSplitterAddress = '0x' + splitterAddressData?.slice(26, 66);
 
-    return formattedSplitterAddress;
-  } catch (e) {
-    throw e;
-  }
+  return formattedSplitterAddress;
 };
 
 export const deploySplitterAndOWRContracts = async ({
@@ -246,52 +231,49 @@ export const deploySplitterAndOWRContracts = async ({
   chainId: number;
 }): Promise<{ owrAddress: ETH_ADDRESS; splitterAddress: ETH_ADDRESS }> => {
   const executeCalls: Call[] = [];
-  try {
-    const splitTxData = encodeCreateSplitTxData(
-      splitterArgs.accounts,
-      splitterArgs.percentAllocations,
-      splitterArgs.distributorFee,
-      splitterArgs.controllerAddress,
-    );
 
-    const owrTxData = encodeCreateOWRecipientTxData(
-      owrArgs.recoveryAddress,
-      owrArgs.principalRecipient,
-      owrArgs.predictedSplitterAddress,
-      owrArgs.amountOfPrincipalStake,
-    );
+  const splitTxData = encodeCreateSplitTxData(
+    splitterArgs.accounts,
+    splitterArgs.percentAllocations,
+    splitterArgs.distributorFee,
+    splitterArgs.controllerAddress,
+  );
 
-    executeCalls.push(
-      {
-        target: CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
-        callData: splitTxData,
-      },
-      {
-        target: CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
-        callData: owrTxData,
-      },
-    );
-    const multicallAddess =
-      CHAIN_CONFIGURATION[chainId].MULTICALL_ADDRESS.address;
+  const owrTxData = encodeCreateOWRecipientTxData(
+    owrArgs.recoveryAddress,
+    owrArgs.principalRecipient,
+    owrArgs.predictedSplitterAddress,
+    owrArgs.amountOfPrincipalStake,
+  );
 
-    const executeMultiCalls = await multicall(
-      executeCalls,
-      signer,
-      multicallAddess,
-    );
+  executeCalls.push(
+    {
+      target: CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+      callData: splitTxData,
+    },
+    {
+      target: CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
+      callData: owrTxData,
+    },
+  );
+  const multicallAddess =
+    CHAIN_CONFIGURATION[chainId].MULTICALL_ADDRESS.address;
 
-    const splitAddressData = executeMultiCalls?.logs[0]?.topics[1];
-    const formattedSplitterAddress = '0x' + splitAddressData?.slice(26, 66);
-    const owrAddressData = executeMultiCalls?.logs[1]?.topics[1];
-    const formattedOwrAddress = '0x' + owrAddressData?.slice(26, 66);
+  const executeMultiCalls = await multicall(
+    executeCalls,
+    signer,
+    multicallAddess,
+  );
 
-    return {
-      owrAddress: formattedOwrAddress,
-      splitterAddress: formattedSplitterAddress,
-    };
-  } catch (e) {
-    throw e;
-  }
+  const splitAddressData = executeMultiCalls?.logs[0]?.topics[1];
+  const formattedSplitterAddress = '0x' + splitAddressData?.slice(26, 66);
+  const owrAddressData = executeMultiCalls?.logs[1]?.topics[1];
+  const formattedOwrAddress = '0x' + owrAddressData?.slice(26, 66);
+
+  return {
+    owrAddress: formattedOwrAddress,
+    splitterAddress: formattedSplitterAddress,
+  };
 };
 
 export const getOWRTranches = async ({
