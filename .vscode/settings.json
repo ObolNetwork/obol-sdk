@@ -1,6 +1,0 @@
-{
-    "sonarlint.connectedMode.project": {
-        "connectionId": "obolnetwork",
-        "projectKey": "ObolNetwork_obol-sdk"
-    }
-}

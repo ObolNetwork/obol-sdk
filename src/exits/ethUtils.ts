@@ -1,12 +1,17 @@
 import type { HttpRequestFunc } from '../types';
-import { CAPELLA_FORK_MAPPING, FORK_VERSION_TO_NETWORK_NAME } from '../constants';
+import {
+  CAPELLA_FORK_MAPPING,
+  FORK_VERSION_TO_NETWORK_NAME,
+} from '../constants';
 
 /**
  * Retrieves the Capella fork version for a given base fork version.
  * @param fork_version - The base fork version string (e.g., '0x00000000' for mainnet).
  * @returns A promise that resolves to the Capella fork version string, or null if not found.
  */
-export async function getCapellaFork(fork_version: string): Promise<string | null> {
+export async function getCapellaFork(
+  fork_version: string,
+): Promise<string | null> {
   // Ensure the CAPELLA_FORK_MAPPING uses the base fork_version as key
   if (CAPELLA_FORK_MAPPING[fork_version]) {
     return CAPELLA_FORK_MAPPING[fork_version];
@@ -44,8 +49,11 @@ export async function getGenesisValidatorsRoot(
     console.error('Invalid response structure from genesis endpoint', response);
     return null;
   } catch (e: any) {
-    console.error(`Error fetching genesis validators root from ${genesisEndpoint}:`, e);
+    console.error(
+      `Error fetching genesis validators root from ${genesisEndpoint}:`,
+      e,
+    );
     const errorMessage = e instanceof Error ? e.message : String(e);
     throw new Error(`Failed to fetch genesis validators root: ${errorMessage}`);
   }
-} 
+}

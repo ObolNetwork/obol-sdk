@@ -1,6 +1,6 @@
 {
   "name": "@obolnetwork/obol-sdk",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "A package for creating Distributed Validators using the Obol API.",
   "bugs": {
     "url": "https://github.com/obolnetwork/obol-sdk/issues"
@@ -15,7 +15,7 @@
     "compile": "tsc -b ./tsconfig.cjs.json ./tsconfig.esm.json ./tsconfig.types.json",
     "build:clean": "rm -rf ./dist",
     "build": "npm-run-all build:clean compile",
-    "test": "jest test/**/*.spec.ts",
+    "test": "jest test/**/*.spec.ts --testPathIgnorePatterns=test/sdk-package/",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "release": "release-it",
@@ -52,6 +52,7 @@
     "ajv-formats": "^3.0.1",
     "ajv-keywords": "^5.1.0",
     "cross-fetch": "^3.1.5",
+    "dotenv": "^16.4.7",
     "elliptic": "^6.5.4",
     "eslint-config-standard-with-typescript": "^43.0.1",
     "eslint-plugin-import": "^2.29.1",
@@ -66,13 +67,11 @@
   },
   "devDependencies": {
     "@release-it/conventional-changelog": "^8.0.1",
-    "@types/dotenv": "^6.1.1",
     "@types/elliptic": "^6.4.18",
     "@types/jest": "^28.1.8",
     "@types/node": "^20.2.5",
     "@types/semver": "^7.5.8",
     "@types/uuid": "^9.0.1",
-    "dotenv": "^16.5.0",
     "eslint": "^8.57.0",
     "husky": "^9.0.11",
     "jest": "^28.1.3",
@@ -131,25 +130,10 @@
       "^bn.js$": "<rootDir>/node_modules/bn.js",
       "^asn1.js$": "<rootDir>/node_modules/asn1.js",
       "^hash.js$": "<rootDir>/node_modules/hash.js",
-      "^(\\.{1,2}/.*)\\.js$": "$1"
+      "^(\\.\\.?\\/.+)\\.js$": "$1"
     },
     "extensionsToTreatAsEsm": [
       ".ts"
-    ],
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/dist/"
-    ],
-    "modulePathIgnorePatterns": [
-      "<rootDir>/dist/"
-    ],
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "json",
-      "node"
     ]
   }
 }

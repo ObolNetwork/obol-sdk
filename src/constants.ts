@@ -236,6 +236,10 @@ export const NETWORK_NAME_TO_FORK_VERSION: Record<string, string> = {
  * Maps base fork versions to their corresponding network names.
  * This is the reverse of NETWORK_NAME_TO_FORK_VERSION for convenience.
  */
-export const FORK_VERSION_TO_NETWORK_NAME: Record<string, string> = Object.fromEntries(
-  Object.entries(NETWORK_NAME_TO_FORK_VERSION).map(([name, version]) => [version, name])
-);
+export const FORK_VERSION_TO_NETWORK_NAME: Record<string, string> =
+  Object.fromEntries(
+    Object.entries(NETWORK_NAME_TO_FORK_VERSION).map(([name, version]) => [
+      version,
+      name,
+    ]),
+  );

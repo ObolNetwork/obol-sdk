@@ -1,8 +1,4 @@
-import {
-  ContainerType,
-  ByteVectorType,
-  fromHexString,
-} from '@chainsafe/ssz';
+import { ContainerType, ByteVectorType, fromHexString } from '@chainsafe/ssz';
 
 // From obol-api/src/verification/common.ts
 export const GENESIS_VALIDATOR_ROOT_HEX_STRING =
@@ -48,7 +44,9 @@ export function computeDomain(
   genesisValidatorsRootOverride?: Uint8Array, // 32 bytes
 ): Uint8Array {
   const forkVersionBytes = fromHexString(
-    forkVersionString.startsWith('0x') ? forkVersionString.substring(2) : forkVersionString
+    forkVersionString.startsWith('0x')
+      ? forkVersionString.substring(2)
+      : forkVersionString,
   );
 
   if (forkVersionBytes.length !== 4) {
@@ -58,10 +56,14 @@ export function computeDomain(
     throw new Error('Domain type must be 4 bytes');
   }
 
-  const actualGenesisValidatorsRoot = genesisValidatorsRootOverride ??
+  const actualGenesisValidatorsRoot =
+    genesisValidatorsRootOverride ??
     fromHexString(GENESIS_VALIDATOR_ROOT_HEX_STRING.substring(2));
 
-  const forkDataRoot = computeForkDataRoot(forkVersionBytes, actualGenesisValidatorsRoot);
+  const forkDataRoot = computeForkDataRoot(
+    forkVersionBytes,
+    actualGenesisValidatorsRoot,
+  );
   const domain = new Uint8Array(32);
   domain.set(domainType.slice(0, 4)); // Ensure domainType is 4 bytes and set it
   domain.set(forkDataRoot.subarray(0, 28), 4); // Set the remaining 28 bytes from forkDataRoot
@@ -104,4 +106,4 @@ export function signingRoot(
 ): Uint8Array {
   const sszObjectRootU8 = Uint8Array.from(messageBuffer);
   return computeSigningRoot(sszObjectRootU8, domain);
-} 
+}

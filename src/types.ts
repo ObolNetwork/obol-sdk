@@ -422,12 +422,10 @@ export interface ExitValidationPayload {
  * Represents the data structure for an already existing exit blob for exit validation.
  */
 export interface ExistingExitValidationBlobData {
-  publickey: string;
+  public_key: string;
   epoch: string;
   validator_index: string;
-  shares_exit_data: Array<
-    Record<string, { partial_exit_signature: string }>
-  >;
+  shares_exit_data: Array<Record<string, { partial_exit_signature: string }>>;
 }
 
 /**
