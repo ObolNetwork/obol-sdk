@@ -61,32 +61,56 @@ export const predictSplitterAddress = async ({
   distributorFee: number;
   controllerAddress: ETH_ADDRESS;
 }): Promise<ETH_ADDRESS> => {
-  let predictedSplitterAddress: string;
-  const splitMainContractInstance = new Contract(
-    CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
-    splitMainEthereumAbi,
-    signer,
-  );
+  try {
+    const splitMainContractInstance = new Contract(
+      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+      splitMainEthereumAbi,
+      signer,
+    );
 
-  if (controllerAddress === ZeroAddress) {
-    predictedSplitterAddress =
-      await splitMainContractInstance.predictImmutableSplitAddress(
-        accounts,
-        percentAllocations,
-        distributorFee,
-      );
-  } else {
-    // It throws on deployed Immutable splitter
-    predictedSplitterAddress =
-      await splitMainContractInstance.createSplit.staticCall(
-        accounts,
-        percentAllocations,
-        distributorFee,
-        controllerAddress,
-      );
+    let predictedSplitterAddress: string;
+
+    if (controllerAddress === ZeroAddress) {
+      try {
+        predictedSplitterAddress =
+          await splitMainContractInstance.predictImmutableSplitAddress(
+            accounts,
+            percentAllocations,
+            distributorFee,
+          );
+      } catch (error: any) {
+        throw new Error(
+          `Failed to predict immutable splitter address: ${error.message ?? 'Contract call failed'}`,
+        );
+      }
+    } else {
+      try {
+        // It throws on deployed Immutable splitter
+        predictedSplitterAddress =
+          await splitMainContractInstance.createSplit.staticCall(
+            accounts,
+            percentAllocations,
+            distributorFee,
+            controllerAddress,
+          );
+      } catch (error: any) {
+        throw new Error(
+          `Failed to predict mutable splitter address via static call: ${error.message ?? 'Static call failed'}`,
+        );
+      }
+    }
+
+    return predictedSplitterAddress;
+  } catch (error: any) {
+    // Re-throw if it's already our custom error
+    if (error.message.includes('Failed to predict')) {
+      throw error;
+    }
+    // Handle unexpected errors
+    throw new Error(
+      `Unexpected error in predictSplitterAddress: ${error.message ?? 'Unknown contract interaction error'}`,
+    );
   }
-
-  return predictedSplitterAddress;
 };
 
 export const handleDeployOWRAndSplitter = async ({
@@ -114,45 +138,71 @@ export const handleDeployOWRAndSplitter = async ({
   controllerAddress: ETH_ADDRESS;
   recoveryAddress: ETH_ADDRESS;
 }): Promise<ClusterValidator> => {
-  if (isSplitterDeployed) {
-    const owrAddress = await createOWRContract({
-      owrArgs: {
-        principalRecipient,
-        amountOfPrincipalStake: etherAmount,
-        predictedSplitterAddress,
-        recoveryAddress,
-      },
-      signer,
-      chainId,
-    });
-    return {
-      withdrawal_address: owrAddress,
-      fee_recipient_address: predictedSplitterAddress,
-    };
-  } else {
-    const { owrAddress, splitterAddress } = await deploySplitterAndOWRContracts(
-      {
-        owrArgs: {
-          principalRecipient,
-          amountOfPrincipalStake: etherAmount,
-          predictedSplitterAddress,
-          recoveryAddress,
-        },
-        splitterArgs: {
-          accounts,
-          percentAllocations,
-          distributorFee,
-          controllerAddress,
-        },
-        signer,
-        chainId,
-      },
-    );
+  try {
+    if (isSplitterDeployed) {
+      let owrAddress: ETH_ADDRESS;
+      try {
+        owrAddress = await createOWRContract({
+          owrArgs: {
+            principalRecipient,
+            amountOfPrincipalStake: etherAmount,
+            predictedSplitterAddress,
+            recoveryAddress,
+          },
+          signer,
+          chainId,
+        });
+      } catch (error: any) {
+        throw new Error(
+          `Failed to create OWR contract with existing splitter: ${error.message ?? 'OWR contract creation failed'}`,
+        );
+      }
+      return {
+        withdrawal_address: owrAddress,
+        fee_recipient_address: predictedSplitterAddress,
+      };
+    } else {
+      let owrAddress: ETH_ADDRESS;
+      let splitterAddress: ETH_ADDRESS;
+      try {
+        const result = await deploySplitterAndOWRContracts({
+          owrArgs: {
+            principalRecipient,
+            amountOfPrincipalStake: etherAmount,
+            predictedSplitterAddress,
+            recoveryAddress,
+          },
+          splitterArgs: {
+            accounts,
+            percentAllocations,
+            distributorFee,
+            controllerAddress,
+          },
+          signer,
+          chainId,
+        });
+        owrAddress = result.owrAddress;
+        splitterAddress = result.splitterAddress;
+      } catch (error: any) {
+        throw new Error(
+          `Failed to deploy both splitter and OWR contracts: ${error.message ?? 'Multicall contract deployment failed'}`,
+        );
+      }
 
-    return {
-      withdrawal_address: owrAddress,
-      fee_recipient_address: splitterAddress,
-    };
+      return {
+        withdrawal_address: owrAddress,
+        fee_recipient_address: splitterAddress,
+      };
+    }
+  } catch (error: any) {
+    // Re-throw if it's already our custom error
+    if (error.message.includes('Failed to')) {
+      throw error;
+    }
+    // Handle unexpected errors
+    throw new Error(
+      `Unexpected error in handleDeployOWRAndSplitter: ${error.message ?? 'Unknown error during contract deployment orchestration'}`,
+    );
   }
 };
 
@@ -165,24 +215,69 @@ const createOWRContract = async ({
   signer: SignerType;
   chainId: number;
 }): Promise<ETH_ADDRESS> => {
-  const OWRFactoryInstance = new Contract(
-    CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
-    OWRFactoryContract.abi,
-    signer,
-  );
+  try {
+    const OWRFactoryInstance = new Contract(
+      CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
+      OWRFactoryContract.abi,
+      signer,
+    );
 
-  const tx = await OWRFactoryInstance.createOWRecipient(
-    owrArgs.recoveryAddress,
-    owrArgs.principalRecipient,
-    owrArgs.predictedSplitterAddress,
-    parseEther(owrArgs.amountOfPrincipalStake.toString()),
-  );
+    let tx;
+    try {
+      tx = await OWRFactoryInstance.createOWRecipient(
+        owrArgs.recoveryAddress,
+        owrArgs.principalRecipient,
+        owrArgs.predictedSplitterAddress,
+        parseEther(owrArgs.amountOfPrincipalStake.toString()),
+      );
+    } catch (error: any) {
+      throw new Error(
+        `Failed to submit OWR contract creation transaction: ${error.message ?? 'Transaction submission failed'}`,
+      );
+    }
 
-  const receipt = await tx.wait();
-  const OWRAddressData = receipt?.logs[0]?.topics[1];
-  const formattedOWRAddress = '0x' + OWRAddressData?.slice(26, 66);
+    let receipt;
+    try {
+      receipt = await tx.wait();
+    } catch (error: any) {
+      throw new Error(
+        `OWR contract creation transaction failed or was reverted: ${error.message ?? 'Transaction execution failed'}`,
+      );
+    }
 
-  return formattedOWRAddress;
+    if (!receipt?.logs?.length) {
+      throw new Error(
+        'OWR contract creation transaction succeeded but no events were emitted - unable to determine contract address',
+      );
+    }
+
+    const OWRAddressData = receipt.logs[0]?.topics[1];
+    if (!OWRAddressData) {
+      throw new Error(
+        'OWR contract creation transaction succeeded but contract address could not be extracted from events',
+      );
+    }
+
+    const formattedOWRAddress = '0x' + OWRAddressData.slice(26, 66);
+
+    // Basic address validation
+    if (formattedOWRAddress.length !== 42 || !formattedOWRAddress.startsWith('0x')) {
+      throw new Error(
+        `Invalid OWR contract address format: ${formattedOWRAddress}`,
+      );
+    }
+
+    return formattedOWRAddress;
+  } catch (error: any) {
+    // Re-throw if it's already our custom error
+    if (error.message.includes('Failed to') || error.message.includes('OWR contract') || error.message.includes('Invalid OWR')) {
+      throw error;
+    }
+    // Handle unexpected errors
+    throw new Error(
+      `Unexpected error in createOWRContract: ${error.message ?? 'Unknown error during OWR contract creation'}`,
+    );
+  }
 };
 
 export const deploySplitterContract = async ({
@@ -200,23 +295,69 @@ export const deploySplitterContract = async ({
   distributorFee: number;
   controllerAddress: ETH_ADDRESS;
 }): Promise<ETH_ADDRESS> => {
-  const splitMainContractInstance = new Contract(
-    CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
-    splitMainEthereumAbi,
-    signer,
-  );
-  const tx = await splitMainContractInstance.createSplit(
-    accounts,
-    percentAllocations,
-    distributorFee,
-    controllerAddress,
-  );
+  try {
+    const splitMainContractInstance = new Contract(
+      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+      splitMainEthereumAbi,
+      signer,
+    );
 
-  const receipt = await tx.wait();
-  const splitterAddressData = receipt?.logs[0]?.topics[1];
-  const formattedSplitterAddress = '0x' + splitterAddressData?.slice(26, 66);
+    let tx;
+    try {
+      tx = await splitMainContractInstance.createSplit(
+        accounts,
+        percentAllocations,
+        distributorFee,
+        controllerAddress,
+      );
+    } catch (error: any) {
+      throw new Error(
+        `Failed to submit splitter contract creation transaction: ${error.message ?? 'Transaction submission failed'}`,
+      );
+    }
 
-  return formattedSplitterAddress;
+    let receipt;
+    try {
+      receipt = await tx.wait();
+    } catch (error: any) {
+      throw new Error(
+        `Splitter contract creation transaction failed or was reverted: ${error.message ?? 'Transaction execution failed'}`,
+      );
+    }
+
+    if (!receipt?.logs?.length) {
+      throw new Error(
+        'Splitter contract creation transaction succeeded but no events were emitted - unable to determine contract address',
+      );
+    }
+
+    const splitterAddressData = receipt.logs[0]?.topics[1];
+    if (!splitterAddressData) {
+      throw new Error(
+        'Splitter contract creation transaction succeeded but contract address could not be extracted from events',
+      );
+    }
+
+    const formattedSplitterAddress = '0x' + splitterAddressData.slice(26, 66);
+
+    // Basic address validation
+    if (formattedSplitterAddress.length !== 42 || !formattedSplitterAddress.startsWith('0x')) {
+      throw new Error(
+        `Invalid splitter contract address format: ${formattedSplitterAddress}`,
+      );
+    }
+
+    return formattedSplitterAddress;
+  } catch (error: any) {
+    // Re-throw if it's already our custom error
+    if (error.message.includes('Failed to') || error.message.includes('Splitter contract') || error.message.includes('Invalid splitter')) {
+      throw error;
+    }
+    // Handle unexpected errors
+    throw new Error(
+      `Unexpected error in deploySplitterContract: ${error.message ?? 'Unknown error during splitter contract creation'}`,
+    );
+  }
 };
 
 export const deploySplitterAndOWRContracts = async ({
@@ -283,14 +424,39 @@ export const getOWRTranches = async ({
   owrAddress: ETH_ADDRESS;
   signer: SignerType;
 }): Promise<OWRTranches> => {
-  const owrContract = new Contract(owrAddress, OWRContract.abi, signer);
-  const res = await owrContract.getTranches();
+  try {
+    const owrContract = new Contract(owrAddress, OWRContract.abi, signer);
 
-  return {
-    principalRecipient: res.principalRecipient,
-    rewardRecipient: res.rewardRecipient,
-    amountOfPrincipalStake: res.amountOfPrincipalStake,
-  };
+    let res;
+    try {
+      res = await owrContract.getTranches();
+    } catch (error: any) {
+      throw new Error(
+        `Failed to call getTranches on OWR contract at ${owrAddress}: ${error.message ?? 'Contract call failed'}`,
+      );
+    }
+
+    if (!res) {
+      throw new Error(
+        `OWR contract at ${owrAddress} returned empty result for getTranches()`,
+      );
+    }
+
+    return {
+      principalRecipient: res.principalRecipient,
+      rewardRecipient: res.rewardRecipient,
+      amountOfPrincipalStake: res.amountOfPrincipalStake,
+    };
+  } catch (error: any) {
+    // Re-throw if it's already our custom error
+    if (error.message.includes('Failed to') || error.message.includes('OWR contract')) {
+      throw error;
+    }
+    // Handle unexpected errors
+    throw new Error(
+      `Unexpected error in getOWRTranches: ${error.message ?? 'Unknown error while fetching OWR tranche data'}`,
+    );
+  }
 };
 
 export const multicall = async (
@@ -298,14 +464,48 @@ export const multicall = async (
   signer: SignerType,
   multicallAddress: string,
 ): Promise<any> => {
-  const multiCallContractInstance = new Contract(
-    multicallAddress,
-    MultiCallContract.abi,
-    signer,
-  );
-  const tx = await multiCallContractInstance.aggregate(calls);
-  const receipt = await tx.wait();
-  return receipt;
+  try {
+    const multiCallContractInstance = new Contract(
+      multicallAddress,
+      MultiCallContract.abi,
+      signer,
+    );
+
+    let tx;
+    try {
+      tx = await multiCallContractInstance.aggregate(calls);
+    } catch (error: any) {
+      throw new Error(
+        `Failed to submit multicall transaction: ${error.message ?? 'Transaction submission failed'}`,
+      );
+    }
+
+    let receipt;
+    try {
+      receipt = await tx.wait();
+    } catch (error: any) {
+      throw new Error(
+        `Multicall transaction failed or was reverted: ${error.message ?? 'Transaction execution failed'}`,
+      );
+    }
+
+    if (!receipt) {
+      throw new Error(
+        'Multicall transaction succeeded but no receipt was returned',
+      );
+    }
+
+    return receipt;
+  } catch (error: any) {
+    // Re-throw if it's already our custom error
+    if (error.message.includes('Failed to') || error.message.includes('Multicall transaction')) {
+      throw error;
+    }
+    // Handle unexpected errors
+    throw new Error(
+      `Unexpected error in multicall: ${error.message ?? 'Unknown error during multicall execution'}`,
+    );
+  }
 };
 
 const encodeCreateSplitTxData = (
