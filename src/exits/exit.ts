@@ -181,14 +181,10 @@ export class Exit {
     }
   }
 
-  async validateExitBlobs(
+  private async validateOperatorAndPayload(
     clusterConfig: ExitClusterConfig,
     exitsPayload: ExitValidationPayload,
-    beaconNodeApiUrl: string,
-    getExistingBlobData: (
-      publicKey: string,
-    ) => Promise<ExistingExitValidationBlobData | null>,
-  ): Promise<ExitValidationBlob[]> {
+  ): Promise<string> {
     const operatorIndex = exitsPayload.share_idx - 1;
     if (
       operatorIndex < 0 ||
@@ -208,114 +204,192 @@ export class Exit {
       throw new Error('Incorrect payload signature for partial exits.');
     }
 
+    return operatorEnr;
+  }
+
+  private async getNetworkParameters(
+    forkVersion: string,
+    beaconNodeApiUrl: string,
+  ): Promise<{ genesisValidatorsRoot: string; capellaForkVersion: string }> {
     const genesisValidatorsRootString = await getGenesisValidatorsRoot(
-      clusterConfig.definition.fork_version,
+      forkVersion,
       beaconNodeApiUrl,
-      this.request, // Use this.request
+      this.request,
     );
     if (!genesisValidatorsRootString) {
       throw new Error('Could not retrieve genesis validators root.');
     }
 
-    const capellaForkVersionString = await getCapellaFork(
-      clusterConfig.definition.fork_version,
-    );
+    const capellaForkVersionString = await getCapellaFork(forkVersion);
     if (!capellaForkVersionString) {
       throw new Error(
-        `Unsupported network: Could not determine Capella fork for ${clusterConfig.definition.fork_version}`,
+        `Unsupported network: Could not determine Capella fork for ${forkVersion}`,
       );
     }
 
+    return {
+      genesisValidatorsRoot: genesisValidatorsRootString,
+      capellaForkVersion: capellaForkVersionString,
+    };
+  }
+
+  private findValidatorInCluster(
+    clusterConfig: ExitClusterConfig,
+    publicKey: string,
+    operatorIndex: number,
+  ): { validator: any; publicShare: string } {
+    const validatorInCluster = clusterConfig.distributed_validators.find(
+      dv =>
+        (dv.distributed_public_key.startsWith('0x')
+          ? dv.distributed_public_key
+          : '0x' + dv.distributed_public_key
+        ).toLowerCase() ===
+        (publicKey.startsWith('0x')
+          ? publicKey
+          : '0x' + publicKey
+        ).toLowerCase(),
+    );
+
+    if (!validatorInCluster) {
+      throw new Error(
+        `Public key ${publicKey} not found in the cluster's distributed validators.`,
+      );
+    }
+
+    const publicShareForOperator =
+      validatorInCluster.public_shares[operatorIndex];
+    if (!publicShareForOperator) {
+      throw new Error(
+        `Public share for operator index ${operatorIndex} not found for validator ${publicKey}`,
+      );
+    }
+
+    return {
+      validator: validatorInCluster,
+      publicShare: publicShareForOperator,
+    };
+  }
+
+  private async validateExistingBlobData(
+    exitBlob: ExitValidationBlob,
+    existingBlob: ExistingExitValidationBlobData | null,
+    operatorIndex: number,
+  ): Promise<boolean> {
+    if (!existingBlob) {
+      return false;
+    }
+
+    if (
+      existingBlob.validator_index !==
+      exitBlob.signed_exit_message.message.validator_index
+    ) {
+      throw new Error(
+        `Validator index mismatch for already processed exit for public key ${exitBlob.public_key}. Expected ${existingBlob.validator_index}, got ${exitBlob.signed_exit_message.message.validator_index}.`,
+      );
+    }
+
+    const currentEpoch = parseInt(
+      exitBlob.signed_exit_message.message.epoch,
+      10,
+    );
+    const existingEpoch = parseInt(existingBlob.epoch, 10);
+
+    if (currentEpoch < existingEpoch) {
+      throw new Error(
+        `New exit epoch ${currentEpoch} is not greater than existing exit epoch ${existingEpoch} for validator ${exitBlob.public_key}.`,
+      );
+    } else if (currentEpoch === existingEpoch) {
+      const operatorShareIndexString = String(operatorIndex);
+      if (
+        existingBlob.shares_exit_data?.[0]?.[operatorShareIndexString]
+          ?.partial_exit_signature &&
+        existingBlob.shares_exit_data[0][operatorShareIndexString]
+          .partial_exit_signature !== exitBlob.signed_exit_message.signature
+      ) {
+        throw new Error(
+          `Signature mismatch for validator ${exitBlob.public_key}, operator index ${operatorIndex} at epoch ${currentEpoch}. Received different signature than existing.`,
+        );
+      }
+      return true; // Already processed
+    }
+
+    return false;
+  }
+
+  private async processExitBlob(
+    exitBlob: ExitValidationBlob,
+    clusterConfig: ExitClusterConfig,
+    operatorIndex: number,
+    genesisValidatorsRoot: string,
+    getExistingBlobData: (
+      publicKey: string,
+    ) => Promise<ExistingExitValidationBlobData | null>,
+  ): Promise<ExitValidationBlob | null> {
+    const { publicShare } = this.findValidatorInCluster(
+      clusterConfig,
+      exitBlob.public_key,
+      operatorIndex,
+    );
+
+    const existingBlob = await getExistingBlobData(exitBlob.public_key);
+    const alreadyProcessed = await this.validateExistingBlobData(
+      exitBlob,
+      existingBlob,
+      operatorIndex,
+    );
+
+    if (alreadyProcessed) {
+      return null;
+    }
+
+    const isPartialSignatureValid = await this.verifyPartialExitSignature(
+      publicShare,
+      exitBlob.signed_exit_message,
+      clusterConfig.definition.fork_version,
+      genesisValidatorsRoot,
+    );
+
+    if (!isPartialSignatureValid) {
+      throw new Error(
+        `Invalid partial exit signature for validator ${exitBlob.public_key} by operator index ${operatorIndex}.`,
+      );
+    }
+
+    return exitBlob;
+  }
+
+  async validateExitBlobs(
+    clusterConfig: ExitClusterConfig,
+    exitsPayload: ExitValidationPayload,
+    beaconNodeApiUrl: string,
+    getExistingBlobData: (
+      publicKey: string,
+    ) => Promise<ExistingExitValidationBlobData | null>,
+  ): Promise<ExitValidationBlob[]> {
+    await this.validateOperatorAndPayload(clusterConfig, exitsPayload);
+
+    const { genesisValidatorsRoot } = await this.getNetworkParameters(
+      clusterConfig.definition.fork_version,
+      beaconNodeApiUrl,
+    );
+
+    const operatorIndex = exitsPayload.share_idx - 1;
     const validNonDuplicateBlobs: ExitValidationBlob[] = [];
 
     for (const currentExitBlob of exitsPayload.partial_exits) {
-      const validatorInCluster = clusterConfig.distributed_validators.find(
-        dv =>
-          (dv.distributed_public_key.startsWith('0x')
-            ? dv.distributed_public_key
-            : '0x' + dv.distributed_public_key
-          ).toLowerCase() ===
-          (currentExitBlob.public_key.startsWith('0x')
-            ? currentExitBlob.public_key
-            : '0x' + currentExitBlob.public_key
-          ).toLowerCase(),
+      const processedBlob = await this.processExitBlob(
+        currentExitBlob,
+        clusterConfig,
+        operatorIndex,
+        genesisValidatorsRoot,
+        getExistingBlobData,
       );
 
-      if (!validatorInCluster) {
-        throw new Error(
-          `Public key ${currentExitBlob.public_key} not found in the cluster's distributed validators.`,
-        );
+      if (processedBlob) {
+        validNonDuplicateBlobs.push(processedBlob);
       }
-
-      const publicShareForOperator =
-        validatorInCluster.public_shares[operatorIndex];
-      if (!publicShareForOperator) {
-        throw new Error(
-          `Public share for operator index ${operatorIndex} not found for validator ${currentExitBlob.public_key}`,
-        );
-      }
-
-      const existingBlob = await getExistingBlobData(
-        currentExitBlob.public_key,
-      );
-      let alreadyProcessed = false;
-
-      if (existingBlob) {
-        if (
-          existingBlob.validator_index !==
-          currentExitBlob.signed_exit_message.message.validator_index
-        ) {
-          throw new Error(
-            `Validator index mismatch for already processed exit for public key ${currentExitBlob.public_key}. Expected ${existingBlob.validator_index}, got ${currentExitBlob.signed_exit_message.message.validator_index}.`,
-          );
-        }
-
-        const currentEpoch = parseInt(
-          currentExitBlob.signed_exit_message.message.epoch,
-          10,
-        );
-        const existingEpoch = parseInt(existingBlob.epoch, 10);
-
-        if (currentEpoch < existingEpoch) {
-          throw new Error(
-            `New exit epoch ${currentEpoch} is not greater than existing exit epoch ${existingEpoch} for validator ${currentExitBlob.public_key}.`,
-          );
-        } else if (currentEpoch === existingEpoch) {
-          alreadyProcessed = true;
-          const operatorShareIndexString = String(operatorIndex);
-          if (
-            existingBlob.shares_exit_data?.[0]?.[operatorShareIndexString]
-              ?.partial_exit_signature &&
-            existingBlob.shares_exit_data[0][operatorShareIndexString]
-              .partial_exit_signature !==
-              currentExitBlob.signed_exit_message.signature
-          ) {
-            throw new Error(
-              `Signature mismatch for validator ${currentExitBlob.public_key}, operator index ${operatorIndex} at epoch ${currentEpoch}. Received different signature than existing.`,
-            );
-          }
-        }
-      }
-
-      if (alreadyProcessed) {
-        continue;
-      }
-
-      const isPartialSignatureValid = await this.verifyPartialExitSignature(
-        publicShareForOperator,
-        currentExitBlob.signed_exit_message,
-        clusterConfig.definition.fork_version,
-        genesisValidatorsRootString,
-      );
-
-      if (!isPartialSignatureValid) {
-        throw new Error(
-          `Invalid partial exit signature for validator ${currentExitBlob.public_key} by operator index ${operatorIndex}.`,
-        );
-      }
-
-      validNonDuplicateBlobs.push(currentExitBlob);
     }
+
     return validNonDuplicateBlobs;
   }
 }
