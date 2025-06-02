@@ -60,6 +60,9 @@ export function computeDomain(
     genesisValidatorsRootOverride ??
     fromHexString(GENESIS_VALIDATOR_ROOT_HEX_STRING.substring(2));
 
+  if (actualGenesisValidatorsRoot.length !== 32) {
+    throw new Error('genesisValidatorsRoot must be 32 bytes');
+  }
   const forkDataRoot = computeForkDataRoot(
     forkVersionBytes,
     actualGenesisValidatorsRoot,
