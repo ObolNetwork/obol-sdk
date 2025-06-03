@@ -63,6 +63,62 @@ export class Exit {
   }
 
   /**
+   * Computes the exit auth data root for exit authorization
+   */
+  public static computeExitAuthDataRoot(
+    lockHash: string,
+    validatorPubkey: string,
+    shareIndex: number,
+  ): string {
+    const exitAuthDataType = new ContainerType({
+      lock_hash: new ByteVectorType(32),
+      validator_pubkey: new ByteVectorType(48),
+      share_idx: new UintNumberType(8),
+    });
+    const val = exitAuthDataType.defaultValue();
+
+    val.lock_hash = fromHexString(lockHash);
+    val.validator_pubkey = fromHexString(validatorPubkey);
+    val.share_idx = shareIndex;
+
+    return Buffer.from(exitAuthDataType.hashTreeRoot(val).buffer).toString(
+      'hex',
+    );
+  }
+
+  /**
+   * Verifies exit authorization token
+   */
+  public static async verifyExitAuth(
+    enr: string,
+    {
+      lockHash,
+      validatorPubkey,
+      shareIndex,
+    }: { lockHash: string; validatorPubkey: string; shareIndex: number },
+    token: string,
+  ): Promise<boolean> {
+    const exitAuthDataRoot = Exit.computeExitAuthDataRoot(
+      lockHash,
+      validatorPubkey,
+      shareIndex,
+    );
+    const ec = new elliptic.ec('secp256k1');
+    const pubkey = ENR.decodeTxt(enr).publicKey.toString('hex');
+
+    // https://github.com/ObolNetwork/charon/blob/main/app/k1util/k1util.go#L45
+    const ENRAuth = {
+      r: token.slice(2, 66),
+      s: token.slice(66, 130),
+    };
+
+    const exitTokenVerification = ec
+      .keyFromPublic(pubkey, 'hex')
+      .verify(exitAuthDataRoot, ENRAuth);
+    return exitTokenVerification;
+  }
+
+  /**
    * Safely parse a string integer to number, using BigInt to avoid precision loss
    * for large values beyond JavaScript's safe integer limit (2^53 - 1).
    * Throws an error if the value exceeds the safe range for a 64-bit unsigned integer.
@@ -93,8 +149,9 @@ export class Exit {
     msg: ExitValidationMessage,
   ): Buffer {
     const sszValue = SSZExitMessageType.defaultValue();
-    sszValue.epoch = Exit.safeParseInt(msg.epoch);
-    sszValue.validator_index = Exit.safeParseInt(msg.validator_index);
+
+    sszValue.epoch = parseInt(msg.epoch);
+    sszValue.validator_index = parseInt(msg.validator_index);
     return Buffer.from(SSZExitMessageType.hashTreeRoot(sszValue).buffer);
   }
 
@@ -141,9 +198,9 @@ export class Exit {
     );
 
     const exitDomain = computeDomain(
-      fromHexString(DOMAIN_VOLUNTARY_EXIT.substring(2)),
+      fromHexString(DOMAIN_VOLUNTARY_EXIT),
       capellaForkVersionString,
-      fromHexString(genesisValidatorsRootString.substring(2)),
+      fromHexString(genesisValidatorsRootString),
     );
 
     const messageSigningRoot = signingRoot(
@@ -152,9 +209,9 @@ export class Exit {
     );
 
     return verify(
-      fromHexString(publicShareKey.substring(2)),
+      fromHexString(publicShareKey),
       messageSigningRoot,
-      fromHexString(signedExitMessage.signature.substring(2)),
+      fromHexString(signedExitMessage.signature),
     );
   }
 
@@ -178,9 +235,9 @@ export class Exit {
       ? exitsPayload.signature.substring(2)
       : exitsPayload.signature;
 
-    if (sigHex.length !== 128) {
+    if (sigHex.length !== 130) {
       throw new Error(
-        `Invalid signature length. Expected 128 hex chars (r + s), got ${sigHex.length}`,
+        `Invalid signature length. Expected 130 hex chars (r + s), got ${sigHex.length}`,
       );
     }
 
@@ -236,7 +293,6 @@ export class Exit {
     const genesisValidatorsRootString = await getGenesisValidatorsRoot(
       forkVersion,
       beaconNodeApiUrl,
-      this.request,
     );
     if (!genesisValidatorsRootString) {
       throw new Error('Could not retrieve genesis validators root.');

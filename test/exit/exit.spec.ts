@@ -66,7 +66,7 @@ const mockExitBlob: ExitValidationBlob = {
 const mockExitPayload: ExitValidationPayload = {
   partial_exits: [mockExitBlob],
   share_idx: 1,
-  signature: '0x' + 'ef'.repeat(64),
+  signature: '0x' + 'ef'.repeat(65),
 };
 
 // Make mockClusterConfig directly ExitClusterConfig for easier use in tests

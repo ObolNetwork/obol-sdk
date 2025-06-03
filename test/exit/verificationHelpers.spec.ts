@@ -52,19 +52,6 @@ describe('verificationHelpers', () => {
       expect(domain1).toEqual(domain2);
     });
 
-    it('should handle fork versions with or without 0x prefix', () => {
-      const domainType = fromHexString(DOMAIN_VOLUNTARY_EXIT_HEX.substring(2));
-      const domainWithPrefix = computeDomain(
-        domainType,
-        MAINNET_CAPELLA_FORK_VERSION,
-      );
-      const domainWithoutPrefix = computeDomain(
-        domainType,
-        MAINNET_CAPELLA_FORK_VERSION.substring(2),
-      );
-      expect(domainWithPrefix).toEqual(domainWithoutPrefix);
-    });
-
     it('should throw an error for invalid fork version hex string (e.g. too short)', () => {
       const domainType = fromHexString(DOMAIN_VOLUNTARY_EXIT_HEX.substring(2));
       // Example of an invalid (too short) fork version string

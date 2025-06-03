@@ -44,9 +44,7 @@ export function computeDomain(
   genesisValidatorsRootOverride?: Uint8Array, // 32 bytes
 ): Uint8Array {
   const forkVersionBytes = fromHexString(
-    forkVersionString.startsWith('0x')
-      ? forkVersionString.substring(2)
-      : forkVersionString,
+    forkVersionString.substring(2, forkVersionString.length),
   );
 
   if (forkVersionBytes.length !== 4) {
@@ -68,7 +66,7 @@ export function computeDomain(
     actualGenesisValidatorsRoot,
   );
   const domain = new Uint8Array(32);
-  domain.set(domainType.slice(0, 4)); // Ensure domainType is 4 bytes and set it
+  domain.set(domainType);
   domain.set(forkDataRoot.subarray(0, 28), 4); // Set the remaining 28 bytes from forkDataRoot
   return domain;
 }

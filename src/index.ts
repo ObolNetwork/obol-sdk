@@ -601,4 +601,20 @@ export class Client extends Base {
     );
     return lock;
   }
+
+  /**
+   * @param lockHash - The configuration hash in cluster-definition
+   * @returns {Promise<ClusterLock>} The matched cluster details (lock) from DB
+   * @throws On not found cluster definition or lock.
+   *
+   */
+  async getClusterLockByHash(lockHash: string): Promise<ClusterLock> {
+    const lock: ClusterLock = await this.request(
+      `/${DEFAULT_BASE_VERSION}/lock/${lockHash}`,
+      {
+        method: 'GET',
+      },
+    );
+    return lock;
+  }
 }
