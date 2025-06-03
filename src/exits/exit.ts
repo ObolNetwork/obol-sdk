@@ -87,8 +87,8 @@ export class Exit {
   ): Buffer {
     const sszValue = SSZExitMessageType.defaultValue();
 
-    sszValue.epoch = parseInt(msg.epoch);
-    sszValue.validator_index = parseInt(msg.validator_index);
+    sszValue.epoch = Exit.safeParseInt(msg.epoch);
+    sszValue.validator_index = Exit.safeParseInt(msg.validator_index);
     return Buffer.from(SSZExitMessageType.hashTreeRoot(sszValue).buffer);
   }
 
