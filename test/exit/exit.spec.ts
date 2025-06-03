@@ -12,7 +12,6 @@ import type {
   ExitValidationPayload,
   ExitValidationBlob,
   ExistingExitValidationBlobData,
-  HttpRequestFunc,
   SignedExitValidationMessage,
   ExitValidationMessage,
 } from '../../src/types';
@@ -89,16 +88,11 @@ describe('exit', () => {
   let ecVerifySpy: jest.SpyInstance;
   let keyFromPublicSpy: jest.SpyInstance;
   let exit: Exit;
-  let mockHttpRequest: jest.MockedFunction<HttpRequestFunc>;
 
   beforeEach(() => {
     jest.resetAllMocks();
 
-    // Initialize Exit instance
-    mockHttpRequest = jest.fn().mockResolvedValue({
-      data: { genesis_validators_root: MOCK_GENESIS_ROOT },
-    });
-    exit = new Exit(1, mockHttpRequest, null);
+    exit = new Exit(1, null);
 
     (mockedBls.init as jest.Mock).mockResolvedValue(undefined);
     (mockedBls.verify as jest.Mock).mockReturnValue(true);

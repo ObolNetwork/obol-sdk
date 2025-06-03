@@ -16,7 +16,6 @@ import type {
   ExitValidationMessage,
   SignedExitValidationMessage,
   ExistingExitValidationBlobData,
-  HttpRequestFunc,
 } from '../types';
 import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils';
 import { computeDomain, signingRoot } from './verificationHelpers';
@@ -49,73 +48,11 @@ const SSZPartialExitsPayloadType = new ContainerType({
 
 export class Exit {
   public readonly chainId: number;
-  private readonly request: HttpRequestFunc;
   public readonly provider: ProviderType | undefined | null;
 
-  constructor(
-    chainId: number,
-    request: HttpRequestFunc,
-    provider: ProviderType | undefined | null,
-  ) {
+  constructor(chainId: number, provider: ProviderType | undefined | null) {
     this.chainId = chainId;
-    this.request = request;
     this.provider = provider;
-  }
-
-  /**
-   * Computes the exit auth data root for exit authorization
-   */
-  public static computeExitAuthDataRoot(
-    lockHash: string,
-    validatorPubkey: string,
-    shareIndex: number,
-  ): string {
-    const exitAuthDataType = new ContainerType({
-      lock_hash: new ByteVectorType(32),
-      validator_pubkey: new ByteVectorType(48),
-      share_idx: new UintNumberType(8),
-    });
-    const val = exitAuthDataType.defaultValue();
-
-    val.lock_hash = fromHexString(lockHash);
-    val.validator_pubkey = fromHexString(validatorPubkey);
-    val.share_idx = shareIndex;
-
-    return Buffer.from(exitAuthDataType.hashTreeRoot(val).buffer).toString(
-      'hex',
-    );
-  }
-
-  /**
-   * Verifies exit authorization token
-   */
-  public static async verifyExitAuth(
-    enr: string,
-    {
-      lockHash,
-      validatorPubkey,
-      shareIndex,
-    }: { lockHash: string; validatorPubkey: string; shareIndex: number },
-    token: string,
-  ): Promise<boolean> {
-    const exitAuthDataRoot = Exit.computeExitAuthDataRoot(
-      lockHash,
-      validatorPubkey,
-      shareIndex,
-    );
-    const ec = new elliptic.ec('secp256k1');
-    const pubkey = ENR.decodeTxt(enr).publicKey.toString('hex');
-
-    // https://github.com/ObolNetwork/charon/blob/main/app/k1util/k1util.go#L45
-    const ENRAuth = {
-      r: token.slice(2, 66),
-      s: token.slice(66, 130),
-    };
-
-    const exitTokenVerification = ec
-      .keyFromPublic(pubkey, 'hex')
-      .verify(exitAuthDataRoot, ENRAuth);
-    return exitTokenVerification;
   }
 
   /**

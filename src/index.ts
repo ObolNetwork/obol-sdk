@@ -111,7 +111,7 @@ export class Client extends Base {
       this.request.bind(this),
       this.provider,
     );
-    this.exit = new Exit(this.chainId, this.request.bind(this), this.provider);
+    this.exit = new Exit(this.chainId, this.provider);
   }
 
   /**
