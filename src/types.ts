@@ -428,6 +428,18 @@ export interface ExistingExitValidationBlobData {
   shares_exit_data: Array<Record<string, { partial_exit_signature: string }>>;
 }
 
+// ExitBlob is an exit message alongside its BLS12-381 hex-encoded signature.
+export interface ExitBlob {
+  public_key: string;
+  signed_exit_message: {
+    message: {
+      epoch: string;
+      validator_index: string;
+    }
+    signature: string;
+  }
+}
+
 /**
  * Generic HTTP request function type.
  * Args:
