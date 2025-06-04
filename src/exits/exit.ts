@@ -303,11 +303,10 @@ export class Exit {
       );
     }
 
-    const currentEpoch = parseInt(
+    const currentEpoch = Exit.safeParseInt(
       exitBlob.signed_exit_message.message.epoch,
-      10,
     );
-    const existingEpoch = parseInt(existingBlob.epoch, 10);
+    const existingEpoch = Exit.safeParseInt(existingBlob.epoch);
 
     if (currentEpoch < existingEpoch) {
       throw new Error(
