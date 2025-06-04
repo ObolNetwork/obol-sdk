@@ -71,14 +71,7 @@ export class Exit {
       );
     }
 
-    // For values within JavaScript's safe integer range, convert directly
-    const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
-    if (bigIntValue <= MAX_SAFE_INTEGER) {
-      return Number(bigIntValue);
-    }
-
-    // For larger values, we still need to convert to number for SSZ compatibility
-    // The SSZ library should handle these properly even if they exceed JS safe integer limits
+    // Convert to number - SSZ library should handle values even if they exceed JS safe integer limits
     return Number(bigIntValue);
   }
 
@@ -97,7 +90,7 @@ export class Exit {
     // This eliminates the O(n log n) sort and improves performance
     const sszValue = SSZPartialExitsPayloadType.defaultValue();
     sszValue.partial_exits = exits.partial_exits.map(pe => ({
-      public_key: fromHexString(pe.public_key.substring(2)),
+      public_key: fromHexString(pe.public_key),
       signed_exit_message: {
         message: {
           epoch: Exit.safeParseInt(pe.signed_exit_message.message.epoch),
@@ -105,7 +98,7 @@ export class Exit {
             pe.signed_exit_message.message.validator_index,
           ),
         },
-        signature: fromHexString(pe.signed_exit_message.signature.substring(2)),
+        signature: fromHexString(pe.signed_exit_message.signature),
       },
     }));
     sszValue.share_idx = exits.share_idx;
@@ -227,10 +220,8 @@ export class Exit {
     forkVersion: string,
     beaconNodeApiUrl: string,
   ): Promise<{ genesisValidatorsRoot: string; capellaForkVersion: string }> {
-    const genesisValidatorsRootString = await getGenesisValidatorsRoot(
-      forkVersion,
-      beaconNodeApiUrl,
-    );
+    const genesisValidatorsRootString =
+      await getGenesisValidatorsRoot(beaconNodeApiUrl);
     if (!genesisValidatorsRootString) {
       throw new Error('Could not retrieve genesis validators root.');
     }
@@ -294,6 +285,17 @@ export class Exit {
       return false;
     }
 
+    // Check if existing blob data is for this public key
+    const normalizeKey = (key: string): string =>
+      (key.startsWith('0x') ? key : '0x' + key).toLowerCase();
+
+    if (
+      normalizeKey(existingBlob.public_key) !==
+      normalizeKey(exitBlob.public_key)
+    ) {
+      return false; // Existing blob data is for a different validator
+    }
+
     if (
       existingBlob.validator_index !==
       exitBlob.signed_exit_message.message.validator_index
@@ -335,9 +337,7 @@ export class Exit {
     clusterConfig: ExitClusterConfig,
     operatorIndex: number,
     genesisValidatorsRoot: string,
-    getExistingBlobData: (
-      publicKey: string,
-    ) => Promise<ExistingExitValidationBlobData | null>,
+    existingBlobData: ExistingExitValidationBlobData | null,
   ): Promise<ExitValidationBlob | null> {
     const { publicShare } = this.findValidatorInCluster(
       clusterConfig,
@@ -345,10 +345,9 @@ export class Exit {
       operatorIndex,
     );
 
-    const existingBlob = await getExistingBlobData(exitBlob.public_key);
     const alreadyProcessed = await this.validateExistingBlobData(
       exitBlob,
-      existingBlob,
+      existingBlobData,
       operatorIndex,
     );
 
@@ -376,9 +375,7 @@ export class Exit {
     clusterConfig: ExitClusterConfig,
     exitsPayload: ExitValidationPayload,
     beaconNodeApiUrl: string,
-    getExistingBlobData: (
-      publicKey: string,
-    ) => Promise<ExistingExitValidationBlobData | null>,
+    existingBlobData: ExistingExitValidationBlobData | null,
   ): Promise<ExitValidationBlob[]> {
     await this.validateOperatorAndPayload(clusterConfig, exitsPayload);
 
@@ -396,7 +393,7 @@ export class Exit {
         clusterConfig,
         operatorIndex,
         genesisValidatorsRoot,
-        getExistingBlobData,
+        existingBlobData,
       );
 
       if (processedBlob) {

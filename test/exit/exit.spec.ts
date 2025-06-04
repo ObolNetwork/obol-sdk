@@ -3,10 +3,7 @@ import * as ethUtils from '../../src/exits/ethUtils';
 import * as bls from '@chainsafe/bls';
 import { ENR } from '@chainsafe/discv5';
 import * as elliptic from 'elliptic';
-import {
-  CAPELLA_FORK_MAPPING,
-  NETWORK_NAME_TO_FORK_VERSION,
-} from '../../src/constants';
+import { CAPELLA_FORK_MAPPING } from '../../src/constants';
 import type {
   ExitClusterConfig,
   ExitValidationPayload,
@@ -35,7 +32,7 @@ const mockedEthUtils = ethUtils as jest.Mocked<typeof ethUtils>;
 const mockedBls = bls as jest.Mocked<typeof bls>;
 
 // --- Test Data ---
-const MAINNET_BASE_FORK_VERSION = NETWORK_NAME_TO_FORK_VERSION['mainnet'];
+const MAINNET_BASE_FORK_VERSION = '0x00000000';
 const MAINNET_CAPELLA_FORK_VERSION =
   CAPELLA_FORK_MAPPING[MAINNET_BASE_FORK_VERSION];
 const MOCK_GENESIS_ROOT =
@@ -81,6 +78,13 @@ const mockClusterConfig: ExitClusterConfig = {
       public_shares: ['0x' + 'aa'.repeat(48)],
     },
   ],
+};
+
+const mockExistingBlobData: ExistingExitValidationBlobData = {
+  public_key: mockExitBlob.public_key,
+  epoch: mockExitMessage.epoch,
+  validator_index: mockExitMessage.validator_index,
+  shares_exit_data: [],
 };
 
 describe('exit', () => {
@@ -229,28 +233,14 @@ describe('exit', () => {
   });
 
   describe('validateExitBlobs', () => {
-    let mockGetExistingBlobData: jest.Mock<
-      Promise<ExistingExitValidationBlobData | null>,
-      [string]
-    >;
-
-    beforeEach(() => {
-      mockGetExistingBlobData = jest
-        .fn<Promise<ExistingExitValidationBlobData | null>, [string]>()
-        .mockResolvedValue(null);
-    });
-
     it('should successfully validate a new, valid exit blob', async () => {
       const result = await exit.validateExitBlobs(
         mockClusterConfig,
         mockExitPayload,
         MOCK_BEACON_API_URL,
-        mockGetExistingBlobData,
+        null, // No existing blob data
       );
       expect(result).toEqual([mockExitBlob]);
-      expect(mockGetExistingBlobData).toHaveBeenCalledWith(
-        mockExitBlob.public_key,
-      );
       expect(ecVerifySpy).toHaveBeenCalled(); // Called by internal verifyExitPayloadSignature
       expect(mockedBls.verify).toHaveBeenCalled(); // Called by internal verifyPartialExitSignature
     });
@@ -262,7 +252,7 @@ describe('exit', () => {
           mockClusterConfig,
           invalidPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          mockExistingBlobData,
         ),
       ).rejects.toThrow('Invalid share_idx');
 
@@ -275,7 +265,7 @@ describe('exit', () => {
           mockClusterConfig,
           invalidPayload2,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          mockExistingBlobData,
         ),
       ).rejects.toThrow('Invalid share_idx');
     });
@@ -287,7 +277,7 @@ describe('exit', () => {
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          mockExistingBlobData,
         ),
       ).rejects.toThrow('Incorrect payload signature');
     });
@@ -299,7 +289,7 @@ describe('exit', () => {
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          mockExistingBlobData,
         ),
       ).rejects.toThrow('Could not retrieve genesis validators root');
     });
@@ -311,7 +301,7 @@ describe('exit', () => {
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          mockExistingBlobData,
         ),
       ).rejects.toThrow(
         'Unsupported network: Could not determine Capella fork',
@@ -332,7 +322,7 @@ describe('exit', () => {
           mockClusterConfig,
           payloadWithUnknownKey,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          null, // No existing blob data
         ),
       ).rejects.toThrow(
         "Public key 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef not found in the cluster's distributed validators.",
@@ -346,7 +336,7 @@ describe('exit', () => {
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          null, // No existing blob data
         ),
       ).rejects.toThrow(
         'Invalid partial exit signature for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd by operator index 0.',
@@ -354,46 +344,31 @@ describe('exit', () => {
     });
 
     it('should return an empty array if an exit blob has already been processed (epoch match)', async () => {
-      mockGetExistingBlobData.mockImplementation(async pubKey => {
-        if (pubKey === mockExitBlob.public_key) {
-          return {
-            public_key: mockExitBlob.public_key,
-            epoch: mockExitMessage.epoch,
-            validator_index: mockExitMessage.validator_index,
-            shares_exit_data: [],
-          };
-        }
-        return null;
-      });
       const result = await exit.validateExitBlobs(
         mockClusterConfig,
         mockExitPayload,
         MOCK_BEACON_API_URL,
-        mockGetExistingBlobData,
+        mockExistingBlobData,
       );
       expect(result).toEqual([]);
     });
 
     it('should throw if an exit blob has been processed with a different validator index', async () => {
-      mockGetExistingBlobData.mockImplementation(async pubKey => {
-        if (pubKey === mockExitBlob.public_key) {
-          return {
-            public_key: mockExitBlob.public_key,
-            epoch: mockExitMessage.epoch,
-            validator_index: (
-              parseInt(mockExitMessage.validator_index, 10) + 1
-            ).toString(), // Different index
-            shares_exit_data: [],
-          };
-        }
-        return null;
-      });
+      const existingBlobWithDifferentIndex: ExistingExitValidationBlobData = {
+        public_key: mockExitBlob.public_key,
+        epoch: mockExitMessage.epoch,
+        validator_index: (
+          parseInt(mockExitMessage.validator_index, 10) + 1
+        ).toString(), // Different index
+        shares_exit_data: [],
+      };
+
       await expect(
         exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          existingBlobWithDifferentIndex,
         ),
       ).rejects.toThrow(
         'Validator index mismatch for already processed exit for public key 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd. Expected 11, got 10.',
@@ -401,19 +376,20 @@ describe('exit', () => {
     });
 
     it('should throw if an exit blob has been processed with a higher epoch', async () => {
-      mockGetExistingBlobData.mockResolvedValueOnce({
+      const existingBlobWithHigherEpoch: ExistingExitValidationBlobData = {
         public_key: mockExitBlob.public_key,
         epoch: (parseInt(mockExitMessage.epoch, 10) + 1).toString(), // Existing epoch is HIGHER (e.g. 2)
         validator_index: mockExitMessage.validator_index,
         shares_exit_data: [],
-      });
+      };
+
       // currentExitBlob (from mockExitPayload) has mockExitMessage.epoch (e.g. '1')
       await expect(
         exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          existingBlobWithHigherEpoch,
         ),
       ).rejects.toThrow(
         'New exit epoch 1 is not greater than existing exit epoch 2 for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd.',
@@ -421,17 +397,18 @@ describe('exit', () => {
     });
 
     it('should successfully validate if an exit blob has been processed with a lower epoch', async () => {
-      mockGetExistingBlobData.mockResolvedValueOnce({
+      const existingBlobWithLowerEpoch: ExistingExitValidationBlobData = {
         public_key: mockExitBlob.public_key,
         epoch: (parseInt(mockExitMessage.epoch, 10) - 1).toString(),
         validator_index: mockExitMessage.validator_index,
         shares_exit_data: [],
-      });
+      };
+
       const result = await exit.validateExitBlobs(
         mockClusterConfig,
         mockExitPayload,
         MOCK_BEACON_API_URL,
-        mockGetExistingBlobData,
+        existingBlobWithLowerEpoch,
       );
       expect(result).toEqual([mockExitBlob]);
     });
@@ -440,30 +417,26 @@ describe('exit', () => {
       const operatorIndex = 0;
       const operatorShareIndexString = String(operatorIndex);
 
-      mockGetExistingBlobData.mockImplementation(async pubKey => {
-        if (pubKey === mockExitBlob.public_key) {
-          return {
-            public_key: mockExitBlob.public_key,
-            epoch: mockExitMessage.epoch,
-            validator_index: mockExitMessage.validator_index,
-            shares_exit_data: [
-              {
-                [operatorShareIndexString]: {
-                  partial_exit_signature: '0x' + 'different'.repeat(16),
-                },
+      const existingBlobWithDifferentSignature: ExistingExitValidationBlobData =
+        {
+          public_key: mockExitBlob.public_key,
+          epoch: mockExitMessage.epoch,
+          validator_index: mockExitMessage.validator_index,
+          shares_exit_data: [
+            {
+              [operatorShareIndexString]: {
+                partial_exit_signature: '0x' + 'different'.repeat(16),
               },
-            ],
-          };
-        }
-        return null;
-      });
+            },
+          ],
+        };
 
       await expect(
         exit.validateExitBlobs(
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          existingBlobWithDifferentSignature,
         ),
       ).rejects.toThrow(
         'Signature mismatch for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd, operator index 0 at epoch 1.',
@@ -493,33 +466,23 @@ describe('exit', () => {
         ],
       };
 
-      mockGetExistingBlobData.mockImplementation(async pubKey => {
-        if (pubKey === mockExitBlob.public_key) {
-          return {
-            public_key: mockExitBlob.public_key,
-            epoch: mockExitMessage.epoch,
-            validator_index: mockExitMessage.validator_index,
-            shares_exit_data: [],
-          };
-        }
-        return null;
-      });
+      // Only the first blob has existing data, second is new
+      const existingBlobDataForFirstOnly: ExistingExitValidationBlobData = {
+        public_key: mockExitBlob.public_key,
+        epoch: mockExitMessage.epoch,
+        validator_index: mockExitMessage.validator_index,
+        shares_exit_data: [],
+      };
 
       const result = await exit.validateExitBlobs(
         clusterConfigWithTwoValidators,
         payloadWithTwoBlobs,
         MOCK_BEACON_API_URL,
-        mockGetExistingBlobData,
+        existingBlobDataForFirstOnly,
       );
 
       expect(result.length).toBe(1);
       expect(result[0]).toEqual(anotherMockExitBlob);
-      expect(mockGetExistingBlobData).toHaveBeenCalledWith(
-        mockExitBlob.public_key,
-      );
-      expect(mockGetExistingBlobData).toHaveBeenCalledWith(
-        anotherMockExitBlob.public_key,
-      );
     });
 
     it('should throw if getGenesisValidatorsRoot itself throws an error', async () => {
@@ -531,7 +494,7 @@ describe('exit', () => {
           mockClusterConfig,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          mockExistingBlobData,
         ),
       ).rejects.toThrow('Beacon node unavailable');
     });
@@ -561,7 +524,7 @@ describe('exit', () => {
         clusterConfigWithoutPrefix,
         payloadWithoutPrefix,
         MOCK_BEACON_API_URL,
-        mockGetExistingBlobData,
+        null, // No existing blob data
       );
       expect(result).toEqual([blobWithoutPrefix]);
     });
@@ -589,7 +552,7 @@ describe('exit', () => {
         clusterConfigWithLowercase,
         payloadWithUppercase,
         MOCK_BEACON_API_URL,
-        mockGetExistingBlobData,
+        null, // No existing blob data
       );
       expect(result).toEqual([blobWithUppercase]);
     });
@@ -610,7 +573,7 @@ describe('exit', () => {
           clusterConfigWithMissingShare,
           mockExitPayload,
           MOCK_BEACON_API_URL,
-          mockGetExistingBlobData,
+          mockExistingBlobData,
         ),
       ).rejects.toThrow(
         'Public share for operator index 0 not found for validator 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
