@@ -1,7 +1,4 @@
-import {
-  CAPELLA_FORK_MAPPING,
-  FORK_VERSION_TO_NETWORK_NAME,
-} from '../constants';
+import { CAPELLA_FORK_MAPPING } from '../constants';
 
 /**
  * Retrieves the Capella fork version for a given base fork version.
@@ -20,23 +17,13 @@ export async function getCapellaFork(
 
 /**
  * Fetches the genesis validators root from a beacon node.
- * @param fork_version - The base fork version string to determine the network.
  * @param beaconNodeApiUrl - The base URL of the beacon node API (e.g., http://localhost:5052).
- * @param httpService - The HTTP service to make the API call.
  * @returns A promise that resolves to the genesis_validators_root string, or null on error.
  * @throws Will throw an error if the network corresponding to the fork_version is not supported or if the HTTP request fails.
  */
 export async function getGenesisValidatorsRoot(
-  fork_version: string, // Used to determine network if FORK_VERSION_TO_NETWORK_NAME is populated
   beaconNodeApiUrl: string,
 ): Promise<string | null> {
-  const network = FORK_VERSION_TO_NETWORK_NAME[fork_version]; // Will be used once constants are populated
-  if (!network) {
-    console.warn(
-      `Network for fork_version ${fork_version} not found in FORK_VERSION_TO_NETWORK_NAME. Ensure constants are correctly populated.`,
-    );
-  }
-
   const genesisEndpoint = `${beaconNodeApiUrl}/eth/v1/beacon/genesis`;
 
   try {

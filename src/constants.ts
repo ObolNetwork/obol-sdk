@@ -218,28 +218,3 @@ export const CAPELLA_FORK_MAPPING: Record<string, string> = {
   '0x01017000': '0x04017000', // Holesky
   '0x10000910': '0x40000910', // Hoodi
 };
-
-/**
- * Maps network names to their base fork versions.
- * This is the primary mapping for network to fork version.
- */
-export const NETWORK_NAME_TO_FORK_VERSION: Record<string, string> = {
-  mainnet: '0x00000000',
-  goerli: '0x00001020',
-  gnosis: '0x00000064',
-  sepolia: '0x90000069',
-  holesky: '0x01017000',
-  hoodi: '0x10000910',
-};
-
-/**
- * Maps base fork versions to their corresponding network names.
- * This is the reverse of NETWORK_NAME_TO_FORK_VERSION for convenience.
- */
-export const FORK_VERSION_TO_NETWORK_NAME: Record<string, string> =
-  Object.fromEntries(
-    Object.entries(NETWORK_NAME_TO_FORK_VERSION).map(([name, version]) => [
-      version,
-      name,
-    ]),
-  );
