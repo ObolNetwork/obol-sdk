@@ -563,6 +563,25 @@ export class Exit {
     return validNonDuplicateBlobs;
   }
 
+  /**
+   * Recombines exit blobs into a single exit blob.
+   *
+   * This method aggregates partial exit signatures from multiple operators into a single exit blob.
+   * It ensures that the signatures are properly ordered and aggregated according to the operator indices.
+   *
+   * @param exitBlob - The existing exit blob data containing partial exit signatures
+   *
+   * @returns Promise resolving to a single exit blob with aggregated signatures
+   *
+   * @throws {Error} When no valid signatures are found for aggregation
+   * @throws {Error} When signature length is invalid
+   * @throws {Error} When signature parsing fails
+   *
+   * @example
+   * ```typescript
+   * const aggregatedExitBlob = await exit.recombineExitBlobs(existingBlobData);
+   * ```
+   */
   async recombineExitBlobs(exitBlob: ExistingExitValidationBlobData): Promise<ExitBlob> {
     await init('herumi');
 
