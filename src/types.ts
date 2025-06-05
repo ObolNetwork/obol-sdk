@@ -357,6 +357,7 @@ export type ClaimIncentivesResponse = { txHash: string | null };
  * Represents the structure of an Ethereum operator for exit validation, primarily their ENR.
  */
 export interface ExitOperator {
+  /** The operator's Ethereum Node Record (ENR). */
   enr: string;
 }
 
@@ -364,8 +365,13 @@ export interface ExitOperator {
  * Represents the core definition of a cluster relevant for exit validation.
  */
 export interface ExitClusterDefinition {
+  /** The cluster nodes operators with their ENRs. */
   operators: ExitOperator[];
+
+  /** The cluster fork version. */
   fork_version: string;
+
+  /** The distributed validator threshold. */
   threshold: number;
 }
 
@@ -373,7 +379,10 @@ export interface ExitClusterDefinition {
  * Represents a distributed validator's information relevant for exit validation.
  */
 export interface ExitDistributedValidator {
+  /** The public key of the distributed validator. */
   distributed_public_key: string;
+
+  /** The public key shares of the distributed validator. */
   public_shares: string[];
 }
 
@@ -381,7 +390,10 @@ export interface ExitDistributedValidator {
  * Combined cluster information needed for exit validation in the SDK.
  */
 export interface ExitClusterConfig {
+  /** The cluster definition with operators, fork version and threshold. */
   definition: ExitClusterDefinition;
+
+  /** The cluster distributed validators. */
   distributed_validators: ExitDistributedValidator[];
 }
 
@@ -389,7 +401,10 @@ export interface ExitClusterConfig {
  * Represents the message part of a signed exit for exit validation.
  */
 export interface ExitValidationMessage {
+  /** The epoch at which the validator wishes to exit. */
   epoch: string;
+
+  /** The index of the validator in the beacon chain. */
   validator_index: string;
 }
 
@@ -397,7 +412,10 @@ export interface ExitValidationMessage {
  * Represents a signed exit message for exit validation.
  */
 export interface SignedExitValidationMessage {
+  /** The exit message containing epoch and validator index. */
   message: ExitValidationMessage;
+
+  /** BLS signature of the exit message. */
   signature: string;
 }
 
@@ -405,7 +423,10 @@ export interface SignedExitValidationMessage {
  * Represents a single partial exit blob for exit validation.
  */
 export interface ExitValidationBlob {
+  /** The public key of the validator to exit. */
   public_key: string;
+
+  /** The signed exit message for the validator. */
   signed_exit_message: SignedExitValidationMessage;
 }
 
@@ -413,18 +434,30 @@ export interface ExitValidationBlob {
  * Represents the overall exit payload structure for exit validation.
  */
 export interface ExitValidationPayload {
+  /** Array of partial exits for validators. */
   partial_exits: ExitValidationBlob[];
-  share_idx: number; // Operator's share index (1-based)
-  signature: string; // Signature of the ExitValidationPayload by the operator
+
+  /** Operator's share index (1-based). */
+  share_idx: number;
+
+  /** Signature of the ExitValidationPayload by the operator. */
+  signature: string;
 }
 
 /**
  * Represents the data structure for an already existing exit blob for exit validation.
  */
 export interface ExistingExitValidationBlobData {
+  /** The public key of the validator to exit. */
   public_key: string;
+
+  /** The epoch at which the validator wishes to exit. */
   epoch: string;
+
+  /** The index of the validator in the beacon chain. */
   validator_index: string;
+
+  /** Collection of partial exit signatures from different shares. */
   shares_exit_data: Array<Record<string, { partial_exit_signature: string }>>;
 }
 
