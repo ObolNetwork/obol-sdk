@@ -2,8 +2,16 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.6.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.5.1...v2.6.0)
+
+- Update release-pr.yml [`#121`](https://github.com/ObolNetwork/obol-sdk/pull/121)
+- Exit sdk commands [`#120`](https://github.com/ObolNetwork/obol-sdk/pull/120)
+
 #### [v2.5.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.5.0...v2.5.1)
 
+> 30 May 2025
+
+- chore(release): v2.5.1 [`#117`](https://github.com/ObolNetwork/obol-sdk/pull/117)
 - default compounding to false [`#116`](https://github.com/ObolNetwork/obol-sdk/pull/116)
 
 #### [v2.5.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.6...v2.5.0)
