@@ -1,5 +1,5 @@
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client, validateClusterLock } from '../src/index';
+import { Client, validateClusterLock, type SignerType } from '../../src/index';
 import {
   clusterConfigV1X7,
   clusterConfigV1X10,
@@ -10,14 +10,14 @@ import {
   clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
-} from './fixtures.js';
-import { SDK_VERSION } from '../src/constants';
-import { Base } from '../src/base';
+} from '../fixtures.js';
+import { SDK_VERSION } from '../../src/constants';
+import { Base } from '../../src/base';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { hashTermsAndConditions } from '../src/verification/termsAndConditions';
-import * as utils from '../src/utils';
-import * as splitsHelpers from '../src/splitHelpers';
+import { hashTermsAndConditions } from '../../src/verification/termsAndConditions';
+import * as utils from '../../src/utils';
+import * as splitsHelpers from '../../src/splits/splitHelpers';
 
 jest.setTimeout(20000);
 
@@ -25,7 +25,7 @@ const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
 const wallet = new ethers.Wallet(privateKey, provider);
-const mockSigner = wallet.connect(provider);
+const mockSigner = wallet.connect(provider) as unknown as SignerType;
 
 /* eslint no-new: 0 */
 describe('Cluster Client', () => {
@@ -276,7 +276,7 @@ describe('Cluster Client without a signer', () => {
     /* eslint-disable @typescript-eslint/no-var-requires */
     const {
       validateClusterLock: validateLockWithRpcUrl,
-    } = require('../src/index');
+    } = require('../../src/index');
 
     const safeRpcUrl = 'https://ethereum-holesky-rpc.publicnode.com';
     const isValidLock: boolean = await validateLockWithRpcUrl(

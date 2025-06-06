@@ -15,7 +15,7 @@
     "compile": "tsc -b ./tsconfig.cjs.json ./tsconfig.esm.json ./tsconfig.types.json",
     "build:clean": "rm -rf ./dist",
     "build": "npm-run-all build:clean compile",
-    "test": "jest ./test/*.test.ts",
+    "test": "jest test/**/*.spec.ts --testPathIgnorePatterns=test/sdk-package/",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "release": "release-it",
@@ -130,7 +130,7 @@
       "^bn.js$": "<rootDir>/node_modules/bn.js",
       "^asn1.js$": "<rootDir>/node_modules/asn1.js",
       "^hash.js$": "<rootDir>/node_modules/hash.js",
-      "(.+)\\.js": "$1"
+      "^(\\.\\.?\\/.+)\\.js$": "$1"
     },
     "extensionsToTreatAsEsm": [
       ".ts"

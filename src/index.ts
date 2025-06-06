@@ -45,15 +45,17 @@ import {
   handleDeployOWRAndSplitter,
   predictSplitterAddress,
   getOWRTranches,
-} from './splitHelpers.js';
+} from './splits/splitHelpers.js';
 import { isContractAvailable } from './utils.js';
-import { Incentives } from './incentives.js';
+import { Incentives } from './incentives/incentives.js';
+import { Exit } from './exits/exit.js';
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
 export * from './verification/common.js';
 export * from './constants.js';
-export { Incentives } from './incentives.js';
+export { Incentives } from './incentives/incentives.js';
+export { Exit } from './exits/exit.js';
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
@@ -69,6 +71,12 @@ export class Client extends Base {
    * @type {Incentives}
    */
   public incentives: Incentives;
+
+  /**
+   * The exit module, responsible for managing exit validation.
+   * @type {Exit}
+   */
+  public exit: Exit;
 
   /**
    * The blockchain provider, used to interact with the network.
@@ -103,6 +111,7 @@ export class Client extends Base {
       this.request.bind(this),
       this.provider,
     );
+    this.exit = new Exit(this.chainId, this.provider);
   }
 
   /**
@@ -341,6 +350,7 @@ export class Client extends Base {
     const { accounts, percentAllocations } = formatSplitRecipients(
       copiedSplitRecipients,
     );
+
     const predictedSplitterAddress = await predictSplitterAddress({
       signer: this.signer,
       accounts,
@@ -549,6 +559,22 @@ export class Client extends Base {
   async getClusterLock(configHash: string): Promise<ClusterLock> {
     const lock: ClusterLock = await this.request(
       `/${DEFAULT_BASE_VERSION}/lock/configHash/${configHash}`,
+      {
+        method: 'GET',
+      },
+    );
+    return lock;
+  }
+
+  /**
+   * @param lockHash - The configuration hash in cluster-definition
+   * @returns {Promise<ClusterLock>} The matched cluster details (lock) from DB
+   * @throws On not found cluster definition or lock.
+   *
+   */
+  async getClusterLockByHash(lockHash: string): Promise<ClusterLock> {
+    const lock: ClusterLock = await this.request(
+      `/${DEFAULT_BASE_VERSION}/lock/${lockHash}`,
       {
         method: 'GET',
       },

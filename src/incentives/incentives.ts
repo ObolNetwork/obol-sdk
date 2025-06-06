@@ -1,4 +1,4 @@
-import { isContractAvailable } from './utils';
+import { isContractAvailable } from '../utils';
 import {
   type ClaimableIncentives,
   type ETH_ADDRESS,
@@ -6,12 +6,12 @@ import {
   type ProviderType,
   type SignerType,
   type ClaimIncentivesResponse,
-} from './types';
+} from '../types';
 import {
   claimIncentivesFromMerkleDistributor,
   isClaimedFromMerkleDistributor,
 } from './incentiveHelpers';
-import { DEFAULT_BASE_VERSION } from './constants';
+import { DEFAULT_BASE_VERSION } from '../constants';
 
 /**
  * Incentives can be used for fetching and claiming Obol incentives.
