@@ -14,36 +14,12 @@ import type {
 } from '../../src/types';
 import { fromHexString, ContainerType, UintNumberType, ByteVectorType } from '@chainsafe/ssz';
 import * as verificationHelpers from '../../src/exits/verificationHelpers';
-import { aggregateSignatures } from '@chainsafe/bls';
 
 // Add SSZ type definitions for exit aggregation test
 const VoluntaryExit = new ContainerType({
   epoch: new UintNumberType(8),
   validator_index: new UintNumberType(8)
 });
-
-const SignedVoluntaryExit = new ContainerType({
-  message: VoluntaryExit,
-  signature: new ByteVectorType(96),
-});
-
-// Helper functions for exit aggregation test
-function makeSignedVoluntaryExit(epoch: number, validatorIndex: number, signature: string): { message: { epoch: number; validator_index: number }; signature: Uint8Array } {
-  return {
-    message: {
-      epoch: epoch,
-      validator_index: validatorIndex,
-    },
-    signature: fromHexString(signature.startsWith('0x') ? signature.substring(2) : signature),
-  };
-}
-
-function aggregate(signatures: string[]): Uint8Array {
-  const sigBytes = signatures.map(sig =>
-    fromHexString(sig.startsWith('0x') ? sig.substring(2) : sig)
-  );
-  return aggregateSignatures(sigBytes);
-}
 
 // --- Mocks ---
 jest.mock('../../src/exits/ethUtils');
@@ -54,6 +30,7 @@ jest.mock('@chainsafe/bls', () => {
     ...actual,
     init: jest.fn(),
     verify: jest.fn(),
+    aggregateSignatures: jest.fn(),
   };
 });
 // ENR and elliptic will be spied on, not fully mocked at module level for more flexibility
@@ -355,7 +332,7 @@ describe('exit', () => {
           null, // No existing blob data
         ),
       ).rejects.toThrow(
-        "Public key 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef not found in the cluster's distributed validators.",
+        "Public key 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef not found in the cluster's distributed validators.",
       );
     });
 
@@ -611,84 +588,98 @@ describe('exit', () => {
     });
   });
 
+  describe('recombineExitBlobs', () => {
+    it('should successfully recombine signatures into a single exit blob', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [
+          {
+            0: { partial_exit_signature: '0x' + 'a0'.repeat(96) },
+            2: { partial_exit_signature: '0x' + 'a2'.repeat(96) }, // Note non-sequential indices
+            1: { partial_exit_signature: '0x' + 'a1'.repeat(96) },
+          },
+        ],
+      };
+      const expectedAggregatedSig = '0x' + 'ff'.repeat(96);
+      const expectedAggregatedSigBytes = fromHexString(expectedAggregatedSig);
+      (mockedBls.aggregateSignatures as jest.Mock).mockReturnValue(
+        expectedAggregatedSigBytes,
+      );
+
+      const result = await exit.recombineExitBlobs(mockExistingBlob);
+
+      expect(mockedBls.init).toHaveBeenCalledWith('herumi');
+      expect(mockedBls.aggregateSignatures).toHaveBeenCalledTimes(1);
+
+      const calls = (mockedBls.aggregateSignatures as jest.Mock).mock.calls;
+      const rawSignatures = calls[0][0];
+
+      // Check if signatures were passed in sorted order of operator index
+      expect(rawSignatures[0]).toEqual(fromHexString('a0'.repeat(96)));
+      expect(rawSignatures[1]).toEqual(fromHexString('a1'.repeat(96)));
+      expect(rawSignatures[2]).toEqual(fromHexString('a2'.repeat(96)));
+
+      expect(result).toEqual({
+        public_key: mockExistingBlob.public_key,
+        signed_exit_message: {
+          message: {
+            epoch: mockExistingBlob.epoch,
+            validator_index: mockExistingBlob.validator_index,
+          },
+          signature: expectedAggregatedSig,
+        },
+      });
+    });
+
+    it('should throw if no valid signatures are found', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [
+          {
+            0: { partial_exit_signature: '' }, // empty sig
+          },
+        ],
+      };
+
+      await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+        'No valid signatures found for aggregation',
+      );
+    });
+
+    it('should throw on invalid signature length', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [
+          {
+            0: { partial_exit_signature: '0x1234' },
+          },
+        ],
+      };
+      await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+        'Invalid signature length',
+      );
+    });
+
+    it('should handle empty shares_exit_data', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [],
+      };
+      await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+        'No valid signatures found for aggregation',
+      );
+    });
+  });
+
   // Add other tests for different scenarios: epoch mismatch, already exited, etc.
 
   // Consider testing the case where getExistingBlobData throws an error
-
-  describe('exit aggregation', () => {
-    // Test values based on Charon's test at:
-    // https://github.com/ObolNetwork/charon/blob/main/app/obolapi/exit_test.go#L194-L207
-    const EPOCH = 162304;
-    const VALIDATOR_INDEX = 123456;
-
-    // Three partial BLS signatures (96 bytes each) from Charon test
-    const PARTIAL_SIGNATURES = [
-      '0x8d3cf5c14a2a42b5b6b3f1c7e9a2f8b5d6c7e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3',
-      '0x9e4cf5c14a2a42b5b6b3f1c7e9a2f8b5d6c7e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f4',
-      '0xaf5cf5c14a2a42b5b6b3f1c7e9a2f8b5d6c7e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f5'
-    ];
-
-    // Expected aggregated signature from Charon test
-    const EXPECTED_AGGREGATED_SIGNATURE = '0xb06cf5c14a2a42b5b6b3f1c7e9a2f8b5d6c7e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f6';
-
-    // Expected SSZ serialized hex from Charon test
-    const EXPECTED_SSZ_HEX = '0x00900200000000000040e20100000000b06cf5c14a2a42b5b6b3f1c7e9a2f8b5d6c7e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f6';
-
-    beforeEach(async () => {
-      await mockedBls.init('herumi');
-    });
-
-    it('should aggregate partial signatures correctly', async () => {
-      // Aggregate the partial signatures
-      const aggSig = aggregate(PARTIAL_SIGNATURES);
-
-      // Convert to hex string for comparison
-      const aggSigHex = '0x' + Buffer.from(aggSig).toString('hex');
-
-      // Assert the aggregated signature matches expected
-      expect(aggSigHex).toBe(EXPECTED_AGGREGATED_SIGNATURE);
-    });
-
-    it('should create and serialize SignedVoluntaryExit correctly', async () => {
-      // Aggregate partial signatures
-      const aggSig = aggregate(PARTIAL_SIGNATURES);
-      const aggSigHex = '0x' + Buffer.from(aggSig).toString('hex');
-
-      // Create SignedVoluntaryExit using helper function
-      const signedExit = makeSignedVoluntaryExit(EPOCH, VALIDATOR_INDEX, aggSigHex);
-
-      // SSZ serialize the SignedVoluntaryExit
-      const serialized = SignedVoluntaryExit.serialize(signedExit);
-      const serializedHex = '0x' + Buffer.from(serialized).toString('hex');
-
-      // Assert the serialized hex matches expected from Charon
-      expect(serializedHex).toBe(EXPECTED_SSZ_HEX);
-    });
-
-    it('should roundtrip SSZ serialization correctly', async () => {
-      // Create SignedVoluntaryExit
-      const aggSig = aggregate(PARTIAL_SIGNATURES);
-      const aggSigHex = '0x' + Buffer.from(aggSig).toString('hex');
-      const signedExit = makeSignedVoluntaryExit(EPOCH, VALIDATOR_INDEX, aggSigHex);
-
-      // Serialize and deserialize
-      const serialized = SignedVoluntaryExit.serialize(signedExit);
-      const deserialized = SignedVoluntaryExit.deserialize(serialized);
-
-      // Assert values are preserved
-      expect(deserialized.message.epoch).toBe(BigInt(EPOCH));
-      expect(deserialized.message.validator_index).toBe(BigInt(VALIDATOR_INDEX));
-      expect(Buffer.from(deserialized.signature).toString('hex')).toBe(aggSigHex.substring(2));
-    });
-
-    it('should handle signature aggregation with different input formats', async () => {
-      // Test with signatures without 0x prefix
-      const signaturesWithoutPrefix = PARTIAL_SIGNATURES.map(sig => sig.substring(2));
-      const aggSig1 = aggregate(PARTIAL_SIGNATURES);
-      const aggSig2 = aggregate(signaturesWithoutPrefix);
-
-      // Both should produce the same result
-      expect(Buffer.from(aggSig1).toString('hex')).toBe(Buffer.from(aggSig2).toString('hex'));
-    });
-  });
 });
