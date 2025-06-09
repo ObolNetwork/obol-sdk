@@ -12,7 +12,7 @@ import type {
   SignedExitValidationMessage,
   ExitValidationMessage,
 } from '../../src/types';
-import { fromHexString, ContainerType, UintNumberType, ByteVectorType } from '@chainsafe/ssz';
+import { fromHexString, ContainerType, UintNumberType } from '@chainsafe/ssz';
 import * as verificationHelpers from '../../src/exits/verificationHelpers';
 
 // Add SSZ type definitions for exit aggregation test
@@ -332,7 +332,7 @@ describe('exit', () => {
           null, // No existing blob data
         ),
       ).rejects.toThrow(
-        "Public key 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef not found in the cluster's distributed validators.",
+        "Public key 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef not found in the cluster's distributed validators.",
       );
     });
 
@@ -678,8 +678,4 @@ describe('exit', () => {
       );
     });
   });
-
-  // Add other tests for different scenarios: epoch mismatch, already exited, etc.
-
-  // Consider testing the case where getExistingBlobData throws an error
 });

@@ -16,7 +16,7 @@ import type {
   ExitValidationMessage,
   SignedExitValidationMessage,
   ExistingExitValidationBlobData,
-  ExitBlob,
+  FullExitBlob,
 } from '../types';
 import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils';
 import { computeDomain, signingRoot } from './verificationHelpers';
@@ -582,7 +582,7 @@ export class Exit {
    * const aggregatedExitBlob = await exit.recombineExitBlobs(existingBlobData);
    * ```
    */
-  async recombineExitBlobs(exitBlob: ExistingExitValidationBlobData): Promise<ExitBlob> {
+  async recombineExitBlobs(exitBlob: ExistingExitValidationBlobData): Promise<FullExitBlob> {
     await init('herumi');
 
     // Map to store signatures by their share index (matching Go's map[int]tbls.Signature)
