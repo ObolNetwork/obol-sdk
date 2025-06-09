@@ -485,12 +485,12 @@ export interface FullExitBlob {
        * The unique index of the validator requesting to exit
        */
       validator_index: string;
-    }
+    };
     /**
      * The BLS12-381 hex-encoded signature of the exit message
      */
     signature: string;
-  }
+  };
 
   /** The public key of the validator to exit. */
   public_key: string;

@@ -12,14 +12,8 @@ import type {
   SignedExitValidationMessage,
   ExitValidationMessage,
 } from '../../src/types';
-import { fromHexString, ContainerType, UintNumberType } from '@chainsafe/ssz';
+import { fromHexString } from '@chainsafe/ssz';
 import * as verificationHelpers from '../../src/exits/verificationHelpers';
-
-// Add SSZ type definitions for exit aggregation test
-const VoluntaryExit = new ContainerType({
-  epoch: new UintNumberType(8),
-  validator_index: new UintNumberType(8)
-});
 
 // --- Mocks ---
 jest.mock('../../src/exits/ethUtils');

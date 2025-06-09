@@ -582,7 +582,9 @@ export class Exit {
    * const aggregatedExitBlob = await exit.recombineExitBlobs(existingBlobData);
    * ```
    */
-  async recombineExitBlobs(exitBlob: ExistingExitValidationBlobData): Promise<FullExitBlob> {
+  async recombineExitBlobs(
+    exitBlob: ExistingExitValidationBlobData,
+  ): Promise<FullExitBlob> {
     await init('herumi');
 
     // Map to store signatures by their share index (matching Go's map[int]tbls.Signature)
@@ -604,9 +606,13 @@ export class Exit {
       }
 
       // Remove 0x prefix and ensure it's 96 bytes (192 hex chars)
-      const cleanSigStr = sigStr.startsWith('0x') ? sigStr.substring(2) : sigStr;
+      const cleanSigStr = sigStr.startsWith('0x')
+        ? sigStr.substring(2)
+        : sigStr;
       if (cleanSigStr.length !== 192) {
-        throw new Error(`Invalid signature length. Expected 192 hex chars (96 bytes), got ${cleanSigStr.length}`);
+        throw new Error(
+          `Invalid signature length. Expected 192 hex chars (96 bytes), got ${cleanSigStr.length}`,
+        );
       }
 
       try {
@@ -624,7 +630,9 @@ export class Exit {
     }
 
     // Sort by index and extract signatures in correct order
-    const sortedIndices = Array.from(signaturesByIndex.keys()).sort((a, b) => a - b);
+    const sortedIndices = Array.from(signaturesByIndex.keys()).sort(
+      (a, b) => a - b,
+    );
     const rawSignatures = sortedIndices.map(idx => {
       const signature = signaturesByIndex.get(idx);
       if (signature === undefined) {
