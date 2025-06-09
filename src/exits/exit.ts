@@ -591,8 +591,10 @@ export class Exit {
     const signaturesByIndex = new Map<number, Uint8Array>();
 
     // Extract signatures from shares_exit_data (equivalent to er.Signatures in Go)
+    if (!exitBlob.shares_exit_data || exitBlob.shares_exit_data.length === 0) {
+      throw new Error('No shares exit data available for aggregation');
+    }
     const signaturesMap = exitBlob.shares_exit_data[0] || {};
-
     for (const [sigIdxStr, sigData] of Object.entries(signaturesMap)) {
       const sigStr = sigData.partial_exit_signature;
 
