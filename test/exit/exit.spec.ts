@@ -668,7 +668,7 @@ describe('exit', () => {
         shares_exit_data: [],
       };
       await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
-        'No valid signatures found for aggregation',
+        'No shares exit data available for aggregation',
       );
     });
   });
