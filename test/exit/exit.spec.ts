@@ -24,6 +24,7 @@ jest.mock('@chainsafe/bls', () => {
     ...actual,
     init: jest.fn(),
     verify: jest.fn(),
+    aggregateSignatures: jest.fn(),
   };
 });
 // ENR and elliptic will be spied on, not fully mocked at module level for more flexibility
@@ -581,7 +582,94 @@ describe('exit', () => {
     });
   });
 
-  // Add other tests for different scenarios: epoch mismatch, already exited, etc.
+  describe('recombineExitBlobs', () => {
+    it('should successfully recombine signatures into a single exit blob', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [
+          {
+            0: { partial_exit_signature: '0x' + 'a0'.repeat(96) },
+            2: { partial_exit_signature: '0x' + 'a2'.repeat(96) }, // Note non-sequential indices
+            1: { partial_exit_signature: '0x' + 'a1'.repeat(96) },
+          },
+        ],
+      };
+      const expectedAggregatedSig = '0x' + 'ff'.repeat(96);
+      const expectedAggregatedSigBytes = fromHexString(expectedAggregatedSig);
+      (mockedBls.aggregateSignatures as jest.Mock).mockReturnValue(
+        expectedAggregatedSigBytes,
+      );
 
-  // Consider testing the case where getExistingBlobData throws an error
+      const result = await exit.recombineExitBlobs(mockExistingBlob);
+
+      expect(mockedBls.init).toHaveBeenCalledWith('herumi');
+      expect(mockedBls.aggregateSignatures).toHaveBeenCalledTimes(1);
+
+      const calls = (mockedBls.aggregateSignatures as jest.Mock).mock.calls;
+      const rawSignatures = calls[0][0];
+
+      // Check if signatures were passed in sorted order of operator index
+      expect(rawSignatures[0]).toEqual(fromHexString('a0'.repeat(96)));
+      expect(rawSignatures[1]).toEqual(fromHexString('a1'.repeat(96)));
+      expect(rawSignatures[2]).toEqual(fromHexString('a2'.repeat(96)));
+
+      expect(result).toEqual({
+        public_key: mockExistingBlob.public_key,
+        signed_exit_message: {
+          message: {
+            epoch: mockExistingBlob.epoch,
+            validator_index: mockExistingBlob.validator_index,
+          },
+          signature: expectedAggregatedSig,
+        },
+      });
+    });
+
+    it('should throw if no valid signatures are found', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [
+          {
+            0: { partial_exit_signature: '' }, // empty sig
+          },
+        ],
+      };
+
+      await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+        'No valid signatures found for aggregation',
+      );
+    });
+
+    it('should throw on invalid signature length', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [
+          {
+            0: { partial_exit_signature: '0x1234' },
+          },
+        ],
+      };
+      await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+        'Invalid signature length',
+      );
+    });
+
+    it('should handle empty shares_exit_data', async () => {
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [],
+      };
+      await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+        'No shares exit data available for aggregation',
+      );
+    });
+  });
 });

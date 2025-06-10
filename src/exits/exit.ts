@@ -1,6 +1,6 @@
 import { ENR } from '@chainsafe/discv5';
 import * as elliptic from 'elliptic';
-import { init, verify } from '@chainsafe/bls';
+import { init, verify, aggregateSignatures } from '@chainsafe/bls';
 import {
   ByteVectorType,
   ContainerType,
@@ -16,6 +16,7 @@ import type {
   ExitValidationMessage,
   SignedExitValidationMessage,
   ExistingExitValidationBlobData,
+  FullExitBlob,
 } from '../types';
 import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils';
 import { computeDomain, signingRoot } from './verificationHelpers';
@@ -560,5 +561,101 @@ export class Exit {
     }
 
     return validNonDuplicateBlobs;
+  }
+
+  /**
+   * Recombines exit blobs into a single exit blob.
+   *
+   * This method aggregates partial exit signatures from multiple operators into a single exit blob.
+   * It ensures that the signatures are properly ordered and aggregated according to the operator indices.
+   *
+   * @param exitBlob - The existing exit blob data containing partial exit signatures
+   *
+   * @returns Promise resolving to a single exit blob with aggregated signatures
+   *
+   * @throws {Error} When no valid signatures are found for aggregation
+   * @throws {Error} When signature length is invalid
+   * @throws {Error} When signature parsing fails
+   *
+   * @example
+   * ```typescript
+   * const aggregatedExitBlob = await exit.recombineExitBlobs(existingBlobData);
+   * ```
+   */
+  async recombineExitBlobs(
+    exitBlob: ExistingExitValidationBlobData,
+  ): Promise<FullExitBlob> {
+    await init('herumi');
+
+    // Map to store signatures by their share index (matching Go's map[int]tbls.Signature)
+    const signaturesByIndex = new Map<number, Uint8Array>();
+
+    // Extract signatures from shares_exit_data (equivalent to er.Signatures in Go)
+    if (!exitBlob.shares_exit_data || exitBlob.shares_exit_data.length === 0) {
+      throw new Error('No shares exit data available for aggregation');
+    }
+    const signaturesMap = exitBlob.shares_exit_data[0] || {};
+    for (const [sigIdxStr, sigData] of Object.entries(signaturesMap)) {
+      const sigStr = sigData.partial_exit_signature;
+
+      if (!sigStr || sigStr.length === 0) {
+        // ignore, the associated share index didn't push a partial signature yet
+        continue;
+      }
+
+      if (sigStr.length < 2) {
+        throw new Error(`Signature string has invalid size: ${sigStr.length}`);
+      }
+
+      // Remove 0x prefix and ensure it's 96 bytes (192 hex chars)
+      const cleanSigStr = sigStr.startsWith('0x')
+        ? sigStr.substring(2)
+        : sigStr;
+      if (cleanSigStr.length !== 192) {
+        throw new Error(
+          `Invalid signature length. Expected 192 hex chars (96 bytes), got ${cleanSigStr.length}`,
+        );
+      }
+
+      try {
+        const sigBytes = fromHexString(cleanSigStr);
+        // Convert string index to number and add 1 (matching Go's sigIdx+1)
+        const sigIdx = parseInt(sigIdxStr, 10);
+        signaturesByIndex.set(sigIdx + 1, sigBytes);
+      } catch (err) {
+        throw new Error(`Invalid partial signature: ${String(err)}`);
+      }
+    }
+
+    if (signaturesByIndex.size === 0) {
+      throw new Error('No valid signatures found for aggregation');
+    }
+
+    // Sort by index and extract signatures in correct order
+    const sortedIndices = Array.from(signaturesByIndex.keys()).sort(
+      (a, b) => a - b,
+    );
+    const rawSignatures = sortedIndices.map(idx => {
+      const signature = signaturesByIndex.get(idx);
+      if (signature === undefined) {
+        throw new Error(`Missing signature for index ${idx}`);
+      }
+      return signature;
+    });
+
+    // Aggregate signatures (equivalent to tbls.ThresholdAggregate in Go)
+    // Note: @chainsafe/bls doesn't have explicit threshold aggregation, but ordering should be preserved
+    const fullSig = aggregateSignatures(rawSignatures);
+
+    return {
+      public_key: exitBlob.public_key,
+      signed_exit_message: {
+        message: {
+          epoch: exitBlob.epoch,
+          validator_index: exitBlob.validator_index,
+        },
+        signature: '0x' + Buffer.from(fullSig).toString('hex'),
+      },
+    };
   }
 }

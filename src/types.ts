@@ -448,17 +448,52 @@ export interface ExitValidationPayload {
  * Represents the data structure for an already existing exit blob for exit validation.
  */
 export interface ExistingExitValidationBlobData {
+  /**
+   * The BLS public key of the validator in hex format
+   */
+  public_key: string;
+  /**
+   * The epoch number when the exit is scheduled to occur
+   */
+  epoch: string;
+  /**
+   * The unique index of the validator in the beacon chain
+   */
+  validator_index: string;
+  /**
+   * Array of distributed validator shares exit data, where each share contains
+   * the partial exit signature from each operator in the cluster
+   */
+  shares_exit_data: Array<Record<string, { partial_exit_signature: string }>>;
+}
+
+// ExitBlob is an exit message alongside its BLS12-381 hex-encoded signature.
+export interface FullExitBlob {
+  /**
+   * The signed voluntary exit message containing the exit details and signature
+   */
+  signed_exit_message: {
+    /**
+     * The voluntary exit message details
+     */
+    message: {
+      /**
+       * The epoch number when the validator exit will be processed
+       */
+      epoch: string;
+      /**
+       * The unique index of the validator requesting to exit
+       */
+      validator_index: string;
+    };
+    /**
+     * The BLS12-381 hex-encoded signature of the exit message
+     */
+    signature: string;
+  };
+
   /** The public key of the validator to exit. */
   public_key: string;
-
-  /** The epoch at which the validator wishes to exit. */
-  epoch: string;
-
-  /** The index of the validator in the beacon chain. */
-  validator_index: string;
-
-  /** Collection of partial exit signatures from different shares. */
-  shares_exit_data: Array<Record<string, { partial_exit_signature: string }>>;
 }
 
 /**
