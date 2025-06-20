@@ -4,15 +4,21 @@ import {
   type ETH_ADDRESS,
   type SplitRecipient,
   type SignerType,
+  type SplitV2Recipient,
+  type OVMArgs,
+  type OVMAndSplitV2Result,
 } from '../types';
 import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
+import { OVMFactoryContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { MultiCallContract } from '../abi/Multicall';
-import { CHAIN_CONFIGURATION } from '../constants';
+import { CHAIN_CONFIGURATION, SPLITS_V2_SALT } from '../constants';
+import { SplitsClient } from '@0xsplits/splits-sdk';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
+const ovmFactoryContractInterface = new Interface(OVMFactoryContract.abi);
 
 type Call = {
   target: ETH_ADDRESS;
@@ -33,14 +39,34 @@ type SplitArgs = {
   controllerAddress: ETH_ADDRESS;
 };
 
+// Helper function to extract common recipient formatting logic
+const formatRecipientsCommon = (
+  recipients: SplitRecipient[] | SplitV2Recipient[],
+): { sortedRecipients: any[]; getAddress: (item: any) => string; getPercentAllocation: (item: any) => number } => {
+  const copiedRecipients = [...recipients];
+
+  // Handle both SplitRecipient and SplitV2Recipient types
+  const getAddress = (item: any) => item.account || item.address;
+  const getPercentAllocation = (item: any) => item.percentAllocation;
+
+  // Has to be sorted when passed
+  copiedRecipients.sort((a, b) => getAddress(a).localeCompare(getAddress(b)));
+
+  return {
+    sortedRecipients: copiedRecipients,
+    getAddress,
+    getPercentAllocation,
+  };
+};
+
 export const formatSplitRecipients = (
   recipients: SplitRecipient[],
 ): { accounts: ETH_ADDRESS[]; percentAllocations: number[] } => {
-  // Has to be sorted when passed
-  recipients.sort((a, b) => a.account.localeCompare(b.account));
-  const accounts = recipients.map(item => item.account);
-  const percentAllocations = recipients.map(recipient => {
-    const splitTostring = (recipient.percentAllocation * 1e4).toFixed(0);
+  const { sortedRecipients, getAddress, getPercentAllocation } = formatRecipientsCommon(recipients);
+
+  const accounts = sortedRecipients.map(item => getAddress(item));
+  const percentAllocations = sortedRecipients.map(recipient => {
+    const splitTostring = (getPercentAllocation(recipient) * 1e4).toFixed(0);
     return parseInt(splitTostring);
   });
   return { accounts, percentAllocations };
@@ -553,5 +579,225 @@ const encodeCreateOWRecipientTxData = (
     principalRecipient,
     rewardRecipient,
     parseEther(amountOfPrincipalStake.toString()),
+  ]);
+};
+
+// OVM and SplitV2 Helper Functions
+
+
+// Helper function to format recipients specifically for SplitV2 (returns SplitV2Recipient[])
+export const formatRecipientsForSplitV2 = (
+  splitRecipients: SplitRecipient[] | SplitV2Recipient[],
+): SplitV2Recipient[] => {
+  const { sortedRecipients, getAddress, getPercentAllocation } = formatRecipientsCommon(splitRecipients);
+
+  return sortedRecipients
+    .filter(item => getAddress(item) !== '')
+    .map(item => ({
+      address: getAddress(item),
+      percentAllocation: parseFloat(getPercentAllocation(item).toString()),
+    }));
+};
+
+export const createSplitsClient = (signer: SignerType, chainId: number): SplitsClient => {
+  return new SplitsClient({
+    chainId,
+  });
+};
+
+export const predictSplitV2Address = async ({
+  recipients,
+  distributorFeePercent,
+  salt,
+  signer,
+  chainId,
+}: {
+  recipients: SplitV2Recipient[];
+  distributorFeePercent: number;
+  salt: string;
+  signer: SignerType;
+  chainId: number;
+}): Promise<string> => {
+  try {
+    const splitsClient = createSplitsClient(signer, chainId);
+
+    const response = await splitsClient.splitV2.predictDeterministicAddress({
+      recipients,
+      distributorFeePercent,
+      salt,
+    });
+
+    return response.splitAddress;
+  } catch (error: any) {
+    throw new Error(
+      `Failed to predict SplitV2 address: ${error.message ?? 'SplitV2 SDK call failed'}`,
+    );
+  }
+};
+
+export const isSplitV2Deployed = async ({
+  recipients,
+  distributorFeePercent,
+  salt,
+  signer,
+  chainId,
+}: {
+  recipients: SplitV2Recipient[];
+  distributorFeePercent: number;
+  salt: string;
+  signer: SignerType;
+  chainId: number;
+}): Promise<boolean> => {
+  try {
+    const splitsClient = createSplitsClient(signer, chainId);
+
+    const response = await splitsClient.splitV2.isDeployed({
+      recipients,
+      distributorFeePercent,
+      salt,
+    });
+
+    return response.deployed;
+  } catch (error: any) {
+    // If the check fails, assume it's not deployed
+    return false;
+  }
+};
+
+export const deployOVMContract = async ({
+  ownerAddress,
+  principalRecipient,
+  rewardRecipient,
+  principalThreshold,
+  signer,
+  chainId,
+}: {
+  ownerAddress: string;
+  principalRecipient: string;
+  rewardRecipient: string;
+  principalThreshold: number;
+  signer: SignerType;
+  chainId: number;
+}): Promise<string> => {
+  try {
+    const chainConfig = CHAIN_CONFIGURATION[chainId];
+    if (!chainConfig?.OVM_FACTORY_ADDRESS?.address) {
+      throw new Error(`OVM Factory not configured for chain ${chainId}`);
+    }
+
+    const ovmFactoryContract = new Contract(
+      chainConfig.OVM_FACTORY_ADDRESS.address,
+      OVMFactoryContract.abi,
+      signer,
+    );
+
+    const tx = await ovmFactoryContract.createObolValidatorManager(
+      ownerAddress,
+      principalRecipient,
+      rewardRecipient,
+      principalThreshold,
+    );
+
+    const receipt = await tx.wait();
+
+    // Extract OVM address from logs
+    const ovmAddressLog = receipt?.logs[1]?.topics[1];
+    if (!ovmAddressLog) {
+      throw new Error('Failed to extract OVM address from transaction logs');
+    }
+
+    const ovmAddress = '0x' + ovmAddressLog.slice(26, 66);
+    return ovmAddress;
+  } catch (error: any) {
+    throw new Error(
+      `Failed to deploy OVM contract: ${error.message ?? 'OVM deployment failed'}`,
+    );
+  }
+};
+
+export const deployImmutableSplitV2 = async ({
+  ovmArgs,
+  recipients,
+  predictedSplitAddress,
+  distributorFeePercent,
+  salt,
+  signer,
+  chainId,
+}: {
+  ovmArgs: OVMArgs;
+  recipients: SplitV2Recipient[];
+  predictedSplitAddress: string;
+  distributorFeePercent: number;
+  salt: string;
+  signer: SignerType;
+  chainId: number;
+}): Promise<OVMAndSplitV2Result> => {
+  try {
+    const chainConfig = CHAIN_CONFIGURATION[chainId];
+    if (!chainConfig?.OVM_FACTORY_ADDRESS?.address) {
+      throw new Error(`OVM Factory not configured for chain ${chainId}`);
+    }
+
+    const splitsClient = createSplitsClient(signer, chainId);
+
+    const executeCalls: any[] = [];
+
+    // Create SplitV2 call data
+    const splitTxData = await splitsClient.splitV2.callData.createSplit({
+      recipients,
+      distributorFeePercent,
+      salt,
+    });
+
+    executeCalls.push(splitTxData);
+
+    // Create OVM call data
+    const ovmTxData = encodeCreateOVMTxData(
+      ovmArgs.ownerAddress,
+      ovmArgs.principalRecipient,
+      ovmArgs.rewardRecipient,
+      ovmArgs.principalThreshold,
+    );
+
+    executeCalls.push({
+      address: chainConfig.OVM_FACTORY_ADDRESS.address,
+      data: ovmTxData,
+    });
+
+    // Execute multicall
+    const executeMultiCalls = await splitsClient.splitV2.multicall({
+      calls: executeCalls,
+    });
+
+    // Extract addresses from events
+    const sliceSplitAddress = executeMultiCalls?.events[1]?.address;
+    const ovmAddress = executeMultiCalls?.events[3]?.address;
+
+    if (!sliceSplitAddress || !ovmAddress) {
+      throw new Error('Failed to extract contract addresses from multicall events');
+    }
+
+    return {
+      ovmAddress: ovmAddress,
+      splitAddress: sliceSplitAddress,
+    };
+  } catch (error: any) {
+    throw new Error(
+      `Failed to deploy immutable SplitV2: ${error.message ?? 'SplitV2 deployment failed'}`,
+    );
+  }
+};
+
+const encodeCreateOVMTxData = (
+  ownerAddress: string,
+  principalRecipient: string,
+  rewardRecipient: string,
+  principalThreshold: number,
+): string => {
+  return ovmFactoryContractInterface.encodeFunctionData('createObolValidatorManager', [
+    ownerAddress,
+    principalRecipient,
+    rewardRecipient,
+    principalThreshold,
   ]);
 };

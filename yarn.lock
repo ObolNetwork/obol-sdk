@@ -2,6 +2,21 @@
 # yarn lockfile v1
 
 
+"@0no-co/graphql.web@^1.0.1":
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/@0no-co/graphql.web/-/graphql.web-1.1.2.tgz#9af8deaf3f236c1c6ee99cc5349051475e5dcc83"
+  integrity sha512-N2NGsU5FLBhT8NZ+3l2YrzZSHITjNXNuDhC4iDiikv0IujaJ0Xc6xIxQZ/Ek3Cb+rgPjnLHYyJm11tInuJn+cw==
+
+"@0xsplits/splits-sdk@^5.1.0":
+  version "5.1.0"
+  resolved "https://registry.yarnpkg.com/@0xsplits/splits-sdk/-/splits-sdk-5.1.0.tgz#817f2a08e750bc2a92185c6258636de80e494be7"
+  integrity sha512-hkygG/mehwmbmWkF8vjPZCGhS/Fz+rX3F5vj2iVkcuMK8UfL1n+xVxn+7lPBBmflugz2cV7d4KCFehGYs5uhDw==
+  dependencies:
+    "@urql/core" "^4.3.0"
+    base-64 "^1.0.0"
+    graphql "^16.8.1"
+    lodash "^4.17.21"
+
 "@adraffy/ens-normalize@1.10.1":
   version "1.10.1"
   resolved "https://registry.yarnpkg.com/@adraffy/ens-normalize/-/ens-normalize-1.10.1.tgz#63430d04bd8c5e74f8d7d049338f1cd9d4f02069"
@@ -1722,6 +1737,14 @@
   resolved "https://registry.yarnpkg.com/@ungap/structured-clone/-/structured-clone-1.2.0.tgz#756641adb587851b5ccb3e095daf27ae581c8406"
   integrity sha512-zuVdFrMJiuCDQUMCzQaD6KL28MjnqqN8XnAqiEq9PNm/hCPTSGfrXCOfwj1ow4LFb/tNymJPwsNbVePc1xFqrQ==
 
+"@urql/core@^4.3.0":
+  version "4.3.0"
+  resolved "https://registry.yarnpkg.com/@urql/core/-/core-4.3.0.tgz#5e150412ed08d167861b05ceed417abbd048553f"
+  integrity sha512-wT+FeL8DG4x5o6RfHEnONNFVDM3616ouzATMYUClB6CB+iIu2mwfBKd7xSUxYOZmwtxna5/hDRQdMl3nbQZlnw==
+  dependencies:
+    "@0no-co/graphql.web" "^1.0.1"
+    wonka "^6.3.2"
+
 "@zxing/text-encoding@0.9.0":
   version "0.9.0"
   resolved "https://registry.yarnpkg.com/@zxing/text-encoding/-/text-encoding-0.9.0.tgz#fb50ffabc6c7c66a0c96b4c03e3d9be74864b70b"
@@ -2111,6 +2134,11 @@ balanced-match@^1.0.0:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/balanced-match/-/balanced-match-1.0.2.tgz#e83e3a7e3f300b34cb9d87f615fa0cbf357690ee"
   integrity sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==
+
+base-64@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/base-64/-/base-64-1.0.0.tgz#09d0f2084e32a3fd08c2475b973788eee6ae8f4a"
+  integrity sha512-kwDPIFCGx0NZHog36dj+tHiwP4QMzsZ3AgMViUBKI0+V5n4U0ufTCUMhnQ04diaRI8EX/QcPfql7zlhZ7j4zgg==
 
 base-x@^3.0.2:
   version "3.0.10"
@@ -5545,7 +5573,7 @@ lodash.uniqby@^4.7.0:
   resolved "https://registry.yarnpkg.com/lodash.uniqby/-/lodash.uniqby-4.7.0.tgz#d99c07a669e9e6d24e1362dfe266c67616af1302"
   integrity sha512-e/zcLx6CSbmaEgFHCA7BnoQKyCtKMxnuWrJygbwPs/AIn+IMKl66L8/s+wBUn5LRw2pZx3bUHibiV1b6aTWIww==
 
-lodash@4.17.21:
+lodash@4.17.21, lodash@^4.17.21:
   version "4.17.21"
   resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz#679591c564c3bffaae8454cf0b3df370c3d6911c"
   integrity sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==
@@ -8238,6 +8266,11 @@ windows-release@^5.0.1:
   integrity sha512-NMD00arvqcq2nwqc5Q6KtrSRHK+fVD31erE5FEMahAw5PmVCgD7MUXodq3pdZSUkqA9Cda2iWx6s1XYwiJWRmw==
   dependencies:
     execa "^5.1.1"
+
+wonka@^6.3.2:
+  version "6.3.5"
+  resolved "https://registry.yarnpkg.com/wonka/-/wonka-6.3.5.tgz#33fa54ea700ff3e87b56fe32202112a9e8fea1a2"
+  integrity sha512-SSil+ecw6B4/Dm7Pf2sAshKQ5hWFvfyGlfPbEd6A14dOH6VDjrmbY86u6nZvy9omGwwIPFR8V41+of1EezgoUw==
 
 word-wrap@^1.2.5:
   version "1.2.5"

@@ -2,6 +2,7 @@ import { ZeroAddress } from 'ethers';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+  PRINCIPAL_THRESHOLD,
 } from './constants';
 import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv';
 
@@ -149,4 +150,77 @@ export const rewardsSplitterPayloadSchema = {
   },
   validateRewardsSplitRecipients: true,
   required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
+};
+
+export const ovmBaseSplitPayloadSchema = {
+  type: 'object',
+  properties: {
+    splitRecipients: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          address: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{40}$',
+          },
+          percentAllocation: { type: 'number' },
+        },
+        required: ['address', 'percentAllocation'],
+      },
+    },
+    ownerAddress: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+    principalThreshold: {
+      type: 'number',
+      minimum: 0,
+      default: PRINCIPAL_THRESHOLD,
+    },
+    distributorFeePercent: {
+      type: 'number',
+      minimum: 0,
+      maximum: 10,
+      default: 0,
+    },
+  },
+  validateRewardsSplitRecipientsvalidateRewardsSplitRecipients: true,
+  required: ['splitRecipients', 'ownerAddress'],
+};
+
+export const ovmRewardsSplitPayloadSchema = {
+  type: 'object',
+  properties: {
+    ...ovmBaseSplitPayloadSchema.properties,
+    principalRecipient: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+  },
+  validateRewardsSplitRecipients: true,
+  required: ['splitRecipients', 'ownerAddress', 'principalRecipient'],
+};
+
+export const ovmTotalSplitPayloadSchema = {
+  type: 'object',
+  properties: {
+    ...ovmBaseSplitPayloadSchema.properties,
+    principalRecipients: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          address: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{40}$',
+          },
+          percentAllocation: { type: 'number' },
+        },
+        required: ['account', 'percentAllocation'],
+      },
+    },
+  },
+  validateTotalSplitRecipients: true,
+  required: ['splitRecipients', 'principalRecipients', 'ownerAddress'],
 };

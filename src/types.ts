@@ -203,6 +203,78 @@ export interface RewardsSplitPayload extends TotalSplitPayload {
 }
 
 /**
+ * OVM and SplitV2 Base Params
+ */
+export type OVMBaseSplitPayload = {
+  /** The split recipients addresses and splits. */
+  splitRecipients: SplitV2Recipient[];
+
+  /** Owner address of the cluster. */
+  ownerAddress: string;
+
+  /** Principal threshold for OVM contract. */
+  principalThreshold?: number;
+
+  /** Distributor fee percentage (0-10). */
+  distributorFeePercent?: number;
+}
+
+/**
+ * OVM and SplitV2 Params for rewards-only split
+ */
+export type OVMRewardsSplitPayload = OVMBaseSplitPayload & {
+  /** Principal recipient address (single address for rewards-only split). */
+  principalRecipient: string;
+}
+
+/**
+ * OVM and SplitV2 Params for total split (principal + rewards)
+ */
+export type OVMTotalSplitPayload = OVMBaseSplitPayload & {
+  /** Principal recipients addresses and splits (for total split). */
+  principalRecipients: SplitV2Recipient[];
+}
+
+/**
+ * OVM Arguments for contract creation
+ */
+export type OVMArgs = {
+  /** Owner address of the cluster. */
+  ownerAddress: string;
+
+  /** Principal recipient address. */
+  principalRecipient: string;
+
+  /** Rewards recipient of the cluster. */
+  rewardRecipient: string;
+
+  /** Principal threshold for OVM contract. */
+  principalThreshold: number;
+}
+
+/**
+ * SplitV2 Recipient structure
+ */
+export type SplitV2Recipient = {
+  /** Recipient address. */
+  address: string;
+
+  /** Percentage allocation (0-100 with up to 4 decimals). */
+  percentAllocation: number;
+}
+
+/**
+ * OVM and SplitV2 deployment result
+ */
+export type OVMAndSplitV2Result = {
+  /** OVM contract address. */
+  ovmAddress: string;
+
+  /** SplitV2 contract address. */
+  splitAddress: string;
+}
+
+/**
  * OWR Tranches
  */
 export type OWRTranches = {
