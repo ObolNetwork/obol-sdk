@@ -1,19 +1,4 @@
-import { isContractAvailable } from '../utils';
 import {
-  type ClusterValidator,
-  type ProviderType,
-  type SignerType,
-  type TotalSplitPayload,
-  type OVMRewardsSplitPayload,
-  type OVMTotalSplitPayload,
-  type OVMArgs,
-  type SplitV2Recipient,
-  type OVMAndSplitV2Result,
-} from '../types';
-import {
-  deploySplitterContract,
-  formatSplitRecipients,
-  predictSplitterAddress,
   formatRecipientsForSplitV2,
   predictSplitV2Address,
   isSplitV2Deployed,
@@ -24,13 +9,19 @@ import {
   AVAILABLE_SPLITTER_CHAINS,
   CHAIN_CONFIGURATION,
   SPLITS_V2_SALT,
-  PRINCIPAL_THRESHOLD,
+  DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
 } from '../constants';
 import {
   ovmRewardsSplitPayloadSchema,
-  ovmTotalSplitPayloadSchema,
 } from '../schema';
 import { validatePayload } from '../ajv';
+import { isContractAvailable } from '../utils';
+import {
+  type ClusterValidator,
+  type ProviderType,
+  type SignerType,
+  type OVMRewardsSplitPayload,
+} from '../types';
 
 /**
  * ObolSplits can be used for creating and managing Obol splits.
@@ -76,8 +67,8 @@ export class ObolSplits {
     splitRecipients,
     ownerAddress,
     principalRecipient,
-    principalThreshold = PRINCIPAL_THRESHOLD,
-    distributorFeePercent = 0, // Default defined in schema
+    principalThreshold,
+    distributorFeePercent,
   }: OVMRewardsSplitPayload): Promise<ClusterValidator> {
     const salt = SPLITS_V2_SALT;
     if (!this.signer) {
@@ -103,16 +94,48 @@ export class ObolSplits {
       );
     }
 
+    // Check if OVM contract factory is configured for this chain
+    if (!CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS) {
+      throw new Error(
+        `OVM contract factory is not configured for chain ${this.chainId}`,
+      );
+    }
+
+    // Check if OVM factory contract is actually deployed and available
+    if (!this.provider) {
+      throw new Error('Provider is required to check OVM factory contract availability');
+    }
+
+    const ovmFactoryConfig = CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS;
+    if (!ovmFactoryConfig?.address || !ovmFactoryConfig?.bytecode) {
+      throw new Error(
+        `OVM factory contract configuration is incomplete for chain ${this.chainId}`,
+      );
+    }
+
     const checkOVMFactoryAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS?.address || '',
-      this.provider as ProviderType,
+      ovmFactoryConfig.address,
+      this.provider,
+      ovmFactoryConfig.bytecode,
     );
 
     if (!checkOVMFactoryAddress) {
-      throw new Error('Required contracts are not deployed on this chain');
+      throw new Error(
+        `OVM factory contract is not deployed or available on chain ${this.chainId}`,
+      );
     }
+
+    // Add retroactive funding recipient to split recipients
+    const retroActiveFundingRecipient = {
+      address: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS?.address || '',
+      percentAllocation: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+    };
+
+    const copiedSplitRecipients = [...validatedPayload.splitRecipients];
+    copiedSplitRecipients.push(retroActiveFundingRecipient);
+
     // Format recipients for SplitV2
-    const recipients = formatRecipientsForSplitV2(validatedPayload.splitRecipients);
+    const recipients = formatRecipientsForSplitV2(copiedSplitRecipients);
 
     // Predict split address
     const predictedSplitAddress = await predictSplitV2Address({

@@ -228,31 +228,6 @@ export type OVMRewardsSplitPayload = OVMBaseSplitPayload & {
 }
 
 /**
- * OVM and SplitV2 Params for total split (principal + rewards)
- */
-export type OVMTotalSplitPayload = OVMBaseSplitPayload & {
-  /** Principal recipients addresses and splits (for total split). */
-  principalRecipients: SplitV2Recipient[];
-}
-
-/**
- * OVM Arguments for contract creation
- */
-export type OVMArgs = {
-  /** Owner address of the cluster. */
-  ownerAddress: string;
-
-  /** Principal recipient address. */
-  principalRecipient: string;
-
-  /** Rewards recipient of the cluster. */
-  rewardRecipient: string;
-
-  /** Principal threshold for OVM contract. */
-  principalThreshold: number;
-}
-
-/**
  * SplitV2 Recipient structure
  */
 export type SplitV2Recipient = {
@@ -580,5 +555,22 @@ export type HttpRequestFunc = (
   url: string,
   config?: Record<string, any>,
 ) => Promise<any>;
+
+/**
+ * OVM Arguments for contract creation
+ */
+export type OVMArgs = {
+  /** Owner address of the cluster. */
+  ownerAddress: string;
+
+  /** Principal recipient address. */
+  principalRecipient: string;
+
+  /** Rewards recipient of the cluster. */
+  rewardRecipient: string;
+
+  /** Principal threshold for OVM contract. */
+  principalThreshold: number;
+}
 
 // Add other SDK-specific types below or import from other type files
