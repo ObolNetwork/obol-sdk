@@ -27,32 +27,38 @@ export const VALID_NON_COMPOUNDING_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
 ];
 
+// Helper function to calculate total percentage from recipients
+const calculateTotalPercentage = (recipients: Array<{ percentAllocation: number }>): number => {
+  return recipients.reduce((acc, curr) => acc + curr.percentAllocation, 0);
+};
+
+// Helper function to validate total percentage equals 100%
+const validateTotalPercentage = (totalPercentage: number): boolean => {
+  return totalPercentage === 100;
+};
+
+// Helper function to validate total percentage + RAF equals 100%
+const validateTotalPercentageWithRAF = (totalPercentage: number, rafPercentage: number): boolean => {
+  return totalPercentage + rafPercentage === 100;
+};
+
 // They dont see defaults set in schema
 const validateRewardsSplitRecipients = (
   _: boolean,
   data: RewardsSplitPayload,
 ): boolean => {
-  const obolRAFSplit =
-    data?.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
-  const splitPercentage = (data.splitRecipients).reduce(
-    (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
-    0,
-  );
-  return splitPercentage + obolRAFSplit === 100;
+  const obolRAFSplit = data?.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.splitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
 };
-
 
 const validateTotalSplitRecipients = (
   _: boolean,
   data: TotalSplitPayload,
 ): boolean => {
-  const obolRAFSplit =
-    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
-  const splitPercentage = data.splitRecipients.reduce(
-    (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
-    0,
-  );
-  return splitPercentage + obolRAFSplit === 100;
+  const obolRAFSplit = data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.splitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
 };
 
 const validateUniqueAddresses = (
@@ -81,30 +87,21 @@ const validateUniqueAddresses = (
   return isUnique;
 };
 
-
 const validateOVMRewardsSplitRecipients = (
   _: boolean,
   data: OVMRewardsSplitPayload,
 ): boolean => {
-  const obolRAFSplit =
-    DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
-  const splitPercentage = (data.rewardSplitRecipients).reduce(
-    (acc: number, curr: SplitV2Recipient) => acc + curr.percentAllocation,
-    0,
-  );
-  return splitPercentage + obolRAFSplit === 100;
+  const obolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.rewardSplitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
 };
 
 const validateOVMTotalSplitRecipients = (
   _: boolean,
   data: OVMTotalSplitPayload,
 ): boolean => {
-
-  const splitPercentage = data.principalSplitRecipients.reduce(
-    (acc: number, curr: SplitV2Recipient) => acc + curr.percentAllocation,
-    0,
-  );
-  return splitPercentage === 100;
+  const splitPercentage = calculateTotalPercentage(data.principalSplitRecipients);
+  return validateTotalPercentage(splitPercentage);
 };
 
 const ajv = new Ajv({
