@@ -3,7 +3,7 @@ import { OVMRewardsSplitPayload, OVMTotalSplitPayload } from '../../src/types';
 import { CHAIN_CONFIGURATION } from '../../src/constants';
 
 // Mock the split helpers
-jest.mock('../../../src/splits/splitHelpers', () => ({
+jest.mock('../../src/splits/splitHelpers', () => ({
   formatRecipientsForSplitV2: jest.fn(),
   predictSplitV2Address: jest.fn(),
   isSplitV2Deployed: jest.fn(),
@@ -12,12 +12,12 @@ jest.mock('../../../src/splits/splitHelpers', () => ({
 }));
 
 // Mock the utils
-jest.mock('../../../src/utils', () => ({
+jest.mock('../../src/utils', () => ({
   isContractAvailable: jest.fn(),
 }));
 
 // Mock the validation
-jest.mock('../../../src/ajv', () => ({
+jest.mock('../../src/ajv', () => ({
   validatePayload: jest.fn((data) => data),
 }));
 
@@ -52,8 +52,8 @@ describe('ObolSplits', () => {
     };
 
     it('should create rewards-only split successfully', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../../src/splits/splitHelpers');
-      const { isContractAvailable } = require('../../../src/utils');
+      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../src/splits/splitHelpers');
+      const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
       formatRecipientsForSplitV2.mockReturnValue([
@@ -131,8 +131,8 @@ describe('ObolSplits', () => {
     };
 
     it('should create total split successfully', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../../src/splits/splitHelpers');
-      const { isContractAvailable } = require('../../../src/utils');
+      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../src/splits/splitHelpers');
+      const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
       formatRecipientsForSplitV2
@@ -171,8 +171,8 @@ describe('ObolSplits', () => {
     });
 
     it('should handle case when both splits are already deployed', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../../src/splits/splitHelpers');
-      const { isContractAvailable } = require('../../../src/utils');
+      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../src/splits/splitHelpers');
+      const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
       formatRecipientsForSplitV2

@@ -64,7 +64,8 @@
     "pdf-parse": "^1.1.1",
     "semver": "^7.6.0",
     "typescript-eslint": "^7.1.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "viem": "^2.31.4"
   },
   "devDependencies": {
     "@release-it/conventional-changelog": "^8.0.1",

@@ -606,15 +606,17 @@ export const createSplitsClient = (signer: SignerType, chainId: number): SplitsC
 };
 
 export const predictSplitV2Address = async ({
+  ownerAddress,
   recipients,
   distributorFeePercent,
   salt,
   signer,
   chainId,
 }: {
+  ownerAddress: string,
   recipients: SplitV2Recipient[];
   distributorFeePercent: number;
-  salt: string;
+  salt: `0x${string}`;
   signer: SignerType;
   chainId: number;
 }): Promise<string> => {
@@ -622,6 +624,7 @@ export const predictSplitV2Address = async ({
     const splitsClient = createSplitsClient(signer, chainId);
 
     const response = await splitsClient.splitV2.predictDeterministicAddress({
+      ownerAddress,
       recipients,
       distributorFeePercent,
       salt,
@@ -636,22 +639,24 @@ export const predictSplitV2Address = async ({
 };
 
 export const isSplitV2Deployed = async ({
+  ownerAddress,
   recipients,
   distributorFeePercent,
   salt,
   signer,
   chainId,
 }: {
+  ownerAddress: string,
   recipients: SplitV2Recipient[];
   distributorFeePercent: number;
-  salt: string;
+  salt: `0x${string}`;
   signer: SignerType;
   chainId: number;
 }): Promise<boolean> => {
   try {
     const splitsClient = createSplitsClient(signer, chainId);
-
     const response = await splitsClient.splitV2.isDeployed({
+      ownerAddress,
       recipients,
       distributorFeePercent,
       salt,
@@ -730,7 +735,7 @@ export const deployOVMAndSplitV2 = async ({
   rewardRecipients: SplitV2Recipient[];
   isRewardsSplitterDeployed?: boolean;
   distributorFeePercent: number;
-  salt: string;
+  salt: `0x${string}`;
   signer: SignerType;
   chainId: number;
   principalSplitRecipients?: SplitV2Recipient[];
@@ -789,7 +794,7 @@ export const deployOVMAndSplitV2 = async ({
       calls: executeCalls,
     });
 
-    console.log(executeMultiCalls,"check heree")
+    console.log(executeMultiCalls, "check heree")
 
     // Extract addresses from events
     const sliceSplitAddress = executeMultiCalls?.events[1]?.address;

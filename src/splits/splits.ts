@@ -129,7 +129,8 @@ export class ObolSplits {
 
     // Predict split address
     const predictedSplitAddress = await predictSplitV2Address({
-      recipients:rewardRecipients,
+      ownerAddress: validatedPayload.ownerAddress,
+      recipients: rewardRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
       signer: this.signer,
@@ -138,7 +139,8 @@ export class ObolSplits {
 
     // Check if split is already deployed
     const isRewardSplitterDeployed = await isSplitV2Deployed({
-      recipients:rewardRecipients,
+      ownerAddress: validatedPayload.ownerAddress,
+      recipients: rewardRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
       signer: this.signer,
@@ -170,7 +172,7 @@ export class ObolSplits {
           principalThreshold: validatedPayload.principalThreshold,
         },
         rewardRecipients,
-        isRewardsSplitterDeployed:isRewardSplitterDeployed,
+        isRewardsSplitterDeployed: isRewardSplitterDeployed,
         distributorFeePercent: validatedPayload.distributorFeePercent,
         salt,
         signer: this.signer,
@@ -268,6 +270,7 @@ export class ObolSplits {
 
     // Predict rewards split address
     const predictedRewardsSplitAddress = await predictSplitV2Address({
+      ownerAddress: validatedPayload.ownerAddress,
       recipients: rewardsRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
@@ -277,6 +280,7 @@ export class ObolSplits {
 
     // Predict principal split address
     const predictedPrincipalSplitAddress = await predictSplitV2Address({
+      ownerAddress: validatedPayload.ownerAddress,
       recipients: principalSplitRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt: salt,
@@ -286,6 +290,7 @@ export class ObolSplits {
 
     // Check if rewards split is already deployed
     const isRewardsSplitterDeployed = await isSplitV2Deployed({
+      ownerAddress: validatedPayload.ownerAddress,
       recipients: rewardsRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
@@ -295,6 +300,7 @@ export class ObolSplits {
 
     // Check if principal split is already deployed
     const isPrincipalSplitterDeployed = await isSplitV2Deployed({
+      ownerAddress: validatedPayload.ownerAddress,
       recipients: principalSplitRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt: salt,
