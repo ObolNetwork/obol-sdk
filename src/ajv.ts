@@ -4,9 +4,7 @@ import { parseUnits } from 'ethers';
 import {
   OVMRewardsSplitPayload,
   OVMTotalSplitPayload,
-  SplitV2Recipient,
   type RewardsSplitPayload,
-  type SplitRecipient,
   type TotalSplitPayload,
 } from './types';
 import Ajv from 'ajv';
@@ -27,22 +25,18 @@ export const VALID_NON_COMPOUNDING_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
 ];
 
-// Helper function to calculate total percentage from recipients
 const calculateTotalPercentage = (recipients: Array<{ percentAllocation: number }>): number => {
   return recipients.reduce((acc, curr) => acc + curr.percentAllocation, 0);
 };
 
-// Helper function to validate total percentage equals 100%
 const validateTotalPercentage = (totalPercentage: number): boolean => {
   return totalPercentage === 100;
 };
 
-// Helper function to validate total percentage + RAF equals 100%
 const validateTotalPercentageWithRAF = (totalPercentage: number, rafPercentage: number): boolean => {
   return totalPercentage + rafPercentage === 100;
 };
 
-// They dont see defaults set in schema
 const validateRewardsSplitRecipients = (
   _: boolean,
   data: RewardsSplitPayload,

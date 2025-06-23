@@ -153,52 +153,49 @@ export const rewardsSplitterPayloadSchema = {
   required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
 };
 
-export const ovmBaseSplitPayloadSchema = {
-  type: 'object',
-  properties: {
-    rewardSplitRecipients: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          address: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{40}$',
-          },
-          percentAllocation: { type: 'number' },
+export const ovmBaseSplitPayload = {
+
+  rewardSplitRecipients: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        address: {
+          type: 'string',
+          pattern: '^0x[a-fA-F0-9]{40}$',
         },
-        required: ['address', 'percentAllocation'],
+        percentAllocation: { type: 'number' },
       },
-    },
-    OVMOwnerAddress: {
-      type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
-    },
-    splitOwnerAddress: {
-      type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
-      default: zeroAddress,
-    },
-    principalThreshold: {
-      type: 'number',
-      minimum: 0,
-      default: PRINCIPAL_THRESHOLD,
-    },
-    distributorFeePercent: {
-      type: 'number',
-      minimum: 0,
-      maximum: 10,
-      default: 0,
+      required: ['address', 'percentAllocation'],
     },
   },
-  validateRewardsSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'OVMOwnerAddress'],
+  OVMOwnerAddress: {
+    type: 'string',
+    pattern: '^0x[a-fA-F0-9]{40}$',
+  },
+  splitOwnerAddress: {
+    type: 'string',
+    pattern: '^0x[a-fA-F0-9]{40}$',
+    default: zeroAddress,
+  },
+  principalThreshold: {
+    type: 'number',
+    minimum: 16,
+    default: PRINCIPAL_THRESHOLD,
+  },
+  distributorFeePercent: {
+    type: 'number',
+    minimum: 0,
+    maximum: 10,
+    default: 0,
+  },
+
 };
 
 export const ovmRewardsSplitPayloadSchema = {
   type: 'object',
   properties: {
-    ...ovmBaseSplitPayloadSchema.properties,
+    ...ovmBaseSplitPayload,
     principalRecipient: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
@@ -211,7 +208,7 @@ export const ovmRewardsSplitPayloadSchema = {
 export const ovmTotalSplitPayloadSchema = {
   type: 'object',
   properties: {
-    ...ovmBaseSplitPayloadSchema.properties,
+    ...ovmBaseSplitPayload,
     principalSplitRecipients: {
       type: 'array',
       items: {
@@ -227,6 +224,7 @@ export const ovmTotalSplitPayloadSchema = {
       },
     },
   },
+  validateOVMRewardsSplitRecipients: true,
   validateOVMTotalSplitRecipients: true,
   required: ['rewardSplitRecipients', 'principalSplitRecipients', 'OVMOwnerAddress'],
 };

@@ -607,8 +607,9 @@ export const createSplitsClient = async (signer: SignerType, chainId: number): P
     chain: chain,
     transport: http(CHAIN_PUBLIC_RPC_URL[chainId])
   })
+  // convert signer to walletClient
   if (typeof window !== 'undefined' && signer.provider instanceof BrowserProvider) {
-    // Ensure user has authorized account
+    // For browser environment
     const address = await signer.getAddress();
     const viemWalletClient = createWalletClient({
       account: address,
@@ -627,7 +628,6 @@ export const createSplitsClient = async (signer: SignerType, chainId: number): P
       throw new Error('Signer private key not available');
     }
 
-    // Ensure private key has 0x prefix
     const privateKey = signerPrivateKey.startsWith('0x')
       ? signerPrivateKey
       : `0x${signerPrivateKey}`;

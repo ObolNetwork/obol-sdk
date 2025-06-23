@@ -71,27 +71,23 @@ export class ObolSplits {
       throw new Error('Signer is required in createObolOVMAndRewardPullSplit');
     }
 
-    // Validate payload using schema
     const validatedPayload = validatePayload<Required<OVMRewardsSplitPayload>>(
       payload,
       ovmRewardsSplitPayloadSchema,
     );
 
-    // Check if we allow splitters on this chainId
     if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
-    // Check if OVM contract factory is configured for this chain
     if (!CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS) {
       throw new Error(
         `OVM contract factory is not configured for chain ${this.chainId}`,
       );
     }
 
-    // Check if OVM factory contract is actually deployed and available
     if (!this.provider) {
       throw new Error('Provider is required to check OVM factory contract availability');
     }
@@ -115,9 +111,8 @@ export class ObolSplits {
       );
     }
 
-    // Add retroactive funding recipient to split recipients
     const retroActiveFundingRecipient = {
-      address: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS?.address || '',
+      address: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS?.address,
       percentAllocation: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     };
 
@@ -127,7 +122,6 @@ export class ObolSplits {
     // Format recipients for SplitV2
     const rewardRecipients = formatRecipientsForSplitV2(copiedRewardsSplitRecipients);
 
-    // Predict split address
     const predictedSplitAddress = await predictSplitV2Address({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardRecipients,
@@ -137,7 +131,6 @@ export class ObolSplits {
       chainId: this.chainId,
     });
 
-    // Check if split is already deployed
     const isRewardSplitterDeployed = await isSplitV2Deployed({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardRecipients,
@@ -148,7 +141,6 @@ export class ObolSplits {
     });
 
     if (isRewardSplitterDeployed) {
-      // Only deploy OVM contract
       const ovmAddress = await deployOVMContract({
         OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
         principalRecipient: validatedPayload.principalRecipient,
@@ -163,7 +155,6 @@ export class ObolSplits {
         fee_recipient_address: predictedSplitAddress,
       };
     } else {
-      // Deploy both OVM and SplitV2 contracts via multicall
       const ovmAddress = await deployOVMAndSplitV2({
         ovmArgs: {
           OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
@@ -210,27 +201,23 @@ export class ObolSplits {
       throw new Error('Signer is required in createObolOVMAndTotalPullSplit');
     }
 
-    // Validate payload using schema
     const validatedPayload = validatePayload<Required<OVMTotalSplitPayload>>(
       payload,
       ovmTotalSplitPayloadSchema,
     );
 
-    // Check if we allow splitters on this chainId
     if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
-    // Check if OVM contract factory is configured for this chain
     if (!CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS) {
       throw new Error(
         `OVM contract factory is not configured for chain ${this.chainId}`,
       );
     }
 
-    // Check if OVM factory contract is actually deployed and available
     if (!this.provider) {
       throw new Error('Provider is required to check OVM factory contract availability');
     }
@@ -254,7 +241,6 @@ export class ObolSplits {
       );
     }
 
-    // Add retroactive funding recipient to rewards split recipients
     const retroActiveFundingRecipient = {
       address: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
@@ -263,13 +249,10 @@ export class ObolSplits {
     const copiedRewardsSplitRecipients = [...validatedPayload.rewardSplitRecipients];
     copiedRewardsSplitRecipients.push(retroActiveFundingRecipient);
 
-    // Format recipients for rewards SplitV2
     const rewardsRecipients = formatRecipientsForSplitV2(copiedRewardsSplitRecipients);
 
-    // Format recipients for principal SplitV2 (no RAF recipient)
     const principalSplitRecipients = formatRecipientsForSplitV2(validatedPayload.principalSplitRecipients);
 
-    // Predict rewards split address
     const predictedRewardsSplitAddress = await predictSplitV2Address({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardsRecipients,
@@ -279,7 +262,6 @@ export class ObolSplits {
       chainId: this.chainId,
     });
 
-    // Predict principal split address
     const predictedPrincipalSplitAddress = await predictSplitV2Address({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: principalSplitRecipients,
@@ -289,7 +271,6 @@ export class ObolSplits {
       chainId: this.chainId,
     });
 
-    // Check if rewards split is already deployed
     const isRewardsSplitterDeployed = await isSplitV2Deployed({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardsRecipients,
@@ -299,7 +280,6 @@ export class ObolSplits {
       chainId: this.chainId,
     });
 
-    // Check if principal split is already deployed
     const isPrincipalSplitterDeployed = await isSplitV2Deployed({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: principalSplitRecipients,
@@ -310,7 +290,6 @@ export class ObolSplits {
     });
 
     if (isRewardsSplitterDeployed && isPrincipalSplitterDeployed) {
-      // Only deploy OVM contract
       const ovmAddress = await deployOVMContract({
         OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
         principalRecipient: predictedPrincipalSplitAddress,

@@ -182,11 +182,11 @@ export const CHAIN_CONFIGURATION = {
     },
     // OVM and SplitV2 Contract Addresses
     OVM_FACTORY_ADDRESS: {
-      address: '0xdfe2d8b26806583cf03b3cb623b0752f8670e93e', // TODO: Replace with actual address
+      address: '0xdfe2d8b26806583cf03b3cb623b0752f8670e93e',
       bytecode: MAINNET_OVM_FACTORY_BYTECOD,
     },
     WAREHOUSE_ADDRESS: {
-      address: '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8', // TODO: Replace with actual address
+      address: '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8',
       bytecode: MAINNET_WAREHOUSE_BYTECODE,
     },
   },
