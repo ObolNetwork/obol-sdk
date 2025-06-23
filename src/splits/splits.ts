@@ -31,7 +31,7 @@ import {
  * @internal Access it through Client.splits.
  * @example
  * const obolClient = new Client(config);
- * await obolClient.splits.createObolOVMAndPullSplit(splitPayload);
+ * await obolClient.splits.createObolOVMAndRewardPullSplit(OVMRewardsSplitPayload);
  */
 export class ObolSplits {
   private readonly signer: SignerType | undefined;
@@ -62,13 +62,13 @@ export class ObolSplits {
    * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient
    * @throws Will throw an error if the splitter configuration is not supported or deployment fails
    *
-   * An example of how to use createObolOVMAndPullSplit:
-   * [createObolOVMAndPullSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L141)
+   * An example of how to use createObolOVMAndRewardPullSplit:
+   * [createObolOVMAndRewardPullSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L333)
    */
-  async createObolOVMAndPullSplit(payload: OVMRewardsSplitPayload): Promise<ClusterValidator> {
+  async createObolOVMAndRewardPullSplit(payload: OVMRewardsSplitPayload): Promise<ClusterValidator> {
     const salt = SPLITS_V2_SALT;
     if (!this.signer) {
-      throw new Error('Signer is required in createObolOVMAndPullSplit');
+      throw new Error('Signer is required in createObolOVMAndRewardPullSplit');
     }
 
     // Validate payload using schema
@@ -197,11 +197,14 @@ export class ObolSplits {
    * @param {OVMTotalSplitPayload} payload - Data needed to deploy OVM and SplitV2
    * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient
    * @throws Will throw an error if the splitter configuration is not supported or deployment fails
+   *
+   * An example of how to use createObolOVMAndTotalPullSplit:
+   * [createObolOVMAndTotalPullSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#340)
    */
-  async createObolTotalSplit(payload: OVMTotalSplitPayload): Promise<ClusterValidator> {
+  async createObolOVMAndTotalPullSplit(payload: OVMTotalSplitPayload): Promise<ClusterValidator> {
     const salt = SPLITS_V2_SALT;
     if (!this.signer) {
-      throw new Error('Signer is required in createObolTotalSplit');
+      throw new Error('Signer is required in createObolOVMAndTotalPullSplit');
     }
 
     // Validate payload using schema
