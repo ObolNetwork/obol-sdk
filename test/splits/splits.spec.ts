@@ -1,6 +1,6 @@
-import { Client } from '../../../src';
-import { OVMRewardsSplitPayload, OVMTotalSplitPayload } from '../../../src/types';
-import { CHAIN_CONFIGURATION } from '../../../src/constants';
+import { Client } from '../../src';
+import { OVMRewardsSplitPayload, OVMTotalSplitPayload } from '../../src/types';
+import { CHAIN_CONFIGURATION } from '../../src/constants';
 
 // Mock the split helpers
 jest.mock('../../../src/splits/splitHelpers', () => ({
