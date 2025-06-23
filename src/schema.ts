@@ -5,6 +5,7 @@ import {
   PRINCIPAL_THRESHOLD,
 } from './constants';
 import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv';
+import { zeroAddress } from 'viem';
 
 export const operatorPayloadSchema = {
   type: 'object',
@@ -176,6 +177,7 @@ export const ovmBaseSplitPayloadSchema = {
     splitOwnerAddress: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
+      default: zeroAddress,
     },
     principalThreshold: {
       type: 'number',
