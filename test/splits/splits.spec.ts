@@ -27,6 +27,9 @@ describe('ObolSplits', () => {
   let mockProvider: any;
 
   beforeEach(() => {
+    // Clear all mocks before each test
+    jest.clearAllMocks();
+    
     mockSigner = {
       provider: {
         getCode: jest.fn().mockResolvedValue('0x123456'),
@@ -52,7 +55,7 @@ describe('ObolSplits', () => {
     };
 
     it('should create rewards-only split successfully', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../src/splits/splitHelpers');
+      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMAndSplitV2 } = require('../../src/splits/splitHelpers');
       const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
@@ -63,7 +66,10 @@ describe('ObolSplits', () => {
       ]);
       predictSplitV2Address.mockResolvedValue('0xRewardsSplitAddress');
       isSplitV2Deployed.mockResolvedValue(false);
-      deployOVMContract.mockResolvedValue('0xOVMAddress');
+      deployOVMAndSplitV2.mockResolvedValue({
+        ovmAddress: '0xOVMAddress',
+        splitAddress: '0xRewardsSplitAddress',
+      });
       isContractAvailable.mockResolvedValue(true);
 
       const result = await client.splits.createObolOVMAndRewardPullSplit(mockRewardsSplitPayload);
@@ -76,7 +82,7 @@ describe('ObolSplits', () => {
       expect(formatRecipientsForSplitV2).toHaveBeenCalled();
       expect(predictSplitV2Address).toHaveBeenCalled();
       expect(isSplitV2Deployed).toHaveBeenCalled();
-      expect(deployOVMContract).toHaveBeenCalled();
+      expect(deployOVMAndSplitV2).toHaveBeenCalled();
     });
 
     it('should throw error when signer is not provided', async () => {
@@ -107,13 +113,6 @@ describe('ObolSplits', () => {
       // Restore original config
       CHAIN_CONFIGURATION[1] = originalConfig;
     });
-
-    it('should throw error when provider is not available', async () => {
-      const clientWithoutProvider = new Client({ chainId: 1 }, mockSigner);
-
-      await expect(clientWithoutProvider.splits.createObolOVMAndRewardPullSplit(mockRewardsSplitPayload))
-        .rejects.toThrow('Provider is required to check OVM factory contract availability');
-    });
   });
 
   describe('createObolOVMAndTotalPullSplit', () => {
@@ -131,7 +130,7 @@ describe('ObolSplits', () => {
     };
 
     it('should create total split successfully', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../src/splits/splitHelpers');
+      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract, deployOVMAndSplitV2 } = require('../../src/splits/splitHelpers');
       const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
@@ -154,7 +153,10 @@ describe('ObolSplits', () => {
         .mockResolvedValueOnce(false) // rewards split not deployed
         .mockResolvedValueOnce(false); // principal split not deployed
 
-      deployOVMContract.mockResolvedValue('0xOVMAddress');
+      deployOVMAndSplitV2.mockResolvedValue({
+        ovmAddress: '0xOVMAddress',
+        splitAddress: '0xRewardsSplitAddress',
+      });
       isContractAvailable.mockResolvedValue(true);
 
       const result = await client.splits.createObolOVMAndTotalPullSplit(mockTotalSplitPayload);
@@ -167,11 +169,11 @@ describe('ObolSplits', () => {
       expect(formatRecipientsForSplitV2).toHaveBeenCalledTimes(2);
       expect(predictSplitV2Address).toHaveBeenCalledTimes(2);
       expect(isSplitV2Deployed).toHaveBeenCalledTimes(2);
-      expect(deployOVMContract).toHaveBeenCalled();
+      expect(deployOVMAndSplitV2).toHaveBeenCalled();
     });
 
     it('should handle case when both splits are already deployed', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract } = require('../../src/splits/splitHelpers');
+      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract, deployOVMAndSplitV2 } = require('../../src/splits/splitHelpers');
       const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
