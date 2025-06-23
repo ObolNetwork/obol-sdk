@@ -209,7 +209,7 @@ export const CHAIN_CONFIGURATION = {
     },
   },
   [AVAILABLE_SPLITTER_CHAINS[2]]: {
-      SPLITMAIN_ADDRESS: {
+    SPLITMAIN_ADDRESS: {
       address: '0xc05ae267291705ac16F75283572294ed2a91CBc7',
       bytecode: HOODI_SPLITMAIN_BYTECODE,
     },
@@ -217,21 +217,21 @@ export const CHAIN_CONFIGURATION = {
       address: '0xcA11bde05977b3631167028862bE2a173976CA11',
       bytecode: HOODI_MULTICALL_BYTECODE,
     },
-     OWR_FACTORY_ADDRESS: {
+    OWR_FACTORY_ADDRESS: {
       address: '0x9ff0c649d0bf5fe7efa4d72e94bed7302ed5c8d7',
       bytecode: HOODI_OWR_FACTORY_BYTECODE,
     },
     RETROACTIVE_FUNDING_ADDRESS: {
-      address: '0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5', 
+      address: '0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5',
       bytecode: '',
     },
     // OVM and SplitV2 Contract Addresses
     OVM_FACTORY_ADDRESS: {
-      address: '0x6F13d929C783a420AE4DC71C1dcc27A02038Ed09', 
+      address: '0x6F13d929C783a420AE4DC71C1dcc27A02038Ed09',
       bytecode: HOODI_OVM_FACTORY_BYTECODE,
     },
     WAREHOUSE_ADDRESS: {
-      address: '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8', 
+      address: '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8',
       bytecode: HOODI_WAREHOUSE_BYTECODE,
     },
   },
@@ -265,4 +265,9 @@ export const CAPELLA_FORK_MAPPING: Record<string, string> = {
   '0x90000069': '0x90000072', // Sepolia
   '0x01017000': '0x04017000', // Holesky
   '0x10000910': '0x40000910', // Hoodi
+};
+
+export const CHAIN_PUBLIC_RPC_URL: Record<number, string> = {
+  1: 'https://ethereum-rpc.publicnode.com', // Mainnet
+  560048: 'https://ethereum-hoodi-rpc.publicnode.com', // Hoodi
 };

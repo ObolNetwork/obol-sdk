@@ -6,15 +6,17 @@ import {
   type SignerType,
   type SplitV2Recipient,
   type OVMArgs,
-  type OVMAndSplitV2Result,
 } from '../types';
-import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
+import { BrowserProvider, Contract, Interface, parseEther, Wallet, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
 import { OVMFactoryContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { MultiCallContract } from '../abi/Multicall';
-import { CHAIN_CONFIGURATION, SPLITS_V2_SALT } from '../constants';
+import { CHAIN_CONFIGURATION, CHAIN_PUBLIC_RPC_URL } from '../constants';
 import { SplitsClient } from '@0xsplits/splits-sdk';
+import { createPublicClient, createWalletClient, custom, http } from 'viem';
+import { hoodi, mainnet } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
@@ -599,11 +601,52 @@ export const formatRecipientsForSplitV2 = (
     }));
 };
 
-export const createSplitsClient = (signer: SignerType, chainId: number): SplitsClient => {
-  return new SplitsClient({
-    chainId,
-  });
-};
+export const createSplitsClient = async (signer: SignerType, chainId: number): Promise<SplitsClient> => {
+  const chain = chainId == 1 ? mainnet : hoodi
+  const client = createPublicClient({
+    chain: chain,
+    transport: http(CHAIN_PUBLIC_RPC_URL[chainId])
+  })
+  if (typeof window !== 'undefined' && signer.provider instanceof BrowserProvider) {
+    // Ensure user has authorized account
+    const address = await signer.getAddress();
+    const viemWalletClient = createWalletClient({
+      account: address,
+      chain: chain,
+      transport: custom((window as any).ethereum),
+    });
+    return new SplitsClient({
+      publicClient: client,
+      walletClient: viemWalletClient,
+      chainId,
+    });
+  } else {
+    // For non-browser environment, extract private key from signer
+    const signerPrivateKey = (signer as Wallet)?.privateKey;
+    if (!signerPrivateKey) {
+      throw new Error('Signer private key not available');
+    }
+
+    // Ensure private key has 0x prefix
+    const privateKey = signerPrivateKey.startsWith('0x')
+      ? signerPrivateKey
+      : `0x${signerPrivateKey}`;
+
+    const scriptAccount = privateKeyToAccount(privateKey as `0x${string}`);
+    const account = scriptAccount;
+
+    const viemWalletClient = createWalletClient({
+      account,
+      chain: chain,
+      transport: http(CHAIN_PUBLIC_RPC_URL[chainId])
+    });
+    return new SplitsClient({
+      publicClient: client,
+      walletClient: viemWalletClient,
+      chainId,
+    });
+  };
+}
 
 export const predictSplitV2Address = async ({
   splitOwnerAddress,
@@ -621,7 +664,7 @@ export const predictSplitV2Address = async ({
   chainId: number;
 }): Promise<string> => {
   try {
-    const splitsClient = createSplitsClient(signer, chainId);
+    const splitsClient = await createSplitsClient(signer, chainId);
 
     const response = await splitsClient.splitV2.predictDeterministicAddress({
       ownerAddress: splitOwnerAddress,
@@ -654,7 +697,7 @@ export const isSplitV2Deployed = async ({
   chainId: number;
 }): Promise<boolean> => {
   try {
-    const splitsClient = createSplitsClient(signer, chainId);
+    const splitsClient = await createSplitsClient(signer, chainId);
     const response = await splitsClient.splitV2.isDeployed({
       ownerAddress: splitOwnerAddress,
       recipients,
@@ -742,14 +785,14 @@ export const deployOVMAndSplitV2 = async ({
   principalSplitRecipients?: SplitV2Recipient[];
   isPrincipalSplitDeployed?: boolean;
   splitOwnerAddress: string;
-}): Promise<OVMAndSplitV2Result> => {
+}): Promise<string> => {
   try {
     const chainConfig = CHAIN_CONFIGURATION[chainId];
     if (!chainConfig?.OVM_FACTORY_ADDRESS?.address) {
       throw new Error(`OVM Factory not configured for chain ${chainId}`);
     }
 
-    const splitsClient = createSplitsClient(signer, chainId);
+    const splitsClient = await createSplitsClient(signer, chainId);
     const executeCalls: any[] = [];
 
 
@@ -795,20 +838,14 @@ export const deployOVMAndSplitV2 = async ({
       calls: executeCalls,
     });
 
-    console.log(executeMultiCalls, "check heree")
-
     // Extract addresses from events
-    const sliceSplitAddress = executeMultiCalls?.events[1]?.address;
-    const ovmAddress = executeMultiCalls?.events[3]?.address;
+    const ovmAddress = executeMultiCalls?.events.length == 2 ? executeMultiCalls?.events[0]?.address : (executeMultiCalls?.events.length == 5 ? executeMultiCalls?.events[3]?.address : executeMultiCalls?.events[6]?.address);
 
-    if (!sliceSplitAddress || !ovmAddress) {
+    if (!ovmAddress) {
       throw new Error('Failed to extract contract addresses from multicall events');
     }
 
-    return {
-      ovmAddress: ovmAddress,
-      splitAddress: sliceSplitAddress,
-    };
+    return ovmAddress;
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM and SplitV2: ${error.message ?? 'Deployment failed'}`,

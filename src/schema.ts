@@ -192,7 +192,7 @@ export const ovmBaseSplitPayloadSchema = {
     },
   },
   validateRewardsSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'splitOwnerAddress'],
+  required: ['rewardSplitRecipients', 'OVMOwnerAddress'],
 };
 
 export const ovmRewardsSplitPayloadSchema = {
@@ -205,7 +205,7 @@ export const ovmRewardsSplitPayloadSchema = {
     },
   },
   validateOVMRewardsSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'splitOwnerAddress', 'principalRecipient'],
+  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'principalRecipient'],
 };
 
 export const ovmTotalSplitPayloadSchema = {
@@ -228,5 +228,5 @@ export const ovmTotalSplitPayloadSchema = {
     },
   },
   validateOVMTotalSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'principalSplitRecipients', 'OVMOwnerAddress', 'splitOwnerAddress'],
+  required: ['rewardSplitRecipients', 'principalSplitRecipients', 'OVMOwnerAddress'],
 };

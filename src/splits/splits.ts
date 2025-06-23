@@ -164,7 +164,7 @@ export class ObolSplits {
       };
     } else {
       // Deploy both OVM and SplitV2 contracts via multicall
-      const { ovmAddress, splitAddress } = await deployOVMAndSplitV2({
+      const ovmAddress = await deployOVMAndSplitV2({
         ovmArgs: {
           OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
           rewardRecipient: predictedSplitAddress,
@@ -182,7 +182,7 @@ export class ObolSplits {
 
       return {
         withdrawal_address: ovmAddress,
-        fee_recipient_address: splitAddress,
+        fee_recipient_address: predictedSplitAddress,
       };
     }
   }
@@ -326,7 +326,7 @@ export class ObolSplits {
       };
     } else {
       // Use multicall to deploy any contracts that aren't deployed
-      const { ovmAddress, splitAddress } = await deployOVMAndSplitV2({
+      const ovmAddress = await deployOVMAndSplitV2({
         ovmArgs: {
           OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
           rewardRecipient: predictedRewardsSplitAddress,
@@ -345,7 +345,7 @@ export class ObolSplits {
 
       return {
         withdrawal_address: ovmAddress,
-        fee_recipient_address: splitAddress,
+        fee_recipient_address: predictedRewardsSplitAddress,
       };
     }
   }

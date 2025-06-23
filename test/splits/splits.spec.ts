@@ -29,7 +29,7 @@ describe('ObolSplits', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks();
-    
+
     mockSigner = {
       provider: {
         getCode: jest.fn().mockResolvedValue('0x123456'),
@@ -43,7 +43,7 @@ describe('ObolSplits', () => {
     client = new Client({ chainId: 1 }, mockSigner, mockProvider);
   });
 
-  describe('createObolOVMAndPullSplit', () => {
+  describe('createObolOVMAndRewardPullSplit', () => {
     const mockRewardsSplitPayload: OVMRewardsSplitPayload = {
       rewardSplitRecipients: [
         { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
@@ -67,10 +67,7 @@ describe('ObolSplits', () => {
       ]);
       predictSplitV2Address.mockResolvedValue('0xRewardsSplitAddress');
       isSplitV2Deployed.mockResolvedValue(false);
-      deployOVMAndSplitV2.mockResolvedValue({
-        ovmAddress: '0xOVMAddress',
-        splitAddress: '0xRewardsSplitAddress',
-      });
+      deployOVMAndSplitV2.mockResolvedValue( '0xOVMAddress');
       isContractAvailable.mockResolvedValue(true);
 
       const result = await client.splits.createObolOVMAndRewardPullSplit(mockRewardsSplitPayload);
@@ -155,10 +152,9 @@ describe('ObolSplits', () => {
         .mockResolvedValueOnce(false) // rewards split not deployed
         .mockResolvedValueOnce(false); // principal split not deployed
 
-      deployOVMAndSplitV2.mockResolvedValue({
-        ovmAddress: '0xOVMAddress',
-        splitAddress: '0xRewardsSplitAddress',
-      });
+      deployOVMAndSplitV2.mockResolvedValue(
+        '0xOVMAddress'
+      );
       isContractAvailable.mockResolvedValue(true);
 
       const result = await client.splits.createObolOVMAndTotalPullSplit(mockTotalSplitPayload);

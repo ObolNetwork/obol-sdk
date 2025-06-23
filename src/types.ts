@@ -5,7 +5,6 @@ import {
   type JsonRpcProvider,
   type JsonRpcSigner,
   type Provider,
-  type Signer,
 } from 'ethers';
 
 /**
@@ -213,7 +212,7 @@ export type OVMBaseSplitPayload = {
   OVMOwnerAddress: string;
 
   /** Owner address for the splitter contracts. */
-  splitOwnerAddress: string;
+  splitOwnerAddress?: string;
 
   /** Principal threshold for OVM contract. */
   principalThreshold?: number;
@@ -252,17 +251,6 @@ export type SplitV2Recipient = {
 
   /** Percentage allocation (0-100 with up to 4 decimals). */
   percentAllocation: number;
-}
-
-/**
- * OVM and SplitV2 deployment result
- */
-export type OVMAndSplitV2Result = {
-  /** OVM contract address. */
-  ovmAddress: string;
-
-  /** SplitV2 contract address. */
-  splitAddress: string;
 }
 
 /**
@@ -409,7 +397,7 @@ export type SafeRpcUrl = string;
 /**
  * Signer Types
  */
-export type SignerType = Signer | JsonRpcSigner | Wallet;
+export type SignerType = JsonRpcSigner | Wallet;
 
 /**
  * claimIncentives Response
