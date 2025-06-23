@@ -129,7 +129,7 @@ export class ObolSplits {
 
     // Predict split address
     const predictedSplitAddress = await predictSplitV2Address({
-      ownerAddress: validatedPayload.ownerAddress,
+      splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
@@ -139,7 +139,7 @@ export class ObolSplits {
 
     // Check if split is already deployed
     const isRewardSplitterDeployed = await isSplitV2Deployed({
-      ownerAddress: validatedPayload.ownerAddress,
+      splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
@@ -150,7 +150,7 @@ export class ObolSplits {
     if (isRewardSplitterDeployed) {
       // Only deploy OVM contract
       const ovmAddress = await deployOVMContract({
-        ownerAddress: validatedPayload.ownerAddress,
+        OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
         principalRecipient: validatedPayload.principalRecipient,
         rewardRecipient: predictedSplitAddress,
         principalThreshold: validatedPayload.principalThreshold,
@@ -166,7 +166,7 @@ export class ObolSplits {
       // Deploy both OVM and SplitV2 contracts via multicall
       const { ovmAddress, splitAddress } = await deployOVMAndSplitV2({
         ovmArgs: {
-          ownerAddress: validatedPayload.ownerAddress,
+          OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
           rewardRecipient: predictedSplitAddress,
           principalRecipient: validatedPayload.principalRecipient,
           principalThreshold: validatedPayload.principalThreshold,
@@ -177,6 +177,7 @@ export class ObolSplits {
         salt,
         signer: this.signer,
         chainId: this.chainId,
+        splitOwnerAddress: validatedPayload.splitOwnerAddress,
       });
 
       return {
@@ -270,7 +271,7 @@ export class ObolSplits {
 
     // Predict rewards split address
     const predictedRewardsSplitAddress = await predictSplitV2Address({
-      ownerAddress: validatedPayload.ownerAddress,
+      splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardsRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
@@ -280,7 +281,7 @@ export class ObolSplits {
 
     // Predict principal split address
     const predictedPrincipalSplitAddress = await predictSplitV2Address({
-      ownerAddress: validatedPayload.ownerAddress,
+      splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: principalSplitRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt: salt,
@@ -290,7 +291,7 @@ export class ObolSplits {
 
     // Check if rewards split is already deployed
     const isRewardsSplitterDeployed = await isSplitV2Deployed({
-      ownerAddress: validatedPayload.ownerAddress,
+      splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: rewardsRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt,
@@ -300,7 +301,7 @@ export class ObolSplits {
 
     // Check if principal split is already deployed
     const isPrincipalSplitterDeployed = await isSplitV2Deployed({
-      ownerAddress: validatedPayload.ownerAddress,
+      splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: principalSplitRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
       salt: salt,
@@ -311,7 +312,7 @@ export class ObolSplits {
     if (isRewardsSplitterDeployed && isPrincipalSplitterDeployed) {
       // Only deploy OVM contract
       const ovmAddress = await deployOVMContract({
-        ownerAddress: validatedPayload.ownerAddress,
+        OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
         principalRecipient: predictedPrincipalSplitAddress,
         rewardRecipient: predictedRewardsSplitAddress,
         principalThreshold: validatedPayload.principalThreshold,
@@ -327,7 +328,7 @@ export class ObolSplits {
       // Use multicall to deploy any contracts that aren't deployed
       const { ovmAddress, splitAddress } = await deployOVMAndSplitV2({
         ovmArgs: {
-          ownerAddress: validatedPayload.ownerAddress,
+          OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
           rewardRecipient: predictedRewardsSplitAddress,
           principalRecipient: predictedPrincipalSplitAddress,
           principalThreshold: validatedPayload.principalThreshold,
@@ -339,6 +340,7 @@ export class ObolSplits {
         chainId: this.chainId,
         principalSplitRecipients: principalSplitRecipients,
         isPrincipalSplitDeployed: isPrincipalSplitterDeployed,
+        splitOwnerAddress: validatedPayload.splitOwnerAddress,
       });
 
       return {

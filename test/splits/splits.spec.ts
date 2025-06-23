@@ -49,8 +49,9 @@ describe('ObolSplits', () => {
         { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
         { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
       ],
-      ownerAddress: '0x3456789012345678901234567890123456789012',
-      principalRecipient: '0x4567890123456789012345678901234567890123',
+      OVMOwnerAddress: '0x3456789012345678901234567890123456789012',
+      splitOwnerAddress: '0x4567890123456789012345678901234567890123',
+      principalRecipient: '0x5678901234567890123456789012345678901234',
       distributorFeePercent: 0,
     };
 
@@ -125,7 +126,8 @@ describe('ObolSplits', () => {
         { address: '0x3456789012345678901234567890123456789012', percentAllocation: 60 },
         { address: '0x4567890123456789012345678901234567890123', percentAllocation: 40 },
       ],
-      ownerAddress: '0x5678901234567890123456789012345678901234',
+      OVMOwnerAddress: '0x5678901234567890123456789012345678901234',
+      splitOwnerAddress: '0x6789012345678901234567890123456789012345',
       distributorFeePercent: 0,
     };
 
@@ -207,7 +209,7 @@ describe('ObolSplits', () => {
       });
 
       expect(deployOVMContract).toHaveBeenCalledWith({
-        ownerAddress: mockTotalSplitPayload.ownerAddress,
+        OVMOwnerAddress: mockTotalSplitPayload.OVMOwnerAddress,
         principalRecipient: '0xPrincipalSplitAddress',
         rewardRecipient: '0xRewardsSplitAddress',
         principalThreshold: mockTotalSplitPayload.principalThreshold,

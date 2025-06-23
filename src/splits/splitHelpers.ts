@@ -606,14 +606,14 @@ export const createSplitsClient = (signer: SignerType, chainId: number): SplitsC
 };
 
 export const predictSplitV2Address = async ({
-  ownerAddress,
+  splitOwnerAddress,
   recipients,
   distributorFeePercent,
   salt,
   signer,
   chainId,
 }: {
-  ownerAddress: string,
+  splitOwnerAddress: string,
   recipients: SplitV2Recipient[];
   distributorFeePercent: number;
   salt: `0x${string}`;
@@ -624,7 +624,7 @@ export const predictSplitV2Address = async ({
     const splitsClient = createSplitsClient(signer, chainId);
 
     const response = await splitsClient.splitV2.predictDeterministicAddress({
-      ownerAddress,
+      ownerAddress: splitOwnerAddress,
       recipients,
       distributorFeePercent,
       salt,
@@ -639,14 +639,14 @@ export const predictSplitV2Address = async ({
 };
 
 export const isSplitV2Deployed = async ({
-  ownerAddress,
+  splitOwnerAddress,
   recipients,
   distributorFeePercent,
   salt,
   signer,
   chainId,
 }: {
-  ownerAddress: string,
+  splitOwnerAddress: string,
   recipients: SplitV2Recipient[];
   distributorFeePercent: number;
   salt: `0x${string}`;
@@ -656,7 +656,7 @@ export const isSplitV2Deployed = async ({
   try {
     const splitsClient = createSplitsClient(signer, chainId);
     const response = await splitsClient.splitV2.isDeployed({
-      ownerAddress,
+      ownerAddress: splitOwnerAddress,
       recipients,
       distributorFeePercent,
       salt,
@@ -670,14 +670,14 @@ export const isSplitV2Deployed = async ({
 };
 
 export const deployOVMContract = async ({
-  ownerAddress,
+  OVMOwnerAddress,
   principalRecipient,
   rewardRecipient,
   principalThreshold,
   signer,
   chainId,
 }: {
-  ownerAddress: string;
+  OVMOwnerAddress: string;
   principalRecipient: string;
   rewardRecipient: string;
   principalThreshold: number;
@@ -697,7 +697,7 @@ export const deployOVMContract = async ({
     );
 
     const tx = await ovmFactoryContract.createObolValidatorManager(
-      ownerAddress,
+      OVMOwnerAddress,
       principalRecipient,
       rewardRecipient,
       principalThreshold,
@@ -730,6 +730,7 @@ export const deployOVMAndSplitV2 = async ({
   chainId,
   principalSplitRecipients,
   isPrincipalSplitDeployed,
+  splitOwnerAddress,
 }: {
   ovmArgs: OVMArgs;
   rewardRecipients: SplitV2Recipient[];
@@ -740,6 +741,7 @@ export const deployOVMAndSplitV2 = async ({
   chainId: number;
   principalSplitRecipients?: SplitV2Recipient[];
   isPrincipalSplitDeployed?: boolean;
+  splitOwnerAddress: string;
 }): Promise<OVMAndSplitV2Result> => {
   try {
     const chainConfig = CHAIN_CONFIGURATION[chainId];
@@ -757,7 +759,7 @@ export const deployOVMAndSplitV2 = async ({
       const rewardsSplitTxData = await splitsClient.splitV2.callData.createSplit({
         recipients: rewardRecipients,
         distributorFeePercent,
-        ownerAddress: ovmArgs.ownerAddress,
+        ownerAddress: splitOwnerAddress,
         salt,
       });
 
@@ -770,15 +772,14 @@ export const deployOVMAndSplitV2 = async ({
         recipients: principalSplitRecipients,
         distributorFeePercent,
         salt: salt,
-        ownerAddress: ovmArgs.ownerAddress,
-
+        ownerAddress: splitOwnerAddress,
       });
       executeCalls.push(principalSplitTxData);
     }
 
     // Create OVM call data
     const ovmTxData = encodeCreateOVMTxData(
-      ovmArgs.ownerAddress,
+      ovmArgs.OVMOwnerAddress,
       ovmArgs.principalRecipient,
       ovmArgs.rewardRecipient,
       ovmArgs.principalThreshold,
@@ -816,13 +817,13 @@ export const deployOVMAndSplitV2 = async ({
 };
 
 const encodeCreateOVMTxData = (
-  ownerAddress: string,
+  OVMOwnerAddress: string,
   principalRecipient: string,
   rewardRecipient: string,
   principalThreshold: number,
 ): string => {
   return ovmFactoryContractInterface.encodeFunctionData('createObolValidatorManager', [
-    ownerAddress,
+    OVMOwnerAddress,
     principalRecipient,
     rewardRecipient,
     principalThreshold,

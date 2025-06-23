@@ -209,8 +209,11 @@ export type OVMBaseSplitPayload = {
   /** The split recipients addresses and splits. */
   rewardSplitRecipients: SplitV2Recipient[];
 
-  /** Owner address of the cluster. */
-  ownerAddress: string;
+  /** Owner address for the OVM contract. */
+  OVMOwnerAddress: string;
+
+  /** Owner address for the splitter contracts. */
+  splitOwnerAddress: string;
 
   /** Principal threshold for OVM contract. */
   principalThreshold?: number;
@@ -573,8 +576,8 @@ export type HttpRequestFunc = (
  * OVM Arguments for contract creation
  */
 export type OVMArgs = {
-  /** Owner address of the cluster. */
-  ownerAddress: string;
+  /** Owner address for the OVM contract. */
+  OVMOwnerAddress: string;
 
   /** Principal recipient address. */
   principalRecipient: string;

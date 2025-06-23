@@ -169,7 +169,11 @@ export const ovmBaseSplitPayloadSchema = {
         required: ['address', 'percentAllocation'],
       },
     },
-    ownerAddress: {
+    OVMOwnerAddress: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+    splitOwnerAddress: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
     },
@@ -185,8 +189,8 @@ export const ovmBaseSplitPayloadSchema = {
       default: 0,
     },
   },
-  validateRewardsSplitRecipientsvalidateRewardsSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'ownerAddress'],
+  validateRewardsSplitRecipients: true,
+  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'splitOwnerAddress'],
 };
 
 export const ovmRewardsSplitPayloadSchema = {
@@ -199,7 +203,7 @@ export const ovmRewardsSplitPayloadSchema = {
     },
   },
   validateOVMRewardsSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'ownerAddress', 'principalRecipient'],
+  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'splitOwnerAddress', 'principalRecipient'],
 };
 
 export const ovmTotalSplitPayloadSchema = {
@@ -222,5 +226,5 @@ export const ovmTotalSplitPayloadSchema = {
     },
   },
   validateOVMTotalSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'principalSplitRecipients', 'ownerAddress'],
+  required: ['rewardSplitRecipients', 'principalSplitRecipients', 'OVMOwnerAddress', 'splitOwnerAddress'],
 };
