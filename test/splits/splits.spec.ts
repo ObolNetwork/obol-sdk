@@ -47,7 +47,7 @@ describe('ObolSplits', () => {
     const mockRewardsSplitPayload: OVMRewardsSplitPayload = {
       rewardSplitRecipients: [
         { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 30 },
+        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
       ],
       ownerAddress: '0x3456789012345678901234567890123456789012',
       principalRecipient: '0x4567890123456789012345678901234567890123',
@@ -61,7 +61,7 @@ describe('ObolSplits', () => {
       // Mock helper functions
       formatRecipientsForSplitV2.mockReturnValue([
         { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 30 },
+        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
         { address: '0xDe5aE4De36c966747Ea7DF13BD9589642e2B1D0d', percentAllocation: 1 },
       ]);
       predictSplitV2Address.mockResolvedValue('0xRewardsSplitAddress');
@@ -119,7 +119,7 @@ describe('ObolSplits', () => {
     const mockTotalSplitPayload: OVMTotalSplitPayload = {
       rewardSplitRecipients: [
         { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 30 },
+        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
       ],
       principalSplitRecipients: [
         { address: '0x3456789012345678901234567890123456789012', percentAllocation: 60 },
@@ -137,7 +137,7 @@ describe('ObolSplits', () => {
       formatRecipientsForSplitV2
         .mockReturnValueOnce([ // rewards recipients
           { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-          { address: '0x2345678901234567890123456789012345678901', percentAllocation: 30 },
+          { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
           { address: '0xDe5aE4De36c966747Ea7DF13BD9589642e2B1D0d', percentAllocation: 1 },
         ])
         .mockReturnValueOnce([ // principal recipients
@@ -180,7 +180,7 @@ describe('ObolSplits', () => {
       formatRecipientsForSplitV2
         .mockReturnValueOnce([ // rewards recipients
           { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-          { address: '0x2345678901234567890123456789012345678901', percentAllocation: 30 },
+          { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
           { address: '0xDe5aE4De36c966747Ea7DF13BD9589642e2B1D0d', percentAllocation: 1 },
         ])
         .mockReturnValueOnce([ // principal recipients
