@@ -207,7 +207,7 @@ export interface RewardsSplitPayload extends TotalSplitPayload {
  */
 export type OVMBaseSplitPayload = {
   /** The split recipients addresses and splits. */
-  splitRecipients: SplitV2Recipient[];
+  rewardSplitRecipients: SplitV2Recipient[];
 
   /** Owner address of the cluster. */
   ownerAddress: string;
@@ -226,6 +226,19 @@ export type OVMRewardsSplitPayload = OVMBaseSplitPayload & {
   /** Principal recipient address (single address for rewards-only split). */
   principalRecipient: string;
 }
+
+/**
+ * OVM and SplitV2 Params for total split scenario
+ */
+export type OVMTotalSplitPayload = OVMBaseSplitPayload & {
+  /** Principal recipients addresses and splits (array for total split scenario). */
+  principalSplitRecipients: SplitV2Recipient[];
+}
+
+/**
+ * Union type for both OVM split scenarios
+ */
+export type OVMSplitPayload = OVMRewardsSplitPayload | OVMTotalSplitPayload;
 
 /**
  * SplitV2 Recipient structure

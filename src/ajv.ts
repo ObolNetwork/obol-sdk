@@ -2,6 +2,9 @@ import addFormats from 'ajv-formats';
 import addKeywords from 'ajv-keywords';
 import { parseUnits } from 'ethers';
 import {
+  OVMRewardsSplitPayload,
+  OVMTotalSplitPayload,
+  SplitV2Recipient,
   type RewardsSplitPayload,
   type SplitRecipient,
   type TotalSplitPayload,
@@ -30,13 +33,14 @@ const validateRewardsSplitRecipients = (
   data: RewardsSplitPayload,
 ): boolean => {
   const obolRAFSplit =
-    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
-  const splitPercentage = data.splitRecipients.reduce(
+    data?.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = (data.splitRecipients).reduce(
     (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
     0,
   );
   return splitPercentage + obolRAFSplit === 100;
 };
+
 
 const validateTotalSplitRecipients = (
   _: boolean,
@@ -77,6 +81,32 @@ const validateUniqueAddresses = (
   return isUnique;
 };
 
+
+const validateOVMRewardsSplitRecipients = (
+  _: boolean,
+  data: OVMRewardsSplitPayload,
+): boolean => {
+  const obolRAFSplit =
+    DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = (data.rewardSplitRecipients).reduce(
+    (acc: number, curr: SplitV2Recipient) => acc + curr.percentAllocation,
+    0,
+  );
+  return splitPercentage + obolRAFSplit === 100;
+};
+
+const validateOVMTotalSplitRecipients = (
+  _: boolean,
+  data: OVMTotalSplitPayload,
+): boolean => {
+
+  const splitPercentage = data.principalSplitRecipients.reduce(
+    (acc: number, curr: SplitV2Recipient) => acc + curr.percentAllocation,
+    0,
+  );
+  return splitPercentage === 100;
+};
+
 const ajv = new Ajv({
   allErrors: true,
   useDefaults: true,
@@ -92,6 +122,7 @@ ajv.addKeyword({
   schemaType: 'boolean',
 });
 
+
 ajv.addKeyword({
   keyword: 'validateTotalSplitRecipients',
   validate: validateTotalSplitRecipients,
@@ -101,6 +132,18 @@ ajv.addKeyword({
 ajv.addKeyword({
   keyword: 'validateUniqueAddresses',
   validate: validateUniqueAddresses,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMRewardsSplitRecipients',
+  validate: validateOVMRewardsSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMTotalSplitRecipients',
+  validate: validateOVMTotalSplitRecipients,
   schemaType: 'boolean',
 });
 

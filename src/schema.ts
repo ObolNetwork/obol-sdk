@@ -155,7 +155,7 @@ export const rewardsSplitterPayloadSchema = {
 export const ovmBaseSplitPayloadSchema = {
   type: 'object',
   properties: {
-    splitRecipients: {
+    rewardSplitRecipients: {
       type: 'array',
       items: {
         type: 'object',
@@ -186,7 +186,7 @@ export const ovmBaseSplitPayloadSchema = {
     },
   },
   validateRewardsSplitRecipientsvalidateRewardsSplitRecipients: true,
-  required: ['splitRecipients', 'ownerAddress'],
+  required: ['rewardSplitRecipients', 'ownerAddress'],
 };
 
 export const ovmRewardsSplitPayloadSchema = {
@@ -198,15 +198,15 @@ export const ovmRewardsSplitPayloadSchema = {
       pattern: '^0x[a-fA-F0-9]{40}$',
     },
   },
-  validateRewardsSplitRecipients: true,
-  required: ['splitRecipients', 'ownerAddress', 'principalRecipient'],
+  validateOVMRewardsSplitRecipients: true,
+  required: ['rewardSplitRecipients', 'ownerAddress', 'principalRecipient'],
 };
 
 export const ovmTotalSplitPayloadSchema = {
   type: 'object',
   properties: {
     ...ovmBaseSplitPayloadSchema.properties,
-    principalRecipients: {
+    principalSplitRecipients: {
       type: 'array',
       items: {
         type: 'object',
@@ -217,10 +217,10 @@ export const ovmTotalSplitPayloadSchema = {
           },
           percentAllocation: { type: 'number' },
         },
-        required: ['account', 'percentAllocation'],
+        required: ['address', 'percentAllocation'],
       },
     },
   },
-  validateTotalSplitRecipients: true,
-  required: ['splitRecipients', 'principalRecipients', 'ownerAddress'],
+  validateOVMTotalSplitRecipients: true,
+  required: ['rewardSplitRecipients', 'principalSplitRecipients', 'ownerAddress'],
 };

@@ -715,22 +715,26 @@ export const deployOVMContract = async ({
   }
 };
 
-export const deployImmutableSplitV2 = async ({
+export const deployOVMAndSplitV2 = async ({
   ovmArgs,
-  recipients,
-  predictedSplitAddress,
+  rewardRecipients,
+  isRewardsSplitterDeployed,
   distributorFeePercent,
   salt,
   signer,
   chainId,
+  principalSplitRecipients,
+  isPrincipalSplitDeployed,
 }: {
   ovmArgs: OVMArgs;
-  recipients: SplitV2Recipient[];
-  predictedSplitAddress: string;
+  rewardRecipients: SplitV2Recipient[];
+  isRewardsSplitterDeployed?: boolean;
   distributorFeePercent: number;
   salt: string;
   signer: SignerType;
   chainId: number;
+  principalSplitRecipients?: SplitV2Recipient[];
+  isPrincipalSplitDeployed?: boolean;
 }): Promise<OVMAndSplitV2Result> => {
   try {
     const chainConfig = CHAIN_CONFIGURATION[chainId];
@@ -739,17 +743,33 @@ export const deployImmutableSplitV2 = async ({
     }
 
     const splitsClient = createSplitsClient(signer, chainId);
-
     const executeCalls: any[] = [];
 
-    // Create SplitV2 call data
-    const splitTxData = await splitsClient.splitV2.callData.createSplit({
-      recipients,
-      distributorFeePercent,
-      salt,
-    });
 
-    executeCalls.push(splitTxData);
+    if (rewardRecipients && !isRewardsSplitterDeployed) {
+
+      // Create rewards split call data
+      const rewardsSplitTxData = await splitsClient.splitV2.callData.createSplit({
+        recipients: rewardRecipients,
+        distributorFeePercent,
+        ownerAddress: ovmArgs.ownerAddress,
+        salt,
+      });
+
+      executeCalls.push(rewardsSplitTxData);
+    }
+
+    // Create principal split call data if needed (for total split scenario)
+    if (principalSplitRecipients && !isPrincipalSplitDeployed) {
+      const principalSplitTxData = await splitsClient.splitV2.callData.createSplit({
+        recipients: principalSplitRecipients,
+        distributorFeePercent,
+        salt: salt,
+        ownerAddress: ovmArgs.ownerAddress,
+
+      });
+      executeCalls.push(principalSplitTxData);
+    }
 
     // Create OVM call data
     const ovmTxData = encodeCreateOVMTxData(
@@ -769,6 +789,8 @@ export const deployImmutableSplitV2 = async ({
       calls: executeCalls,
     });
 
+    console.log(executeMultiCalls,"check heree")
+
     // Extract addresses from events
     const sliceSplitAddress = executeMultiCalls?.events[1]?.address;
     const ovmAddress = executeMultiCalls?.events[3]?.address;
@@ -783,7 +805,7 @@ export const deployImmutableSplitV2 = async ({
     };
   } catch (error: any) {
     throw new Error(
-      `Failed to deploy immutable SplitV2: ${error.message ?? 'SplitV2 deployment failed'}`,
+      `Failed to deploy OVM and SplitV2: ${error.message ?? 'Deployment failed'}`,
     );
   }
 };
