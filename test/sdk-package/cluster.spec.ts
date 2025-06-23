@@ -353,6 +353,167 @@ describe('Cluster Definition', () => {
     );
   });
 
+  it('should deploy OVM and Rewards Split (createObolOVMAndPullSplit)', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
+    
+    // Create OVM and rewards split
+    const { withdrawal_address, fee_recipient_address } =
+      await client.splits.createObolOVMAndRewardPullSplit({
+        rewardSplitRecipients: [
+          { address: secondRandomSignerAddress, percentAllocation: 50 },
+          { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+        ],
+        ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        distributorFeePercent: 0,
+      });
+
+    expect(withdrawal_address.length).toEqual(42);
+    expect(fee_recipient_address.length).toEqual(42);
+    expect(withdrawal_address).not.toEqual(fee_recipient_address);
+
+    // Test that calling the same configuration returns the same addresses
+    const sameContracts = await client.splits.createObolOVMAndRewardPullSplit({
+      rewardSplitRecipients: [
+        { address: secondRandomSignerAddress, percentAllocation: 50 },
+        { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+      ],
+      ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+      principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+      distributorFeePercent: 0,
+    });
+
+    expect(sameContracts.withdrawal_address.toLowerCase()).toEqual(
+      withdrawal_address.toLowerCase(),
+    );
+    expect(sameContracts.fee_recipient_address.toLowerCase()).toEqual(
+      fee_recipient_address.toLowerCase(),
+    );
+  });
+
+  it('should deploy OVM and Total Split (createObolTotalSplit)', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
+    
+    // Create OVM and total split
+    const { withdrawal_address, fee_recipient_address } =
+      await client.splits.createObolOVMAndTotalPullSplit({
+        rewardSplitRecipients: [
+          { address: secondRandomSignerAddress, percentAllocation: 50 },
+          { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+        ],
+        principalSplitRecipients: [
+          { address: secondRandomSignerAddress, percentAllocation: 60 },
+          { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 40 },
+        ],
+        ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        distributorFeePercent: 0,
+      });
+
+    expect(withdrawal_address.length).toEqual(42);
+    expect(fee_recipient_address.length).toEqual(42);
+    expect(withdrawal_address).not.toEqual(fee_recipient_address);
+
+    // Test that calling the same configuration returns the same addresses
+    const sameContracts = await client.splits.createObolOVMAndTotalPullSplit({
+      rewardSplitRecipients: [
+        { address: secondRandomSignerAddress, percentAllocation: 50 },
+        { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+      ],
+      principalSplitRecipients: [
+        { address: secondRandomSignerAddress, percentAllocation: 60 },
+        { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 40 },
+      ],
+      ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+      distributorFeePercent: 0,
+    });
+
+    expect(sameContracts.withdrawal_address.toLowerCase()).toEqual(
+      withdrawal_address.toLowerCase(),
+    );
+    expect(sameContracts.fee_recipient_address.toLowerCase()).toEqual(
+      fee_recipient_address.toLowerCase(),
+    );
+  });
+
+  it('should deploy OVM and Total Split with different principal recipients', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
+    
+    // Create OVM and total split with different principal recipients
+    const { withdrawal_address, fee_recipient_address } =
+      await client.splits.createObolOVMAndTotalPullSplit({
+        rewardSplitRecipients: [
+          { address: secondRandomSignerAddress, percentAllocation: 50 },
+          { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+        ],
+        principalSplitRecipients: [
+          { address: '0x1234567890123456789012345678901234567890', percentAllocation: 70 },
+          { address: '0x2345678901234567890123456789012345678901', percentAllocation: 30 },
+        ],
+        ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        distributorFeePercent: 0,
+      });
+
+    expect(withdrawal_address.length).toEqual(42);
+    expect(fee_recipient_address.length).toEqual(42);
+    expect(withdrawal_address).not.toEqual(fee_recipient_address);
+
+    // Test that different principal recipients create different contracts
+    const differentContracts = await client.splits.createObolOVMAndTotalPullSplit({
+      rewardSplitRecipients: [
+        { address: secondRandomSignerAddress, percentAllocation: 50 },
+        { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+      ],
+      principalSplitRecipients: [
+        { address: '0x3456789012345678901234567890123456789012', percentAllocation: 80 },
+        { address: '0x4567890123456789012345678901234567890123', percentAllocation: 20 },
+      ],
+      ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+      distributorFeePercent: 0,
+    });
+
+    expect(differentContracts.withdrawal_address.toLowerCase()).not.toEqual(
+      withdrawal_address.toLowerCase(),
+    );
+    expect(differentContracts.fee_recipient_address.toLowerCase()).toEqual(
+      fee_recipient_address.toLowerCase(),
+    );
+  });
+
+  it('should deploy OVM and Rewards Split with distributor fee', async () => {
+    const secondRandomSignerAddress = await secondRandomSigner.getAddress();
+    
+    // Create OVM and rewards split with distributor fee
+    const { withdrawal_address, fee_recipient_address } =
+      await client.splits.createObolOVMAndRewardPullSplit({
+        rewardSplitRecipients: [
+          { address: secondRandomSignerAddress, percentAllocation: 50 },
+          { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+        ],
+        ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+        distributorFeePercent: 2,
+      });
+
+    expect(withdrawal_address.length).toEqual(42);
+    expect(fee_recipient_address.length).toEqual(42);
+    expect(withdrawal_address).not.toEqual(fee_recipient_address);
+
+    // Test that different distributor fee creates different contracts
+    const differentFeeContracts = await client.splits.createObolOVMAndRewardPullSplit({
+      rewardSplitRecipients: [
+        { address: secondRandomSignerAddress, percentAllocation: 50 },
+        { address: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966', percentAllocation: 49 },
+      ],
+      ownerAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+      principalRecipient: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+      distributorFeePercent: 5,
+    });
+
+    expect(differentFeeContracts.fee_recipient_address.toLowerCase()).not.toEqual(
+      fee_recipient_address.toLowerCase(),
+    );
+  });
+
   afterAll(async () => {
     await request(app)
       .delete(`/v1/definition/${configHash}`)

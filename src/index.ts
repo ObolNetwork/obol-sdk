@@ -49,6 +49,7 @@ import {
 import { isContractAvailable } from './utils.js';
 import { Incentives } from './incentives/incentives.js';
 import { Exit } from './exits/exit.js';
+import { ObolSplits } from './splits/splits.js';
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
@@ -56,6 +57,7 @@ export * from './verification/common.js';
 export * from './constants.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
+export { ObolSplits } from './splits/splits.js';
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
@@ -77,6 +79,13 @@ export class Client extends Base {
    * @type {Exit}
    */
   public exit: Exit;
+
+
+  /**
+   * The splits module, responsible for managing splits.
+   * @type {ObolSplits}
+   */
+  public splits: ObolSplits;
 
   /**
    * The blockchain provider, used to interact with the network.
@@ -112,6 +121,7 @@ export class Client extends Base {
       this.provider,
     );
     this.exit = new Exit(this.chainId, this.provider);
+    this.splits = new ObolSplits(this.signer, this.chainId, this.provider);
   }
 
   /**
