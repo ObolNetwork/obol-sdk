@@ -5,7 +5,6 @@ import {
   type JsonRpcProvider,
   type JsonRpcSigner,
   type Provider,
-  type Signer,
 } from 'ethers';
 
 /**
@@ -203,6 +202,58 @@ export interface RewardsSplitPayload extends TotalSplitPayload {
 }
 
 /**
+ * OVM and SplitV2 Base Params
+ */
+export type OVMBaseSplitPayload = {
+  /** The split recipients addresses and splits. */
+  rewardSplitRecipients: SplitV2Recipient[];
+
+  /** Owner address for the OVM contract. */
+  OVMOwnerAddress: string;
+
+  /** Owner address for the splitter contracts. */
+  splitOwnerAddress?: string;
+
+  /** Principal threshold for OVM contract. */
+  principalThreshold?: number;
+
+  /** Distributor fee percentage (0-10). */
+  distributorFeePercent?: number;
+};
+
+/**
+ * OVM and SplitV2 Params for rewards-only split
+ */
+export type OVMRewardsSplitPayload = OVMBaseSplitPayload & {
+  /** Principal recipient address (single address for rewards-only split). */
+  principalRecipient: string;
+};
+
+/**
+ * OVM and SplitV2 Params for total split scenario
+ */
+export type OVMTotalSplitPayload = OVMBaseSplitPayload & {
+  /** Principal recipients addresses and splits (array for total split scenario). */
+  principalSplitRecipients: SplitV2Recipient[];
+};
+
+/**
+ * Union type for both OVM split scenarios
+ */
+export type OVMSplitPayload = OVMRewardsSplitPayload | OVMTotalSplitPayload;
+
+/**
+ * SplitV2 Recipient structure
+ */
+export type SplitV2Recipient = {
+  /** Recipient address. */
+  address: string;
+
+  /** Percentage allocation (0-100 with up to 4 decimals). */
+  percentAllocation: number;
+};
+
+/**
  * OWR Tranches
  */
 export type OWRTranches = {
@@ -346,7 +397,7 @@ export type SafeRpcUrl = string;
 /**
  * Signer Types
  */
-export type SignerType = Signer | JsonRpcSigner | Wallet;
+export type SignerType = JsonRpcSigner | Wallet;
 
 /**
  * claimIncentives Response
@@ -509,4 +560,46 @@ export type HttpRequestFunc = (
   config?: Record<string, any>,
 ) => Promise<any>;
 
-// Add other SDK-specific types below or import from other type files
+/**
+ * OVM Arguments for contract creation
+ */
+export type OVMArgs = {
+  /** Owner address for the OVM contract. */
+  OVMOwnerAddress: string;
+
+  /** Principal recipient address. */
+  principalRecipient: string;
+
+  /** Rewards recipient of the cluster. */
+  rewardRecipient: string;
+
+  /** Principal threshold for OVM contract. */
+  principalThreshold: number;
+};
+
+export type ChainConfig = {
+  SPLITMAIN_ADDRESS: {
+    address: string;
+    bytecode: string;
+  };
+  MULTICALL_ADDRESS: {
+    address: string;
+    bytecode: string;
+  };
+  OWR_FACTORY_ADDRESS: {
+    address: string;
+    bytecode: string;
+  };
+  RETROACTIVE_FUNDING_ADDRESS: {
+    address: string;
+    bytecode: string;
+  };
+  OVM_FACTORY_ADDRESS?: {
+    address: string;
+    bytecode: string;
+  };
+  WAREHOUSE_ADDRESS?: {
+    address: string;
+    bytecode: string;
+  };
+};

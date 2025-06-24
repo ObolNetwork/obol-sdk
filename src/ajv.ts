@@ -2,8 +2,9 @@ import addFormats from 'ajv-formats';
 import addKeywords from 'ajv-keywords';
 import { parseUnits } from 'ethers';
 import {
+  type OVMRewardsSplitPayload,
+  type OVMTotalSplitPayload,
   type RewardsSplitPayload,
-  type SplitRecipient,
   type TotalSplitPayload,
 } from './types';
 import Ajv from 'ajv';
@@ -24,18 +25,31 @@ export const VALID_NON_COMPOUNDING_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
 ];
 
-// They dont see defaults set in schema
+const calculateTotalPercentage = (
+  recipients: Array<{ percentAllocation: number }>,
+): number => {
+  return recipients.reduce((acc, curr) => acc + curr.percentAllocation, 0);
+};
+
+const validateTotalPercentage = (totalPercentage: number): boolean => {
+  return totalPercentage === 100;
+};
+
+const validateTotalPercentageWithRAF = (
+  totalPercentage: number,
+  rafPercentage: number,
+): boolean => {
+  return totalPercentage + rafPercentage === 100;
+};
+
 const validateRewardsSplitRecipients = (
   _: boolean,
   data: RewardsSplitPayload,
 ): boolean => {
   const obolRAFSplit =
-    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
-  const splitPercentage = data.splitRecipients.reduce(
-    (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
-    0,
-  );
-  return splitPercentage + obolRAFSplit === 100;
+    data?.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.splitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
 };
 
 const validateTotalSplitRecipients = (
@@ -44,11 +58,8 @@ const validateTotalSplitRecipients = (
 ): boolean => {
   const obolRAFSplit =
     data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
-  const splitPercentage = data.splitRecipients.reduce(
-    (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
-    0,
-  );
-  return splitPercentage + obolRAFSplit === 100;
+  const splitPercentage = calculateTotalPercentage(data.splitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
 };
 
 const validateUniqueAddresses = (
@@ -77,6 +88,25 @@ const validateUniqueAddresses = (
   return isUnique;
 };
 
+const validateOVMRewardsSplitRecipients = (
+  _: boolean,
+  data: OVMRewardsSplitPayload,
+): boolean => {
+  const obolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.rewardSplitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
+};
+
+const validateOVMTotalSplitRecipients = (
+  _: boolean,
+  data: OVMTotalSplitPayload,
+): boolean => {
+  const splitPercentage = calculateTotalPercentage(
+    data.principalSplitRecipients,
+  );
+  return validateTotalPercentage(splitPercentage);
+};
+
 const ajv = new Ajv({
   allErrors: true,
   useDefaults: true,
@@ -101,6 +131,18 @@ ajv.addKeyword({
 ajv.addKeyword({
   keyword: 'validateUniqueAddresses',
   validate: validateUniqueAddresses,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMRewardsSplitRecipients',
+  validate: validateOVMRewardsSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMTotalSplitRecipients',
+  validate: validateOVMTotalSplitRecipients,
   schemaType: 'boolean',
 });
 

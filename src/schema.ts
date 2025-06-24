@@ -2,8 +2,10 @@ import { ZeroAddress } from 'ethers';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+  PRINCIPAL_THRESHOLD,
 } from './constants';
 import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv';
+import { zeroAddress } from 'viem';
 
 export const operatorPayloadSchema = {
   type: 'object',
@@ -149,4 +151,82 @@ export const rewardsSplitterPayloadSchema = {
   },
   validateRewardsSplitRecipients: true,
   required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
+};
+
+export const ovmBaseSplitPayload = {
+  rewardSplitRecipients: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        address: {
+          type: 'string',
+          pattern: '^0x[a-fA-F0-9]{40}$',
+        },
+        percentAllocation: { type: 'number' },
+      },
+      required: ['address', 'percentAllocation'],
+    },
+  },
+  OVMOwnerAddress: {
+    type: 'string',
+    pattern: '^0x[a-fA-F0-9]{40}$',
+  },
+  splitOwnerAddress: {
+    type: 'string',
+    pattern: '^0x[a-fA-F0-9]{40}$',
+    default: zeroAddress,
+  },
+  principalThreshold: {
+    type: 'number',
+    minimum: 16,
+    default: PRINCIPAL_THRESHOLD,
+  },
+  distributorFeePercent: {
+    type: 'number',
+    minimum: 0,
+    maximum: 10,
+    default: 0,
+  },
+};
+
+export const ovmRewardsSplitPayloadSchema = {
+  type: 'object',
+  properties: {
+    ...ovmBaseSplitPayload,
+    principalRecipient: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+  },
+  validateOVMRewardsSplitRecipients: true,
+  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'principalRecipient'],
+};
+
+export const ovmTotalSplitPayloadSchema = {
+  type: 'object',
+  properties: {
+    ...ovmBaseSplitPayload,
+    principalSplitRecipients: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          address: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{40}$',
+          },
+          percentAllocation: { type: 'number' },
+        },
+        required: ['address', 'percentAllocation'],
+      },
+    },
+  },
+  validateOVMRewardsSplitRecipients: true,
+  validateOVMTotalSplitRecipients: true,
+  required: [
+    'rewardSplitRecipients',
+    'principalSplitRecipients',
+    'OVMOwnerAddress',
+  ],
 };

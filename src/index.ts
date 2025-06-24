@@ -12,10 +12,10 @@ import {
   TermsAndConditionsSigningTypes,
   DEFAULT_BASE_VERSION,
   TERMS_AND_CONDITIONS_HASH,
-  AVAILABLE_SPLITTER_CHAINS,
   CHAIN_CONFIGURATION,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   OBOL_SDK_EMAIL,
+  isChainSupportedForSplitters,
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
@@ -49,6 +49,7 @@ import {
 import { isContractAvailable } from './utils.js';
 import { Incentives } from './incentives/incentives.js';
 import { Exit } from './exits/exit.js';
+import { ObolSplits } from './splits/splits.js';
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
@@ -56,6 +57,7 @@ export * from './verification/common.js';
 export * from './constants.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
+export { ObolSplits } from './splits/splits.js';
 
 /**
  * Obol sdk Client can be used for creating, managing and activating distributed validators.
@@ -77,6 +79,12 @@ export class Client extends Base {
    * @type {Exit}
    */
   public exit: Exit;
+
+  /**
+   * The splits module, responsible for managing splits.
+   * @type {ObolSplits}
+   */
+  public splits: ObolSplits;
 
   /**
    * The blockchain provider, used to interact with the network.
@@ -112,6 +120,7 @@ export class Client extends Base {
       this.provider,
     );
     this.exit = new Exit(this.chainId, this.provider);
+    this.splits = new ObolSplits(this.signer, this.chainId, this.provider);
   }
 
   /**
@@ -205,28 +214,35 @@ export class Client extends Base {
     );
 
     // Check if we allow splitters on this chainId
-    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+    if (!isChainSupportedForSplitters(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
+    const chainConfig = CHAIN_CONFIGURATION[this.chainId];
+    if (!chainConfig?.SPLITMAIN_ADDRESS) {
+      throw new Error(
+        `SPLITMAIN_ADDRESS is not configured for chain ${this.chainId}`,
+      );
+    }
+
     const checkSplitMainAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.address,
+      chainConfig.SPLITMAIN_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.bytecode,
+      chainConfig.SPLITMAIN_ADDRESS.bytecode,
     );
 
     const checkMulticallAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS.address,
+      chainConfig.MULTICALL_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS.bytecode,
+      chainConfig.MULTICALL_ADDRESS.bytecode,
     );
 
     const checkOWRFactoryAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS.address,
+      chainConfig.OWR_FACTORY_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS.bytecode,
+      chainConfig.OWR_FACTORY_ADDRESS.bytecode,
     );
 
     if (
@@ -240,8 +256,7 @@ export class Client extends Base {
     }
 
     const retroActiveFundingRecipient = {
-      account:
-        CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
+      account: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: validatedPayload.ObolRAFSplit,
     };
 
@@ -320,16 +335,23 @@ export class Client extends Base {
     );
 
     // Check if we allow splitters on this chainId
-    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+    if (!isChainSupportedForSplitters(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
+    const chainConfig = CHAIN_CONFIGURATION[this.chainId];
+    if (!chainConfig?.SPLITMAIN_ADDRESS) {
+      throw new Error(
+        `SPLITMAIN_ADDRESS is not configured for chain ${this.chainId}`,
+      );
+    }
+
     const checkSplitMainAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.address,
+      chainConfig.SPLITMAIN_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.bytecode,
+      chainConfig.SPLITMAIN_ADDRESS.bytecode,
     );
 
     if (!checkSplitMainAddress) {
@@ -339,8 +361,7 @@ export class Client extends Base {
     }
 
     const retroActiveFundingRecipient = {
-      account:
-        CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
+      account: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: validatedPayload.ObolRAFSplit,
     };
 
