@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.7.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.7.0...v2.7.1)
+
+- Hanan/ovm methods [`#126`](https://github.com/ObolNetwork/obol-sdk/pull/126)
+
 #### [v2.7.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.6.0...v2.7.0)
 
+> 11 June 2025
+
+- chore(release): v2.7.0 [`#125`](https://github.com/ObolNetwork/obol-sdk/pull/125)
 - Adding BLS aggregation for exits [`#123`](https://github.com/ObolNetwork/obol-sdk/pull/123)
 
 #### [v2.6.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.5.1...v2.6.0)

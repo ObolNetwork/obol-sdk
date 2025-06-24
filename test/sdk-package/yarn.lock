@@ -784,7 +784,7 @@
     rimraf "^3.0.2"
 
 "@obolnetwork/obol-sdk@file:../..":
-  version "2.7.0"
+  version "2.7.1"
   dependencies:
     "@0xsplits/splits-sdk" "^5.1.0"
     "@chainsafe/bls" "6.0.3"
