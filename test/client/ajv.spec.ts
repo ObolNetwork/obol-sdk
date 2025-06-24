@@ -1,7 +1,13 @@
-import { validatePayload } from '../src/ajv';
-import { ovmRewardsSplitPayloadSchema, ovmTotalSplitPayloadSchema } from '../src/schema';
-import { OVMRewardsSplitPayload, OVMTotalSplitPayload } from '../src/types';
-import { TEST_ADDRESSES } from './fixtures';
+import { validatePayload } from '../../src/ajv';
+import {
+  ovmRewardsSplitPayloadSchema,
+  ovmTotalSplitPayloadSchema,
+} from '../../src/schema';
+import {
+  type OVMRewardsSplitPayload,
+  type OVMTotalSplitPayload,
+} from '../../src/types';
+import { TEST_ADDRESSES } from '../fixtures';
 
 describe('validatePayload - OVM Schemas', () => {
   describe('ovmRewardsSplitPayloadSchema', () => {
@@ -17,7 +23,10 @@ describe('validatePayload - OVM Schemas', () => {
     };
 
     it('should validate a valid rewards split payload', () => {
-      const result = validatePayload(validRewardsSplitPayload, ovmRewardsSplitPayloadSchema);
+      const result = validatePayload(
+        validRewardsSplitPayload,
+        ovmRewardsSplitPayloadSchema,
+      );
       expect(result).toEqual(validRewardsSplitPayload);
     });
 
@@ -31,7 +40,10 @@ describe('validatePayload - OVM Schemas', () => {
         principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
       };
 
-      const result = validatePayload(payloadWithoutDefaults, ovmRewardsSplitPayloadSchema);
+      const result = validatePayload(
+        payloadWithoutDefaults,
+        ovmRewardsSplitPayloadSchema,
+      );
       expect(result).toEqual({
         ...payloadWithoutDefaults,
         splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS, // default value
@@ -49,8 +61,11 @@ describe('validatePayload - OVM Schemas', () => {
         ],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
-        .toThrow('Validation failed: validateOVMRewardsSplitRecipients');
+      expect(() =>
+        validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed:  must pass "validateOVMRewardsSplitRecipients" keyword validation',
+      );
     });
 
     it('should throw error when rewardSplitRecipients total percentage exceeds 99%', () => {
@@ -62,8 +77,11 @@ describe('validatePayload - OVM Schemas', () => {
         ],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
-        .toThrow('Validation failed: validateOVMRewardsSplitRecipients');
+      expect(() =>
+        validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed:  must pass "validateOVMRewardsSplitRecipients" keyword validation',
+      );
     });
 
     it('should throw error when rewardSplitRecipients is empty', () => {
@@ -72,8 +90,11 @@ describe('validatePayload - OVM Schemas', () => {
         rewardSplitRecipients: [],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
-        .toThrow('Validation failed: /rewardSplitRecipients must NOT have fewer than 1 items');
+      expect(() =>
+        validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed:  must pass "validateOVMRewardsSplitRecipients" keyword validation',
+      );
     });
 
     it('should throw error when rewardSplitRecipients has invalid address format', () => {
@@ -85,8 +106,11 @@ describe('validatePayload - OVM Schemas', () => {
         ],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
-        .toThrow('Validation failed: /rewardSplitRecipients/0/address must match pattern');
+      expect(() =>
+        validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed: /rewardSplitRecipients/0/address must match pattern',
+      );
     });
 
     it('should throw error when OVMOwnerAddress is missing', () => {
@@ -95,8 +119,11 @@ describe('validatePayload - OVM Schemas', () => {
         principalRecipient: validRewardsSplitPayload.principalRecipient,
       };
 
-      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
-        .toThrow('Validation failed: /OVMOwnerAddress is required');
+      expect(() =>
+        validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema),
+      ).toThrow(
+        "Validation failed:  must have required property 'OVMOwnerAddress'",
+      );
     });
 
     it('should throw error when principalRecipient is missing', () => {
@@ -105,8 +132,11 @@ describe('validatePayload - OVM Schemas', () => {
         OVMOwnerAddress: validRewardsSplitPayload.OVMOwnerAddress,
       };
 
-      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
-        .toThrow('Validation failed: /principalRecipient is required');
+      expect(() =>
+        validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema),
+      ).toThrow(
+        "Validation failed:  must have required property 'principalRecipient'",
+      );
     });
   });
 
@@ -117,8 +147,14 @@ describe('validatePayload - OVM Schemas', () => {
         { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
       ],
       principalSplitRecipients: [
-        { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
-        { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
+        {
+          address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+          percentAllocation: 60,
+        },
+        {
+          address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
+          percentAllocation: 40,
+        },
       ],
       OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
       splitOwnerAddress: TEST_ADDRESSES.SPLIT_OWNER,
@@ -126,7 +162,10 @@ describe('validatePayload - OVM Schemas', () => {
     };
 
     it('should validate a valid total split payload', () => {
-      const result = validatePayload(validTotalSplitPayload, ovmTotalSplitPayloadSchema);
+      const result = validatePayload(
+        validTotalSplitPayload,
+        ovmTotalSplitPayloadSchema,
+      );
       expect(result).toEqual(validTotalSplitPayload);
     });
 
@@ -137,13 +176,22 @@ describe('validatePayload - OVM Schemas', () => {
           { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
         ],
         principalSplitRecipients: [
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+            percentAllocation: 60,
+          },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
+            percentAllocation: 40,
+          },
         ],
         OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
       };
 
-      const result = validatePayload(payloadWithoutDefaults, ovmTotalSplitPayloadSchema);
+      const result = validatePayload(
+        payloadWithoutDefaults,
+        ovmTotalSplitPayloadSchema,
+      );
       expect(result).toEqual({
         ...payloadWithoutDefaults,
         splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS, // default value
@@ -161,34 +209,55 @@ describe('validatePayload - OVM Schemas', () => {
         ],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
-        .toThrow('Validation failed: validateOVMRewardsSplitRecipients');
+      expect(() =>
+        validatePayload(invalidPayload, ovmTotalSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed:  must pass "validateOVMRewardsSplitRecipients" keyword validation',
+      );
     });
 
     it('should throw error when principalSplitRecipients total percentage is not 100%', () => {
       const invalidPayload = {
         ...validTotalSplitPayload,
         principalSplitRecipients: [
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 30 }, // Total: 90%
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+            percentAllocation: 60,
+          },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
+            percentAllocation: 30,
+          }, // Total: 90%
         ],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
-        .toThrow('Validation failed: validateOVMTotalSplitRecipients');
+      expect(() =>
+        validatePayload(invalidPayload, ovmTotalSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed:  must pass "validateOVMTotalSplitRecipients" keyword validation',
+      );
     });
 
     it('should throw error when principalSplitRecipients total percentage exceeds 100%', () => {
       const invalidPayload = {
         ...validTotalSplitPayload,
         principalSplitRecipients: [
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 70 },
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 }, // Total: 110%
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+            percentAllocation: 70,
+          },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
+            percentAllocation: 40,
+          }, // Total: 110%
         ],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
-        .toThrow('Validation failed: validateOVMTotalSplitRecipients');
+      expect(() =>
+        validatePayload(invalidPayload, ovmTotalSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed:  must pass "validateOVMTotalSplitRecipients" keyword validation',
+      );
     });
 
     it('should throw error when principalSplitRecipients is empty', () => {
@@ -197,8 +266,11 @@ describe('validatePayload - OVM Schemas', () => {
         principalSplitRecipients: [],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
-        .toThrow('Validation failed: /principalSplitRecipients must NOT have fewer than 1 items');
+      expect(() =>
+        validatePayload(invalidPayload, ovmTotalSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed:  must pass "validateOVMTotalSplitRecipients" keyword validation',
+      );
     });
 
     it('should throw error when principalSplitRecipients has invalid address format', () => {
@@ -206,22 +278,32 @@ describe('validatePayload - OVM Schemas', () => {
         ...validTotalSplitPayload,
         principalSplitRecipients: [
           { address: 'invalid-address', percentAllocation: 60 },
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
+            percentAllocation: 40,
+          },
         ],
       };
 
-      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
-        .toThrow('Validation failed: /principalSplitRecipients/0/address must match pattern');
+      expect(() =>
+        validatePayload(invalidPayload, ovmTotalSplitPayloadSchema),
+      ).toThrow(
+        'Validation failed: /principalSplitRecipients/0/address must match pattern',
+      );
     });
 
     it('should throw error when OVMOwnerAddress is missing', () => {
       const invalidPayload = {
         rewardSplitRecipients: validTotalSplitPayload.rewardSplitRecipients,
-        principalSplitRecipients: validTotalSplitPayload.principalSplitRecipients,
+        principalSplitRecipients:
+          validTotalSplitPayload.principalSplitRecipients,
       };
 
-      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
-        .toThrow('Validation failed: /OVMOwnerAddress is required');
+      expect(() =>
+        validatePayload(invalidPayload, ovmTotalSplitPayloadSchema),
+      ).toThrow(
+        "Validation failed:  must have required property 'OVMOwnerAddress'",
+      );
     });
 
     it('should throw error when principalThreshold is less than 16', () => {
@@ -230,8 +312,9 @@ describe('validatePayload - OVM Schemas', () => {
         principalThreshold: 15,
       };
 
-      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
-        .toThrow('Validation failed: /principalThreshold must be >= 16');
+      expect(() =>
+        validatePayload(invalidPayload, ovmTotalSplitPayloadSchema),
+      ).toThrow('Validation failed: /principalThreshold must be >= 16');
     });
 
     it('should validate when principalThreshold is exactly 16', () => {
@@ -259,8 +342,14 @@ describe('validatePayload - OVM Schemas', () => {
     it('should handle decimal percentages correctly for rewards split', () => {
       const payload = {
         rewardSplitRecipients: [
-          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 49.5 },
-          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49.5 },
+          {
+            address: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+            percentAllocation: 49.5,
+          },
+          {
+            address: TEST_ADDRESSES.REWARD_RECIPIENT_2,
+            percentAllocation: 49.5,
+          },
         ],
         OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
         principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
@@ -278,12 +367,24 @@ describe('validatePayload - OVM Schemas', () => {
     it('should handle decimal percentages correctly for total split', () => {
       const payload = {
         rewardSplitRecipients: [
-          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 49.5 },
-          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49.5 },
+          {
+            address: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+            percentAllocation: 49.5,
+          },
+          {
+            address: TEST_ADDRESSES.REWARD_RECIPIENT_2,
+            percentAllocation: 49.5,
+          },
         ],
         principalSplitRecipients: [
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60.5 },
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 39.5 },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+            percentAllocation: 60.5,
+          },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
+            percentAllocation: 39.5,
+          },
         ],
         OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
       };
@@ -318,11 +419,20 @@ describe('validatePayload - OVM Schemas', () => {
     it('should handle single recipient with 100% allocation for total split', () => {
       const payload = {
         rewardSplitRecipients: [
-          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 49.5 },
-          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49.5 },
+          {
+            address: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+            percentAllocation: 49.5,
+          },
+          {
+            address: TEST_ADDRESSES.REWARD_RECIPIENT_2,
+            percentAllocation: 49.5,
+          },
         ],
         principalSplitRecipients: [
-          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 100 },
+          {
+            address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+            percentAllocation: 100,
+          },
         ],
         OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
       };
@@ -336,4 +446,4 @@ describe('validatePayload - OVM Schemas', () => {
       });
     });
   });
-}); 
+});

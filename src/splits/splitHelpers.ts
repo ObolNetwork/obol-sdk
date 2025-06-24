@@ -6,8 +6,16 @@ import {
   type SignerType,
   type SplitV2Recipient,
   type OVMArgs,
+  type ChainConfig,
 } from '../types';
-import { BrowserProvider, Contract, Interface, parseEther, Wallet, ZeroAddress } from 'ethers';
+import {
+  BrowserProvider,
+  Contract,
+  Interface,
+  parseEther,
+  type Wallet,
+  ZeroAddress,
+} from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
 import { OVMFactoryContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
@@ -44,12 +52,16 @@ type SplitArgs = {
 // Helper function to extract common recipient formatting logic
 const formatRecipientsCommon = (
   recipients: SplitRecipient[] | SplitV2Recipient[],
-): { sortedRecipients: any[]; getAddress: (item: any) => string; getPercentAllocation: (item: any) => number } => {
+): {
+  sortedRecipients: any[];
+  getAddress: (item: any) => string;
+  getPercentAllocation: (item: any) => number;
+} => {
   const copiedRecipients = [...recipients];
 
   // Handle both SplitRecipient and SplitV2Recipient types
-  const getAddress = (item: any) => item.account || item.address;
-  const getPercentAllocation = (item: any) => item.percentAllocation;
+  const getAddress = (item: any): string => item.account || item.address;
+  const getPercentAllocation = (item: any): number => item.percentAllocation;
 
   // Has to be sorted when passed
   copiedRecipients.sort((a, b) => getAddress(a).localeCompare(getAddress(b)));
@@ -64,7 +76,8 @@ const formatRecipientsCommon = (
 export const formatSplitRecipients = (
   recipients: SplitRecipient[],
 ): { accounts: ETH_ADDRESS[]; percentAllocations: number[] } => {
-  const { sortedRecipients, getAddress, getPercentAllocation } = formatRecipientsCommon(recipients);
+  const { sortedRecipients, getAddress, getPercentAllocation } =
+    formatRecipientsCommon(recipients);
 
   const accounts = sortedRecipients.map(item => getAddress(item));
   const percentAllocations = sortedRecipients.map(recipient => {
@@ -91,7 +104,7 @@ export const predictSplitterAddress = async ({
 }): Promise<ETH_ADDRESS> => {
   try {
     const splitMainContractInstance = new Contract(
-      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+      getChainConfig(chainId).SPLITMAIN_ADDRESS.address,
       splitMainEthereumAbi,
       signer,
     );
@@ -245,7 +258,7 @@ const createOWRContract = async ({
 }): Promise<ETH_ADDRESS> => {
   try {
     const OWRFactoryInstance = new Contract(
-      CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
+      getChainConfig(chainId).OWR_FACTORY_ADDRESS.address,
       OWRFactoryContract.abi,
       signer,
     );
@@ -332,7 +345,7 @@ export const deploySplitterContract = async ({
 }): Promise<ETH_ADDRESS> => {
   try {
     const splitMainContractInstance = new Contract(
-      CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+      getChainConfig(chainId).SPLITMAIN_ADDRESS.address,
       splitMainEthereumAbi,
       signer,
     );
@@ -431,16 +444,15 @@ export const deploySplitterAndOWRContracts = async ({
 
   executeCalls.push(
     {
-      target: CHAIN_CONFIGURATION[chainId].SPLITMAIN_ADDRESS.address,
+      target: getChainConfig(chainId).SPLITMAIN_ADDRESS.address,
       callData: splitTxData,
     },
     {
-      target: CHAIN_CONFIGURATION[chainId].OWR_FACTORY_ADDRESS.address,
+      target: getChainConfig(chainId).OWR_FACTORY_ADDRESS.address,
       callData: owrTxData,
     },
   );
-  const multicallAddess =
-    CHAIN_CONFIGURATION[chainId].MULTICALL_ADDRESS.address;
+  const multicallAddess = getChainConfig(chainId).MULTICALL_ADDRESS.address;
 
   const executeMultiCalls = await multicall(
     executeCalls,
@@ -586,12 +598,12 @@ const encodeCreateOWRecipientTxData = (
 
 // OVM and SplitV2 Helper Functions
 
-
 // Helper function to format recipients specifically for SplitV2 (returns SplitV2Recipient[])
 export const formatRecipientsForSplitV2 = (
   splitRecipients: SplitRecipient[] | SplitV2Recipient[],
 ): SplitV2Recipient[] => {
-  const { sortedRecipients, getAddress, getPercentAllocation } = formatRecipientsCommon(splitRecipients);
+  const { sortedRecipients, getAddress, getPercentAllocation } =
+    formatRecipientsCommon(splitRecipients);
 
   return sortedRecipients
     .filter(item => getAddress(item) !== '')
@@ -601,19 +613,25 @@ export const formatRecipientsForSplitV2 = (
     }));
 };
 
-export const createSplitsClient = async (signer: SignerType, chainId: number): Promise<SplitsClient> => {
-  const chain = chainId === 1 ? mainnet : hoodi
+export const createSplitsClient = async (
+  signer: SignerType,
+  chainId: number,
+): Promise<SplitsClient> => {
+  const chain = chainId === 1 ? mainnet : hoodi;
   const client = createPublicClient({
-    chain: chain,
-    transport: http(CHAIN_PUBLIC_RPC_URL[chainId])
-  })
+    chain,
+    transport: http(CHAIN_PUBLIC_RPC_URL[chainId]),
+  });
   // convert signer to walletClient
-  if (typeof window !== 'undefined' && signer.provider instanceof BrowserProvider) {
+  if (
+    typeof window !== 'undefined' &&
+    signer.provider instanceof BrowserProvider
+  ) {
     // For browser environment
     const address = await signer.getAddress();
     const viemWalletClient = createWalletClient({
       account: address,
-      chain: chain,
+      chain,
       transport: custom((window as any).ethereum),
     });
     return new SplitsClient({
@@ -637,16 +655,16 @@ export const createSplitsClient = async (signer: SignerType, chainId: number): P
 
     const viemWalletClient = createWalletClient({
       account,
-      chain: chain,
-      transport: http(CHAIN_PUBLIC_RPC_URL[chainId])
+      chain,
+      transport: http(CHAIN_PUBLIC_RPC_URL[chainId]),
     });
     return new SplitsClient({
       publicClient: client,
       walletClient: viemWalletClient,
       chainId,
     });
-  };
-}
+  }
+};
 
 export const predictSplitV2Address = async ({
   splitOwnerAddress,
@@ -656,7 +674,7 @@ export const predictSplitV2Address = async ({
   signer,
   chainId,
 }: {
-  splitOwnerAddress: string,
+  splitOwnerAddress: string;
   recipients: SplitV2Recipient[];
   distributorFeePercent: number;
   salt: `0x${string}`;
@@ -689,7 +707,7 @@ export const isSplitV2Deployed = async ({
   signer,
   chainId,
 }: {
-  splitOwnerAddress: string,
+  splitOwnerAddress: string;
   recipients: SplitV2Recipient[];
   distributorFeePercent: number;
   salt: `0x${string}`;
@@ -728,7 +746,7 @@ export const deployOVMContract = async ({
   chainId: number;
 }): Promise<string> => {
   try {
-    const chainConfig = CHAIN_CONFIGURATION[chainId];
+    const chainConfig = getChainConfig(chainId);
     if (!chainConfig?.OVM_FACTORY_ADDRESS?.address) {
       throw new Error(`OVM Factory not configured for chain ${chainId}`);
     }
@@ -787,7 +805,7 @@ export const deployOVMAndSplitV2 = async ({
   splitOwnerAddress: string;
 }): Promise<string> => {
   try {
-    const chainConfig = CHAIN_CONFIGURATION[chainId];
+    const chainConfig = getChainConfig(chainId);
     if (!chainConfig?.OVM_FACTORY_ADDRESS?.address) {
       throw new Error(`OVM Factory not configured for chain ${chainId}`);
     }
@@ -795,28 +813,28 @@ export const deployOVMAndSplitV2 = async ({
     const splitsClient = await createSplitsClient(signer, chainId);
     const executeCalls: any[] = [];
 
-
     if (rewardRecipients && !isRewardsSplitterDeployed) {
-
       // Create rewards split call data
-      const rewardsSplitTxData = await splitsClient.splitV2.callData.createSplit({
-        recipients: rewardRecipients,
-        distributorFeePercent,
-        ownerAddress: splitOwnerAddress,
-        salt,
-      });
+      const rewardsSplitTxData =
+        await splitsClient.splitV2.callData.createSplit({
+          recipients: rewardRecipients,
+          distributorFeePercent,
+          ownerAddress: splitOwnerAddress,
+          salt,
+        });
 
       executeCalls.push(rewardsSplitTxData);
     }
 
     // Create principal split call data if needed (for total split scenario)
     if (principalSplitRecipients && !isPrincipalSplitDeployed) {
-      const principalSplitTxData = await splitsClient.splitV2.callData.createSplit({
-        recipients: principalSplitRecipients,
-        distributorFeePercent,
-        salt: salt,
-        ownerAddress: splitOwnerAddress,
-      });
+      const principalSplitTxData =
+        await splitsClient.splitV2.callData.createSplit({
+          recipients: principalSplitRecipients,
+          distributorFeePercent,
+          salt,
+          ownerAddress: splitOwnerAddress,
+        });
       executeCalls.push(principalSplitTxData);
     }
 
@@ -850,7 +868,9 @@ export const deployOVMAndSplitV2 = async ({
       ovmAddress = executeMultiCalls?.events[6]?.address;
     }
     if (!ovmAddress) {
-      throw new Error('Failed to extract contract addresses from multicall events');
+      throw new Error(
+        'Failed to extract contract addresses from multicall events',
+      );
     }
 
     return ovmAddress;
@@ -867,10 +887,17 @@ const encodeCreateOVMTxData = (
   rewardRecipient: string,
   principalThreshold: number,
 ): string => {
-  return ovmFactoryContractInterface.encodeFunctionData('createObolValidatorManager', [
-    OVMOwnerAddress,
-    principalRecipient,
-    rewardRecipient,
-    principalThreshold,
-  ]);
+  return ovmFactoryContractInterface.encodeFunctionData(
+    'createObolValidatorManager',
+    [OVMOwnerAddress, principalRecipient, rewardRecipient, principalThreshold],
+  );
+};
+
+// Helper function to safely get chain configuration
+const getChainConfig = (chainId: number): ChainConfig => {
+  const config = CHAIN_CONFIGURATION[chainId];
+  if (!config) {
+    throw new Error(`Chain configuration not found for chain ID ${chainId}`);
+  }
+  return config;
 };

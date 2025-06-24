@@ -154,7 +154,6 @@ export const rewardsSplitterPayloadSchema = {
 };
 
 export const ovmBaseSplitPayload = {
-
   rewardSplitRecipients: {
     type: 'array',
     items: {
@@ -189,7 +188,6 @@ export const ovmBaseSplitPayload = {
     maximum: 10,
     default: 0,
   },
-
 };
 
 export const ovmRewardsSplitPayloadSchema = {
@@ -226,5 +224,9 @@ export const ovmTotalSplitPayloadSchema = {
   },
   validateOVMRewardsSplitRecipients: true,
   validateOVMTotalSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'principalSplitRecipients', 'OVMOwnerAddress'],
+  required: [
+    'rewardSplitRecipients',
+    'principalSplitRecipients',
+    'OVMOwnerAddress',
+  ],
 };

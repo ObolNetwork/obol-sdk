@@ -12,10 +12,10 @@ import {
   TermsAndConditionsSigningTypes,
   DEFAULT_BASE_VERSION,
   TERMS_AND_CONDITIONS_HASH,
-  AVAILABLE_SPLITTER_CHAINS,
   CHAIN_CONFIGURATION,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   OBOL_SDK_EMAIL,
+  isChainSupportedForSplitters,
 } from './constants.js';
 import { ConflictError } from './errors.js';
 import {
@@ -79,7 +79,6 @@ export class Client extends Base {
    * @type {Exit}
    */
   public exit: Exit;
-
 
   /**
    * The splits module, responsible for managing splits.
@@ -215,28 +214,35 @@ export class Client extends Base {
     );
 
     // Check if we allow splitters on this chainId
-    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+    if (!isChainSupportedForSplitters(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
+    const chainConfig = CHAIN_CONFIGURATION[this.chainId];
+    if (!chainConfig?.SPLITMAIN_ADDRESS) {
+      throw new Error(
+        `SPLITMAIN_ADDRESS is not configured for chain ${this.chainId}`,
+      );
+    }
+
     const checkSplitMainAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.address,
+      chainConfig.SPLITMAIN_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.bytecode,
+      chainConfig.SPLITMAIN_ADDRESS.bytecode,
     );
 
     const checkMulticallAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS.address,
+      chainConfig.MULTICALL_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].MULTICALL_ADDRESS.bytecode,
+      chainConfig.MULTICALL_ADDRESS.bytecode,
     );
 
     const checkOWRFactoryAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS.address,
+      chainConfig.OWR_FACTORY_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].OWR_FACTORY_ADDRESS.bytecode,
+      chainConfig.OWR_FACTORY_ADDRESS.bytecode,
     );
 
     if (
@@ -250,8 +256,7 @@ export class Client extends Base {
     }
 
     const retroActiveFundingRecipient = {
-      account:
-        CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
+      account: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: validatedPayload.ObolRAFSplit,
     };
 
@@ -330,16 +335,23 @@ export class Client extends Base {
     );
 
     // Check if we allow splitters on this chainId
-    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+    if (!isChainSupportedForSplitters(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
+    const chainConfig = CHAIN_CONFIGURATION[this.chainId];
+    if (!chainConfig?.SPLITMAIN_ADDRESS) {
+      throw new Error(
+        `SPLITMAIN_ADDRESS is not configured for chain ${this.chainId}`,
+      );
+    }
+
     const checkSplitMainAddress = await isContractAvailable(
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.address,
+      chainConfig.SPLITMAIN_ADDRESS.address,
       this.signer.provider as ProviderType,
-      CHAIN_CONFIGURATION[this.chainId].SPLITMAIN_ADDRESS.bytecode,
+      chainConfig.SPLITMAIN_ADDRESS.bytecode,
     );
 
     if (!checkSplitMainAddress) {
@@ -349,8 +361,7 @@ export class Client extends Base {
     }
 
     const retroActiveFundingRecipient = {
-      account:
-        CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
+      account: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: validatedPayload.ObolRAFSplit,
     };
 

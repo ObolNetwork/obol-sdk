@@ -2,8 +2,8 @@ import addFormats from 'ajv-formats';
 import addKeywords from 'ajv-keywords';
 import { parseUnits } from 'ethers';
 import {
-  OVMRewardsSplitPayload,
-  OVMTotalSplitPayload,
+  type OVMRewardsSplitPayload,
+  type OVMTotalSplitPayload,
   type RewardsSplitPayload,
   type TotalSplitPayload,
 } from './types';
@@ -25,7 +25,9 @@ export const VALID_NON_COMPOUNDING_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
 ];
 
-const calculateTotalPercentage = (recipients: Array<{ percentAllocation: number }>): number => {
+const calculateTotalPercentage = (
+  recipients: Array<{ percentAllocation: number }>,
+): number => {
   return recipients.reduce((acc, curr) => acc + curr.percentAllocation, 0);
 };
 
@@ -33,7 +35,10 @@ const validateTotalPercentage = (totalPercentage: number): boolean => {
   return totalPercentage === 100;
 };
 
-const validateTotalPercentageWithRAF = (totalPercentage: number, rafPercentage: number): boolean => {
+const validateTotalPercentageWithRAF = (
+  totalPercentage: number,
+  rafPercentage: number,
+): boolean => {
   return totalPercentage + rafPercentage === 100;
 };
 
@@ -41,7 +46,8 @@ const validateRewardsSplitRecipients = (
   _: boolean,
   data: RewardsSplitPayload,
 ): boolean => {
-  const obolRAFSplit = data?.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const obolRAFSplit =
+    data?.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
   const splitPercentage = calculateTotalPercentage(data.splitRecipients);
   return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
 };
@@ -50,7 +56,8 @@ const validateTotalSplitRecipients = (
   _: boolean,
   data: TotalSplitPayload,
 ): boolean => {
-  const obolRAFSplit = data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
+  const obolRAFSplit =
+    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
   const splitPercentage = calculateTotalPercentage(data.splitRecipients);
   return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
 };
@@ -94,7 +101,9 @@ const validateOVMTotalSplitRecipients = (
   _: boolean,
   data: OVMTotalSplitPayload,
 ): boolean => {
-  const splitPercentage = calculateTotalPercentage(data.principalSplitRecipients);
+  const splitPercentage = calculateTotalPercentage(
+    data.principalSplitRecipients,
+  );
   return validateTotalPercentage(splitPercentage);
 };
 
@@ -112,7 +121,6 @@ ajv.addKeyword({
   validate: validateRewardsSplitRecipients,
   schemaType: 'boolean',
 });
-
 
 ajv.addKeyword({
   keyword: 'validateTotalSplitRecipients',

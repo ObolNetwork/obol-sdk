@@ -1,7 +1,7 @@
 import { type TypedMessage } from '@metamask/eth-sig-util';
 import { type TypedDataDomain } from 'ethers';
 import pjson from '../package.json';
-import { FORK_MAPPING } from './types';
+import { type ChainConfig, FORK_MAPPING } from './types';
 import {
   HOLESKY_MULTICALL_BYTECODE,
   HOLESKY_OWR_FACTORY_BYTECODE,
@@ -156,14 +156,18 @@ export const TERMS_AND_CONDITIONS_URL =
 export const TERMS_AND_CONDITIONS_HASH =
   '0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273';
 
-export const AVAILABLE_SPLITTER_CHAINS = [
-  FORK_MAPPING['0x00000000'],
-  FORK_MAPPING['0x01017000'],
-  FORK_MAPPING['0x10000910'],
-];
+export const AVAILABLE_SPLITTER_CHAINS = {
+  [FORK_MAPPING['0x00000000']]: true, // Mainnet
+  [FORK_MAPPING['0x01017000']]: true, // Holesky
+  [FORK_MAPPING['0x10000910']]: true, // Hoodi
+} as const;
 
-export const CHAIN_CONFIGURATION = {
-  [AVAILABLE_SPLITTER_CHAINS[0]]: {
+export const isChainSupportedForSplitters = (chainId: number): boolean => {
+  return chainId in AVAILABLE_SPLITTER_CHAINS;
+};
+
+export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
+  [FORK_MAPPING['0x00000000']]: {
     SPLITMAIN_ADDRESS: {
       address: '0x2ed6c4B5dA6378c7897AC67Ba9e43102Feb694EE',
       bytecode: MAINNET_SPLITMAIN_BYTECODE,
@@ -190,7 +194,7 @@ export const CHAIN_CONFIGURATION = {
       bytecode: MAINNET_WAREHOUSE_BYTECODE,
     },
   },
-  [AVAILABLE_SPLITTER_CHAINS[1]]: {
+  [FORK_MAPPING['0x01017000']]: {
     SPLITMAIN_ADDRESS: {
       address: '0xfC8a305728051367797DADE6Aa0344E0987f5286',
       bytecode: HOLESKY_SPLITMAIN_BYTECODE,
@@ -208,7 +212,7 @@ export const CHAIN_CONFIGURATION = {
       bytecode: '',
     },
   },
-  [AVAILABLE_SPLITTER_CHAINS[2]]: {
+  [FORK_MAPPING['0x10000910']]: {
     SPLITMAIN_ADDRESS: {
       address: '0xc05ae267291705ac16F75283572294ed2a91CBc7',
       bytecode: HOODI_SPLITMAIN_BYTECODE,
@@ -242,7 +246,8 @@ export const DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT = 1;
 export const DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT = 0.1;
 
 // OVM and SplitV2 Default Constants
-export const SPLITS_V2_SALT = '0x2fa740d39f3b04b2c7ef4e9f9e1a6e38f4c72c1a91d8595d5d31a3adf17c6b12';
+export const SPLITS_V2_SALT =
+  '0x2fa740d39f3b04b2c7ef4e9f9e1a6e38f4c72c1a91d8595d5d31a3adf17c6b12';
 export const PRINCIPAL_THRESHOLD = 16;
 
 export const OBOL_SDK_EMAIL = 'sdk@dvlabs.tech';

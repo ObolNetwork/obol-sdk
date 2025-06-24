@@ -6,10 +6,10 @@ import {
   deployOVMAndSplitV2,
 } from './splitHelpers';
 import {
-  AVAILABLE_SPLITTER_CHAINS,
   CHAIN_CONFIGURATION,
   SPLITS_V2_SALT,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+  isChainSupportedForSplitters,
 } from '../constants';
 import {
   ovmRewardsSplitPayloadSchema,
@@ -31,7 +31,7 @@ import {
  * @internal Access it through Client.splits.
  * @example
  * const obolClient = new Client(config);
- * await obolClient.splits.createObolOVMAndRewardPullSplit(OVMRewardsSplitPayload);
+ * await obolClient.splits.createValidatorManagerAndRewardsSplit(OVMRewardsSplitPayload);
  */
 export class ObolSplits {
   private readonly signer: SignerType | undefined;
@@ -50,7 +50,7 @@ export class ObolSplits {
 
   /**
    * Creates an Obol OVM and Pull split configuration for rewards-only scenario.
-   * 
+   *
    * This method deploys OVM and SplitV2 contracts for managing validator rewards only.
    * Principal is handled by a single address, while rewards are split among recipients.
    *
@@ -62,13 +62,17 @@ export class ObolSplits {
    * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient
    * @throws Will throw an error if the splitter configuration is not supported or deployment fails
    *
-   * An example of how to use createObolOVMAndRewardPullSplit:
-   * [createObolOVMAndRewardPullSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L333)
+   * An example of how to use createValidatorManagerAndRewardsSplit:
+   * [createValidatorManagerAndRewardsSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L333)
    */
-  async createObolOVMAndRewardPullSplit(payload: OVMRewardsSplitPayload): Promise<ClusterValidator> {
+  async createValidatorManagerAndRewardsSplit(
+    payload: OVMRewardsSplitPayload,
+  ): Promise<ClusterValidator> {
     const salt = SPLITS_V2_SALT;
     if (!this.signer) {
-      throw new Error('Signer is required in createObolOVMAndRewardPullSplit');
+      throw new Error(
+        'Signer is required in createValidatorManagerAndRewardsSplit',
+      );
     }
 
     const validatedPayload = validatePayload<Required<OVMRewardsSplitPayload>>(
@@ -76,23 +80,26 @@ export class ObolSplits {
       ovmRewardsSplitPayloadSchema,
     );
 
-    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+    if (!isChainSupportedForSplitters(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
-    if (!CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS) {
+    const chainConfig = CHAIN_CONFIGURATION[this.chainId];
+    if (!chainConfig?.OVM_FACTORY_ADDRESS) {
       throw new Error(
         `OVM contract factory is not configured for chain ${this.chainId}`,
       );
     }
 
     if (!this.provider) {
-      throw new Error('Provider is required to check OVM factory contract availability');
+      throw new Error(
+        'Provider is required to check OVM factory contract availability',
+      );
     }
 
-    const ovmFactoryConfig = CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS;
+    const ovmFactoryConfig = chainConfig.OVM_FACTORY_ADDRESS;
     if (!ovmFactoryConfig?.address || !ovmFactoryConfig?.bytecode) {
       throw new Error(
         `OVM factory contract configuration is incomplete for chain ${this.chainId}`,
@@ -112,15 +119,19 @@ export class ObolSplits {
     }
 
     const retroActiveFundingRecipient = {
-      address: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS?.address,
+      address: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     };
 
-    const copiedRewardsSplitRecipients = [...validatedPayload.rewardSplitRecipients];
+    const copiedRewardsSplitRecipients = [
+      ...validatedPayload.rewardSplitRecipients,
+    ];
     copiedRewardsSplitRecipients.push(retroActiveFundingRecipient);
 
     // Format recipients for SplitV2
-    const rewardRecipients = formatRecipientsForSplitV2(copiedRewardsSplitRecipients);
+    const rewardRecipients = formatRecipientsForSplitV2(
+      copiedRewardsSplitRecipients,
+    );
 
     const predictedSplitAddress = await predictSplitV2Address({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
@@ -180,7 +191,7 @@ export class ObolSplits {
 
   /**
    * Creates an Obol OVM and Total split configuration for total split scenario.
-   * 
+   *
    * This method deploys OVM and SplitV2 contracts for managing both validator rewards and principal.
    * Both rewards and principal are split among recipients, with rewards including RAF recipient.
    *
@@ -192,13 +203,17 @@ export class ObolSplits {
    * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient
    * @throws Will throw an error if the splitter configuration is not supported or deployment fails
    *
-   * An example of how to use createObolOVMAndTotalPullSplit:
-   * [createObolOVMAndTotalPullSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#340)
+   * An example of how to use createValidatorManagerAndTotalSplit:
+   * [createValidatorManagerAndTotalSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#340)
    */
-  async createObolOVMAndTotalPullSplit(payload: OVMTotalSplitPayload): Promise<ClusterValidator> {
+  async createValidatorManagerAndTotalSplit(
+    payload: OVMTotalSplitPayload,
+  ): Promise<ClusterValidator> {
     const salt = SPLITS_V2_SALT;
     if (!this.signer) {
-      throw new Error('Signer is required in createObolOVMAndTotalPullSplit');
+      throw new Error(
+        'Signer is required in createValidatorManagerAndTotalSplit',
+      );
     }
 
     const validatedPayload = validatePayload<Required<OVMTotalSplitPayload>>(
@@ -206,23 +221,26 @@ export class ObolSplits {
       ovmTotalSplitPayloadSchema,
     );
 
-    if (!AVAILABLE_SPLITTER_CHAINS.includes(this.chainId)) {
+    if (!isChainSupportedForSplitters(this.chainId)) {
       throw new Error(
         `Splitter configuration is not supported on ${this.chainId} chain`,
       );
     }
 
-    if (!CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS) {
+    const chainConfig = CHAIN_CONFIGURATION[this.chainId];
+    if (!chainConfig?.OVM_FACTORY_ADDRESS) {
       throw new Error(
         `OVM contract factory is not configured for chain ${this.chainId}`,
       );
     }
 
     if (!this.provider) {
-      throw new Error('Provider is required to check OVM factory contract availability');
+      throw new Error(
+        'Provider is required to check OVM factory contract availability',
+      );
     }
 
-    const ovmFactoryConfig = CHAIN_CONFIGURATION[this.chainId].OVM_FACTORY_ADDRESS;
+    const ovmFactoryConfig = chainConfig.OVM_FACTORY_ADDRESS;
     if (!ovmFactoryConfig?.address || !ovmFactoryConfig?.bytecode) {
       throw new Error(
         `OVM factory contract configuration is incomplete for chain ${this.chainId}`,
@@ -242,16 +260,22 @@ export class ObolSplits {
     }
 
     const retroActiveFundingRecipient = {
-      address: CHAIN_CONFIGURATION[this.chainId].RETROACTIVE_FUNDING_ADDRESS.address,
+      address: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
       percentAllocation: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     };
 
-    const copiedRewardsSplitRecipients = [...validatedPayload.rewardSplitRecipients];
+    const copiedRewardsSplitRecipients = [
+      ...validatedPayload.rewardSplitRecipients,
+    ];
     copiedRewardsSplitRecipients.push(retroActiveFundingRecipient);
 
-    const rewardsRecipients = formatRecipientsForSplitV2(copiedRewardsSplitRecipients);
+    const rewardsRecipients = formatRecipientsForSplitV2(
+      copiedRewardsSplitRecipients,
+    );
 
-    const principalSplitRecipients = formatRecipientsForSplitV2(validatedPayload.principalSplitRecipients);
+    const principalSplitRecipients = formatRecipientsForSplitV2(
+      validatedPayload.principalSplitRecipients,
+    );
 
     const predictedRewardsSplitAddress = await predictSplitV2Address({
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
@@ -266,7 +290,7 @@ export class ObolSplits {
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: principalSplitRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
-      salt: salt,
+      salt,
       signer: this.signer,
       chainId: this.chainId,
     });
@@ -284,7 +308,7 @@ export class ObolSplits {
       splitOwnerAddress: validatedPayload.splitOwnerAddress,
       recipients: principalSplitRecipients,
       distributorFeePercent: validatedPayload.distributorFeePercent,
-      salt: salt,
+      salt,
       signer: this.signer,
       chainId: this.chainId,
     });
@@ -317,7 +341,7 @@ export class ObolSplits {
         salt,
         signer: this.signer,
         chainId: this.chainId,
-        principalSplitRecipients: principalSplitRecipients,
+        principalSplitRecipients,
         isPrincipalSplitDeployed: isPrincipalSplitterDeployed,
         splitOwnerAddress: validatedPayload.splitOwnerAddress,
       });
@@ -328,4 +352,4 @@ export class ObolSplits {
       };
     }
   }
-} 
+}
