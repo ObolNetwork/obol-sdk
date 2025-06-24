@@ -602,7 +602,7 @@ export const formatRecipientsForSplitV2 = (
 };
 
 export const createSplitsClient = async (signer: SignerType, chainId: number): Promise<SplitsClient> => {
-  const chain = chainId == 1 ? mainnet : hoodi
+  const chain = chainId === 1 ? mainnet : hoodi
   const client = createPublicClient({
     chain: chain,
     transport: http(CHAIN_PUBLIC_RPC_URL[chainId])
@@ -839,8 +839,16 @@ export const deployOVMAndSplitV2 = async ({
     });
 
     // Extract addresses from events
-    const ovmAddress = executeMultiCalls?.events.length == 2 ? executeMultiCalls?.events[0]?.address : (executeMultiCalls?.events.length == 5 ? executeMultiCalls?.events[3]?.address : executeMultiCalls?.events[6]?.address);
+    let ovmAddress: string | undefined;
+    const eventCount = executeMultiCalls?.events.length;
 
+    if (eventCount === 2) {
+      ovmAddress = executeMultiCalls?.events[0]?.address;
+    } else if (eventCount === 5) {
+      ovmAddress = executeMultiCalls?.events[3]?.address;
+    } else {
+      ovmAddress = executeMultiCalls?.events[6]?.address;
+    }
     if (!ovmAddress) {
       throw new Error('Failed to extract contract addresses from multicall events');
     }

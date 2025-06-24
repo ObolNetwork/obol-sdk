@@ -1,6 +1,15 @@
 import { Client } from '../../src';
 import { OVMRewardsSplitPayload, OVMTotalSplitPayload } from '../../src/types';
 import { CHAIN_CONFIGURATION } from '../../src/constants';
+import {
+  formatRecipientsForSplitV2,
+  predictSplitV2Address,
+  isSplitV2Deployed,
+  deployOVMAndSplitV2,
+  deployOVMContract
+} from '../../src/splits/splitHelpers';
+import { isContractAvailable } from '../../src/utils';
+import { TEST_ADDRESSES } from '../fixtures';
 
 // Mock the split helpers
 jest.mock('../../src/splits/splitHelpers', () => ({
@@ -20,6 +29,14 @@ jest.mock('../../src/utils', () => ({
 jest.mock('../../src/ajv', () => ({
   validatePayload: jest.fn((data) => data),
 }));
+
+// Type the mocked functions
+const mockFormatRecipientsForSplitV2 = formatRecipientsForSplitV2 as jest.MockedFunction<typeof formatRecipientsForSplitV2>;
+const mockPredictSplitV2Address = predictSplitV2Address as jest.MockedFunction<typeof predictSplitV2Address>;
+const mockIsSplitV2Deployed = isSplitV2Deployed as jest.MockedFunction<typeof isSplitV2Deployed>;
+const mockDeployOVMAndSplitV2 = deployOVMAndSplitV2 as jest.MockedFunction<typeof deployOVMAndSplitV2>;
+const mockDeployOVMContract = deployOVMContract as jest.MockedFunction<typeof deployOVMContract>;
+const mockIsContractAvailable = isContractAvailable as jest.MockedFunction<typeof isContractAvailable>;
 
 describe('ObolSplits', () => {
   let client: Client;
@@ -46,29 +63,27 @@ describe('ObolSplits', () => {
   describe('createObolOVMAndRewardPullSplit', () => {
     const mockRewardsSplitPayload: OVMRewardsSplitPayload = {
       rewardSplitRecipients: [
-        { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
       ],
-      OVMOwnerAddress: '0x3456789012345678901234567890123456789012',
-      splitOwnerAddress: '0x4567890123456789012345678901234567890123',
-      principalRecipient: '0x5678901234567890123456789012345678901234',
+      OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      splitOwnerAddress: TEST_ADDRESSES.SPLIT_OWNER,
+      principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
       distributorFeePercent: 0,
     };
 
     it('should create rewards-only split successfully', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMAndSplitV2 } = require('../../src/splits/splitHelpers');
-      const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
-      formatRecipientsForSplitV2.mockReturnValue([
-        { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
+      mockFormatRecipientsForSplitV2.mockReturnValue([
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
         { address: '0xDe5aE4De36c966747Ea7DF13BD9589642e2B1D0d', percentAllocation: 1 },
       ]);
-      predictSplitV2Address.mockResolvedValue('0xRewardsSplitAddress');
-      isSplitV2Deployed.mockResolvedValue(false);
-      deployOVMAndSplitV2.mockResolvedValue( '0xOVMAddress');
-      isContractAvailable.mockResolvedValue(true);
+      mockPredictSplitV2Address.mockResolvedValue('0xRewardsSplitAddress');
+      mockIsSplitV2Deployed.mockResolvedValue(false);
+      mockDeployOVMAndSplitV2.mockResolvedValue('0xOVMAddress');
+      mockIsContractAvailable.mockResolvedValue(true);
 
       const result = await client.splits.createObolOVMAndRewardPullSplit(mockRewardsSplitPayload);
 
@@ -77,10 +92,10 @@ describe('ObolSplits', () => {
         fee_recipient_address: '0xRewardsSplitAddress',
       });
 
-      expect(formatRecipientsForSplitV2).toHaveBeenCalled();
-      expect(predictSplitV2Address).toHaveBeenCalled();
-      expect(isSplitV2Deployed).toHaveBeenCalled();
-      expect(deployOVMAndSplitV2).toHaveBeenCalled();
+      expect(mockFormatRecipientsForSplitV2).toHaveBeenCalled();
+      expect(mockPredictSplitV2Address).toHaveBeenCalled();
+      expect(mockIsSplitV2Deployed).toHaveBeenCalled();
+      expect(mockDeployOVMAndSplitV2).toHaveBeenCalled();
     });
 
     it('should throw error when signer is not provided', async () => {
@@ -116,46 +131,44 @@ describe('ObolSplits', () => {
   describe('createObolOVMAndTotalPullSplit', () => {
     const mockTotalSplitPayload: OVMTotalSplitPayload = {
       rewardSplitRecipients: [
-        { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-        { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
       ],
       principalSplitRecipients: [
-        { address: '0x3456789012345678901234567890123456789012', percentAllocation: 60 },
-        { address: '0x4567890123456789012345678901234567890123', percentAllocation: 40 },
+        { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
+        { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
       ],
-      OVMOwnerAddress: '0x5678901234567890123456789012345678901234',
-      splitOwnerAddress: '0x6789012345678901234567890123456789012345',
+      OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      splitOwnerAddress: TEST_ADDRESSES.SPLIT_OWNER,
       distributorFeePercent: 0,
     };
 
     it('should create total split successfully', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract, deployOVMAndSplitV2 } = require('../../src/splits/splitHelpers');
-      const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
-      formatRecipientsForSplitV2
+      mockFormatRecipientsForSplitV2
         .mockReturnValueOnce([ // rewards recipients
-          { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-          { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
           { address: '0xDe5aE4De36c966747Ea7DF13BD9589642e2B1D0d', percentAllocation: 1 },
         ])
         .mockReturnValueOnce([ // principal recipients
-          { address: '0x3456789012345678901234567890123456789012', percentAllocation: 60 },
-          { address: '0x4567890123456789012345678901234567890123', percentAllocation: 40 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
         ]);
 
-      predictSplitV2Address
+      mockPredictSplitV2Address
         .mockResolvedValueOnce('0xRewardsSplitAddress')
         .mockResolvedValueOnce('0xPrincipalSplitAddress');
 
-      isSplitV2Deployed
+      mockIsSplitV2Deployed
         .mockResolvedValueOnce(false) // rewards split not deployed
         .mockResolvedValueOnce(false); // principal split not deployed
 
-      deployOVMAndSplitV2.mockResolvedValue(
+      mockDeployOVMAndSplitV2.mockResolvedValue(
         '0xOVMAddress'
       );
-      isContractAvailable.mockResolvedValue(true);
+      mockIsContractAvailable.mockResolvedValue(true);
 
       const result = await client.splits.createObolOVMAndTotalPullSplit(mockTotalSplitPayload);
 
@@ -164,38 +177,36 @@ describe('ObolSplits', () => {
         fee_recipient_address: '0xRewardsSplitAddress',
       });
 
-      expect(formatRecipientsForSplitV2).toHaveBeenCalledTimes(2);
-      expect(predictSplitV2Address).toHaveBeenCalledTimes(2);
-      expect(isSplitV2Deployed).toHaveBeenCalledTimes(2);
-      expect(deployOVMAndSplitV2).toHaveBeenCalled();
+      expect(mockFormatRecipientsForSplitV2).toHaveBeenCalledTimes(2);
+      expect(mockPredictSplitV2Address).toHaveBeenCalledTimes(2);
+      expect(mockIsSplitV2Deployed).toHaveBeenCalledTimes(2);
+      expect(mockDeployOVMAndSplitV2).toHaveBeenCalled();
     });
 
     it('should handle case when both splits are already deployed', async () => {
-      const { formatRecipientsForSplitV2, predictSplitV2Address, isSplitV2Deployed, deployOVMContract, deployOVMAndSplitV2 } = require('../../src/splits/splitHelpers');
-      const { isContractAvailable } = require('../../src/utils');
 
       // Mock helper functions
-      formatRecipientsForSplitV2
+      mockFormatRecipientsForSplitV2
         .mockReturnValueOnce([ // rewards recipients
-          { address: '0x1234567890123456789012345678901234567890', percentAllocation: 50 },
-          { address: '0x2345678901234567890123456789012345678901', percentAllocation: 49 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
           { address: '0xDe5aE4De36c966747Ea7DF13BD9589642e2B1D0d', percentAllocation: 1 },
         ])
         .mockReturnValueOnce([ // principal recipients
-          { address: '0x3456789012345678901234567890123456789012', percentAllocation: 60 },
-          { address: '0x4567890123456789012345678901234567890123', percentAllocation: 40 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
         ]);
 
-      predictSplitV2Address
+      mockPredictSplitV2Address
         .mockResolvedValueOnce('0xRewardsSplitAddress')
         .mockResolvedValueOnce('0xPrincipalSplitAddress');
 
-      isSplitV2Deployed
+      mockIsSplitV2Deployed
         .mockResolvedValueOnce(true) // rewards split deployed
         .mockResolvedValueOnce(true); // principal split deployed
 
-      deployOVMContract.mockResolvedValue('0xOVMAddress');
-      isContractAvailable.mockResolvedValue(true);
+      mockDeployOVMContract.mockResolvedValue('0xOVMAddress');
+      mockIsContractAvailable.mockResolvedValue(true);
 
       const result = await client.splits.createObolOVMAndTotalPullSplit(mockTotalSplitPayload);
 
@@ -204,7 +215,7 @@ describe('ObolSplits', () => {
         fee_recipient_address: '0xRewardsSplitAddress',
       });
 
-      expect(deployOVMContract).toHaveBeenCalledWith({
+      expect(mockDeployOVMContract).toHaveBeenCalledWith({
         OVMOwnerAddress: mockTotalSplitPayload.OVMOwnerAddress,
         principalRecipient: '0xPrincipalSplitAddress',
         rewardRecipient: '0xRewardsSplitAddress',

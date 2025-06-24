@@ -1,0 +1,339 @@
+import { validatePayload } from '../src/ajv';
+import { ovmRewardsSplitPayloadSchema, ovmTotalSplitPayloadSchema } from '../src/schema';
+import { OVMRewardsSplitPayload, OVMTotalSplitPayload } from '../src/types';
+import { TEST_ADDRESSES } from './fixtures';
+
+describe('validatePayload - OVM Schemas', () => {
+  describe('ovmRewardsSplitPayloadSchema', () => {
+    const validRewardsSplitPayload: OVMRewardsSplitPayload = {
+      rewardSplitRecipients: [
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
+      ],
+      OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      splitOwnerAddress: TEST_ADDRESSES.SPLIT_OWNER,
+      principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+      distributorFeePercent: 0,
+    };
+
+    it('should validate a valid rewards split payload', () => {
+      const result = validatePayload(validRewardsSplitPayload, ovmRewardsSplitPayloadSchema);
+      expect(result).toEqual(validRewardsSplitPayload);
+    });
+
+    it('should validate rewards split payload with default values', () => {
+      const payloadWithoutDefaults = {
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
+        ],
+        OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+        principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+      };
+
+      const result = validatePayload(payloadWithoutDefaults, ovmRewardsSplitPayloadSchema);
+      expect(result).toEqual({
+        ...payloadWithoutDefaults,
+        splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS, // default value
+        principalThreshold: 16, // default value
+        distributorFeePercent: 0, // default value
+      });
+    });
+
+    it('should throw error when rewardSplitRecipients total percentage is not 99%', () => {
+      const invalidPayload = {
+        ...validRewardsSplitPayload,
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 40 }, // Total: 90%
+        ],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
+        .toThrow('Validation failed: validateOVMRewardsSplitRecipients');
+    });
+
+    it('should throw error when rewardSplitRecipients total percentage exceeds 99%', () => {
+      const invalidPayload = {
+        ...validRewardsSplitPayload,
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 60 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 50 }, // Total: 110%
+        ],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
+        .toThrow('Validation failed: validateOVMRewardsSplitRecipients');
+    });
+
+    it('should throw error when rewardSplitRecipients is empty', () => {
+      const invalidPayload = {
+        ...validRewardsSplitPayload,
+        rewardSplitRecipients: [],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
+        .toThrow('Validation failed: /rewardSplitRecipients must NOT have fewer than 1 items');
+    });
+
+    it('should throw error when rewardSplitRecipients has invalid address format', () => {
+      const invalidPayload = {
+        ...validRewardsSplitPayload,
+        rewardSplitRecipients: [
+          { address: 'invalid-address', percentAllocation: 50 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
+        ],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
+        .toThrow('Validation failed: /rewardSplitRecipients/0/address must match pattern');
+    });
+
+    it('should throw error when OVMOwnerAddress is missing', () => {
+      const invalidPayload = {
+        rewardSplitRecipients: validRewardsSplitPayload.rewardSplitRecipients,
+        principalRecipient: validRewardsSplitPayload.principalRecipient,
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
+        .toThrow('Validation failed: /OVMOwnerAddress is required');
+    });
+
+    it('should throw error when principalRecipient is missing', () => {
+      const invalidPayload = {
+        rewardSplitRecipients: validRewardsSplitPayload.rewardSplitRecipients,
+        OVMOwnerAddress: validRewardsSplitPayload.OVMOwnerAddress,
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmRewardsSplitPayloadSchema))
+        .toThrow('Validation failed: /principalRecipient is required');
+    });
+  });
+
+  describe('ovmTotalSplitPayloadSchema', () => {
+    const validTotalSplitPayload: OVMTotalSplitPayload = {
+      rewardSplitRecipients: [
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+        { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
+      ],
+      principalSplitRecipients: [
+        { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
+        { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
+      ],
+      OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      splitOwnerAddress: TEST_ADDRESSES.SPLIT_OWNER,
+      distributorFeePercent: 0,
+    };
+
+    it('should validate a valid total split payload', () => {
+      const result = validatePayload(validTotalSplitPayload, ovmTotalSplitPayloadSchema);
+      expect(result).toEqual(validTotalSplitPayload);
+    });
+
+    it('should validate total split payload with default values', () => {
+      const payloadWithoutDefaults = {
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49 },
+        ],
+        principalSplitRecipients: [
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
+        ],
+        OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      };
+
+      const result = validatePayload(payloadWithoutDefaults, ovmTotalSplitPayloadSchema);
+      expect(result).toEqual({
+        ...payloadWithoutDefaults,
+        splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS, // default value
+        principalThreshold: 16, // default value
+        distributorFeePercent: 0, // default value
+      });
+    });
+
+    it('should throw error when rewardSplitRecipients total percentage is not 99%', () => {
+      const invalidPayload = {
+        ...validTotalSplitPayload,
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 50 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 40 }, // Total: 90%
+        ],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
+        .toThrow('Validation failed: validateOVMRewardsSplitRecipients');
+    });
+
+    it('should throw error when principalSplitRecipients total percentage is not 100%', () => {
+      const invalidPayload = {
+        ...validTotalSplitPayload,
+        principalSplitRecipients: [
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 30 }, // Total: 90%
+        ],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
+        .toThrow('Validation failed: validateOVMTotalSplitRecipients');
+    });
+
+    it('should throw error when principalSplitRecipients total percentage exceeds 100%', () => {
+      const invalidPayload = {
+        ...validTotalSplitPayload,
+        principalSplitRecipients: [
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 70 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 }, // Total: 110%
+        ],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
+        .toThrow('Validation failed: validateOVMTotalSplitRecipients');
+    });
+
+    it('should throw error when principalSplitRecipients is empty', () => {
+      const invalidPayload = {
+        ...validTotalSplitPayload,
+        principalSplitRecipients: [],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
+        .toThrow('Validation failed: /principalSplitRecipients must NOT have fewer than 1 items');
+    });
+
+    it('should throw error when principalSplitRecipients has invalid address format', () => {
+      const invalidPayload = {
+        ...validTotalSplitPayload,
+        principalSplitRecipients: [
+          { address: 'invalid-address', percentAllocation: 60 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 40 },
+        ],
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
+        .toThrow('Validation failed: /principalSplitRecipients/0/address must match pattern');
+    });
+
+    it('should throw error when OVMOwnerAddress is missing', () => {
+      const invalidPayload = {
+        rewardSplitRecipients: validTotalSplitPayload.rewardSplitRecipients,
+        principalSplitRecipients: validTotalSplitPayload.principalSplitRecipients,
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
+        .toThrow('Validation failed: /OVMOwnerAddress is required');
+    });
+
+    it('should throw error when principalThreshold is less than 16', () => {
+      const invalidPayload = {
+        ...validTotalSplitPayload,
+        principalThreshold: 15,
+      };
+
+      expect(() => validatePayload(invalidPayload, ovmTotalSplitPayloadSchema))
+        .toThrow('Validation failed: /principalThreshold must be >= 16');
+    });
+
+    it('should validate when principalThreshold is exactly 16', () => {
+      const validPayload = {
+        ...validTotalSplitPayload,
+        principalThreshold: 16,
+      };
+
+      const result = validatePayload(validPayload, ovmTotalSplitPayloadSchema);
+      expect(result).toEqual(validPayload);
+    });
+
+    it('should validate when principalThreshold is greater than 16', () => {
+      const validPayload = {
+        ...validTotalSplitPayload,
+        principalThreshold: 20,
+      };
+
+      const result = validatePayload(validPayload, ovmTotalSplitPayloadSchema);
+      expect(result).toEqual(validPayload);
+    });
+  });
+
+  describe('Edge cases and boundary conditions', () => {
+    it('should handle decimal percentages correctly for rewards split', () => {
+      const payload = {
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 49.5 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49.5 },
+        ],
+        OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+        principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+      };
+
+      const result = validatePayload(payload, ovmRewardsSplitPayloadSchema);
+      expect(result).toEqual({
+        ...payload,
+        splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS,
+        principalThreshold: 16,
+        distributorFeePercent: 0,
+      });
+    });
+
+    it('should handle decimal percentages correctly for total split', () => {
+      const payload = {
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 49.5 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49.5 },
+        ],
+        principalSplitRecipients: [
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 60.5 },
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, percentAllocation: 39.5 },
+        ],
+        OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      };
+
+      const result = validatePayload(payload, ovmTotalSplitPayloadSchema);
+      expect(result).toEqual({
+        ...payload,
+        splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS,
+        principalThreshold: 16,
+        distributorFeePercent: 0,
+      });
+    });
+
+    it('should handle single recipient with 99% allocation for rewards split', () => {
+      const payload = {
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 99 },
+        ],
+        OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+        principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+      };
+
+      const result = validatePayload(payload, ovmRewardsSplitPayloadSchema);
+      expect(result).toEqual({
+        ...payload,
+        splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS,
+        principalThreshold: 16,
+        distributorFeePercent: 0,
+      });
+    });
+
+    it('should handle single recipient with 100% allocation for total split', () => {
+      const payload = {
+        rewardSplitRecipients: [
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 49.5 },
+          { address: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 49.5 },
+        ],
+        principalSplitRecipients: [
+          { address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, percentAllocation: 100 },
+        ],
+        OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      };
+
+      const result = validatePayload(payload, ovmTotalSplitPayloadSchema);
+      expect(result).toEqual({
+        ...payload,
+        splitOwnerAddress: TEST_ADDRESSES.ZERO_ADDRESS,
+        principalThreshold: 16,
+        distributorFeePercent: 0,
+      });
+    });
+  });
+}); 
