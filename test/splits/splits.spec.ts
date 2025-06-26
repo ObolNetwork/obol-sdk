@@ -157,9 +157,9 @@ describe('ObolSplits', () => {
     it('should throw error when OVM factory is not configured', async () => {
       // Mock chain configuration without OVM factory
       const originalConfig = CHAIN_CONFIGURATION[1];
-      // Create a new config object without OVM_FACTORY_ADDRESS
+      // Create a new config object without OVM_FACTORY_CONTRACT
       const configWithoutOVM = { ...originalConfig };
-      delete configWithoutOVM.OVM_FACTORY_ADDRESS;
+      delete configWithoutOVM.OVM_FACTORY_CONTRACT;
       CHAIN_CONFIGURATION[1] = configWithoutOVM;
 
       await expect(

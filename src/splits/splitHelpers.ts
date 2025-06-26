@@ -21,14 +21,12 @@ import { OVMFactoryContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { MultiCallContract } from '../abi/Multicall';
 import { CHAIN_CONFIGURATION, CHAIN_PUBLIC_RPC_URL } from '../constants';
-import { SplitsClient } from '@0xsplits/splits-sdk';
-import { createPublicClient, createWalletClient, custom, http } from 'viem';
-import { hoodi, mainnet } from 'viem/chains';
-import { privateKeyToAccount } from 'viem/accounts';
+import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
 const ovmFactoryContractInterface = new Interface(OVMFactoryContract.abi);
+const splitV2FactoryInterface = new Interface(splitV2FactoryAbi);
 
 type Call = {
   target: ETH_ADDRESS;
@@ -104,7 +102,7 @@ export const predictSplitterAddress = async ({
 }): Promise<ETH_ADDRESS> => {
   try {
     const splitMainContractInstance = new Contract(
-      getChainConfig(chainId).SPLITMAIN_ADDRESS.address,
+      getChainConfig(chainId).SPLITMAIN_CONTRACT.address,
       splitMainEthereumAbi,
       signer,
     );
@@ -258,7 +256,7 @@ const createOWRContract = async ({
 }): Promise<ETH_ADDRESS> => {
   try {
     const OWRFactoryInstance = new Contract(
-      getChainConfig(chainId).OWR_FACTORY_ADDRESS.address,
+      getChainConfig(chainId).OWR_FACTORY_CONTRACT.address,
       OWRFactoryContract.abi,
       signer,
     );
@@ -345,7 +343,7 @@ export const deploySplitterContract = async ({
 }): Promise<ETH_ADDRESS> => {
   try {
     const splitMainContractInstance = new Contract(
-      getChainConfig(chainId).SPLITMAIN_ADDRESS.address,
+      getChainConfig(chainId).SPLITMAIN_CONTRACT.address,
       splitMainEthereumAbi,
       signer,
     );
@@ -444,20 +442,19 @@ export const deploySplitterAndOWRContracts = async ({
 
   executeCalls.push(
     {
-      target: getChainConfig(chainId).SPLITMAIN_ADDRESS.address,
+      target: getChainConfig(chainId).SPLITMAIN_CONTRACT.address,
       callData: splitTxData,
     },
     {
-      target: getChainConfig(chainId).OWR_FACTORY_ADDRESS.address,
+      target: getChainConfig(chainId).OWR_FACTORY_CONTRACT.address,
       callData: owrTxData,
     },
   );
-  const multicallAddess = getChainConfig(chainId).MULTICALL_ADDRESS.address;
 
   const executeMultiCalls = await multicall(
     executeCalls,
     signer,
-    multicallAddess,
+    chainId,
   );
 
   const splitAddressData = executeMultiCalls?.logs[0]?.topics[1];
@@ -519,9 +516,11 @@ export const getOWRTranches = async ({
 export const multicall = async (
   calls: Call[],
   signer: SignerType,
-  multicallAddress: string,
+  chainId: number
 ): Promise<any> => {
   try {
+    const chainConfig = getChainConfig(chainId);
+    const multicallAddress = chainConfig.MULTICALL_CONTRACT.address;
     const multiCallContractInstance = new Contract(
       multicallAddress,
       MultiCallContract.abi,
@@ -613,57 +612,26 @@ export const formatRecipientsForSplitV2 = (
     }));
 };
 
-export const createSplitsClient = async (
-  signer: SignerType,
-  chainId: number,
-): Promise<SplitsClient> => {
-  const chain = chainId === 1 ? mainnet : hoodi;
-  const client = createPublicClient({
-    chain,
-    transport: http(CHAIN_PUBLIC_RPC_URL[chainId]),
-  });
-  // convert signer to walletClient
-  if (
-    typeof window !== 'undefined' &&
-    signer.provider instanceof BrowserProvider
-  ) {
-    // For browser environment
-    const address = await signer.getAddress();
-    const viemWalletClient = createWalletClient({
-      account: address,
-      chain,
-      transport: custom((window as any).ethereum),
-    });
-    return new SplitsClient({
-      publicClient: client,
-      walletClient: viemWalletClient,
-      chainId,
-    });
-  } else {
-    // For non-browser environment, extract private key from signer
-    const signerPrivateKey = (signer as Wallet)?.privateKey;
-    if (!signerPrivateKey) {
-      throw new Error('Signer private key not available');
-    }
+// Helper function to create SplitV2 parameters
+const createSplitV2Params = (
+  recipients: SplitV2Recipient[],
+  distributorFeePercent: number,
+): {
+  recipients: string[];
+  allocations: number[];
+  totalAllocation: number;
+  distributionIncentive: number;
+} => {
+  const addresses = recipients.map(r => r.address);
+  const allocations = recipients.map(r => Math.floor(r.percentAllocation * 1e4)); // Convert to basis points
+  const totalAllocation = allocations.reduce((sum, allocation) => sum + allocation, 0);
 
-    const privateKey = signerPrivateKey.startsWith('0x')
-      ? signerPrivateKey
-      : `0x${signerPrivateKey}`;
-
-    const scriptAccount = privateKeyToAccount(privateKey as `0x${string}`);
-    const account = scriptAccount;
-
-    const viemWalletClient = createWalletClient({
-      account,
-      chain,
-      transport: http(CHAIN_PUBLIC_RPC_URL[chainId]),
-    });
-    return new SplitsClient({
-      publicClient: client,
-      walletClient: viemWalletClient,
-      chainId,
-    });
-  }
+  return {
+    recipients: addresses,
+    allocations,
+    totalAllocation,
+    distributionIncentive: distributorFeePercent,
+  };
 };
 
 export const predictSplitV2Address = async ({
@@ -682,19 +650,29 @@ export const predictSplitV2Address = async ({
   chainId: number;
 }): Promise<string> => {
   try {
-    const splitsClient = await createSplitsClient(signer, chainId);
+    const chainConfig = getChainConfig(chainId);
+    if (!chainConfig?.SPLIT_V2_FACTORY_CONTRACT?.address) {
+      throw new Error(`SplitV2 Factory not configured for chain ${chainId}`);
+    }
 
-    const response = await splitsClient.splitV2.predictDeterministicAddress({
-      ownerAddress: splitOwnerAddress,
-      recipients,
-      distributorFeePercent,
+    const splitV2FactoryContract = new Contract(
+      chainConfig.SPLIT_V2_FACTORY_CONTRACT.address,
+      splitV2FactoryAbi,
+      signer,
+    );
+
+    const splitParams = createSplitV2Params(recipients, distributorFeePercent);
+
+    const predictedAddress = await splitV2FactoryContract.predictDeterministicAddress(
+      splitParams,
+      splitOwnerAddress,
       salt,
-    });
+    );
 
-    return response.splitAddress;
+    return predictedAddress;
   } catch (error: any) {
     throw new Error(
-      `Failed to predict SplitV2 address: ${error.message ?? 'SplitV2 SDK call failed'}`,
+      `Failed to predict SplitV2 address: ${error.message ?? 'SplitV2 contract call failed'}`,
     );
   }
 };
@@ -715,15 +693,26 @@ export const isSplitV2Deployed = async ({
   chainId: number;
 }): Promise<boolean> => {
   try {
-    const splitsClient = await createSplitsClient(signer, chainId);
-    const response = await splitsClient.splitV2.isDeployed({
-      ownerAddress: splitOwnerAddress,
-      recipients,
-      distributorFeePercent,
-      salt,
-    });
+    const chainConfig = getChainConfig(chainId);
+    if (!chainConfig?.SPLIT_V2_FACTORY_CONTRACT?.address) {
+      throw new Error(`SplitV2 Factory not configured for chain ${chainId}`);
+    }
 
-    return response.deployed;
+    const splitV2FactoryContract = new Contract(
+      chainConfig.SPLIT_V2_FACTORY_CONTRACT.address,
+      splitV2FactoryAbi,
+      signer,
+    );
+
+    const splitParams = createSplitV2Params(recipients, distributorFeePercent);
+
+    const [, exists] = await splitV2FactoryContract.isDeployed(
+      splitParams,
+      splitOwnerAddress,
+      salt,
+    );
+
+    return exists;
   } catch (error: any) {
     // If the check fails, assume it's not deployed
     return false;
@@ -747,12 +736,12 @@ export const deployOVMContract = async ({
 }): Promise<string> => {
   try {
     const chainConfig = getChainConfig(chainId);
-    if (!chainConfig?.OVM_FACTORY_ADDRESS?.address) {
+    if (!chainConfig?.OVM_FACTORY_CONTRACT?.address) {
       throw new Error(`OVM Factory not configured for chain ${chainId}`);
     }
 
     const ovmFactoryContract = new Contract(
-      chainConfig.OVM_FACTORY_ADDRESS.address,
+      chainConfig.OVM_FACTORY_CONTRACT.address,
       OVMFactoryContract.abi,
       signer,
     );
@@ -806,36 +795,43 @@ export const deployOVMAndSplitV2 = async ({
 }): Promise<string> => {
   try {
     const chainConfig = getChainConfig(chainId);
-    if (!chainConfig?.OVM_FACTORY_ADDRESS?.address) {
+    if (!chainConfig?.OVM_FACTORY_CONTRACT?.address) {
       throw new Error(`OVM Factory not configured for chain ${chainId}`);
     }
 
-    const splitsClient = await createSplitsClient(signer, chainId);
-    const executeCalls: any[] = [];
+    if (!chainConfig?.SPLIT_V2_FACTORY_CONTRACT?.address) {
+      throw new Error(`SplitV2 Factory not configured for chain ${chainId}`);
+    }
+
+    const executeCalls: Call[] = [];
 
     if (rewardRecipients && !isRewardsSplitterDeployed) {
       // Create rewards split call data
-      const rewardsSplitTxData =
-        await splitsClient.splitV2.callData.createSplit({
-          recipients: rewardRecipients,
-          distributorFeePercent,
-          ownerAddress: splitOwnerAddress,
-          salt,
-        });
+      const splitParams = createSplitV2Params(rewardRecipients, distributorFeePercent);
+      const rewardsSplitTxData = encodeCreateSplitV2DeterministicTxData(
+        splitParams,
+        splitOwnerAddress,
+        salt,
+      );
 
-      executeCalls.push(rewardsSplitTxData);
+      executeCalls.push({
+        target: chainConfig.SPLIT_V2_FACTORY_CONTRACT.address,
+        callData: rewardsSplitTxData,
+      });
     }
 
     // Create principal split call data if needed (for total split scenario)
     if (principalSplitRecipients && !isPrincipalSplitDeployed) {
-      const principalSplitTxData =
-        await splitsClient.splitV2.callData.createSplit({
-          recipients: principalSplitRecipients,
-          distributorFeePercent,
-          salt,
-          ownerAddress: splitOwnerAddress,
-        });
-      executeCalls.push(principalSplitTxData);
+      const principalSplitParams = createSplitV2Params(principalSplitRecipients, distributorFeePercent);
+      const principalSplitTxData = encodeCreateSplitV2DeterministicTxData(
+        principalSplitParams,
+        splitOwnerAddress,
+        salt,
+      );
+      executeCalls.push({
+        target: chainConfig.SPLIT_V2_FACTORY_CONTRACT.address,
+        callData: principalSplitTxData,
+      });
     }
 
     // Create OVM call data
@@ -847,25 +843,23 @@ export const deployOVMAndSplitV2 = async ({
     );
 
     executeCalls.push({
-      address: chainConfig.OVM_FACTORY_ADDRESS.address,
-      data: ovmTxData,
+      target: chainConfig.OVM_FACTORY_CONTRACT.address,
+      callData: ovmTxData,
     });
 
     // Execute multicall
-    const executeMultiCalls = await splitsClient.splitV2.multicall({
-      calls: executeCalls,
-    });
+    const executeMultiCalls = await multicall(executeCalls, signer, chainId);
 
     // Extract addresses from events
     let ovmAddress: string | undefined;
-    const eventCount = executeMultiCalls?.events.length;
+    const logsCount = executeMultiCalls?.logs?.length || 0;
 
-    if (eventCount === 2) {
-      ovmAddress = executeMultiCalls?.events[0]?.address;
-    } else if (eventCount === 5) {
-      ovmAddress = executeMultiCalls?.events[3]?.address;
+    if (logsCount === 2) {
+      ovmAddress = '0x' + executeMultiCalls?.logs[0]?.topics[1]?.slice(26, 66);
+    } else if (logsCount === 5) {
+      ovmAddress = '0x' + executeMultiCalls?.logs[3]?.topics[1]?.slice(26, 66);
     } else {
-      ovmAddress = executeMultiCalls?.events[6]?.address;
+      ovmAddress = '0x' + executeMultiCalls?.logs[6]?.topics[1]?.slice(26, 66);
     }
     if (!ovmAddress) {
       throw new Error(
@@ -890,6 +884,22 @@ const encodeCreateOVMTxData = (
   return ovmFactoryContractInterface.encodeFunctionData(
     'createObolValidatorManager',
     [OVMOwnerAddress, principalRecipient, rewardRecipient, principalThreshold],
+  );
+};
+
+const encodeCreateSplitV2DeterministicTxData = (
+  splitParams: {
+    recipients: string[];
+    allocations: number[];
+    totalAllocation: number;
+    distributionIncentive: number;
+  },
+  splitOwnerAddress: string,
+  salt: `0x${string}`,
+): string => {
+  return splitV2FactoryInterface.encodeFunctionData(
+    'createSplitDeterministic',
+    [splitParams, splitOwnerAddress, ZeroAddress, salt],
   );
 };
 
