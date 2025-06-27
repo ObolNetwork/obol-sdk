@@ -663,7 +663,7 @@ export const predictSplitV2Address = async ({
 
     const splitParams = createSplitV2Params(recipients, distributorFeePercent);
 
-    const predictedAddress = await splitV2FactoryContract.predictDeterministicAddress(
+    const predictedAddress = await splitV2FactoryContract['predictDeterministicAddress((address[],uint256[],uint256,uint16),address,bytes32)'](
       splitParams,
       splitOwnerAddress,
       salt,
