@@ -8,19 +8,12 @@ import {
   type OVMArgs,
   type ChainConfig,
 } from '../types';
-import {
-  BrowserProvider,
-  Contract,
-  Interface,
-  parseEther,
-  type Wallet,
-  ZeroAddress,
-} from 'ethers';
+import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
 import { OVMFactoryContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { MultiCallContract } from '../abi/Multicall';
-import { CHAIN_CONFIGURATION, CHAIN_PUBLIC_RPC_URL } from '../constants';
+import { CHAIN_CONFIGURATION } from '../constants';
 import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
@@ -451,11 +444,7 @@ export const deploySplitterAndOWRContracts = async ({
     },
   );
 
-  const executeMultiCalls = await multicall(
-    executeCalls,
-    signer,
-    chainId,
-  );
+  const executeMultiCalls = await multicall(executeCalls, signer, chainId);
 
   const splitAddressData = executeMultiCalls?.logs[0]?.topics[1];
   const formattedSplitterAddress = '0x' + splitAddressData?.slice(26, 66);
@@ -516,7 +505,7 @@ export const getOWRTranches = async ({
 export const multicall = async (
   calls: Call[],
   signer: SignerType,
-  chainId: number
+  chainId: number,
 ): Promise<any> => {
   try {
     const chainConfig = getChainConfig(chainId);
@@ -623,8 +612,13 @@ const createSplitV2Params = (
   distributionIncentive: number;
 } => {
   const addresses = recipients.map(r => r.address);
-  const allocations = recipients.map(r => Math.floor(r.percentAllocation * 1e4)); // Convert to basis points
-  const totalAllocation = allocations.reduce((sum, allocation) => sum + allocation, 0);
+  const allocations = recipients.map(r =>
+    Math.floor(r.percentAllocation * 1e4),
+  ); // Convert to basis points
+  const totalAllocation = allocations.reduce(
+    (sum, allocation) => sum + allocation,
+    0,
+  );
 
   return {
     recipients: addresses,
@@ -663,11 +657,9 @@ export const predictSplitV2Address = async ({
 
     const splitParams = createSplitV2Params(recipients, distributorFeePercent);
 
-    const predictedAddress = await splitV2FactoryContract['predictDeterministicAddress((address[],uint256[],uint256,uint16),address,bytes32)'](
-      splitParams,
-      splitOwnerAddress,
-      salt,
-    );
+    const predictedAddress = await splitV2FactoryContract[
+      'predictDeterministicAddress((address[],uint256[],uint256,uint16),address,bytes32)'
+    ](splitParams, splitOwnerAddress, salt);
 
     return predictedAddress;
   } catch (error: any) {
@@ -807,7 +799,10 @@ export const deployOVMAndSplitV2 = async ({
 
     if (rewardRecipients && !isRewardsSplitterDeployed) {
       // Create rewards split call data
-      const splitParams = createSplitV2Params(rewardRecipients, distributorFeePercent);
+      const splitParams = createSplitV2Params(
+        rewardRecipients,
+        distributorFeePercent,
+      );
       const rewardsSplitTxData = encodeCreateSplitV2DeterministicTxData(
         splitParams,
         splitOwnerAddress,
@@ -822,7 +817,10 @@ export const deployOVMAndSplitV2 = async ({
 
     // Create principal split call data if needed (for total split scenario)
     if (principalSplitRecipients && !isPrincipalSplitDeployed) {
-      const principalSplitParams = createSplitV2Params(principalSplitRecipients, distributorFeePercent);
+      const principalSplitParams = createSplitV2Params(
+        principalSplitRecipients,
+        distributorFeePercent,
+      );
       const principalSplitTxData = encodeCreateSplitV2DeterministicTxData(
         principalSplitParams,
         splitOwnerAddress,
@@ -897,6 +895,7 @@ const encodeCreateSplitV2DeterministicTxData = (
   splitOwnerAddress: string,
   salt: `0x${string}`,
 ): string => {
+  // creatorAddress can be kept as default https://docs.splits.org/sdk/splits-v2#createsplit
   return splitV2FactoryInterface.encodeFunctionData(
     'createSplitDeterministic',
     [splitParams, splitOwnerAddress, ZeroAddress, salt],

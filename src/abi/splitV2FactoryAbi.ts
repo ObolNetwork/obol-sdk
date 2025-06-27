@@ -414,4 +414,4 @@ export const splitV2FactoryAbi = [
     stateMutability: 'view',
     type: 'function',
   },
-]; 
+];

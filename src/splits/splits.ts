@@ -102,8 +102,14 @@ export class ObolSplits {
     const splitV2FactoryConfig = chainConfig.SPLIT_V2_FACTORY_CONTRACT;
     const multiCallConfig = chainConfig.MULTICALL_CONTRACT;
 
-
-    if (!ovmFactoryConfig?.address || !ovmFactoryConfig?.bytecode || !splitV2FactoryConfig?.address || !splitV2FactoryConfig?.bytecode || !multiCallConfig?.address || !multiCallConfig?.bytecode) {
+    if (
+      !ovmFactoryConfig?.address ||
+      !ovmFactoryConfig?.bytecode ||
+      !splitV2FactoryConfig?.address ||
+      !splitV2FactoryConfig?.bytecode ||
+      !multiCallConfig?.address ||
+      !multiCallConfig?.bytecode
+    ) {
       throw new Error(
         `Contracts configuration is incomplete for chain ${this.chainId}`,
       );
@@ -127,7 +133,11 @@ export class ObolSplits {
       multiCallConfig.bytecode,
     );
 
-    if (!checkOVMFactoryContract || !checkSplitV2FactoryContract || !checkMultiCallContract) {
+    if (
+      !checkOVMFactoryContract ||
+      !checkSplitV2FactoryContract ||
+      !checkMultiCallContract
+    ) {
       throw new Error(
         `Splitter contract is not deployed or available on chain ${this.chainId}`,
       );
@@ -259,8 +269,14 @@ export class ObolSplits {
     const splitV2FactoryConfig = chainConfig.SPLIT_V2_FACTORY_CONTRACT;
     const multiCallConfig = chainConfig.MULTICALL_CONTRACT;
 
-
-    if (!ovmFactoryConfig?.address || !ovmFactoryConfig?.bytecode || !splitV2FactoryConfig?.address || !splitV2FactoryConfig?.bytecode || !multiCallConfig?.address || !multiCallConfig?.bytecode) {
+    if (
+      !ovmFactoryConfig?.address ||
+      !ovmFactoryConfig?.bytecode ||
+      !splitV2FactoryConfig?.address ||
+      !splitV2FactoryConfig?.bytecode ||
+      !multiCallConfig?.address ||
+      !multiCallConfig?.bytecode
+    ) {
       throw new Error(
         `Contracts configuration is incomplete for chain ${this.chainId}`,
       );
@@ -284,7 +300,11 @@ export class ObolSplits {
       multiCallConfig.bytecode,
     );
 
-    if (!checkOVMFactoryContract || !checkSplitV2FactoryContract || !checkMultiCallContract) {
+    if (
+      !checkOVMFactoryContract ||
+      !checkSplitV2FactoryContract ||
+      !checkMultiCallContract
+    ) {
       throw new Error(
         `Splitter contract is not deployed or available on chain ${this.chainId}`,
       );

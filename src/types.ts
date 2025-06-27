@@ -605,5 +605,5 @@ export type ChainConfig = {
   SPLIT_V2_FACTORY_CONTRACT?: {
     address: string;
     bytecode: string;
-  }
+  };
 };
