@@ -578,27 +578,31 @@ export type OVMArgs = {
 };
 
 export type ChainConfig = {
-  SPLITMAIN_ADDRESS: {
+  SPLITMAIN_CONTRACT: {
     address: string;
     bytecode: string;
   };
-  MULTICALL_ADDRESS: {
+  MULTICALL_CONTRACT: {
     address: string;
     bytecode: string;
   };
-  OWR_FACTORY_ADDRESS: {
+  OWR_FACTORY_CONTRACT: {
     address: string;
     bytecode: string;
   };
-  RETROACTIVE_FUNDING_ADDRESS: {
+  RETROACTIVE_FUNDING_CONTRACT: {
     address: string;
     bytecode: string;
   };
-  OVM_FACTORY_ADDRESS?: {
+  OVM_FACTORY_CONTRACT?: {
     address: string;
     bytecode: string;
   };
-  WAREHOUSE_ADDRESS?: {
+  WAREHOUSE_CONTRACT?: {
+    address: string;
+    bytecode: string;
+  };
+  SPLIT_V2_FACTORY_CONTRACT?: {
     address: string;
     bytecode: string;
   };

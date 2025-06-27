@@ -87,7 +87,7 @@ export class ObolSplits {
     }
 
     const chainConfig = CHAIN_CONFIGURATION[this.chainId];
-    if (!chainConfig?.OVM_FACTORY_ADDRESS) {
+    if (!chainConfig?.OVM_FACTORY_CONTRACT) {
       throw new Error(
         `OVM contract factory is not configured for chain ${this.chainId}`,
       );
@@ -98,28 +98,53 @@ export class ObolSplits {
         'Provider is required to check OVM factory contract availability',
       );
     }
+    const ovmFactoryConfig = chainConfig.OVM_FACTORY_CONTRACT;
+    const splitV2FactoryConfig = chainConfig.SPLIT_V2_FACTORY_CONTRACT;
+    const multiCallConfig = chainConfig.MULTICALL_CONTRACT;
 
-    const ovmFactoryConfig = chainConfig.OVM_FACTORY_ADDRESS;
-    if (!ovmFactoryConfig?.address || !ovmFactoryConfig?.bytecode) {
+    if (
+      !ovmFactoryConfig?.address ||
+      !ovmFactoryConfig?.bytecode ||
+      !splitV2FactoryConfig?.address ||
+      !splitV2FactoryConfig?.bytecode ||
+      !multiCallConfig?.address ||
+      !multiCallConfig?.bytecode
+    ) {
       throw new Error(
-        `OVM factory contract configuration is incomplete for chain ${this.chainId}`,
+        `Contracts configuration is incomplete for chain ${this.chainId}`,
       );
     }
 
-    const checkOVMFactoryAddress = await isContractAvailable(
+    const checkOVMFactoryContract = await isContractAvailable(
       ovmFactoryConfig.address,
       this.provider,
       ovmFactoryConfig.bytecode,
     );
 
-    if (!checkOVMFactoryAddress) {
+    const checkSplitV2FactoryContract = await isContractAvailable(
+      splitV2FactoryConfig.address,
+      this.provider,
+      splitV2FactoryConfig.bytecode,
+    );
+
+    const checkMultiCallContract = await isContractAvailable(
+      multiCallConfig.address,
+      this.provider,
+      multiCallConfig.bytecode,
+    );
+
+    if (
+      !checkOVMFactoryContract ||
+      !checkSplitV2FactoryContract ||
+      !checkMultiCallContract
+    ) {
       throw new Error(
-        `OVM factory contract is not deployed or available on chain ${this.chainId}`,
+        `Splitter contract is not deployed or available on chain ${this.chainId}`,
       );
     }
 
     const retroActiveFundingRecipient = {
-      address: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
+      address: chainConfig.RETROACTIVE_FUNDING_CONTRACT.address,
       percentAllocation: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     };
 
@@ -228,7 +253,7 @@ export class ObolSplits {
     }
 
     const chainConfig = CHAIN_CONFIGURATION[this.chainId];
-    if (!chainConfig?.OVM_FACTORY_ADDRESS) {
+    if (!chainConfig?.OVM_FACTORY_CONTRACT) {
       throw new Error(
         `OVM contract factory is not configured for chain ${this.chainId}`,
       );
@@ -240,27 +265,53 @@ export class ObolSplits {
       );
     }
 
-    const ovmFactoryConfig = chainConfig.OVM_FACTORY_ADDRESS;
-    if (!ovmFactoryConfig?.address || !ovmFactoryConfig?.bytecode) {
+    const ovmFactoryConfig = chainConfig.OVM_FACTORY_CONTRACT;
+    const splitV2FactoryConfig = chainConfig.SPLIT_V2_FACTORY_CONTRACT;
+    const multiCallConfig = chainConfig.MULTICALL_CONTRACT;
+
+    if (
+      !ovmFactoryConfig?.address ||
+      !ovmFactoryConfig?.bytecode ||
+      !splitV2FactoryConfig?.address ||
+      !splitV2FactoryConfig?.bytecode ||
+      !multiCallConfig?.address ||
+      !multiCallConfig?.bytecode
+    ) {
       throw new Error(
-        `OVM factory contract configuration is incomplete for chain ${this.chainId}`,
+        `Contracts configuration is incomplete for chain ${this.chainId}`,
       );
     }
 
-    const checkOVMFactoryAddress = await isContractAvailable(
+    const checkOVMFactoryContract = await isContractAvailable(
       ovmFactoryConfig.address,
       this.provider,
       ovmFactoryConfig.bytecode,
     );
 
-    if (!checkOVMFactoryAddress) {
+    const checkSplitV2FactoryContract = await isContractAvailable(
+      splitV2FactoryConfig.address,
+      this.provider,
+      splitV2FactoryConfig.bytecode,
+    );
+
+    const checkMultiCallContract = await isContractAvailable(
+      multiCallConfig.address,
+      this.provider,
+      multiCallConfig.bytecode,
+    );
+
+    if (
+      !checkOVMFactoryContract ||
+      !checkSplitV2FactoryContract ||
+      !checkMultiCallContract
+    ) {
       throw new Error(
-        `OVM factory contract is not deployed or available on chain ${this.chainId}`,
+        `Splitter contract is not deployed or available on chain ${this.chainId}`,
       );
     }
 
     const retroActiveFundingRecipient = {
-      address: chainConfig.RETROACTIVE_FUNDING_ADDRESS.address,
+      address: chainConfig.RETROACTIVE_FUNDING_CONTRACT.address,
       percentAllocation: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     };
 
