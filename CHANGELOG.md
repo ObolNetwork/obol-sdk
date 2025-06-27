@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.8.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.8.0...v2.8.1)
+
+- use splitv2Factory contract instead of sdk [`#129`](https://github.com/ObolNetwork/obol-sdk/pull/129)
+
 #### [v2.8.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.7.0...v2.8.0)
 
+> 25 June 2025
+
+- chore(release): v2.8.0 [`#128`](https://github.com/ObolNetwork/obol-sdk/pull/128)
 - Hanan/ovm methods [`#126`](https://github.com/ObolNetwork/obol-sdk/pull/126)
 
 #### [v2.7.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.6.0...v2.7.0)
