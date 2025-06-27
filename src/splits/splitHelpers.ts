@@ -853,11 +853,11 @@ export const deployOVMAndSplitV2 = async ({
     const logsCount = executeMultiCalls?.logs?.length || 0;
 
     if (logsCount === 2) {
-      ovmAddress = '0x' + executeMultiCalls?.logs[0]?.topics[1]?.slice(26, 66);
+      ovmAddress = '0x' + executeMultiCalls?.logs[1]?.topics[1]?.slice(26, 66);
     } else if (logsCount === 5) {
-      ovmAddress = '0x' + executeMultiCalls?.logs[3]?.topics[1]?.slice(26, 66);
+      ovmAddress = '0x' + executeMultiCalls?.logs[4]?.topics[1]?.slice(26, 66);
     } else {
-      ovmAddress = '0x' + executeMultiCalls?.logs[6]?.topics[1]?.slice(26, 66);
+      ovmAddress = '0x' + executeMultiCalls?.logs[7]?.topics[1]?.slice(26, 66);
     }
     if (!ovmAddress) {
       throw new Error(
