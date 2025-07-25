@@ -229,3 +229,31 @@ export const ovmTotalSplitPayloadSchema = {
     'OVMOwnerAddress',
   ],
 };
+
+export const ovmRequestWithdrawalPayloadSchema = {
+  type: 'object',
+  properties: {
+    ovmAddress: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+    pubKeys: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'string',
+        pattern: '^0x[a-fA-F0-9]{96}$', // 48 bytes = 96 hex chars + 0x prefix
+      },
+    },
+    amounts: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'string',
+        pattern: '^[0-9]+$',
+      },
+    },
+  },
+  validateOVMRequestWithdrawalPayload: true,
+  required: ['ovmAddress', 'pubKeys', 'amounts'],
+};

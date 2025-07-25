@@ -2,6 +2,7 @@ import { validatePayload } from '../../src/ajv';
 import {
   ovmRewardsSplitPayloadSchema,
   ovmTotalSplitPayloadSchema,
+  ovmRequestWithdrawalPayloadSchema,
 } from '../../src/schema';
 import {
   type OVMRewardsSplitPayload,
@@ -445,5 +446,47 @@ describe('validatePayload - OVM Schemas', () => {
         distributorFeePercent: 0,
       });
     });
+  });
+});
+
+describe('ovmRequestWithdrawalPayloadSchema', () => {
+  const validPayload = {
+    ovmAddress: '0x1234567890123456789012345678901234567890',
+    pubKeys: [
+      '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+    ],
+    amounts: ['32000000000'],
+  };
+
+  it('should throw error when OVM address is missing', () => {
+    const payload = {
+      pubKeys: validPayload.pubKeys,
+      amounts: validPayload.amounts,
+    };
+    expect(() =>
+      validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
+    ).toThrow("Validation failed:  must have required property 'ovmAddress'");
+  });
+
+  it('should throw error when OVM address is invalid', () => {
+    const payload = {
+      ovmAddress: '0x123', // Too short
+      pubKeys: validPayload.pubKeys,
+      amounts: validPayload.amounts,
+    };
+    expect(() =>
+      validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
+    ).toThrow('Validation failed: /ovmAddress must match pattern');
+  });
+
+  it('should throw error when number of public keys does not match number of amounts', () => {
+    const payload = {
+      ovmAddress: validPayload.ovmAddress,
+      pubKeys: validPayload.pubKeys,
+      amounts: ['32000000000', '16000000000'], // 2 amounts, 1 pubKey
+    };
+    expect(() =>
+      validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
+    ).toThrow('Validation failed:  must pass "validateOVMRequestWithdrawalPayload" keyword validation');
   });
 });

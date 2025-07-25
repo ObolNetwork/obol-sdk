@@ -607,3 +607,17 @@ export type ChainConfig = {
     bytecode: string;
   };
 };
+
+/**
+ * Payload for requesting withdrawal from OVM contract
+ */
+export type OVMRequestWithdrawalPayload = {
+  /** OVM contract address */
+  ovmAddress: string;
+  
+  /** Array of validator public keys in bytes format */
+  pubKeys: string[];
+  
+  /** Array of withdrawal amounts in gwei (uint64) as strings */
+  amounts: string[];
+};

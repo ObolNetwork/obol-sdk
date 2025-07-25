@@ -4,6 +4,7 @@ import {
   isSplitV2Deployed,
   deployOVMContract,
   deployOVMAndSplitV2,
+  requestWithdrawalFromOVM,
 } from './splitHelpers';
 import {
   CHAIN_CONFIGURATION,
@@ -14,6 +15,7 @@ import {
 import {
   ovmRewardsSplitPayloadSchema,
   ovmTotalSplitPayloadSchema,
+  ovmRequestWithdrawalPayloadSchema,
 } from '../schema';
 import { validatePayload } from '../ajv';
 import { isContractAvailable } from '../utils';
@@ -23,6 +25,7 @@ import {
   type SignerType,
   type OVMRewardsSplitPayload,
   type OVMTotalSplitPayload,
+  type OVMRequestWithdrawalPayload,
 } from '../types';
 
 /**
@@ -402,5 +405,50 @@ export class ObolSplits {
         fee_recipient_address: predictedRewardsSplitAddress,
       };
     }
+  }
+
+  /**
+   * Requests withdrawal from an OVM contract.
+   *
+   * This method allows requesting withdrawal of validator funds from an OVM contract.
+   * The withdrawal request includes OVM address, validator public keys and corresponding withdrawal amounts.
+   *
+   * @remarks
+   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
+   * and not pushed to version control.
+   *
+   * @param {OVMRequestWithdrawalPayload} payload - Data needed to request withdrawal
+   * @returns {Promise<{txHash: string}>} Transaction hash of the withdrawal request
+   * @throws Will throw an error if the signer is not provided, OVM address is invalid, or the request fails
+   *
+   * An example of how to use requestWithdrawal:
+   * ```typescript
+   * const result = await client.splits.requestWithdrawal({
+   *   ovmAddress: '0x1234567890123456789012345678901234567890',
+   *   pubKeys: ['0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456'],
+   *   amounts: ['32000000000'] // 32 ETH in gwei
+   * });
+   * console.log('Withdrawal requested:', result.txHash);
+   * ```
+   */
+  async requestWithdrawal(
+    payload: OVMRequestWithdrawalPayload,
+  ): Promise<{ txHash: string }> {
+    if (!this.signer) {
+      throw new Error('Signer is required in requestWithdrawal');
+    }
+
+    const validatedPayload = validatePayload<OVMRequestWithdrawalPayload>(
+      payload,
+      ovmRequestWithdrawalPayloadSchema,
+    );
+    console.log(validatedPayload,"validatedPayload")
+
+    return await requestWithdrawalFromOVM({
+      ovmAddress: validatedPayload.ovmAddress,
+      pubKeys: validatedPayload.pubKeys,
+      amounts: validatedPayload.amounts,
+      signer: this.signer,
+    });
   }
 }

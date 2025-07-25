@@ -12,6 +12,7 @@ import {
   isSplitV2Deployed,
   deployOVMAndSplitV2,
   deployOVMContract,
+  requestWithdrawalFromOVM,
 } from '../../src/splits/splitHelpers';
 import { isContractAvailable } from '../../src/utils';
 import { TEST_ADDRESSES } from '../fixtures';
@@ -23,6 +24,7 @@ jest.mock('../../src/splits/splitHelpers', () => ({
   isSplitV2Deployed: jest.fn(),
   deployOVMContract: jest.fn(),
   deployOVMAndSplitV2: jest.fn(),
+  requestWithdrawalFromOVM: jest.fn(),
 }));
 
 // Mock the utils
@@ -52,6 +54,9 @@ const mockDeployOVMAndSplitV2 = deployOVMAndSplitV2 as jest.MockedFunction<
 const mockDeployOVMContract = deployOVMContract as jest.MockedFunction<
   typeof deployOVMContract
 >;
+const mockRequestWithdrawalFromOVM = requestWithdrawalFromOVM as jest.MockedFunction<
+  typeof requestWithdrawalFromOVM
+>;
 const mockIsContractAvailable = isContractAvailable as jest.MockedFunction<
   typeof isContractAvailable
 >;
@@ -64,6 +69,9 @@ describe('ObolSplits', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks();
+
+    // Reset the mock to not be called by default
+    mockRequestWithdrawalFromOVM.mockReset();
 
     mockSigner = {
       getAddress: jest
@@ -326,6 +334,95 @@ describe('ObolSplits', () => {
           mockTotalSplitPayload,
         ),
       ).rejects.toThrow('Splitter configuration is not supported on 999 chain');
+    });
+  });
+
+  describe('requestWithdrawal', () => {
+    const mockOVMAddress = '0x1234567890123456789012345678901234567890';
+    const mockPubKeys = [
+      '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+    ];
+    const mockAmounts = ['32000000000']; // 32 ETH in gwei
+
+    it('should request withdrawal successfully', async () => {
+      mockRequestWithdrawalFromOVM.mockResolvedValue({
+        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      });
+
+      const result = await client.splits.requestWithdrawal({
+        ovmAddress: mockOVMAddress,
+        pubKeys: mockPubKeys,
+        amounts: mockAmounts,
+      });
+
+      expect(result).toEqual({
+        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      });
+
+      expect(mockRequestWithdrawalFromOVM).toHaveBeenCalledWith({
+        ovmAddress: mockOVMAddress,
+        pubKeys: mockPubKeys,
+        amounts: mockAmounts,
+        signer: mockSigner,
+      });
+    });
+
+    it('should throw error when signer is not provided', async () => {
+      const clientWithoutSigner = new Client(
+        { chainId: 1 },
+        undefined,
+        mockProvider,
+      );
+
+      await expect(
+        clientWithoutSigner.splits.requestWithdrawal({
+          ovmAddress: mockOVMAddress,
+          pubKeys: mockPubKeys,
+          amounts: mockAmounts,
+        }),
+      ).rejects.toThrow('Signer is required in requestWithdrawal');
+    });
+
+    // it('should throw error when amount is below minimum (1,000,000 gwei)', async () => {
+    //   await expect(
+    //     client.splits.requestWithdrawal({
+    //       ovmAddress: mockOVMAddress,
+    //       pubKeys: mockPubKeys,
+    //       amounts: ['500000'], // Below minimum of 1,000,000 gwei
+    //     }),
+    //   ).rejects.toThrow('Validation failed');
+    // });
+
+    it('should handle multiple validators withdrawal request', async () => {
+      const multiplePubKeys = [
+        '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+      ];
+      const multipleAmounts = [
+        '32000000000', // 32 ETH
+        '16000000000', // 16 ETH
+      ];
+
+      mockRequestWithdrawalFromOVM.mockResolvedValue({
+        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      });
+
+      const result = await client.splits.requestWithdrawal({
+        ovmAddress: mockOVMAddress,
+        pubKeys: multiplePubKeys,
+        amounts: multipleAmounts,
+      });
+
+      expect(result).toEqual({
+        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      });
+
+      expect(mockRequestWithdrawalFromOVM).toHaveBeenCalledWith({
+        ovmAddress: mockOVMAddress,
+        pubKeys: multiplePubKeys,
+        amounts: multipleAmounts,
+        signer: mockSigner,
+      });
     });
   });
 
