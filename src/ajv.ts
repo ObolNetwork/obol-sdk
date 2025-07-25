@@ -6,6 +6,7 @@ import {
   type OVMTotalSplitPayload,
   type RewardsSplitPayload,
   type TotalSplitPayload,
+  type OVMRequestWithdrawalPayload,
 } from './types';
 import Ajv from 'ajv';
 import {
@@ -107,6 +108,32 @@ const validateOVMTotalSplitRecipients = (
   return validateTotalPercentage(splitPercentage);
 };
 
+const validateOVMRequestWithdrawalPayload = (
+  _: boolean,
+  data: OVMRequestWithdrawalPayload,
+): boolean => {
+  console.log(data, 'hanaaan dataaaa');
+  if (!data.pubKeys || !data.amounts) {
+    return false;
+  }
+
+  if (data.pubKeys.length !== data.amounts.length) {
+    return false;
+  }
+
+  // // Validate that all amounts are at least 1,000,000 gwei
+  // const minAmount = BigInt(1000000);
+  // for (const amountStr of data.amounts) {
+  //   const minAmount = BigInt(1000000);
+  //   const amount = BigInt(amountStr);
+  //   if (amount < minAmount) {
+  //     return false;
+  //   }
+  // }
+
+  return true;
+};
+
 const ajv = new Ajv({
   allErrors: true,
   useDefaults: true,
@@ -143,6 +170,12 @@ ajv.addKeyword({
 ajv.addKeyword({
   keyword: 'validateOVMTotalSplitRecipients',
   validate: validateOVMTotalSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMRequestWithdrawalPayload',
+  validate: validateOVMRequestWithdrawalPayload,
   schemaType: 'boolean',
 });
 

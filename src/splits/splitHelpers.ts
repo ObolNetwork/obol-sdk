@@ -10,7 +10,7 @@ import {
 } from '../types';
 import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
-import { OVMFactoryContract } from '../abi/OVMFactory';
+import { OVMFactoryContract, OVMContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { MultiCallContract } from '../abi/Multicall';
 import { CHAIN_CONFIGURATION } from '../constants';
@@ -909,4 +909,40 @@ const getChainConfig = (chainId: number): ChainConfig => {
     throw new Error(`Chain configuration not found for chain ID ${chainId}`);
   }
   return config;
+};
+
+/**
+ * Requests withdrawal from an OVM contract
+ * @param ovmAddress - The address of the OVM contract
+ * @param pubKeys - Array of validator public keys in bytes format
+ * @param amounts - Array of withdrawal amounts in wei (uint64)
+ * @param signer - The signer to use for the transaction
+ * @returns Promise that resolves to the transaction hash
+ */
+export const requestWithdrawalFromOVM = async ({
+  ovmAddress,
+  pubKeys,
+  amounts,
+  signer,
+}: {
+  ovmAddress: string;
+  pubKeys: string[];
+  amounts: string[];
+  signer: SignerType;
+}): Promise<{ txHash: string }> => {
+  try {
+    // Convert string amounts to bigint
+    const bigintAmounts = amounts.map(amount => BigInt(amount));
+
+    const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
+
+    const tx = await ovmContract.requestWithdrawal(pubKeys, bigintAmounts);
+    const receipt = await tx.wait();
+
+    return { txHash: receipt.hash };
+  } catch (error: any) {
+    throw new Error(
+      `Failed to request withdrawal from OVM: ${error.message ?? 'Request withdrawal failed'}`,
+    );
+  }
 };
