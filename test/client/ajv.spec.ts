@@ -487,6 +487,8 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     };
     expect(() =>
       validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
-    ).toThrow('Validation failed:  must pass "validateOVMRequestWithdrawalPayload" keyword validation');
+    ).toThrow(
+      'Validation failed:  must pass "validateOVMRequestWithdrawalPayload" keyword validation',
+    );
   });
 });

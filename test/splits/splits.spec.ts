@@ -54,9 +54,10 @@ const mockDeployOVMAndSplitV2 = deployOVMAndSplitV2 as jest.MockedFunction<
 const mockDeployOVMContract = deployOVMContract as jest.MockedFunction<
   typeof deployOVMContract
 >;
-const mockRequestWithdrawalFromOVM = requestWithdrawalFromOVM as jest.MockedFunction<
-  typeof requestWithdrawalFromOVM
->;
+const mockRequestWithdrawalFromOVM =
+  requestWithdrawalFromOVM as jest.MockedFunction<
+    typeof requestWithdrawalFromOVM
+  >;
 const mockIsContractAvailable = isContractAvailable as jest.MockedFunction<
   typeof isContractAvailable
 >;
@@ -346,7 +347,8 @@ describe('ObolSplits', () => {
 
     it('should request withdrawal successfully', async () => {
       mockRequestWithdrawalFromOVM.mockResolvedValue({
-        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        txHash:
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       });
 
       const result = await client.splits.requestWithdrawal({
@@ -356,7 +358,8 @@ describe('ObolSplits', () => {
       });
 
       expect(result).toEqual({
-        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        txHash:
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       });
 
       expect(mockRequestWithdrawalFromOVM).toHaveBeenCalledWith({
@@ -404,7 +407,8 @@ describe('ObolSplits', () => {
       ];
 
       mockRequestWithdrawalFromOVM.mockResolvedValue({
-        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        txHash:
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       });
 
       const result = await client.splits.requestWithdrawal({
@@ -414,7 +418,8 @@ describe('ObolSplits', () => {
       });
 
       expect(result).toEqual({
-        txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        txHash:
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       });
 
       expect(mockRequestWithdrawalFromOVM).toHaveBeenCalledWith({

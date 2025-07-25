@@ -10,12 +10,11 @@ import {
 } from '../types';
 import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
-import { OVMFactoryContract } from '../abi/OVMFactory';
+import { OVMFactoryContract, OVMContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { MultiCallContract } from '../abi/Multicall';
 import { CHAIN_CONFIGURATION } from '../constants';
 import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi';
-import { OVMContract } from '../abi/OVMFactory';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);

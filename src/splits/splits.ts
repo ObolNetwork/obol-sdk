@@ -437,12 +437,11 @@ export class ObolSplits {
     if (!this.signer) {
       throw new Error('Signer is required in requestWithdrawal');
     }
-    //[TBD] need to move ovm verification to sdk method and use it here
+    // [TBD] need to move ovm verification to sdk method and use it here
     const validatedPayload = validatePayload<OVMRequestWithdrawalPayload>(
       payload,
       ovmRequestWithdrawalPayloadSchema,
     );
-    console.log(validatedPayload, "validatedPayload")
 
     return await requestWithdrawalFromOVM({
       ovmAddress: validatedPayload.ovmAddress,

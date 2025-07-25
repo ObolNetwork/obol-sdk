@@ -112,7 +112,7 @@ const validateOVMRequestWithdrawalPayload = (
   _: boolean,
   data: OVMRequestWithdrawalPayload,
 ): boolean => {
-  console.log(data,"hanaaan dataaaa")
+  console.log(data, 'hanaaan dataaaa');
   if (!data.pubKeys || !data.amounts) {
     return false;
   }
