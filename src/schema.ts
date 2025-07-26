@@ -235,7 +235,7 @@ export const ovmRequestWithdrawalPayloadSchema = {
   properties: {
     withdrawalFees: {
       type: 'string',
-      pattern: '^[0-9]+$', 
+      pattern: '^[0-9]+$',
     },
     ovmAddress: {
       type: 'string',

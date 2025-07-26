@@ -355,7 +355,7 @@ describe('ObolSplits', () => {
         ovmAddress: mockOVMAddress,
         pubKeys: mockPubKeys,
         amounts: mockAmounts,
-        withdrawalFees: "1",
+        withdrawalFees: '1',
       });
 
       expect(result).toEqual({
@@ -367,7 +367,7 @@ describe('ObolSplits', () => {
         ovmAddress: mockOVMAddress,
         pubKeys: mockPubKeys,
         amounts: mockAmounts,
-        withdrawalFees: "1",
+        withdrawalFees: '1',
         signer: mockSigner,
       });
     });
@@ -384,7 +384,7 @@ describe('ObolSplits', () => {
           ovmAddress: mockOVMAddress,
           pubKeys: mockPubKeys,
           amounts: mockAmounts,
-          withdrawalFees:"1",
+          withdrawalFees: '1',
         }),
       ).rejects.toThrow('Signer is required in requestWithdrawal');
     });
@@ -418,7 +418,7 @@ describe('ObolSplits', () => {
         ovmAddress: mockOVMAddress,
         pubKeys: multiplePubKeys,
         amounts: multipleAmounts,
-        withdrawalFees: "1",
+        withdrawalFees: '1',
       });
 
       expect(result).toEqual({
@@ -430,7 +430,7 @@ describe('ObolSplits', () => {
         ovmAddress: mockOVMAddress,
         pubKeys: multiplePubKeys,
         amounts: multipleAmounts,
-        withdrawalFees: "1",
+        withdrawalFees: '1',
         signer: mockSigner,
       });
     });

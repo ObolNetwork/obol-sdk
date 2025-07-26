@@ -938,7 +938,9 @@ export const requestWithdrawalFromOVM = async ({
 
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
 
-    const tx = await ovmContract.requestWithdrawal(pubKeys, bigintAmounts, { value: BigInt(withdrawalFees) });
+    const tx = await ovmContract.requestWithdrawal(pubKeys, bigintAmounts, {
+      value: BigInt(withdrawalFees),
+    });
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };

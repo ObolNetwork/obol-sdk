@@ -456,7 +456,7 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
       '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
     ],
     amounts: ['32000000000'],
-    withdrawalFees: "1",
+    withdrawalFees: '1',
   };
 
   it('should throw error when OVM address is missing', () => {
@@ -477,7 +477,9 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     };
     expect(() =>
       validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
-    ).toThrow("Validation failed:  must have required property 'withdrawalFees', /ovmAddress must match pattern \"^0x[a-fA-F0-9]{40}$\"");
+    ).toThrow(
+      'Validation failed:  must have required property \'withdrawalFees\', /ovmAddress must match pattern "^0x[a-fA-F0-9]{40}$"',
+    );
   });
 
   it('should throw error when number of public keys does not match number of amounts', () => {
@@ -502,7 +504,9 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     };
     expect(() =>
       validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
-    ).toThrow("Validation failed:  must have required property 'withdrawalFees'");
+    ).toThrow(
+      "Validation failed:  must have required property 'withdrawalFees'",
+    );
   });
 
   it('should throw error when withdrawalFees is invalid', () => {
@@ -514,6 +518,8 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     };
     expect(() =>
       validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
-    ).toThrow('Validation failed: /withdrawalFees must match pattern \"^[0-9]+$\"');
+    ).toThrow(
+      'Validation failed: /withdrawalFees must match pattern "^[0-9]+$"',
+    );
   });
 });
