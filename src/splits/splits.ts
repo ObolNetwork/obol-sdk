@@ -447,6 +447,7 @@ export class ObolSplits {
       ovmAddress: validatedPayload.ovmAddress,
       pubKeys: validatedPayload.pubKeys,
       amounts: validatedPayload.amounts,
+      withdrawalFees: validatedPayload.withdrawalFees,
       signer: this.signer,
     });
   }

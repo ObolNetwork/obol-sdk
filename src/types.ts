@@ -612,6 +612,9 @@ export type ChainConfig = {
  * Payload for requesting withdrawal from OVM contract
  */
 export type OVMRequestWithdrawalPayload = {
+  /** request withdrawal fees in wei */
+  withdrawalFees: string;
+
   /** OVM contract address */
   ovmAddress: string;
 

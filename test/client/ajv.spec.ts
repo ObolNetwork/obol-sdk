@@ -456,6 +456,7 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
       '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
     ],
     amounts: ['32000000000'],
+    withdrawalFees: '1',
   };
 
   it('should throw error when OVM address is missing', () => {
@@ -476,7 +477,9 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     };
     expect(() =>
       validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
-    ).toThrow('Validation failed: /ovmAddress must match pattern');
+    ).toThrow(
+      'Validation failed:  must have required property \'withdrawalFees\', /ovmAddress must match pattern "^0x[a-fA-F0-9]{40}$"',
+    );
   });
 
   it('should throw error when number of public keys does not match number of amounts', () => {
@@ -484,11 +487,39 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
       ovmAddress: validPayload.ovmAddress,
       pubKeys: validPayload.pubKeys,
       amounts: ['32000000000', '16000000000'], // 2 amounts, 1 pubKey
+      withdrawalFees: validPayload.withdrawalFees,
     };
     expect(() =>
       validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
     ).toThrow(
       'Validation failed:  must pass "validateOVMRequestWithdrawalPayload" keyword validation',
+    );
+  });
+
+  it('should throw error when withdrawalFees is missing', () => {
+    const payload = {
+      ovmAddress: validPayload.ovmAddress,
+      pubKeys: validPayload.pubKeys,
+      amounts: validPayload.amounts,
+    };
+    expect(() =>
+      validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
+    ).toThrow(
+      "Validation failed:  must have required property 'withdrawalFees'",
+    );
+  });
+
+  it('should throw error when withdrawalFees is invalid', () => {
+    const payload = {
+      ovmAddress: validPayload.ovmAddress,
+      pubKeys: validPayload.pubKeys,
+      amounts: validPayload.amounts,
+      withdrawalFees: 'invalid',
+    };
+    expect(() =>
+      validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
+    ).toThrow(
+      'Validation failed: /withdrawalFees must match pattern "^[0-9]+$"',
     );
   });
 });

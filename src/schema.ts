@@ -233,6 +233,10 @@ export const ovmTotalSplitPayloadSchema = {
 export const ovmRequestWithdrawalPayloadSchema = {
   type: 'object',
   properties: {
+    withdrawalFees: {
+      type: 'string',
+      pattern: '^[0-9]+$',
+    },
     ovmAddress: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
@@ -255,5 +259,5 @@ export const ovmRequestWithdrawalPayloadSchema = {
     },
   },
   validateOVMRequestWithdrawalPayload: true,
-  required: ['ovmAddress', 'pubKeys', 'amounts'],
+  required: ['ovmAddress', 'pubKeys', 'amounts', 'withdrawalFees'],
 };
