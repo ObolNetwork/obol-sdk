@@ -923,11 +923,13 @@ export const requestWithdrawalFromOVM = async ({
   ovmAddress,
   pubKeys,
   amounts,
+  withdrawalFees,
   signer,
 }: {
   ovmAddress: string;
   pubKeys: string[];
   amounts: string[];
+  withdrawalFees: string;
   signer: SignerType;
 }): Promise<{ txHash: string }> => {
   try {
@@ -936,7 +938,7 @@ export const requestWithdrawalFromOVM = async ({
 
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
 
-    const tx = await ovmContract.requestWithdrawal(pubKeys, bigintAmounts);
+    const tx = await ovmContract.requestWithdrawal(pubKeys, bigintAmounts, { value: BigInt(withdrawalFees) });
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };
