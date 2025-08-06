@@ -23,15 +23,15 @@ export async function submitEOAWithdrawalRequest({
   signer: SignerType;
   provider: ProviderType;
 }): Promise<{ txHash: string | null }> {
-  if (!withdrawalAddress) throw new Error("No withdrawal address provided");
-  if (!allocation) throw new Error("No allocation provided");
+  if (!withdrawalAddress) throw new Error('No withdrawal address provided');
+  if (!allocation) throw new Error('No allocation provided');
 
   const amountInGwei = BigInt(Math.floor(Number(allocation) * ETHER_TO_GWEI));
-  const data = `${pubkey}${amountInGwei.toString(16).padStart(16, "0")}`;
+  const data = `0x${pubkey.slice(2)}${amountInGwei.toString(16).padStart(16, '0')}`;
 
   const { hash } = await signer.sendTransaction({
     to: withdrawalContractAddress,
-    chainId: chainId as 1 | 17000 | 100 | 11155111 | 560048,
+    chainId,
     value: BigInt(requiredFee),
     data: data as `0x${string}`,
   });
@@ -40,4 +40,4 @@ export async function submitEOAWithdrawalRequest({
   if (!txResult) return { txHash: null };
 
   return { txHash: txResult?.hash };
-} 
+}

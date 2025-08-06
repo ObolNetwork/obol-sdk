@@ -91,4 +91,4 @@ export class EOA {
       provider: this.provider,
     });
   }
-} 
+}
