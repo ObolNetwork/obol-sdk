@@ -214,7 +214,7 @@ export type OVMBaseSplitPayload = {
   /** Owner address for the splitter contracts. */
   splitOwnerAddress?: string;
 
-  /** Principal threshold for OVM contract. */
+  /** Principal threshold in ETH for OVM contract. */
   principalThreshold?: number;
 
   /** Distributor fee percentage (0-10). */
@@ -573,7 +573,7 @@ export type OVMArgs = {
   /** Rewards recipient of the cluster. */
   rewardRecipient: string;
 
-  /** Principal threshold for OVM contract. */
+  /** Principal threshold in ETH for OVM contract. */
   principalThreshold: number;
 };
 

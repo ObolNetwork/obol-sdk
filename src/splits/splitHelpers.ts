@@ -13,7 +13,7 @@ import { OWRContract, OWRFactoryContract } from '../abi/OWR';
 import { OVMFactoryContract, OVMContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { MultiCallContract } from '../abi/Multicall';
-import { CHAIN_CONFIGURATION } from '../constants';
+import { CHAIN_CONFIGURATION, ETHER_TO_GWEI } from '../constants';
 import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
@@ -742,7 +742,7 @@ export const deployOVMContract = async ({
       OVMOwnerAddress,
       principalRecipient,
       rewardRecipient,
-      principalThreshold,
+      principalThreshold * ETHER_TO_GWEI,
     );
 
     const receipt = await tx.wait();
@@ -837,7 +837,7 @@ export const deployOVMAndSplitV2 = async ({
       ovmArgs.OVMOwnerAddress,
       ovmArgs.principalRecipient,
       ovmArgs.rewardRecipient,
-      ovmArgs.principalThreshold,
+      ovmArgs.principalThreshold * ETHER_TO_GWEI,
     );
 
     executeCalls.push({
