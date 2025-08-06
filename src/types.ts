@@ -606,6 +606,9 @@ export type ChainConfig = {
     address: string;
     bytecode: string;
   };
+  EOA_WITHDRAWAL_CONTRACT?: {
+    address: string;
+  };
 };
 
 /**
@@ -623,4 +626,18 @@ export type OVMRequestWithdrawalPayload = {
 
   /** Array of withdrawal amounts in gwei (uint64) as strings */
   amounts: string[];
+};
+
+/**
+ * Payload for requesting withdrawal from EOA contract
+ */
+export type EOAWithdrawalPayload = {
+  /** Validator public key in hex format */
+  pubkey: string;
+
+  /** Withdrawal amount in ETH */
+  allocation: number;
+
+  /** Required fee in wei */
+  requiredFee: string;
 };

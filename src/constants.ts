@@ -199,6 +199,9 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
       address: '0x5cbA88D55Cec83caD5A105Ad40C8c9aF20bE21d1',
       bytecode: MAINNET_SPLIT_V2_FACTORY_BYTECODE,
     },
+    EOA_WITHDRAWAL_CONTRACT: {
+      address: '0x00000961Ef480Eb55e80D19ad83579A64c007002', // TODO: Add actual mainnet address
+    },
   },
   [FORK_MAPPING['0x01017000']]: {
     SPLITMAIN_CONTRACT: {
@@ -216,6 +219,9 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     RETROACTIVE_FUNDING_CONTRACT: {
       address: '0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5',
       bytecode: '',
+    },
+    EOA_WITHDRAWAL_CONTRACT: {
+      address: '0x00000961Ef480Eb55e80D19ad83579A64c007002', // TODO: Add actual holesky address
     },
   },
   [FORK_MAPPING['0x10000910']]: {
@@ -247,6 +253,9 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     SPLIT_V2_FACTORY_CONTRACT: {
       address: '0x5cbA88D55Cec83caD5A105Ad40C8c9aF20bE21d1',
       bytecode: HOODI_SPLIT_V2_FACTORY_BYTECODE,
+    },
+    EOA_WITHDRAWAL_CONTRACT: {
+      address: '0x00000961Ef480Eb55e80D19ad83579A64c007002', // TODO: Add actual hoodi address
     },
   },
 };
