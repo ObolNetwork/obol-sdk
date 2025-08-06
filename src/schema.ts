@@ -261,3 +261,22 @@ export const ovmRequestWithdrawalPayloadSchema = {
   validateOVMRequestWithdrawalPayload: true,
   required: ['ovmAddress', 'pubKeys', 'amounts', 'withdrawalFees'],
 };
+
+export const eoaWithdrawalPayloadSchema = {
+  type: 'object',
+  properties: {
+    pubkey: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{96}$', // 48 bytes = 96 hex chars + 0x prefix
+    },
+    allocation: {
+      type: 'number',
+      minimum: 0,
+    },
+    requiredFee: {
+      type: 'string',
+      pattern: '^[0-9]+$',
+    },
+  },
+  required: ['pubkey', 'allocation', 'requiredFee'],
+};
