@@ -110,5 +110,26 @@ describe('EOA', () => {
         'EOA withdrawal contract is not configured for chain 999',
       );
     });
+
+    it('should return null txHash when transaction receipt is null', async () => {
+      const mockPayload: EOAWithdrawalPayload = {
+        pubkey:
+          '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        allocation: 32,
+        requiredFee: '1',
+      };
+
+      const mockResult = { txHash: null };
+
+      (
+        submitEOAWithdrawalRequest as jest.MockedFunction<
+          typeof submitEOAWithdrawalRequest
+        >
+      ).mockResolvedValue(mockResult);
+
+      const result = await eoa.requestWithdrawal(mockPayload);
+
+      expect(result).toEqual(mockResult);
+    });
   });
 });
