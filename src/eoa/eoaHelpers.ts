@@ -29,15 +29,14 @@ export async function submitEOAWithdrawalRequest({
   const amountInGwei = BigInt(Math.floor(Number(allocation) * ETHER_TO_GWEI));
   const data = `0x${pubkey.slice(2)}${amountInGwei.toString(16).padStart(16, '0')}`;
 
-  const { hash } = await signer.sendTransaction({
+  const tx = await signer.sendTransaction({
     to: withdrawalContractAddress,
     chainId,
     value: BigInt(requiredFee),
     data: data as `0x${string}`,
   });
 
-  const txResult = await provider.getTransactionReceipt(hash);
-  if (!txResult) return { txHash: null };
-
-  return { txHash: txResult?.hash };
+  const receipt = await tx.wait();
+  if (!receipt) return { txHash: null };
+  return { txHash: receipt.hash };
 }
