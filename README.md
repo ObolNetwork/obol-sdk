@@ -19,7 +19,7 @@ If you're integrating this SDK with a **backend** (e.g., in Node.js), and you st
 
 ## ⚡️ Integration with Safe Wallet
 
-When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_HOLESKY` or `RPC_GNOSIS` or `RPC_SEPOLIA` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
+When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_HOLESKY` or `RPC_GNOSIS` or `RPC_SEPOLIA` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
 
 
 ## Contributing
