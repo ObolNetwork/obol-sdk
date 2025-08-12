@@ -29,7 +29,8 @@ jobs:
           RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
           RPC_GNOSIS: ${{ secrets.RPC_GNOSIS }}
           RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}
-      
+          RPC_HOODI: ${{ secrets.RPC_HOODI }}
+
       - name: Install e2e dependencies
         working-directory: ./test/sdk-package
         run: yarn install --frozen-lockfile

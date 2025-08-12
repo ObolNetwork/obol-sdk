@@ -276,6 +276,7 @@ export const PROVIDER_MAP: Record<number, string> = {
   17000: `${process.env.RPC_HOLESKY}`, // Holesky
   11155111: `${process.env.RPC_SEPOLIA}`, // Sepolia
   100: `${process.env.RPC_GNOSIS}`, // Gnosis
+  560048: `${process.env.RPC_HOODI}`, // Hoodi
 };
 
 /**
