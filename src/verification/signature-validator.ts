@@ -83,6 +83,8 @@ export const validateSmartContractSignature = async ({
 }): Promise<boolean> => {
   try {
     const safeProvider = safeRpcUrl ?? PROVIDER_MAP[chainId];
+    console.log("ll"+safeProvider+"safeProviderrrrrrr")
+    console.log("ll"+address+"address")
 
     const protocolKit = await Safe.init({
       provider: safeProvider,
@@ -96,6 +98,8 @@ export const validateSmartContractSignature = async ({
 
     return isValidSignature;
   } catch (err: any) {
+    console.log(err, "whyyyyyyyy")
+
     throw new Error(
       `Error validating smart contract signature: ${err.message}`,
     );
