@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.10.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.10.1...v2.10.2)
+
+- hoodi support [`#139`](https://github.com/ObolNetwork/obol-sdk/pull/139)
+
 #### [v2.10.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.10.0...v2.10.1)
 
+> 7 August 2025
+
+- chore(release): v2.10.1 [`#138`](https://github.com/ObolNetwork/obol-sdk/pull/138)
 - Hanan/await tx [`#137`](https://github.com/ObolNetwork/obol-sdk/pull/137)
 
 #### [v2.10.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.9.1...v2.10.0)
