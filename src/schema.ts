@@ -296,7 +296,7 @@ export const ovmDepositPayloadSchema = {
         properties: {
           pubkey: {
             type: 'string',
-            pattern: '^0x[a-fA-F0-9]{96}$', 
+            pattern: '^0x[a-fA-F0-9]{96}$',
           },
           withdrawal_credentials: {
             type: 'string',
@@ -315,14 +315,20 @@ export const ovmDepositPayloadSchema = {
             pattern: '^[0-9]+$',
           },
         },
-        required: ['pubkey', 'withdrawal_credentials', 'signature', 'deposit_data_root', 'amount'],
+        required: [
+          'pubkey',
+          'withdrawal_credentials',
+          'signature',
+          'deposit_data_root',
+          'amount',
+        ],
       },
     },
   },
   required: ['ovmAddress', 'deposits'],
 };
 
-export const eoaDepositPayloadSchema = {
+export const depositPayloadSchema = {
   type: 'object',
   properties: {
     deposits: {
@@ -333,7 +339,7 @@ export const eoaDepositPayloadSchema = {
         properties: {
           pubKey: {
             type: 'string',
-            pattern: '^0x[a-fA-F0-9]{96}$', 
+            pattern: '^0x[a-fA-F0-9]{96}$',
           },
           withdrawalCredentials: {
             type: 'string',

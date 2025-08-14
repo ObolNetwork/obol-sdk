@@ -1,5 +1,8 @@
 import { EOA } from '../../src/eoa/eoa';
-import { submitEOAWithdrawalRequest, submitEOABatchDepositRequest } from '../../src/eoa/eoaHelpers';
+import {
+  submitEOAWithdrawalRequest,
+  submitEOABatchDeposit,
+} from '../../src/eoa/eoaHelpers';
 import {
   type EOAWithdrawalPayload,
   type SignerType,
@@ -9,7 +12,7 @@ import {
 // Mock the helper function
 jest.mock('../../src/eoa/eoaHelpers', () => ({
   submitEOAWithdrawalRequest: jest.fn(),
-  submitEOABatchDepositRequest: jest.fn(),
+  submitEOABatchDeposit: jest.fn(),
 }));
 
 describe('EOA', () => {
@@ -134,12 +137,14 @@ describe('EOA', () => {
     });
   });
 
-  describe('depositToEOA', () => {
+  describe('deposit', () => {
     const mockDeposits = [
       {
-        pubKey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        pubKey:
+          '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
         withdrawalCredentials: '0x1234567890123456789012345678901234567890',
-        signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        signature:
+          '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
         amount: '32000000000000000000', // 32 ETH in wei
       },
     ];
@@ -150,20 +155,23 @@ describe('EOA', () => {
       };
 
       const mockResult = {
-        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+        txHashes: [
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        ],
       };
 
       (
-        submitEOABatchDepositRequest as jest.MockedFunction<
-          typeof submitEOABatchDepositRequest
+        submitEOABatchDeposit as jest.MockedFunction<
+          typeof submitEOABatchDeposit
         >
       ).mockResolvedValue(mockResult);
 
-      const result = await eoa.depositToEOA(mockPayload);
+      const result = await eoa.deposit(mockPayload);
 
-      expect(submitEOABatchDepositRequest).toHaveBeenCalledWith({
+      expect(submitEOABatchDeposit).toHaveBeenCalledWith({
         deposits: mockDeposits,
-        batchDepositContractAddress: '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
+        batchDepositContractAddress:
+          '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
         signer: mockSigner,
       });
 
@@ -176,9 +184,9 @@ describe('EOA', () => {
         deposits: mockDeposits,
       };
 
-      await expect(
-        eoaWithoutSigner.depositToEOA(mockPayload),
-      ).rejects.toThrow('Signer is required in depositToEOA');
+      await expect(eoaWithoutSigner.deposit(mockPayload)).rejects.toThrow(
+        'Signer is required in deposit',
+      );
     });
 
     it('should throw error when batch deposit contract is not configured for chain', async () => {
@@ -188,7 +196,7 @@ describe('EOA', () => {
       };
 
       await expect(
-        eoaUnsupportedChain.depositToEOA(mockPayload),
+        eoaUnsupportedChain.deposit(mockPayload),
       ).rejects.toThrow(
         'Batch deposit contract is not configured for chain 999',
       );
@@ -197,15 +205,19 @@ describe('EOA', () => {
     it('should handle multiple deposits', async () => {
       const multipleDeposits = [
         {
-          pubKey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+          pubKey:
+            '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
           withdrawalCredentials: '0x1234567890123456789012345678901234567890',
-          signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+          signature:
+            '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
           amount: '32000000000000000000', // 32 ETH in wei
         },
         {
-          pubKey: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          pubKey:
+            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
           withdrawalCredentials: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
-          signature: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          signature:
+            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
           amount: '16000000000000000000', // 16 ETH in wei
         },
       ];
@@ -215,20 +227,23 @@ describe('EOA', () => {
       };
 
       const mockResult = {
-        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+        txHashes: [
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        ],
       };
 
       (
-        submitEOABatchDepositRequest as jest.MockedFunction<
-          typeof submitEOABatchDepositRequest
+        submitEOABatchDeposit as jest.MockedFunction<
+          typeof submitEOABatchDeposit
         >
       ).mockResolvedValue(mockResult);
 
-      const result = await eoa.depositToEOA(mockPayload);
+      const result = await eoa.deposit(mockPayload);
 
-      expect(submitEOABatchDepositRequest).toHaveBeenCalledWith({
+      expect(submitEOABatchDeposit).toHaveBeenCalledWith({
         deposits: multipleDeposits,
-        batchDepositContractAddress: '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
+        batchDepositContractAddress:
+          '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
         signer: mockSigner,
       });
 

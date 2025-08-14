@@ -944,9 +944,10 @@ export const requestWithdrawalFromOVM = async ({
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Request withdrawal failed';
     throw new Error(
-      `Failed to request withdrawal from OVM: ${error.message ?? 'Request withdrawal failed'}`,
+      `Failed to request withdrawal from OVM: ${errorMessage}`,
     );
   }
 };
@@ -958,7 +959,7 @@ export const requestWithdrawalFromOVM = async ({
  * @param signer - The signer to use for the transaction
  * @returns Promise that resolves to an array of transaction hashes
  */
-export const depositToOVMWithMulticall = async ({
+export const depositWithMulticall = async ({
   ovmAddress,
   deposits,
   signer,
@@ -991,10 +992,10 @@ export const depositToOVMWithMulticall = async ({
     // Process deposits in batches of 500
     for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
       const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
-      
+
       // Prepare multicall calls for this batch
       const calls: Call[] = batchDeposits.map(deposit => ({
-        target: ovmAddress as ETH_ADDRESS,
+        target: ovmAddress,
         callData: ovmContract.interface.encodeFunctionData('deposit', [
           deposit.pubkey,
           deposit.withdrawal_credentials,
@@ -1004,15 +1005,20 @@ export const depositToOVMWithMulticall = async ({
       }));
 
       // Calculate total value needed for this batch
-      const totalValue = batchDeposits.reduce((sum, deposit) => sum + BigInt(deposit.amount), BigInt(0));
+      const totalValue = batchDeposits.reduce(
+        (sum, deposit) => sum + BigInt(deposit.amount),
+        BigInt(0),
+      );
 
       // Execute multicall for this batch
       const tx = await multiCallContractInstance.aggregate(calls, {
         value: totalValue,
       });
-      
+
       const receipt = await tx.wait();
-      txHashes.push(receipt.hash);
+      if (receipt?.hash) {
+        txHashes.push(receipt.hash);
+      }
     }
 
     return { txHashes };

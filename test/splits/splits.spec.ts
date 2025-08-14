@@ -13,7 +13,7 @@ import {
   deployOVMAndSplitV2,
   deployOVMContract,
   requestWithdrawalFromOVM,
-  depositToOVMWithMulticall,
+  depositWithMulticall,
 } from '../../src/splits/splitHelpers';
 import { isContractAvailable } from '../../src/utils';
 import { TEST_ADDRESSES } from '../fixtures';
@@ -26,7 +26,7 @@ jest.mock('../../src/splits/splitHelpers', () => ({
   deployOVMContract: jest.fn(),
   deployOVMAndSplitV2: jest.fn(),
   requestWithdrawalFromOVM: jest.fn(),
-  depositToOVMWithMulticall: jest.fn(),
+  depositWithMulticall: jest.fn(),
 }));
 
 // Mock the utils
@@ -60,9 +60,9 @@ const mockRequestWithdrawalFromOVM =
   requestWithdrawalFromOVM as jest.MockedFunction<
     typeof requestWithdrawalFromOVM
   >;
-const mockDepositToOVMWithMulticall =
-  depositToOVMWithMulticall as jest.MockedFunction<
-    typeof depositToOVMWithMulticall
+const mockdepositWithMulticall =
+  depositWithMulticall as jest.MockedFunction<
+    typeof depositWithMulticall
   >;
 const mockIsContractAvailable = isContractAvailable as jest.MockedFunction<
   typeof isContractAvailable
@@ -442,37 +442,44 @@ describe('ObolSplits', () => {
     });
   });
 
-  describe('depositToOVM', () => {
+  describe('deposit', () => {
     const mockOVMAddress = '0x1234567890123456789012345678901234567890';
     const mockDeposits = [
       {
-        pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        pubkey:
+          '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
         withdrawal_credentials: '0x1234567890123456789012345678901234567890',
-        signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-        deposit_data_root: '0x1234567890123456789012345678901234567890123456789012345678901234',
+        signature:
+          '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        deposit_data_root:
+          '0x1234567890123456789012345678901234567890123456789012345678901234',
         amount: '32000000000000000000', // 32 ETH in wei
       },
     ];
 
     beforeEach(() => {
-      mockDepositToOVMWithMulticall.mockReset();
+      mockdepositWithMulticall.mockReset();
     });
 
     it('should successfully deposit to OVM with multicall', async () => {
-      mockDepositToOVMWithMulticall.mockResolvedValue({
-        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+      mockdepositWithMulticall.mockResolvedValue({
+        txHashes: [
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        ],
       });
 
-      const result = await client.splits.depositToOVM({
+      const result = await client.splits.deposit({
         ovmAddress: mockOVMAddress,
         deposits: mockDeposits,
       });
 
       expect(result).toEqual({
-        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+        txHashes: [
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        ],
       });
 
-      expect(mockDepositToOVMWithMulticall).toHaveBeenCalledWith({
+      expect(mockdepositWithMulticall).toHaveBeenCalledWith({
         ovmAddress: mockOVMAddress,
         deposits: mockDeposits,
         signer: mockSigner,
@@ -488,45 +495,56 @@ describe('ObolSplits', () => {
       );
 
       await expect(
-        clientWithoutSigner.splits.depositToOVM({
+        clientWithoutSigner.splits.deposit({
           ovmAddress: mockOVMAddress,
           deposits: mockDeposits,
         }),
-      ).rejects.toThrow('Signer is required in depositToOVM');
+      ).rejects.toThrow('Signer is required in deposit');
     });
 
     it('should handle multiple deposits', async () => {
       const multipleDeposits = [
         {
-          pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+          pubkey:
+            '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
           withdrawal_credentials: '0x1234567890123456789012345678901234567890',
-          signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-          deposit_data_root: '0x1234567890123456789012345678901234567890123456789012345678901234',
+          signature:
+            '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+          deposit_data_root:
+            '0x1234567890123456789012345678901234567890123456789012345678901234',
           amount: '32000000000000000000', // 32 ETH in wei
         },
         {
-          pubkey: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-          withdrawal_credentials: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
-          signature: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-          deposit_data_root: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          pubkey:
+            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          withdrawal_credentials:
+            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
+          signature:
+            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          deposit_data_root:
+            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
           amount: '16000000000000000000', // 16 ETH in wei
         },
       ];
 
-      mockDepositToOVMWithMulticall.mockResolvedValue({
-        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+      mockdepositWithMulticall.mockResolvedValue({
+        txHashes: [
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        ],
       });
 
-      const result = await client.splits.depositToOVM({
+      const result = await client.splits.deposit({
         ovmAddress: mockOVMAddress,
         deposits: multipleDeposits,
       });
 
       expect(result).toEqual({
-        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+        txHashes: [
+          '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        ],
       });
 
-      expect(mockDepositToOVMWithMulticall).toHaveBeenCalledWith({
+      expect(mockdepositWithMulticall).toHaveBeenCalledWith({
         ovmAddress: mockOVMAddress,
         deposits: multipleDeposits,
         signer: mockSigner,

@@ -5,7 +5,7 @@ import {
   deployOVMContract,
   deployOVMAndSplitV2,
   requestWithdrawalFromOVM,
-  depositToOVMWithMulticall,
+  depositWithMulticall,
 } from './splitHelpers';
 import {
   CHAIN_CONFIGURATION,
@@ -469,9 +469,9 @@ export class ObolSplits {
    * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes for all batches
    * @throws Will throw an error if the signer is not provided, OVM address is invalid, or the deposit fails
    *
-   * An example of how to use depositToOVM:
+   * An example of how to use deposit:
    * ```typescript
-   * const result = await client.splits.depositToOVM({
+   * const result = await client.splits.deposit({
    *   ovmAddress: '0x1234567890123456789012345678901234567890',
    *   deposits: [{
    *     pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
@@ -484,11 +484,11 @@ export class ObolSplits {
    * console.log('Deposits completed:', result.txHashes);
    * ```
    */
-  async depositToOVM(
+  async deposit(
     payload: OVMDepositPayload,
   ): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
-      throw new Error('Signer is required in depositToOVM');
+      throw new Error('Signer is required in deposit');
     }
 
     const validatedPayload = validatePayload<OVMDepositPayload>(
@@ -496,7 +496,7 @@ export class ObolSplits {
       ovmDepositPayloadSchema,
     );
 
-    return await depositToOVMWithMulticall({
+    return await depositWithMulticall({
       ovmAddress: validatedPayload.ovmAddress,
       deposits: validatedPayload.deposits,
       signer: this.signer,

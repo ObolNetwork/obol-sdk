@@ -670,7 +670,7 @@ export type OVMDepositPayload = {
 /**
  * Payload for depositing to EOA batch deposit contract
  */
-export type EOADepositPayload = {
+export type depositPayload = {
   /** Array of deposit objects */
   deposits: Array<{
     /** Validator public key in hex format (48 bytes) */

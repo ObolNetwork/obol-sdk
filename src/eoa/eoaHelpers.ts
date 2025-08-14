@@ -46,7 +46,7 @@ export async function submitEOAWithdrawalRequest({
 /**
  * Helper function to submit batch deposit request for EOA
  */
-export async function submitEOABatchDepositRequest({
+export async function submitEOABatchDeposit({
   deposits,
   batchDepositContractAddress,
   signer,
@@ -74,37 +74,41 @@ export async function submitEOABatchDepositRequest({
   const BATCH_SIZE = 500;
   const txHashes: string[] = [];
 
-  // Process deposits in batches of 500
-  for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
-    const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
-    
-    // Calculate total value needed for this batch
-    const totalValue = batchDeposits.reduce((sum, deposit) => sum + BigInt(deposit.amount), BigInt(0));
+  try {
+    // Process deposits in batches of 500
+    for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
+      const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
 
-    // Prepare deposit data for this batch
-    const depositData = batchDeposits.map(deposit => ({
-      pubKey: deposit.pubKey,
-      withdrawalCredentials: deposit.withdrawalCredentials,
-      signature: deposit.signature,
-      amount: BigInt(deposit.amount),
-    }));
+      // Calculate total value needed for this batch
+      const totalValue = batchDeposits.reduce(
+        (sum, deposit) => sum + BigInt(deposit.amount),
+        BigInt(0),
+      );
 
-    try {
+      // Prepare deposit data for this batch
+      const depositData = batchDeposits.map(deposit => ({
+        pubKey: deposit.pubKey,
+        withdrawalCredentials: deposit.withdrawalCredentials,
+        signature: deposit.signature,
+        amount: BigInt(deposit.amount),
+      }));
+
       // Execute batch deposit for this batch
       const tx = await batchDepositContract.batchDeposit(depositData, {
         value: totalValue,
       });
 
       const receipt = await tx.wait();
-      if (receipt) {
+      if (receipt?.hash) {
         txHashes.push(receipt.hash);
       }
-    } catch (error: any) {
-      throw new Error(
-        `Failed to submit batch deposit for batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message ?? 'Batch deposit failed'}`,
-      );
-    }
-  }
 
-  return { txHashes };
+    }
+    return { txHashes };
+
+  } catch (error: any) {
+    throw new Error(
+      `Failed to submit batch deposit'}`,
+    );
+  }
 }

@@ -1,12 +1,15 @@
-import { submitEOAWithdrawalRequest, submitEOABatchDepositRequest } from './eoaHelpers';
+import {
+  submitEOAWithdrawalRequest,
+  submitEOABatchDeposit,
+} from './eoaHelpers';
 import { validatePayload } from '../ajv';
-import { eoaWithdrawalPayloadSchema, eoaDepositPayloadSchema } from '../schema';
+import { eoaWithdrawalPayloadSchema, depositPayloadSchema } from '../schema';
 import { CHAIN_CONFIGURATION } from '../constants';
 import {
   type ProviderType,
   type SignerType,
   type EOAWithdrawalPayload,
-  type EOADepositPayload,
+  type depositPayload,
 } from '../types';
 
 /**
@@ -103,16 +106,16 @@ export class EOA {
    * @remarks
    * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
    * and not pushed to version control.
-   * 
+   *
    * **⚠️ Gas Limit:** Due to EVM constraints, it is recommended to deposit in batches of up to 500 at a time.
    *
-   * @param {EOADepositPayload} payload - Data needed to deposit to EOA batch contract
+   * @param {depositPayload} payload - Data needed to deposit to EOA batch contract
    * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes for all batches
    * @throws Will throw an error if the signer is not provided, contract is not configured, or the deposit fails
    *
-   * An example of how to use depositToEOA:
+   * An example of how to use deposit:
    * ```typescript
-   * const result = await client.eoa.depositToEOA({
+   * const result = await client.eoa.deposit({
    *   deposits: [{
    *     pubKey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
    *     withdrawalCredentials: '0x1234567890123456789012345678901234567890',
@@ -123,11 +126,11 @@ export class EOA {
    * console.log('Deposits completed:', result.txHashes);
    * ```
    */
-  async depositToEOA(
-    payload: EOADepositPayload,
+  async deposit(
+    payload: depositPayload,
   ): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
-      throw new Error('Signer is required in depositToEOA');
+      throw new Error('Signer is required in deposit');
     }
 
     const chainConfig = CHAIN_CONFIGURATION[this.chainId];
@@ -137,12 +140,12 @@ export class EOA {
       );
     }
 
-    const validatedPayload = validatePayload<EOADepositPayload>(
+    const validatedPayload = validatePayload<depositPayload>(
       payload,
-      eoaDepositPayloadSchema,
+      depositPayloadSchema,
     );
 
-    return await submitEOABatchDepositRequest({
+    return await submitEOABatchDeposit({
       deposits: validatedPayload.deposits,
       batchDepositContractAddress: chainConfig.BATCH_DEPOSIT_CONTRACT.address,
       signer: this.signer,
