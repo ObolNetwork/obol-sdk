@@ -300,11 +300,13 @@ export const ovmDepositPayloadSchema = {
           },
           withdrawal_credentials: {
             type: 'string',
-            pattern: '^0x[a-fA-F0-9]+$',
+            pattern: '^0x[a-fA-F0-9]{64}$',
+            description: '32 bytes withdrawal credentials',
           },
           signature: {
             type: 'string',
-            pattern: '^0x[a-fA-F0-9]+$',
+            pattern: '^0x[a-fA-F0-9]{192}$',
+            description: '96 bytes signature (190 hex chars + 0x prefix)',
           },
           deposit_data_root: {
             type: 'string',
@@ -343,11 +345,13 @@ export const eoaDepositPayloadSchema = {
           },
           withdrawalCredentials: {
             type: 'string',
-            pattern: '^0x[a-fA-F0-9]+$',
+            pattern: '^0x[a-fA-F0-9]{64}$',
+            description: '32 bytes withdrawal credentials',
           },
           signature: {
             type: 'string',
-            pattern: '^0x[a-fA-F0-9]+$',
+            pattern: '^0x[a-fA-F0-9]{192}$',
+            description: '96 bytes signature (190 hex chars + 0x prefix)',
           },
           amount: {
             type: 'string',

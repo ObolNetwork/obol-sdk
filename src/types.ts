@@ -582,7 +582,7 @@ export type ChainConfig = {
     address: string;
     bytecode: string;
   };
-  MULTICALL_CONTRACT: {
+  MULTICALL3_CONTRACT: {
     address: string;
     bytecode: string;
   };
@@ -646,7 +646,7 @@ export type EOAWithdrawalPayload = {
 };
 
 /**
- * Payload for depositing to OVM contract with multicall
+ * Payload for depositing to OVM contract with multicall3
  */
 export type OVMDepositPayload = {
   /** OVM contract address */

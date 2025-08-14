@@ -5,7 +5,7 @@ import {
   deployOVMContract,
   deployOVMAndSplitV2,
   requestWithdrawalFromOVM,
-  depositWithMulticall,
+  depositWithMulticall3,
 } from './splitHelpers';
 import {
   CHAIN_CONFIGURATION,
@@ -106,15 +106,15 @@ export class ObolSplits {
     }
     const ovmFactoryConfig = chainConfig.OVM_FACTORY_CONTRACT;
     const splitV2FactoryConfig = chainConfig.SPLIT_V2_FACTORY_CONTRACT;
-    const multiCallConfig = chainConfig.MULTICALL_CONTRACT;
+    const multiCall3Config = chainConfig.MULTICALL3_CONTRACT;
 
     if (
       !ovmFactoryConfig?.address ||
       !ovmFactoryConfig?.bytecode ||
       !splitV2FactoryConfig?.address ||
       !splitV2FactoryConfig?.bytecode ||
-      !multiCallConfig?.address ||
-      !multiCallConfig?.bytecode
+      !multiCall3Config?.address ||
+      !multiCall3Config?.bytecode
     ) {
       throw new Error(
         `Contracts configuration is incomplete for chain ${this.chainId}`,
@@ -133,16 +133,16 @@ export class ObolSplits {
       splitV2FactoryConfig.bytecode,
     );
 
-    const checkMultiCallContract = await isContractAvailable(
-      multiCallConfig.address,
+    const checkMultiCall3Contract = await isContractAvailable(
+      multiCall3Config.address,
       this.provider,
-      multiCallConfig.bytecode,
+      multiCall3Config.bytecode,
     );
 
     if (
       !checkOVMFactoryContract ||
       !checkSplitV2FactoryContract ||
-      !checkMultiCallContract
+      !checkMultiCall3Contract
     ) {
       throw new Error(
         `Splitter contract is not deployed or available on chain ${this.chainId}`,
@@ -273,15 +273,15 @@ export class ObolSplits {
 
     const ovmFactoryConfig = chainConfig.OVM_FACTORY_CONTRACT;
     const splitV2FactoryConfig = chainConfig.SPLIT_V2_FACTORY_CONTRACT;
-    const multiCallConfig = chainConfig.MULTICALL_CONTRACT;
+    const multiCall3Config = chainConfig.MULTICALL3_CONTRACT;
 
     if (
       !ovmFactoryConfig?.address ||
       !ovmFactoryConfig?.bytecode ||
       !splitV2FactoryConfig?.address ||
       !splitV2FactoryConfig?.bytecode ||
-      !multiCallConfig?.address ||
-      !multiCallConfig?.bytecode
+      !multiCall3Config?.address ||
+      !multiCall3Config?.bytecode
     ) {
       throw new Error(
         `Contracts configuration is incomplete for chain ${this.chainId}`,
@@ -300,16 +300,16 @@ export class ObolSplits {
       splitV2FactoryConfig.bytecode,
     );
 
-    const checkMultiCallContract = await isContractAvailable(
-      multiCallConfig.address,
+    const checkMultiCall3Contract = await isContractAvailable(
+      multiCall3Config.address,
       this.provider,
-      multiCallConfig.bytecode,
+      multiCall3Config.bytecode,
     );
 
     if (
       !checkOVMFactoryContract ||
       !checkSplitV2FactoryContract ||
-      !checkMultiCallContract
+      !checkMultiCall3Contract
     ) {
       throw new Error(
         `Splitter contract is not deployed or available on chain ${this.chainId}`,
@@ -385,7 +385,7 @@ export class ObolSplits {
         fee_recipient_address: predictedRewardsSplitAddress,
       };
     } else {
-      // Use multicall to deploy any contracts that aren't deployed
+      // Use multicall3 to deploy any contracts that aren't deployed
       const ovmAddress = await deployOVMAndSplitV2({
         ovmArgs: {
           OVMOwnerAddress: validatedPayload.OVMOwnerAddress,
@@ -456,9 +456,9 @@ export class ObolSplits {
   }
 
   /**
-   * Deposits to OVM contract using multicall for batch operations.
+   * Deposits to OVM contract using multicall3 for batch operations.
    *
-   * This method allows depositing to an OVM contract using multicall for efficient batch processing.
+   * This method allows depositing to an OVM contract using multicall3 for efficient batch processing.
    * Each deposit includes validator public key, withdrawal credentials, signature, deposit data root, and amount.
    *
    * @remarks
@@ -496,7 +496,7 @@ export class ObolSplits {
       ovmDepositPayloadSchema,
     );
 
-    return await depositWithMulticall({
+    return await depositWithMulticall3({
       ovmAddress: validatedPayload.ovmAddress,
       deposits: validatedPayload.deposits,
       signer: this.signer,

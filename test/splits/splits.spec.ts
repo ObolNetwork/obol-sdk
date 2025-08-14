@@ -13,7 +13,7 @@ import {
   deployOVMAndSplitV2,
   deployOVMContract,
   requestWithdrawalFromOVM,
-  depositWithMulticall,
+  depositWithMulticall3,
 } from '../../src/splits/splitHelpers';
 import { isContractAvailable } from '../../src/utils';
 import { TEST_ADDRESSES } from '../fixtures';
@@ -26,7 +26,7 @@ jest.mock('../../src/splits/splitHelpers', () => ({
   deployOVMContract: jest.fn(),
   deployOVMAndSplitV2: jest.fn(),
   requestWithdrawalFromOVM: jest.fn(),
-  depositWithMulticall: jest.fn(),
+  depositWithMulticall3: jest.fn(),
 }));
 
 // Mock the utils
@@ -60,9 +60,9 @@ const mockRequestWithdrawalFromOVM =
   requestWithdrawalFromOVM as jest.MockedFunction<
     typeof requestWithdrawalFromOVM
   >;
-const mockdepositWithMulticall =
-  depositWithMulticall as jest.MockedFunction<
-    typeof depositWithMulticall
+const mockdepositWithMulticall3 =
+  depositWithMulticall3 as jest.MockedFunction<
+    typeof depositWithMulticall3
   >;
 const mockIsContractAvailable = isContractAvailable as jest.MockedFunction<
   typeof isContractAvailable
@@ -458,11 +458,11 @@ describe('ObolSplits', () => {
     ];
 
     beforeEach(() => {
-      mockdepositWithMulticall.mockReset();
+      mockdepositWithMulticall3.mockReset();
     });
 
-    it('should successfully deposit to OVM with multicall', async () => {
-      mockdepositWithMulticall.mockResolvedValue({
+    it('should successfully deposit to OVM with multicall3', async () => {
+      mockdepositWithMulticall3.mockResolvedValue({
         txHashes: [
           '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
         ],
@@ -479,7 +479,7 @@ describe('ObolSplits', () => {
         ],
       });
 
-      expect(mockdepositWithMulticall).toHaveBeenCalledWith({
+      expect(mockdepositWithMulticall3).toHaveBeenCalledWith({
         ovmAddress: mockOVMAddress,
         deposits: mockDeposits,
         signer: mockSigner,
@@ -527,7 +527,7 @@ describe('ObolSplits', () => {
         },
       ];
 
-      mockdepositWithMulticall.mockResolvedValue({
+      mockdepositWithMulticall3.mockResolvedValue({
         txHashes: [
           '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
         ],
@@ -544,7 +544,7 @@ describe('ObolSplits', () => {
         ],
       });
 
-      expect(mockdepositWithMulticall).toHaveBeenCalledWith({
+      expect(mockdepositWithMulticall3).toHaveBeenCalledWith({
         ovmAddress: mockOVMAddress,
         deposits: multipleDeposits,
         signer: mockSigner,
