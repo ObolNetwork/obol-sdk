@@ -609,6 +609,9 @@ export type ChainConfig = {
   EOA_WITHDRAWAL_CONTRACT?: {
     address: string;
   };
+  BATCH_DEPOSIT_CONTRACT?: {
+    address: string;
+  };
 };
 
 /**
@@ -640,4 +643,43 @@ export type EOAWithdrawalPayload = {
 
   /** Required fee in wei */
   requiredFee: string;
+};
+
+/**
+ * Payload for depositing to OVM contract with multicall
+ */
+export type OVMDepositPayload = {
+  /** OVM contract address */
+  ovmAddress: string;
+
+  /** Array of deposit objects */
+  deposits: Array<{
+    /** Validator public key in hex format (48 bytes) */
+    pubkey: string;
+    /** Withdrawal credentials in hex format */
+    withdrawal_credentials: string;
+    /** Deposit signature in hex format */
+    signature: string;
+    /** Deposit data root in hex format (32 bytes) */
+    deposit_data_root: string;
+    /** Deposit amount in wei as string */
+    amount: string;
+  }>;
+};
+
+/**
+ * Payload for depositing to EOA batch deposit contract
+ */
+export type EOADepositPayload = {
+  /** Array of deposit objects */
+  deposits: Array<{
+    /** Validator public key in hex format (48 bytes) */
+    pubKey: string;
+    /** Withdrawal credentials in hex format */
+    withdrawalCredentials: string;
+    /** Deposit signature in hex format */
+    signature: string;
+    /** Deposit amount in wei as string */
+    amount: string;
+  }>;
 };

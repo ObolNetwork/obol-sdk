@@ -950,3 +950,75 @@ export const requestWithdrawalFromOVM = async ({
     );
   }
 };
+
+/**
+ * Deposits to OVM contract using multicall for batch operations
+ * @param ovmAddress - The address of the OVM contract
+ * @param deposits - Array of deposit objects with all required parameters
+ * @param signer - The signer to use for the transaction
+ * @returns Promise that resolves to an array of transaction hashes
+ */
+export const depositToOVMWithMulticall = async ({
+  ovmAddress,
+  deposits,
+  signer,
+  chainId,
+}: {
+  ovmAddress: string;
+  deposits: Array<{
+    pubkey: string;
+    withdrawal_credentials: string;
+    signature: string;
+    deposit_data_root: string;
+    amount: string;
+  }>;
+  signer: SignerType;
+  chainId: number;
+}): Promise<{ txHashes: string[] }> => {
+  try {
+    const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
+    const chainConfig = getChainConfig(chainId);
+    const multicallAddress = chainConfig.MULTICALL_CONTRACT.address;
+    const multiCallContractInstance = new Contract(
+      multicallAddress,
+      MultiCallContract.abi,
+      signer,
+    );
+
+    const BATCH_SIZE = 500;
+    const txHashes: string[] = [];
+
+    // Process deposits in batches of 500
+    for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
+      const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
+      
+      // Prepare multicall calls for this batch
+      const calls: Call[] = batchDeposits.map(deposit => ({
+        target: ovmAddress as ETH_ADDRESS,
+        callData: ovmContract.interface.encodeFunctionData('deposit', [
+          deposit.pubkey,
+          deposit.withdrawal_credentials,
+          deposit.signature,
+          deposit.deposit_data_root,
+        ]),
+      }));
+
+      // Calculate total value needed for this batch
+      const totalValue = batchDeposits.reduce((sum, deposit) => sum + BigInt(deposit.amount), BigInt(0));
+
+      // Execute multicall for this batch
+      const tx = await multiCallContractInstance.aggregate(calls, {
+        value: totalValue,
+      });
+      
+      const receipt = await tx.wait();
+      txHashes.push(receipt.hash);
+    }
+
+    return { txHashes };
+  } catch (error: any) {
+    throw new Error(
+      `Failed to deposit to OVM with multicall: ${error.message ?? 'Deposit failed'}`,
+    );
+  }
+};

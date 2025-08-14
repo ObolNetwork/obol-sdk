@@ -5,6 +5,7 @@ import {
   deployOVMContract,
   deployOVMAndSplitV2,
   requestWithdrawalFromOVM,
+  depositToOVMWithMulticall,
 } from './splitHelpers';
 import {
   CHAIN_CONFIGURATION,
@@ -16,6 +17,7 @@ import {
   ovmRewardsSplitPayloadSchema,
   ovmTotalSplitPayloadSchema,
   ovmRequestWithdrawalPayloadSchema,
+  ovmDepositPayloadSchema,
 } from '../schema';
 import { validatePayload } from '../ajv';
 import { isContractAvailable } from '../utils';
@@ -26,6 +28,7 @@ import {
   type OVMRewardsSplitPayload,
   type OVMTotalSplitPayload,
   type OVMRequestWithdrawalPayload,
+  type OVMDepositPayload,
 } from '../types';
 
 /**
@@ -449,6 +452,55 @@ export class ObolSplits {
       amounts: validatedPayload.amounts,
       withdrawalFees: validatedPayload.withdrawalFees,
       signer: this.signer,
+    });
+  }
+
+  /**
+   * Deposits to OVM contract using multicall for batch operations.
+   *
+   * This method allows depositing to an OVM contract using multicall for efficient batch processing.
+   * Each deposit includes validator public key, withdrawal credentials, signature, deposit data root, and amount.
+   *
+   * @remarks
+   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
+   * and not pushed to version control.
+   *
+   * @param {OVMDepositPayload} payload - Data needed to deposit to OVM
+   * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes for all batches
+   * @throws Will throw an error if the signer is not provided, OVM address is invalid, or the deposit fails
+   *
+   * An example of how to use depositToOVM:
+   * ```typescript
+   * const result = await client.splits.depositToOVM({
+   *   ovmAddress: '0x1234567890123456789012345678901234567890',
+   *   deposits: [{
+   *     pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+   *     withdrawal_credentials: '0x1234567890123456789012345678901234567890',
+   *     signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+   *     deposit_data_root: '0x1234567890123456789012345678901234567890123456789012345678901234',
+   *     amount: '32000000000000000000' // 32 ETH in wei
+   *   }]
+   * });
+   * console.log('Deposits completed:', result.txHashes);
+   * ```
+   */
+  async depositToOVM(
+    payload: OVMDepositPayload,
+  ): Promise<{ txHashes: string[] }> {
+    if (!this.signer) {
+      throw new Error('Signer is required in depositToOVM');
+    }
+
+    const validatedPayload = validatePayload<OVMDepositPayload>(
+      payload,
+      ovmDepositPayloadSchema,
+    );
+
+    return await depositToOVMWithMulticall({
+      ovmAddress: validatedPayload.ovmAddress,
+      deposits: validatedPayload.deposits,
+      signer: this.signer,
+      chainId: this.chainId,
     });
   }
 }

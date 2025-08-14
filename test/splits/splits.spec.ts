@@ -13,6 +13,7 @@ import {
   deployOVMAndSplitV2,
   deployOVMContract,
   requestWithdrawalFromOVM,
+  depositToOVMWithMulticall,
 } from '../../src/splits/splitHelpers';
 import { isContractAvailable } from '../../src/utils';
 import { TEST_ADDRESSES } from '../fixtures';
@@ -25,6 +26,7 @@ jest.mock('../../src/splits/splitHelpers', () => ({
   deployOVMContract: jest.fn(),
   deployOVMAndSplitV2: jest.fn(),
   requestWithdrawalFromOVM: jest.fn(),
+  depositToOVMWithMulticall: jest.fn(),
 }));
 
 // Mock the utils
@@ -57,6 +59,10 @@ const mockDeployOVMContract = deployOVMContract as jest.MockedFunction<
 const mockRequestWithdrawalFromOVM =
   requestWithdrawalFromOVM as jest.MockedFunction<
     typeof requestWithdrawalFromOVM
+  >;
+const mockDepositToOVMWithMulticall =
+  depositToOVMWithMulticall as jest.MockedFunction<
+    typeof depositToOVMWithMulticall
   >;
 const mockIsContractAvailable = isContractAvailable as jest.MockedFunction<
   typeof isContractAvailable
@@ -432,6 +438,99 @@ describe('ObolSplits', () => {
         amounts: multipleAmounts,
         withdrawalFees: '1',
         signer: mockSigner,
+      });
+    });
+  });
+
+  describe('depositToOVM', () => {
+    const mockOVMAddress = '0x1234567890123456789012345678901234567890';
+    const mockDeposits = [
+      {
+        pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        withdrawal_credentials: '0x1234567890123456789012345678901234567890',
+        signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+        deposit_data_root: '0x1234567890123456789012345678901234567890123456789012345678901234',
+        amount: '32000000000000000000', // 32 ETH in wei
+      },
+    ];
+
+    beforeEach(() => {
+      mockDepositToOVMWithMulticall.mockReset();
+    });
+
+    it('should successfully deposit to OVM with multicall', async () => {
+      mockDepositToOVMWithMulticall.mockResolvedValue({
+        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+      });
+
+      const result = await client.splits.depositToOVM({
+        ovmAddress: mockOVMAddress,
+        deposits: mockDeposits,
+      });
+
+      expect(result).toEqual({
+        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+      });
+
+      expect(mockDepositToOVMWithMulticall).toHaveBeenCalledWith({
+        ovmAddress: mockOVMAddress,
+        deposits: mockDeposits,
+        signer: mockSigner,
+        chainId: 1,
+      });
+    });
+
+    it('should throw error when signer is not provided', async () => {
+      const clientWithoutSigner = new Client(
+        { chainId: 1 },
+        undefined,
+        mockProvider,
+      );
+
+      await expect(
+        clientWithoutSigner.splits.depositToOVM({
+          ovmAddress: mockOVMAddress,
+          deposits: mockDeposits,
+        }),
+      ).rejects.toThrow('Signer is required in depositToOVM');
+    });
+
+    it('should handle multiple deposits', async () => {
+      const multipleDeposits = [
+        {
+          pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+          withdrawal_credentials: '0x1234567890123456789012345678901234567890',
+          signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+          deposit_data_root: '0x1234567890123456789012345678901234567890123456789012345678901234',
+          amount: '32000000000000000000', // 32 ETH in wei
+        },
+        {
+          pubkey: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          withdrawal_credentials: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
+          signature: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          deposit_data_root: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          amount: '16000000000000000000', // 16 ETH in wei
+        },
+      ];
+
+      mockDepositToOVMWithMulticall.mockResolvedValue({
+        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+      });
+
+      const result = await client.splits.depositToOVM({
+        ovmAddress: mockOVMAddress,
+        deposits: multipleDeposits,
+      });
+
+      expect(result).toEqual({
+        txHashes: ['0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'],
+      });
+
+      expect(mockDepositToOVMWithMulticall).toHaveBeenCalledWith({
+        ovmAddress: mockOVMAddress,
+        deposits: multipleDeposits,
+        signer: mockSigner,
+        chainId: 1,
       });
     });
   });

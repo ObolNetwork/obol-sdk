@@ -1,11 +1,12 @@
-import { submitEOAWithdrawalRequest } from './eoaHelpers';
+import { submitEOAWithdrawalRequest, submitEOABatchDepositRequest } from './eoaHelpers';
 import { validatePayload } from '../ajv';
-import { eoaWithdrawalPayloadSchema } from '../schema';
+import { eoaWithdrawalPayloadSchema, eoaDepositPayloadSchema } from '../schema';
 import { CHAIN_CONFIGURATION } from '../constants';
 import {
   type ProviderType,
   type SignerType,
   type EOAWithdrawalPayload,
+  type EOADepositPayload,
 } from '../types';
 
 /**
@@ -89,6 +90,62 @@ export class EOA {
       chainId: this.chainId,
       signer: this.signer,
       provider: this.provider,
+    });
+  }
+
+  /**
+   * Deposits to EOA batch deposit contract.
+   *
+   * This method allows depositing multiple validators to the Ethereum beacon chain
+   * using the Pier Two batch deposit contract for gas efficiency.
+   * Each deposit includes validator public key, withdrawal credentials, signature, and amount.
+   *
+   * @remarks
+   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
+   * and not pushed to version control.
+   * 
+   * **⚠️ Gas Limit:** Due to EVM constraints, it is recommended to deposit in batches of up to 500 at a time.
+   *
+   * @param {EOADepositPayload} payload - Data needed to deposit to EOA batch contract
+   * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes for all batches
+   * @throws Will throw an error if the signer is not provided, contract is not configured, or the deposit fails
+   *
+   * An example of how to use depositToEOA:
+   * ```typescript
+   * const result = await client.eoa.depositToEOA({
+   *   deposits: [{
+   *     pubKey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+   *     withdrawalCredentials: '0x1234567890123456789012345678901234567890',
+   *     signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
+   *     amount: '32000000000000000000' // 32 ETH in wei
+   *   }]
+   * });
+   * console.log('Deposits completed:', result.txHashes);
+   * ```
+   */
+  async depositToEOA(
+    payload: EOADepositPayload,
+  ): Promise<{ txHashes: string[] }> {
+    if (!this.signer) {
+      throw new Error('Signer is required in depositToEOA');
+    }
+
+    const chainConfig = CHAIN_CONFIGURATION[this.chainId];
+    if (!chainConfig?.BATCH_DEPOSIT_CONTRACT?.address) {
+      throw new Error(
+        `Batch deposit contract is not configured for chain ${this.chainId}`,
+      );
+    }
+
+    const validatedPayload = validatePayload<EOADepositPayload>(
+      payload,
+      eoaDepositPayloadSchema,
+    );
+
+    return await submitEOABatchDepositRequest({
+      deposits: validatedPayload.deposits,
+      batchDepositContractAddress: chainConfig.BATCH_DEPOSIT_CONTRACT.address,
+      signer: this.signer,
     });
   }
 }

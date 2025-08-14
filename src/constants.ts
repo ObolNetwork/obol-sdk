@@ -202,6 +202,9 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     EOA_WITHDRAWAL_CONTRACT: {
       address: '0x00000961Ef480Eb55e80D19ad83579A64c007002',
     },
+    BATCH_DEPOSIT_CONTRACT: {
+      address: '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
+    },
   },
   [FORK_MAPPING['0x01017000']]: {
     SPLITMAIN_CONTRACT: {
@@ -256,6 +259,9 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     },
     EOA_WITHDRAWAL_CONTRACT: {
       address: '0x00000961Ef480Eb55e80D19ad83579A64c007002',
+    },
+    BATCH_DEPOSIT_CONTRACT: {
+      address: '0x4c9506eE2fCd962f03022D9d8ebf6f7828abEfaf',
     },
   },
 };
