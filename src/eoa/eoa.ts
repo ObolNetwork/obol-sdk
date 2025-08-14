@@ -126,9 +126,7 @@ export class EOA {
    * console.log('Deposits completed:', result.txHashes);
    * ```
    */
-  async deposit(
-    payload: EOADepositPayload,
-  ): Promise<{ txHashes: string[] }> {
+  async deposit(payload: EOADepositPayload): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
       throw new Error('Signer is required in deposit');
     }

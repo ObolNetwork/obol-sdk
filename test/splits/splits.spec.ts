@@ -60,10 +60,9 @@ const mockRequestWithdrawalFromOVM =
   requestWithdrawalFromOVM as jest.MockedFunction<
     typeof requestWithdrawalFromOVM
   >;
-const mockdepositWithMulticall3 =
-  depositWithMulticall3 as jest.MockedFunction<
-    typeof depositWithMulticall3
-  >;
+const mockdepositWithMulticall3 = depositWithMulticall3 as jest.MockedFunction<
+  typeof depositWithMulticall3
+>;
 const mockIsContractAvailable = isContractAvailable as jest.MockedFunction<
   typeof isContractAvailable
 >;

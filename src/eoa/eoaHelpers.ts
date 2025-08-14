@@ -102,13 +102,9 @@ export async function submitEOABatchDeposit({
       if (receipt?.hash) {
         txHashes.push(receipt.hash);
       }
-
     }
     return { txHashes };
-
   } catch (error: any) {
-    throw new Error(
-      `Failed to submit batch deposit'}`,
-    );
+    throw new Error("Failed to submit batch deposit'}");
   }
 }

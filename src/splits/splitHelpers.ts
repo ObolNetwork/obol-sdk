@@ -945,10 +945,9 @@ export const requestWithdrawalFromOVM = async ({
 
     return { txHash: receipt.hash };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Request withdrawal failed';
-    throw new Error(
-      `Failed to request withdrawal from OVM: ${errorMessage}`,
-    );
+    const errorMessage =
+      error instanceof Error ? error.message : 'Request withdrawal failed';
+    throw new Error(`Failed to request withdrawal from OVM: ${errorMessage}`);
   }
 };
 
@@ -993,7 +992,7 @@ export const depositWithMulticall3 = async ({
     for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
       const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
 
-            // Use Multicall3 aggregate3Value (payable per-call)
+      // Use Multicall3 aggregate3Value (payable per-call)
       const callsWithValue = batchDeposits.map(deposit => ({
         target: ovmAddress,
         allowFailure: false,
@@ -1005,17 +1004,17 @@ export const depositWithMulticall3 = async ({
         ]),
         value: BigInt(deposit.amount),
       }));
-      
+
       const totalBatchValue = callsWithValue.reduce(
         (sum: bigint, c: { value: bigint }) => sum + c.value,
         BigInt(0),
       );
-      
+
       const tx = await multiCall3ContractInstance.aggregate3Value(
         callsWithValue,
         { value: totalBatchValue },
       );
-      
+
       const receipt = await tx.wait();
       if (receipt?.hash) {
         txHashes.push(receipt.hash);
@@ -1024,7 +1023,8 @@ export const depositWithMulticall3 = async ({
 
     return { txHashes };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Deposit failed';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Deposit failed';
     throw new Error(
       `Failed to deposit to OVM with multicall3: ${errorMessage}`,
     );
