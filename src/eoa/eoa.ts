@@ -3,13 +3,13 @@ import {
   submitEOABatchDeposit,
 } from './eoaHelpers';
 import { validatePayload } from '../ajv';
-import { eoaWithdrawalPayloadSchema, depositPayloadSchema } from '../schema';
+import { eoaWithdrawalPayloadSchema, eoaDepositPayloadSchema } from '../schema';
 import { CHAIN_CONFIGURATION } from '../constants';
 import {
   type ProviderType,
   type SignerType,
   type EOAWithdrawalPayload,
-  type depositPayload,
+  type EOADepositPayload,
 } from '../types';
 
 /**
@@ -97,7 +97,7 @@ export class EOA {
   }
 
   /**
-   * Deposits to EOA batch deposit contract.
+   * Deposits to batch deposit contract.
    *
    * This method allows depositing multiple validators to the Ethereum beacon chain
    * using the Pier Two batch deposit contract for gas efficiency.
@@ -109,7 +109,7 @@ export class EOA {
    *
    * **⚠️ Gas Limit:** Due to EVM constraints, it is recommended to deposit in batches of up to 500 at a time.
    *
-   * @param {depositPayload} payload - Data needed to deposit to EOA batch contract
+   * @param {EOADepositPayload} payload - Data needed to deposit to batch contract
    * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes for all batches
    * @throws Will throw an error if the signer is not provided, contract is not configured, or the deposit fails
    *
@@ -127,7 +127,7 @@ export class EOA {
    * ```
    */
   async deposit(
-    payload: depositPayload,
+    payload: EOADepositPayload,
   ): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
       throw new Error('Signer is required in deposit');
@@ -140,9 +140,9 @@ export class EOA {
       );
     }
 
-    const validatedPayload = validatePayload<depositPayload>(
+    const validatedPayload = validatePayload<EOADepositPayload>(
       payload,
-      depositPayloadSchema,
+      eoaDepositPayloadSchema,
     );
 
     return await submitEOABatchDeposit({

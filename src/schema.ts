@@ -328,7 +328,7 @@ export const ovmDepositPayloadSchema = {
   required: ['ovmAddress', 'deposits'],
 };
 
-export const depositPayloadSchema = {
+export const eoaDepositPayloadSchema = {
   type: 'object',
   properties: {
     deposits: {

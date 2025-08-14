@@ -149,7 +149,7 @@ describe('EOA', () => {
       },
     ];
 
-    it('should successfully deposit to EOA batch contract', async () => {
+    it('should successfully deposit to batch contract', async () => {
       const mockPayload = {
         deposits: mockDeposits,
       };
@@ -210,15 +210,15 @@ describe('EOA', () => {
           withdrawalCredentials: '0x1234567890123456789012345678901234567890',
           signature:
             '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-          amount: '32000000000000000000', // 32 ETH in wei
+          amount: '32000000000000000000', 
         },
         {
           pubKey:
-            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdcd',
           withdrawalCredentials: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
           signature:
             '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-          amount: '16000000000000000000', // 16 ETH in wei
+          amount: '16000000000000000000', 
         },
       ];
 
