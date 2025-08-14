@@ -1,5 +1,7 @@
 import { ETHER_TO_GWEI } from '../constants';
 import { type SignerType, type ProviderType } from '../types';
+import { Contract } from 'ethers';
+import { BatchDepositContract } from '../abi/BatchDeposit';
 
 /**
  * Helper function to submit withdrawal request for EOA
@@ -39,4 +41,70 @@ export async function submitEOAWithdrawalRequest({
   const receipt = await tx.wait();
   if (!receipt) return { txHash: null };
   return { txHash: receipt.hash };
+}
+
+/**
+ * Helper function to submit batch deposit request for EOA
+ */
+export async function submitEOABatchDeposit({
+  deposits,
+  batchDepositContractAddress,
+  signer,
+}: {
+  deposits: Array<{
+    pubKey: string;
+    withdrawalCredentials: string;
+    signature: string;
+    amount: string;
+  }>;
+  batchDepositContractAddress: string;
+  signer: SignerType;
+}): Promise<{ txHashes: string[] }> {
+  if (!deposits || deposits.length === 0) {
+    throw new Error('No deposits provided');
+  }
+
+  // Create contract instance
+  const batchDepositContract = new Contract(
+    batchDepositContractAddress,
+    BatchDepositContract.abi,
+    signer,
+  );
+
+  const BATCH_SIZE = 500;
+  const txHashes: string[] = [];
+
+  try {
+    // Process deposits in batches of 500
+    for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
+      const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
+
+      // Calculate total value needed for this batch
+      const totalValue = batchDeposits.reduce(
+        (sum, deposit) => sum + BigInt(deposit.amount),
+        BigInt(0),
+      );
+
+      // Prepare deposit data for this batch
+      const depositData = batchDeposits.map(deposit => ({
+        pubKey: deposit.pubKey,
+        withdrawalCredentials: deposit.withdrawalCredentials,
+        signature: deposit.signature,
+        amount: BigInt(deposit.amount),
+      }));
+
+      // Execute batch deposit for this batch
+      const tx = await batchDepositContract.batchDeposit(depositData, {
+        value: totalValue,
+      });
+
+      const receipt = await tx.wait();
+      if (receipt?.hash) {
+        txHashes.push(receipt.hash);
+      }
+    }
+    return { txHashes };
+  } catch (error: any) {
+    throw new Error("Failed to submit batch deposit'}");
+  }
 }

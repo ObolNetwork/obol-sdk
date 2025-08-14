@@ -242,10 +242,10 @@ export class Client extends Base {
       chainConfig.SPLITMAIN_CONTRACT.bytecode,
     );
 
-    const checkMulticallAddress = await isContractAvailable(
-      chainConfig.MULTICALL_CONTRACT.address,
+    const checkMulticall3Address = await isContractAvailable(
+      chainConfig.MULTICALL3_CONTRACT.address,
       this.signer.provider as ProviderType,
-      chainConfig.MULTICALL_CONTRACT.bytecode,
+      chainConfig.MULTICALL3_CONTRACT.bytecode,
     );
 
     const checkOWRFactoryAddress = await isContractAvailable(
@@ -255,7 +255,7 @@ export class Client extends Base {
     );
 
     if (
-      !checkMulticallAddress ||
+      !checkMulticall3Address ||
       !checkSplitMainAddress ||
       !checkOWRFactoryAddress
     ) {

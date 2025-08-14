@@ -12,9 +12,9 @@ import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
 import { OVMFactoryContract, OVMContract } from '../abi/OVMFactory';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
-import { MultiCallContract } from '../abi/Multicall';
 import { CHAIN_CONFIGURATION, ETHER_TO_GWEI } from '../constants';
 import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi';
+import { MultiCall3Contract } from '../abi/Multicall3';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
@@ -217,7 +217,7 @@ export const handleDeployOWRAndSplitter = async ({
         splitterAddress = result.splitterAddress;
       } catch (error: any) {
         throw new Error(
-          `Failed to deploy both splitter and OWR contracts: ${error.message ?? 'Multicall contract deployment failed'}`,
+          `Failed to deploy both splitter and OWR contracts: ${error.message ?? 'Multicall3 contract deployment failed'}`,
         );
       }
 
@@ -444,7 +444,7 @@ export const deploySplitterAndOWRContracts = async ({
     },
   );
 
-  const executeMultiCalls = await multicall(executeCalls, signer, chainId);
+  const executeMultiCalls = await multicall3(executeCalls, signer, chainId);
 
   const splitAddressData = executeMultiCalls?.logs[0]?.topics[1];
   const formattedSplitterAddress = '0x' + splitAddressData?.slice(26, 66);
@@ -502,26 +502,26 @@ export const getOWRTranches = async ({
   }
 };
 
-export const multicall = async (
+export const multicall3 = async (
   calls: Call[],
   signer: SignerType,
   chainId: number,
 ): Promise<any> => {
   try {
     const chainConfig = getChainConfig(chainId);
-    const multicallAddress = chainConfig.MULTICALL_CONTRACT.address;
-    const multiCallContractInstance = new Contract(
-      multicallAddress,
-      MultiCallContract.abi,
+    const multicall3Address = chainConfig.MULTICALL3_CONTRACT.address;
+    const multiCall3ContractInstance = new Contract(
+      multicall3Address,
+      MultiCall3Contract.abi,
       signer,
     );
 
     let tx;
     try {
-      tx = await multiCallContractInstance.aggregate(calls);
+      tx = await multiCall3ContractInstance.aggregate(calls);
     } catch (error: any) {
       throw new Error(
-        `Failed to submit multicall transaction: ${error.message ?? 'Transaction submission failed'}`,
+        `Failed to submit multicall3 transaction: ${error.message ?? 'Transaction submission failed'}`,
       );
     }
 
@@ -530,13 +530,13 @@ export const multicall = async (
       receipt = await tx.wait();
     } catch (error: any) {
       throw new Error(
-        `Multicall transaction failed or was reverted: ${error.message ?? 'Transaction execution failed'}`,
+        `Multicall3 transaction failed or was reverted: ${error.message ?? 'Transaction execution failed'}`,
       );
     }
 
     if (!receipt) {
       throw new Error(
-        'Multicall transaction succeeded but no receipt was returned',
+        'Multicall3 transaction succeeded but no receipt was returned',
       );
     }
 
@@ -545,13 +545,13 @@ export const multicall = async (
     // Re-throw if it's already our custom error
     if (
       error.message.includes('Failed to') ||
-      error.message.includes('Multicall transaction')
+      error.message.includes('Multicall3 transaction')
     ) {
       throw error;
     }
     // Handle unexpected errors
     throw new Error(
-      `Unexpected error in multicall: ${error.message ?? 'Unknown error during multicall execution'}`,
+      `Unexpected error in multicall3: ${error.message ?? 'Unknown error during multicall3 execution'}`,
     );
   }
 };
@@ -845,8 +845,8 @@ export const deployOVMAndSplitV2 = async ({
       callData: ovmTxData,
     });
 
-    // Execute multicall
-    const executeMultiCalls = await multicall(executeCalls, signer, chainId);
+    // Execute multicall3
+    const executeMultiCalls = await multicall3(executeCalls, signer, chainId);
 
     // Extract addresses from events
     let ovmAddress: string | undefined;
@@ -861,7 +861,7 @@ export const deployOVMAndSplitV2 = async ({
     }
     if (!ovmAddress) {
       throw new Error(
-        'Failed to extract contract addresses from multicall events',
+        'Failed to extract contract addresses from multicall3 events',
       );
     }
 
@@ -944,9 +944,89 @@ export const requestWithdrawalFromOVM = async ({
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Request withdrawal failed';
+    throw new Error(`Failed to request withdrawal from OVM: ${errorMessage}`);
+  }
+};
+
+/**
+ * Deposits to OVM contract using multicall3 for batch operations
+ * @param ovmAddress - The address of the OVM contract
+ * @param deposits - Array of deposit objects with all required parameters
+ * @param signer - The signer to use for the transaction
+ * @returns Promise that resolves to an array of transaction hashes
+ */
+export const depositWithMulticall3 = async ({
+  ovmAddress,
+  deposits,
+  signer,
+  chainId,
+}: {
+  ovmAddress: string;
+  deposits: Array<{
+    pubkey: string;
+    withdrawal_credentials: string;
+    signature: string;
+    deposit_data_root: string;
+    amount: string;
+  }>;
+  signer: SignerType;
+  chainId: number;
+}): Promise<{ txHashes: string[] }> => {
+  try {
+    const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
+    const chainConfig = getChainConfig(chainId);
+    const multicall3Address = chainConfig.MULTICALL3_CONTRACT.address;
+    const multiCall3ContractInstance = new Contract(
+      multicall3Address,
+      MultiCall3Contract.abi,
+      signer,
+    );
+
+    const BATCH_SIZE = 500;
+    const txHashes: string[] = [];
+
+    // Process deposits in batches of 500
+    for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
+      const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
+
+      // Use Multicall3 aggregate3Value (payable per-call)
+      const callsWithValue = batchDeposits.map(deposit => ({
+        target: ovmAddress,
+        allowFailure: false,
+        callData: ovmContract.interface.encodeFunctionData('deposit', [
+          deposit.pubkey,
+          deposit.withdrawal_credentials,
+          deposit.signature,
+          deposit.deposit_data_root,
+        ]),
+        value: BigInt(deposit.amount),
+      }));
+
+      const totalBatchValue = callsWithValue.reduce(
+        (sum: bigint, c: { value: bigint }) => sum + c.value,
+        BigInt(0),
+      );
+
+      const tx = await multiCall3ContractInstance.aggregate3Value(
+        callsWithValue,
+        { value: totalBatchValue },
+      );
+
+      const receipt = await tx.wait();
+      if (receipt?.hash) {
+        txHashes.push(receipt.hash);
+      }
+    }
+
+    return { txHashes };
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Deposit failed';
     throw new Error(
-      `Failed to request withdrawal from OVM: ${error.message ?? 'Request withdrawal failed'}`,
+      `Failed to deposit to OVM with multicall3: ${errorMessage}`,
     );
   }
 };
