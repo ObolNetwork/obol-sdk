@@ -16,7 +16,7 @@ jobs:
         with:
           persist-credentials: false # Required to make GitHub forget this checkout for the next step
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: '18.x'
           registry-url: 'https://registry.npmjs.org'
