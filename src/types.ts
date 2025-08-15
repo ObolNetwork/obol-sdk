@@ -674,11 +674,13 @@ export type EOADepositPayload = {
   /** Array of deposit objects */
   deposits: Array<{
     /** Validator public key in hex format (48 bytes) */
-    pubKey: string;
+    pubkey: string;
     /** Withdrawal credentials in hex format */
-    withdrawalCredentials: string;
+    withdrawal_credentials: string;
     /** Deposit signature in hex format */
     signature: string;
+    /** Deposit data root in hex format (32 bytes) */
+    deposit_data_root: string;
     /** Deposit amount in wei as string */
     amount: string;
   }>;
