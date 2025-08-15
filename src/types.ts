@@ -679,6 +679,8 @@ export type EOADepositPayload = {
     withdrawalCredentials: string;
     /** Deposit signature in hex format */
     signature: string;
+    /** Deposit data root in hex format (32 bytes) */
+    depositDataRoot: string;
     /** Deposit amount in wei as string */
     amount: string;
   }>;

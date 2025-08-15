@@ -55,6 +55,7 @@ export async function submitEOABatchDeposit({
     pubKey: string;
     withdrawalCredentials: string;
     signature: string;
+    depositDataRoot: string;
     amount: string;
   }>;
   batchDepositContractAddress: string;
@@ -90,6 +91,7 @@ export async function submitEOABatchDeposit({
         pubKey: deposit.pubKey,
         withdrawalCredentials: deposit.withdrawalCredentials,
         signature: deposit.signature,
+        depositDataRoot: deposit.depositDataRoot,
         amount: BigInt(deposit.amount),
       }));
 

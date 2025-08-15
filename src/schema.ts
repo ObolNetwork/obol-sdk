@@ -353,12 +353,16 @@ export const eoaDepositPayloadSchema = {
             pattern: '^0x[a-fA-F0-9]{192}$',
             description: '96 bytes signature (190 hex chars + 0x prefix)',
           },
+          depositDataRoot: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{64}$', // 32 bytes = 64 hex chars + 0x prefix
+          },
           amount: {
             type: 'string',
             pattern: '^[0-9]+$',
           },
         },
-        required: ['pubKey', 'withdrawalCredentials', 'signature', 'amount'],
+        required: ['pubKey', 'withdrawalCredentials', 'signature', 'depositDataRoot', 'amount'],
       },
     },
   },
