@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.1...v2.11.2)
+
+- Hanan/deposit methods [`#147`](https://github.com/ObolNetwork/obol-sdk/pull/147)
+
 #### [v2.11.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.0...v2.11.1)
 
+> 15 August 2025
+
+- chore(release): v2.11.1 [`#146`](https://github.com/ObolNetwork/obol-sdk/pull/146)
 - Hanan/deposit methods [`#145`](https://github.com/ObolNetwork/obol-sdk/pull/145)
 
 #### [v2.11.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.10.2...v2.11.0)
