@@ -52,10 +52,10 @@ export async function submitEOABatchDeposit({
   signer,
 }: {
   deposits: Array<{
-    pubKey: string;
-    withdrawalCredentials: string;
+    pubkey: string;
+    withdrawal_credentials: string;
     signature: string;
-    depositDataRoot: string;
+    deposit_data_root: string;
     amount: string;
   }>;
   batchDepositContractAddress: string;
@@ -88,10 +88,10 @@ export async function submitEOABatchDeposit({
 
       // Prepare deposit data for this batch
       const depositData = batchDeposits.map(deposit => ({
-        pubKey: deposit.pubKey,
-        withdrawalCredentials: deposit.withdrawalCredentials,
+        pubKey: deposit.pubkey,
+        withdrawalCredentials: deposit.withdrawal_credentials,
         signature: deposit.signature,
-        depositDataRoot: deposit.depositDataRoot,
+        depositDataRoot: deposit.deposit_data_root,
         amount: BigInt(deposit.amount),
       }));
 
