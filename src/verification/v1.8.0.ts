@@ -253,24 +253,17 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
 
     // Check deposit amounts match exactly if they are defined
     const depositAmounts = clusterLock.cluster_definition.deposit_amounts;
-    if (depositAmounts !== null) {
+    if (!!depositAmounts && depositAmounts !== null) {
       const partialDepositAmounts = (
         validator.partial_deposit_data as DepositData[]
       ).map(d => d.amount);
-      if (depositAmounts?.length !== partialDepositAmounts.length) {
-        return false;
-      }
-      // Check that both arrays contain exactly the same elements
-      const sortedDepositAmounts = [...depositAmounts]
-        .map(Number)
-        .sort((a, b) => a - b);
-      const sortedPartialAmounts = [...partialDepositAmounts]
-        .map(Number)
-        .sort((a, b) => a - b);
+
+      // Check that partialDepositAmounts includes all unique elements of depositAmounts
+      const uniqueDepositAmounts = [...new Set(depositAmounts.map(Number))];
+      const partialAmountsSet = new Set(partialDepositAmounts.map(Number));
+
       if (
-        !sortedDepositAmounts.every(
-          (amount, index) => amount === sortedPartialAmounts[index],
-        )
+        !uniqueDepositAmounts.every(amount => partialAmountsSet.has(amount))
       ) {
         return false;
       }
