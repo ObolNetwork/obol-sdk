@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.3...v2.11.4)
+
+- update ovm factory info [`#153`](https://github.com/ObolNetwork/obol-sdk/pull/153)
+
 #### [v2.11.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.2...v2.11.3)
 
+> 18 September 2025
+
+- chore(release): v2.11.3 [`#152`](https://github.com/ObolNetwork/obol-sdk/pull/152)
 - update  validation for deposit_amounts [`#151`](https://github.com/ObolNetwork/obol-sdk/pull/151)
 
 #### [v2.11.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.1...v2.11.2)
