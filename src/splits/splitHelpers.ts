@@ -10,7 +10,7 @@ import {
 } from '../types';
 import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR';
-import { OVMFactoryContract, OVMContract } from '../abi/OVMFactory';
+import { OVMFactoryContract, OVMContract } from '../abi/OVM';
 import { splitMainEthereumAbi } from '../abi/SplitMain';
 import { CHAIN_CONFIGURATION, ETHER_TO_GWEI } from '../constants';
 import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi';
