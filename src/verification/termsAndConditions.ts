@@ -1,7 +1,7 @@
 import pdf from 'pdf-parse';
 import { ByteListType, ContainerType } from '@chainsafe/ssz';
-import { TERMS_AND_CONDITIONS_URL } from '../constants';
-import { strToUint8Array } from '../utils';
+import { TERMS_AND_CONDITIONS_URL } from '../constants.js';
+import { strToUint8Array } from '../utils.js';
 
 export const hashTermsAndConditions = async (): Promise<string | null> => {
   try {

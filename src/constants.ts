@@ -1,7 +1,7 @@
 import { type TypedMessage } from '@metamask/eth-sig-util';
 import { type TypedDataDomain } from 'ethers';
 import pjson from '../package.json';
-import { type ChainConfig, FORK_MAPPING } from './types';
+import { type ChainConfig, FORK_MAPPING } from './types.js';
 import {
   HOLESKY_MULTICALL3_BYTECODE,
   HOLESKY_OVM_FACTORY_BYTECODE,

@@ -1,6 +1,5 @@
 import { fromHexString } from '@chainsafe/ssz';
 import elliptic from 'elliptic';
-import { init } from '@chainsafe/bls';
 import {
   FORK_MAPPING,
   type ClusterDefinition,
@@ -39,7 +38,7 @@ import {
   signingRootType,
 } from './sszTypes.js';
 import { definitionFlow, hexWithout0x } from '../utils.js';
-import { ENR } from '@chainsafe/discv5';
+import { ENR } from '@chainsafe/enr';
 import {
   clusterDefinitionContainerTypeV1X8,
   hashClusterDefinitionV1X8,
@@ -444,9 +443,10 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
   const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash);
   // node(ENR) signatures
   for (let i = 0; i < (nodeSignatures as string[]).length; i++) {
-    const pubkey = ENR.decodeTxt(
+    const publicKeyBytes = ENR.decodeTxt(
       clusterLock.cluster_definition.operators[i].enr as string,
-    ).publicKey.toString('hex');
+    ).publicKey;
+    const pubkey = Buffer.from(publicKeyBytes).toString('hex');
 
     const ENRsignature = {
       r: (nodeSignatures as string[])[i].slice(2, 66),
@@ -473,22 +473,21 @@ export const signingRoot = (
 };
 
 const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
-  await init('herumi');
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.6.0')) {
-    return verifyDVV1X6(clusterLock);
+    return await verifyDVV1X6(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.7.0')) {
-    return verifyDVV1X7(clusterLock);
+    return await verifyDVV1X7(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.8.0')) {
-    return verifyDVV1X8(clusterLock);
+    return await verifyDVV1X8(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.10.0')) {
-    return verifyDVV1X10(clusterLock);
+    return await verifyDVV1X10(clusterLock);
   }
   return false;
 };

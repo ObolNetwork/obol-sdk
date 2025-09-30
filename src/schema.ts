@@ -4,7 +4,7 @@ import {
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
   PRINCIPAL_THRESHOLD,
 } from './constants';
-import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv';
+import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv.js';
 
 export const operatorPayloadSchema = {
   type: 'object',

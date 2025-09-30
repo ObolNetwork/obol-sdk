@@ -1,13 +1,13 @@
-import { validatePayload } from '../../src/ajv';
+import { validatePayload } from '../../src/ajv.js';
 import {
   ovmRewardsSplitPayloadSchema,
   ovmTotalSplitPayloadSchema,
   ovmRequestWithdrawalPayloadSchema,
-} from '../../src/schema';
+} from '../../src/schema.js';
 import {
   type OVMRewardsSplitPayload,
   type OVMTotalSplitPayload,
-} from '../../src/types';
+} from '../../src/types.js';
 import { TEST_ADDRESSES } from '../fixtures';
 
 describe('validatePayload - OVM Schemas', () => {

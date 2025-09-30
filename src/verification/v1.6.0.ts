@@ -2,7 +2,7 @@ import {
   type UintNumberByteLen,
   UintNumberType,
 } from '@chainsafe/ssz/lib/type/uint';
-import { strToUint8Array } from '../utils';
+import { strToUint8Array } from '../utils.js';
 import {
   type creatorAddressWrapperType,
   type creatorContainerType,
@@ -25,12 +25,8 @@ import {
   type ClusterLock,
   type DepositData,
 } from '../types';
-import { verifyDepositData } from './common';
-import {
-  aggregateSignatures,
-  verifyAggregate,
-  verifyMultiple,
-} from '@chainsafe/bls';
+import { verifyDepositData } from './common.js';
+import bls from '@chainsafe/bls';
 
 // cluster definition
 type DefinitionFieldsV1X6 = {
@@ -195,7 +191,8 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
 };
 
 // DV verification
-export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
+export const verifyDVV1X6 = async (clusterLock: ClusterLock): Promise<boolean> => {
+  await bls.init();
   const validators = clusterLock.distributed_validators;
   const pubShares = [];
   const pubKeys = [];
@@ -230,10 +227,10 @@ export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
     );
   }
 
-  const aggregateBLSSignature = aggregateSignatures(blsSignatures);
+  const aggregateBLSSignature = bls.aggregateSignatures(blsSignatures);
 
   if (
-    !verifyMultiple(
+    !bls.verifyMultiple(
       pubKeys,
       builderRegistrationAndDepositDataMessages,
       aggregateBLSSignature,
@@ -243,7 +240,7 @@ export const verifyDVV1X6 = (clusterLock: ClusterLock): boolean => {
   }
 
   if (
-    !verifyAggregate(
+    !bls.verifyAggregate(
       pubShares,
       fromHexString(clusterLock.lock_hash),
       fromHexString(clusterLock.signature_aggregate),

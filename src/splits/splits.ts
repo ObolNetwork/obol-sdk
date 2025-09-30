@@ -18,9 +18,9 @@ import {
   ovmTotalSplitPayloadSchema,
   ovmRequestWithdrawalPayloadSchema,
   ovmDepositPayloadSchema,
-} from '../schema';
-import { validatePayload } from '../ajv';
-import { isContractAvailable } from '../utils';
+} from '../schema.js';
+import { validatePayload } from '../ajv.js';
+import { isContractAvailable } from '../utils.js';
 import {
   type ClusterValidator,
   type ProviderType,

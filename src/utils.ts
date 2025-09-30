@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
-import { DefinitionFlow, PROVIDER_MAP } from './constants';
-import { FORK_NAMES, type ProviderType, type ClusterDefinition } from './types';
+import { DefinitionFlow, PROVIDER_MAP } from './constants.js';
+import { FORK_NAMES, type ProviderType, type ClusterDefinition } from './types.js';
 
 export const hexWithout0x = (hex: string): string => {
   return hex.slice(2, hex.length);

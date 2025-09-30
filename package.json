@@ -15,7 +15,7 @@
     "compile": "tsc -b ./tsconfig.cjs.json ./tsconfig.esm.json ./tsconfig.types.json",
     "build:clean": "rm -rf ./dist",
     "build": "npm-run-all build:clean compile",
-    "test": "jest test/**/*.spec.ts --testPathIgnorePatterns=test/sdk-package/",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest test/**/*.spec.ts --testPathIgnorePatterns=test/sdk-package/",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "release": "release-it",
@@ -42,49 +42,49 @@
   "dependencies": {
     "@chainsafe/bls": "6.0.3",
     "@chainsafe/blst": "^0.2.9",
-    "@chainsafe/discv5": "^0.5.1",
+    "@chainsafe/enr": "^5.0.0",
     "@chainsafe/ssz": "^0.14.0",
-    "@metamask/eth-sig-util": "^7.0.1",
-    "@safe-global/protocol-kit": "4.1.1",
-    "@safe-global/safe-core-sdk-types": "5.1.0",
-    "@types/pdf-parse": "^1.1.4",
-    "ajv": "^8.12.0",
+    "@metamask/eth-sig-util": "^8.2.0",
+    "@safe-global/protocol-kit": "6.1.1",
+    "@safe-global/types-kit": "^3.0.0",
+    "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "ajv-keywords": "^5.1.0",
-    "cross-fetch": "^3.1.5",
-    "dotenv": "^16.4.7",
-    "elliptic": "^6.5.4",
-    "eslint-config-standard-with-typescript": "^43.0.1",
-    "eslint-plugin-import": "^2.29.1",
-    "eslint-plugin-n": "^16.6.2",
-    "eslint-plugin-promise": "^6.1.1",
-    "ethers": "^6.13.5",
-    "nock": "^13.5.3",
+    "cross-fetch": "^4.1.0",
+    "dotenv": "^17.2.2",
+    "elliptic": "^6.6.1",
+    "ethers": "^6.15.0",
     "pdf-parse": "^1.1.1",
-    "semver": "^7.6.0",
-    "typescript-eslint": "^7.1.0",
+    "semver": "^7.7.2",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@release-it/conventional-changelog": "^8.0.1",
+    "@release-it/conventional-changelog": "^10.0.1",
     "@types/elliptic": "^6.4.18",
-    "@types/jest": "^28.1.8",
-    "@types/node": "^20.2.5",
-    "@types/semver": "^7.5.8",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.5.2",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/semver": "^7.7.1",
     "@types/uuid": "^9.0.1",
-    "eslint": "^8.57.0",
-    "husky": "^9.0.11",
-    "jest": "^28.1.3",
-    "lint-staged": "^15.2.2",
-    "msw": "^2.2.1",
+    "eslint": "^9.36.0",
+    "eslint-config-standard-with-typescript": "^43.0.1",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-n": "^17.23.1",
+    "eslint-plugin-promise": "^7.2.1",
+    "husky": "^9.1.7",
+    "jest": "^30.2.0",
+    "lint-staged": "^16.2.3",
+    "msw": "^2.11.3",
+    "nock": "^14.0.10",
     "npm-run-all": "^4.1.5",
-    "prettier": "^3.2.5",
-    "release-it": "^17.2.1",
-    "ts-jest": "^28.0.8",
-    "tsup": "^6.7.0",
-    "typedoc": "^0.28.0",
-    "typedoc-plugin-markdown": "^4.5.2",
-    "typescript": "~5.3.3"
+    "prettier": "^3.6.2",
+    "release-it": "^19.0.5",
+    "ts-jest": "^29.4.4",
+    "tsup": "^8.5.0",
+    "typedoc": "^0.28.13",
+    "typedoc-plugin-markdown": "^4.9.0",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.44.1"
   },
   "engines": {
     "node": ">= 16"
@@ -118,22 +118,45 @@
     }
   },
   "jest": {
-    "transform": {
-      "\\.[jt]sx?$": "ts-jest"
-    },
-    "globals": {
-      "ts-jest": {
-        "useESM": true
-      }
-    },
-    "moduleNameMapper": {
-      "^bn.js$": "<rootDir>/node_modules/bn.js",
-      "^asn1.js$": "<rootDir>/node_modules/asn1.js",
-      "^hash.js$": "<rootDir>/node_modules/hash.js",
-      "^(\\.\\.?\\/.+)\\.js$": "$1"
-    },
+    "preset": "ts-jest/presets/default-esm",
     "extensionsToTreatAsEsm": [
       ".ts"
+    ],
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "tsconfig": {
+            "module": "esnext",
+            "target": "es2020",
+            "moduleResolution": "node"
+          }
+        }
+      ]
+    },
+    "moduleNameMapper": {
+      "^(\\.\\.?\\/.+)\\.js$": "$1",
+      "^(\\.\\.?\\/.+)$": "$1"
+    },
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "json"
+    ],
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@chainsafe|ethers|msw|until-async|bn.js|asn1.js|hash.js)/)"
+    ],
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "<rootDir>/dist/",
+      "<rootDir>/node_modules/"
+    ],
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/test"
     ]
   }
 }

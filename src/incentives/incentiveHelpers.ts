@@ -1,6 +1,6 @@
-import { type ProviderType, type SignerType, type ETH_ADDRESS } from '../types';
+import { type ProviderType, type SignerType, type ETH_ADDRESS } from '../types.js';
 import { Contract } from 'ethers';
-import { MerkleDistributorABI } from '../abi/MerkleDistributorWithDeadline';
+import { MerkleDistributorABI } from '../abi/MerkleDistributorWithDeadline.js';
 
 export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
   signer: SignerType;

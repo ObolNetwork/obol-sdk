@@ -2,9 +2,9 @@ import {
   submitEOAWithdrawalRequest,
   submitEOABatchDeposit,
 } from './eoaHelpers';
-import { validatePayload } from '../ajv';
-import { eoaWithdrawalPayloadSchema, eoaDepositPayloadSchema } from '../schema';
-import { CHAIN_CONFIGURATION } from '../constants';
+import { validatePayload } from '../ajv.js';
+import { eoaWithdrawalPayloadSchema, eoaDepositPayloadSchema } from '../schema.js';
+import { CHAIN_CONFIGURATION } from '../constants.js';
 import {
   type ProviderType,
   type SignerType,
