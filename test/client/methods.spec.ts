@@ -56,11 +56,11 @@ jest.setTimeout(20000);
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+const provider = new JsonRpcProvider('https://holesky.gateway.tenderly.co');
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider) as unknown as SignerType;
 
-/* eslint no-new: 0 */
+// /* eslint no-new: 0 */
 describe('Cluster Client', () => {
   const mockConfigHash =
     '0x1f6c94e6c070393a68c1aa6073a21cb1fd57f0e14d2a475a2958990ab728c2fd';
@@ -307,7 +307,7 @@ describe('Cluster Client without a signer', () => {
   test('should return true on verified cluster lock with Safe wallet and safe rpc url', async () => {
     process.env.RPC_HOLESKY = undefined;
 
-    const safeRpcUrl = 'https://ethereum-holesky-rpc.publicnode.com';
+    const safeRpcUrl = 'https://holesky.gateway.tenderly.co';
     const isValidLock: boolean = await validateClusterLock(
       clusterLockWithSafe,
       safeRpcUrl,

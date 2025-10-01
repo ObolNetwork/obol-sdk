@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Tests
+test/
+*.spec.ts
+*.test.ts
+
+# Development files
+.vscode/
+.idea/
+*.log
+yarn-error.log
+
+# Source files (only dist/ should be published)
+src/
+tsconfig*.json
+typedoc.json
+
+# CI/CD
+.github/
+
+# Documentation
+docs/
+CHANGELOG.md
+CODEOWNERS
+
+# Build artifacts
+node_modules/
+.DS_Store
+

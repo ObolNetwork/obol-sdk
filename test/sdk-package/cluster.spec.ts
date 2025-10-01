@@ -492,7 +492,7 @@ describe('Poll Cluster Lock', () => {
 describe('OVM Tests', () => {
   const privateKey = '0x' + process.env.PRIVATE_KEY;
   const provider = new JsonRpcProvider(
-    'https://ethereum-hoodi-rpc.publicnode.com',
+    'https://ethereum-hoodi.gateway.tatum.io',
   );
   const wallet = new ethers.Wallet(privateKey, provider);
   const hoodiSigner = wallet.connect(provider);

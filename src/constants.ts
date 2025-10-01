@@ -304,6 +304,6 @@ export const CAPELLA_FORK_MAPPING: Record<string, string> = {
 };
 
 export const CHAIN_PUBLIC_RPC_URL: Record<number, string> = {
-  1: 'https://ethereum-rpc.publicnode.com', // Mainnet
-  560048: 'https://ethereum-hoodi-rpc.publicnode.com', // Hoodi
+  1: 'https://mainnet.gateway.tenderly.co', // Mainnet
+  560048: 'https://ethereum-hoodi.gateway.tatum.io', // Hoodi
 };

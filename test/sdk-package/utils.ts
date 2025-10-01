@@ -11,7 +11,7 @@ dotenv.config();
 
 // known signer
 const privateKey = process.env.PRIVATE_KEY as string;
-const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+const provider = new JsonRpcProvider('https://holesky.gateway.tenderly.co');
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);
 /* eslint-disable */

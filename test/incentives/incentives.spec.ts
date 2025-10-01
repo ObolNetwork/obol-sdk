@@ -6,7 +6,7 @@ import { DEFAULT_BASE_VERSION } from '../../src/constants.js';
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+const provider = new JsonRpcProvider('https://holesky.gateway.tenderly.co');
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);
 const baseUrl = 'https://obol-api-dev.gcp.obol.tech';

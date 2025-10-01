@@ -52,6 +52,7 @@ import {
   hashClusterLockV1X10,
   verifyDVV1X10,
 } from './v1.10.0.js';
+import bls from '@chainsafe/bls';
 
 // cluster-definition hash
 
@@ -261,7 +262,7 @@ const verifyDefinitionSignatures = async (
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
         safeRpcUrl,
       );
@@ -271,7 +272,7 @@ const verifyDefinitionSignatures = async (
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
         ],
         safeRpcUrl,
       );
@@ -384,9 +385,16 @@ export const verifyDepositData = (
   }
 
   const depositMessageBuffer = computeDepositMsgRoot(depositData);
-  const depositDataMessage = signingRoot(depositDomain, depositMessageBuffer);
+  const depositDataRoot = signingRoot(depositDomain, depositMessageBuffer);
+  if (!depositData.signature) return { isValidDepositData: false, depositDataMsg: depositDataRoot }
 
-  return { isValidDepositData: true, depositDataMsg: depositDataMessage };
+  const isValidDepositData = bls.verify(
+    fromHexString(depositData.pubkey),
+    depositDataRoot,
+    fromHexString(depositData.signature),
+  );
+
+  return { isValidDepositData, depositDataMsg: depositDataRoot };
 };
 
 export const verifyBuilderRegistration = (
