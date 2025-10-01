@@ -6280,10 +6280,10 @@ pathe@^2.0.1, pathe@^2.0.3:
   resolved "https://registry.yarnpkg.com/pathe/-/pathe-2.0.3.tgz#3ecbec55421685b70a9da872b2cff3e1cbed1716"
   integrity sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==
 
-pdf-parse@^1.1.1:
+pdf-parse-debugging-disabled@^1.1.1:
   version "1.1.1"
-  resolved "https://registry.yarnpkg.com/pdf-parse/-/pdf-parse-1.1.1.tgz#745e07408679548b3995ff896fd38e96e19d14a7"
-  integrity sha512-v6ZJ/efsBpGrGGknjtq9J/oC8tZWq0KWL5vQrk2GlzLEQPUDB1ex+13Rmidl1neNN358Jn9EHZw5y07FFtaC7A==
+  resolved "https://registry.yarnpkg.com/pdf-parse-debugging-disabled/-/pdf-parse-debugging-disabled-1.1.1.tgz#2b089dc303b5ec86ed0ee8819fba72128a5a3aaa"
+  integrity sha512-pTPktRvyvLSj9zIS9DcOKYKcR7qeTqqyMkWjgYV7YglBmA9yrDJ1/rATOpXQoT5QcXKDYjEt4BSmZkJBcP1JDw==
   dependencies:
     debug "^3.1.0"
     node-ensure "^0.0.0"

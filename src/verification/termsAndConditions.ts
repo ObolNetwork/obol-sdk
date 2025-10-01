@@ -1,4 +1,16 @@
-import pdf from 'pdf-parse';
+/**
+ * Using 'pdf-parse-debugging-disabled' instead of 'pdf-parse' because:
+ * - The original pdf-parse has a bug where it checks `!module.parent` to enable debug mode
+ * - In Jest ESM environments, module.parent is null, triggering debug mode
+ * - Debug mode tries to load './test/data/05-versions-space.pdf' which doesn't exist
+ * - This fork is identical to pdf-parse but with debug mode permanently disabled
+ * - See: https://www.npmjs.com/package/pdf-parse-debugging-disabled
+ * 
+ * Note: @types/pdf-parse-debugging-disabled doesn't exist, so we ignore the type error.
+ * The package has the same API as pdf-parse, so it works fine at runtime.
+ */
+// @ts-ignore - No @types package exists for the fork, but API is identical to pdf-parse
+import pdf from 'pdf-parse-debugging-disabled';
 import { ByteListType, ContainerType } from '@chainsafe/ssz';
 import { TERMS_AND_CONDITIONS_URL } from '../constants.js';
 import { strToUint8Array } from '../utils.js';

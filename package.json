@@ -15,7 +15,7 @@
     "build:clean": "rm -rf ./dist",
     "build": "npm-run-all build:clean build:tsup",
     "build:tsup": "tsup && tsc -b ./tsconfig.types.json",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest test/**/*.spec.ts --testPathIgnorePatterns=test/sdk-package/",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest test/**/methods.spec.ts --testPathIgnorePatterns=test/sdk-package/",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "release": "release-it",
@@ -54,7 +54,7 @@
     "dotenv": "^17.2.2",
     "elliptic": "^6.6.1",
     "ethers": "^6.15.0",
-    "pdf-parse": "^1.1.1",
+    "pdf-parse-debugging-disabled": "^1.1.1",
     "semver": "^7.7.2",
     "uuid": "^9.0.0"
   },

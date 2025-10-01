@@ -1,41 +1,8 @@
 // @ts-nocheck
 import { jest } from '@jest/globals';
-
-/**
- * ESM Mocking Pattern with Jest 29:
- * 
- * We use jest.unstable_mockModule() BEFORE imports to mock ES modules globally.
- * This is required because:
- * 1. ESM imports are evaluated at module load time (before any code runs)
- * 2. ESM modules are read-only - we cannot use jest.spyOn() on them
- * 3. Mocks must be registered before the module is imported
- * 
- * Pattern:
- * 1. Call await jest.unstable_mockModule() to register mocks
- * 2. Use await import() for mocked modules (dynamic import after mock registration)
- * 3. Use regular import for non-mocked modules (they can be static imports)
- * 
- * Why we mock hashTermsAndConditions:
- * - The real function imports 'pdf-parse' which tries to load test PDFs on initialization
- * - This causes "ENOENT: no such file or directory" errors in Jest
- * - We mock it to return the expected hash value without loading PDFs
- * 
- * Why we DON'T mock utils/validation functions:
- * - validateClusterLock and related tests need REAL validation logic (SSZ hashing, BLS verification, etc.)
- * - Mocking would make tests pass even if the actual validation is broken
- * - These are unit tests for validation behavior, not integration tests
- */
-await jest.unstable_mockModule('../../src/verification/termsAndConditions.js', () => ({
-  __esModule: true,
-  hashTermsAndConditions: jest.fn(async () => '0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273'),
-}));
-
-// Dynamic import AFTER mock registration (required for mocked modules in ESM)
-const { hashTermsAndConditions } = await import('../../src/verification/termsAndConditions.js');
-
-// Static imports for non-mocked modules (these use real implementations)
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client, validateClusterLock, type SignerType } from '../../src/index.js';
+import { Client, validateClusterLock, type SignerType } from '../../src/index';
+import { hashTermsAndConditions } from '../../src/verification/termsAndConditions';
 import {
   clusterConfigV1X7,
   clusterConfigV1X10,
@@ -294,8 +261,6 @@ describe('Cluster Client without a signer', () => {
    * - Mocking would give false positives (tests pass but validation is broken)
    * - These are unit tests for the validation behavior itself
    * 
-   * The ONLY mocked function is hashTermsAndConditions, which is NOT used by
-   * validateClusterLock. It's only used by acceptObolLatestTermsAndConditions.
    * 
    * Therefore, when these tests return true, it's a REAL validation result!
    */
@@ -351,6 +316,11 @@ describe('Cluster Client without a signer', () => {
     expect(isValidLock).toEqual(false);
   });
   test('Finds the hash of the latest version of terms and conditions', async () => {
+    // This test validates that hashTermsAndConditions:
+    // 1. Fetches the REAL PDF from https://obol.org/terms.pdf (network call)
+    // 2. Processes it through REAL pdf-parse library (extracts text)
+    // 3. Computes the REAL SSZ hash using @chainsafe/ssz
+    // NO MOCKING - this is a full end-to-end test of the function!
     const termsAndConditionsHash = await hashTermsAndConditions();
     expect(termsAndConditionsHash).toEqual(
       '0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273',
