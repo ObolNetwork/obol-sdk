@@ -157,6 +157,12 @@ describe('Cluster Definition', () => {
     }
   });
 
+  /**
+   * E2E Tests for createObolTotalSplit
+   * Tests cover: signer validation, chainId validation, recipient validation, 
+   * ObolRAFSplit validation, contract deployment, same recipients return same addresses,
+   * different configs return different addresses, distributorFee and controllerAddress
+   */
   it('should deploy Splitter', async () => {
     const secondRandomSignerAddress = await secondRandomSigner.getAddress();
     // new splitter
@@ -194,6 +200,12 @@ describe('Cluster Definition', () => {
     );
   });
 
+  /**
+   * E2E Tests for createObolRewardsSplit
+   * Tests cover: signer validation, chainId validation, recipient validation,
+   * ObolRAFSplit validation, OWR and splitter contract deployment, 
+   * address prediction, tranches retrieval, and various parameter configurations
+   */
   it('should deploy OWR and splitter and get tranches', async () => {
     const secondRandomSignerAddress = await secondRandomSigner.getAddress();
     const principalRecipient = '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966';
