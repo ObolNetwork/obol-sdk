@@ -506,7 +506,7 @@ describe('OVM Tests', () => {
     ? process.env.PRIVATE_KEY
     : '0x' + process.env.PRIVATE_KEY;
   const provider = new JsonRpcProvider(
-    process.env.RPC_HOODI || "https://ethereum-hoodi-rpc.publicnode.com",
+    process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
   );
   const wallet = new ethers.Wallet(privateKey, provider);
   const hoodiSigner = wallet.connect(provider);

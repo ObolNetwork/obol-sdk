@@ -12,9 +12,10 @@ dotenv.config();
 // known signer
 const privateKey = process.env.PRIVATE_KEY?.startsWith('0x')
   ? process.env.PRIVATE_KEY
-  : '0x' + process.env.PRIVATE_KEY; const provider = new JsonRpcProvider(
-    process.env.RPC_HOLESKY || "https://ethereum-holesky-rpc.publicnode.com",
-  );
+  : '0x' + process.env.PRIVATE_KEY;
+const provider = new JsonRpcProvider(
+  process.env.RPC_HOLESKY || 'https://ethereum-holesky-rpc.publicnode.com',
+);
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);
 /* eslint-disable */

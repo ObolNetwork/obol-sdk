@@ -24,7 +24,8 @@ jest.setTimeout(20000);
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider(
-  process.env.RPC_HOLESKY || "https://ethereum-holesky-rpc.publicnode.com");
+  process.env.RPC_HOLESKY || 'https://ethereum-holesky-rpc.publicnode.com',
+);
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider) as unknown as SignerType;
 
