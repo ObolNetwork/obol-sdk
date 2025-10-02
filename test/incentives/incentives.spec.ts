@@ -7,7 +7,7 @@ import { DEFAULT_BASE_VERSION } from '../../src/constants.js';
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider(
-  'https://eth-holesky.g.alchemy.com/v2/taBm2YkxMubBs-p-LosN6ICX5lH5l3xc',
+  process.env.RPC_HOLESKY || "https://ethereum-holesky-rpc.publicnode.com",
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);

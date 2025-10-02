@@ -502,9 +502,11 @@ describe('Poll Cluster Lock', () => {
 });
 
 describe('OVM Tests', () => {
-  const privateKey = '0x' + process.env.PRIVATE_KEY;
+  const privateKey = process.env.PRIVATE_KEY?.startsWith('0x')
+    ? process.env.PRIVATE_KEY
+    : '0x' + process.env.PRIVATE_KEY;
   const provider = new JsonRpcProvider(
-    'https://eth-hoodi.g.alchemy.com/v2/jwDcAgCv33IL1n3OT1HlUcZWJFEkupGQ',
+    process.env.RPC_HOODI || "https://ethereum-hoodi-rpc.publicnode.com",
   );
   const wallet = new ethers.Wallet(privateKey, provider);
   const hoodiSigner = wallet.connect(provider);

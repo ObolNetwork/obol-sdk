@@ -304,6 +304,6 @@ export const CAPELLA_FORK_MAPPING: Record<string, string> = {
 };
 
 export const CHAIN_PUBLIC_RPC_URL: Record<number, string> = {
-  1: 'https://eth-mainnet.g.alchemy.com/v2/taBm2YkxMubBs-p-LosN6ICX5lH5l3xc', // Mainnet
-  560048: 'https://eth-hoodi.g.alchemy.com/v2/jwDcAgCv33IL1n3OT1HlUcZWJFEkupGQ', // Hoodi
+  1:  process.env.RPC_MAINNET || "https://ethereum-rpc.publicnode.com", // Mainnet
+  560048:  process.env.RPC_HOODI || "https://ethereum-hoodi-rpc.publicnode.com", // Hoodi
 };

@@ -7,7 +7,7 @@ import {
   type ProviderType,
 } from '../../src/types.js';
 // import { CHAIN_CONFIGURATION } from '../../src/constants.js';
-import { TEST_ADDRESSES } from '../fixtures';
+import { TEST_ADDRESSES } from '../fixtures.js';
 
 // Mock splitHelpers using unstable_mockModule
 // @ts-expect-error - ESM mocking requires top-level await

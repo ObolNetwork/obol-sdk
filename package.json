@@ -93,8 +93,7 @@
   "files": [
     "package.json",
     "README.md",
-    "dist",
-    "src"
+    "dist"
   ],
   "release-it": {
     "git": {
