@@ -1,4 +1,8 @@
-import { type ProviderType, type SignerType, type ETH_ADDRESS } from '../types.js';
+import {
+  type ProviderType,
+  type SignerType,
+  type ETH_ADDRESS,
+} from '../types.js';
 import { Contract } from 'ethers';
 import { MerkleDistributorABI } from '../abi/MerkleDistributorWithDeadline.js';
 

@@ -195,7 +195,7 @@ export class Exit {
     forkVersion: string,
     genesisValidatorsRootString: string,
   ): Promise<boolean> {
-    await init("herumi");
+    await init('herumi');
     const capellaForkVersionString = await getCapellaFork(forkVersion);
     if (!capellaForkVersionString) {
       throw new Error(
@@ -585,7 +585,6 @@ export class Exit {
   async recombineExitBlobs(
     exitBlob: ExistingExitValidationBlobData,
   ): Promise<FullExitBlob> {
-
     // Map to store signatures by their share index (matching Go's map[int]tbls.Signature)
     const signaturesByIndex = new Map<number, Uint8Array>();
 

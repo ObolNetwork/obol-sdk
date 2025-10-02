@@ -231,8 +231,10 @@ export const hashClusterLockV1X8 = (cluster: ClusterLock): string => {
 };
 
 // DV verification
-export const verifyDVV1X8 = async (clusterLock: ClusterLock): Promise<boolean> => {
-  await init("herumi");
+export const verifyDVV1X8 = async (
+  clusterLock: ClusterLock,
+): Promise<boolean> => {
+  await init('herumi');
   const validators = clusterLock.distributed_validators;
   const pubShares = [];
   const pubKeys = [];

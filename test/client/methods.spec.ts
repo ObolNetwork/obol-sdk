@@ -23,7 +23,9 @@ jest.setTimeout(20000);
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-const provider = new JsonRpcProvider('https://holesky.gateway.tenderly.co');
+const provider = new JsonRpcProvider(
+  'https://eth-holesky.g.alchemy.com/v2/taBm2YkxMubBs-p-LosN6ICX5lH5l3xc',
+);
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider) as unknown as SignerType;
 
@@ -248,20 +250,14 @@ describe('Cluster Client without a signer', () => {
 
   /**
    * IMPORTANT: These tests use REAL validation logic, NOT mocked functions!
-   * 
+   *
    * validateClusterLock performs the following REAL cryptographic validations:
    * 1. BLS signature verification (@chainsafe/bls) - verifies deposit data signatures
-   * 2. ECDSA signature verification (elliptic) - verifies operator signatures  
+   * 2. ECDSA signature verification (elliptic) - verifies operator signatures
    * 3. SSZ hashing (@chainsafe/ssz) - hashes cluster definitions and locks
    * 4. ENR validation (@chainsafe/enr) - validates Ethereum Node Records
    * 5. Safe wallet signature verification (via RPC) - for Safe multisig addresses
-   * 
-   * We do NOT mock any of these functions because:
-   * - We want to ensure the ACTUAL validation logic works correctly
-   * - Mocking would give false positives (tests pass but validation is broken)
-   * - These are unit tests for the validation behavior itself
-   * 
-   * 
+   *
    * Therefore, when these tests return true, it's a REAL validation result!
    */
   test.each([
@@ -331,15 +327,15 @@ describe('Cluster Client without a signer', () => {
 /**
  * Note: Tests for createObolRewardsSplit and createObolTotalSplit are in the e2e test suite
  * See: test/sdk-package/cluster.spec.ts
- * 
- * These methods require real blockchain interactions (contract deployments) which cannot be 
+ *
+ * These methods require real blockchain interactions (contract deployments) which cannot be
  * effectively mocked in unit tests with Jest 29 + ESM. The e2e tests cover:
- * 
+ *
  * createObolRewardsSplit:
  * - Deploy OWR and splitter with various configurations
  * - Tests: signer validation, chainId validation, recipient validation, ObolRAFSplit validation,
  *   contract deployment, address prediction, and tranches retrieval
- * 
+ *
  * createObolTotalSplit:
  * - Deploy splitter contracts with various configurations
  * - Tests: same recipients return same addresses, different configs return different addresses,

@@ -3,7 +3,10 @@ import {
   submitEOABatchDeposit,
 } from './eoaHelpers';
 import { validatePayload } from '../ajv.js';
-import { eoaWithdrawalPayloadSchema, eoaDepositPayloadSchema } from '../schema.js';
+import {
+  eoaWithdrawalPayloadSchema,
+  eoaDepositPayloadSchema,
+} from '../schema.js';
 import { CHAIN_CONFIGURATION } from '../constants.js';
 import {
   type ProviderType,

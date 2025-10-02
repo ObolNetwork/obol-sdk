@@ -5,9 +5,8 @@ import {
   TypedDataUtils,
   type TypedMessage,
 } from '@metamask/eth-sig-util';
-import Safe from '@safe-global/protocol-kit';
+import Safe, { hashSafeMessage } from '@safe-global/protocol-kit';
 import { PROVIDER_MAP } from '../constants.js';
-import { hashSafeMessage } from '@safe-global/protocol-kit';
 import { type EIP712TypedData } from '@safe-global/types-kit';
 import { isContractAvailable, getProvider } from '../utils.js';
 import { type SafeRpcUrl } from '../types.js';

@@ -1,20 +1,23 @@
 // @ts-nocheck
 import { jest } from '@jest/globals';
-// ESM-safe mocking: mock helpers before importing the module under test
-await jest.unstable_mockModule('../../src/eoa/eoaHelpers.js', () => ({
-  __esModule: true,
-  submitEOAWithdrawalRequest: jest.fn(),
-  submitEOABatchDeposit: jest.fn(),
-}));
-const { EOA } = await import('../../src/eoa/eoa.js');
-const { submitEOAWithdrawalRequest, submitEOABatchDeposit } = await import(
-  '../../src/eoa/eoaHelpers.js'
-);
 import {
   type EOAWithdrawalPayload,
   type SignerType,
   type ProviderType,
 } from '../../src/types.js';
+// ESM-safe mocking: mock helpers before importing the module under test
+// @ts-expect-error - ESM mocking requires top-level await
+await jest.unstable_mockModule('../../src/eoa/eoaHelpers.js', () => ({
+  __esModule: true,
+  submitEOAWithdrawalRequest: jest.fn(),
+  submitEOABatchDeposit: jest.fn(),
+}));
+// @ts-expect-error - ESM dynamic import returns promise
+const { EOA } = await import('../../src/eoa/eoa.js');
+// @ts-expect-error - ESM dynamic import returns promise
+const { submitEOAWithdrawalRequest, submitEOABatchDeposit } = await import(
+  '../../src/eoa/eoaHelpers.js'
+);
 
 // helpers are mocked via unstable_mockModule above
 
@@ -31,7 +34,10 @@ describe('EOA', () => {
       getAddress: jest
         .fn()
         .mockResolvedValue('0x1234567890123456789012345678901234567890'),
-      sendTransaction: jest.fn().mockResolvedValue({ hash: '0xhash', wait: jest.fn().mockResolvedValue({ status: 1 }) }),
+      sendTransaction: jest.fn().mockResolvedValue({
+        hash: '0xhash',
+        wait: jest.fn().mockResolvedValue({ status: 1 }),
+      }),
     } as unknown as SignerType;
     mockProvider = {
       getNetwork: jest.fn().mockResolvedValue({ chainId: 1 }),
@@ -57,8 +63,12 @@ describe('EOA', () => {
         submitEOAWithdrawalRequest as jest.MockedFunction<
           typeof submitEOAWithdrawalRequest
         >
-      ).mockResolvedValue?.(mockResult as any);
-      (submitEOAWithdrawalRequest as any).mockResolvedValue?.(mockResult);
+      ).mockResolvedValue?.(mockResult);
+      (
+        submitEOAWithdrawalRequest as jest.MockedFunction<
+          typeof submitEOAWithdrawalRequest
+        >
+      ).mockResolvedValue?.(mockResult);
 
       const result = await eoa.requestWithdrawal(mockPayload);
 
@@ -134,8 +144,12 @@ describe('EOA', () => {
         submitEOAWithdrawalRequest as jest.MockedFunction<
           typeof submitEOAWithdrawalRequest
         >
-      ).mockResolvedValue?.(mockResult as any);
-      (submitEOAWithdrawalRequest as any).mockResolvedValue?.(mockResult);
+      ).mockResolvedValue?.(mockResult);
+      (
+        submitEOAWithdrawalRequest as jest.MockedFunction<
+          typeof submitEOAWithdrawalRequest
+        >
+      ).mockResolvedValue?.(mockResult);
 
       const result = await eoa.requestWithdrawal(mockPayload);
 
@@ -174,8 +188,12 @@ describe('EOA', () => {
         submitEOABatchDeposit as jest.MockedFunction<
           typeof submitEOABatchDeposit
         >
-      ).mockResolvedValue?.(mockResult as any);
-      (submitEOABatchDeposit as any).mockResolvedValue?.(mockResult);
+      ).mockResolvedValue?.(mockResult);
+      (
+        submitEOABatchDeposit as jest.MockedFunction<
+          typeof submitEOABatchDeposit
+        >
+      ).mockResolvedValue?.(mockResult);
 
       const result = await eoa.deposit(mockPayload);
 
@@ -253,8 +271,12 @@ describe('EOA', () => {
         submitEOABatchDeposit as jest.MockedFunction<
           typeof submitEOABatchDeposit
         >
-      ).mockResolvedValue?.(mockResult as any);
-      (submitEOABatchDeposit as any).mockResolvedValue?.(mockResult);
+      ).mockResolvedValue?.(mockResult);
+      (
+        submitEOABatchDeposit as jest.MockedFunction<
+          typeof submitEOABatchDeposit
+        >
+      ).mockResolvedValue?.(mockResult);
 
       const result = await eoa.deposit(mockPayload);
 

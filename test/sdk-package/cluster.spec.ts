@@ -159,7 +159,7 @@ describe('Cluster Definition', () => {
 
   /**
    * E2E Tests for createObolTotalSplit
-   * Tests cover: signer validation, chainId validation, recipient validation, 
+   * Tests cover: signer validation, chainId validation, recipient validation,
    * ObolRAFSplit validation, contract deployment, same recipients return same addresses,
    * different configs return different addresses, distributorFee and controllerAddress
    */
@@ -203,7 +203,7 @@ describe('Cluster Definition', () => {
   /**
    * E2E Tests for createObolRewardsSplit
    * Tests cover: signer validation, chainId validation, recipient validation,
-   * ObolRAFSplit validation, OWR and splitter contract deployment, 
+   * ObolRAFSplit validation, OWR and splitter contract deployment,
    * address prediction, tranches retrieval, and various parameter configurations
    */
   it('should deploy OWR and splitter and get tranches', async () => {

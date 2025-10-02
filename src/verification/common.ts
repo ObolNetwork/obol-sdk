@@ -172,7 +172,7 @@ const validatePOSTConfigHashSigner = async (
   try {
     const data = signCreatorConfigHashPayload(
       { creator_config_hash: configHash },
-      chainId,
+      chainId as number,
     );
 
     return await validateAddressSignature({
@@ -262,8 +262,8 @@ const verifyDefinitionSignatures = async (
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
-        ],
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        ] as number,
         safeRpcUrl,
       );
 
@@ -272,8 +272,8 @@ const verifyDefinitionSignatures = async (
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
-        clusterDefinition.fork_version as keyof typeof FORK_MAPPING
-        ],
+          clusterDefinition.fork_version as keyof typeof FORK_MAPPING
+        ] as number,
         safeRpcUrl,
       );
 
@@ -386,7 +386,9 @@ export const verifyDepositData = (
 
   const depositMessageBuffer = computeDepositMsgRoot(depositData);
   const depositDataRoot = signingRoot(depositDomain, depositMessageBuffer);
-  if (!depositData.signature) return { isValidDepositData: false, depositDataMsg: depositDataRoot }
+  if (!depositData.signature) {
+    return { isValidDepositData: false, depositDataMsg: depositDataRoot };
+  }
 
   const isValidDepositData = bls.bls.verify(
     fromHexString(depositData.pubkey),
@@ -481,7 +483,6 @@ export const signingRoot = (
 };
 
 const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
-
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.6.0')) {
     return await verifyDVV1X6(clusterLock);
   }

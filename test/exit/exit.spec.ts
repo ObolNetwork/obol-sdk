@@ -1,41 +1,5 @@
 // @ts-nocheck
 import { jest } from '@jest/globals';
-
-// Mock ethUtils
-await jest.unstable_mockModule('../../src/exits/ethUtils.js', () => ({
-  __esModule: true,
-  getCapellaFork: jest.fn(),
-  getGenesisValidatorsRoot: jest.fn(),
-}));
-
-// Mock @chainsafe/bls
-const mockBlsVerify = jest.fn();
-await jest.unstable_mockModule('@chainsafe/bls', () => ({
-  __esModule: true,
-  default: {
-    init: jest.fn().mockResolvedValue(undefined),
-    verify: mockBlsVerify,
-    aggregateSignatures: jest.fn(),
-  },
-}));
-
-// Mock elliptic with a proper EC constructor
-const mockEcVerify = jest.fn();
-const mockKeyFromPublic = jest.fn(() => ({
-  verify: mockEcVerify,
-}));
-await jest.unstable_mockModule('elliptic', () => ({
-  __esModule: true,
-  ec: jest.fn(function(this: any, curve: string) {
-    this.curve = curve;
-    this.keyFromPublic = mockKeyFromPublic;
-    return this;
-  }),
-}));
-
-const ethUtils = await import('../../src/exits/ethUtils.js');
-const bls = await import('@chainsafe/bls');
-const { Exit } = await import('../../src/exits/exit.js');
 import { ENR } from '@chainsafe/enr';
 import { CAPELLA_FORK_MAPPING } from '../../src/constants.js';
 import type {
@@ -47,10 +11,54 @@ import type {
   ExitValidationMessage,
 } from '../../src/types';
 import { fromHexString } from '@chainsafe/ssz';
-import * as verificationHelpers from '../../src/exits/verificationHelpers';
+// import * as verificationHelpers from '../../src/exits/verificationHelpers';
+
+// Mock ethUtils
+// @ts-expect-error - ESM mocking requires top-level await
+await jest.unstable_mockModule('../../src/exits/ethUtils.js', () => ({
+  __esModule: true,
+  getCapellaFork: jest.fn(),
+  getGenesisValidatorsRoot: jest.fn(),
+}));
+
+// Mock @chainsafe/bls
+const mockBlsVerify = jest.fn();
+const mockAggregateSignatures = jest.fn();
+// @ts-expect-error - ESM mocking requires top-level await
+await jest.unstable_mockModule('@chainsafe/bls', () => ({
+  __esModule: true,
+  init: jest.fn().mockResolvedValue(undefined),
+  bls: {
+    verify: mockBlsVerify,
+    aggregateSignatures: mockAggregateSignatures,
+  },
+}));
+
+// Mock elliptic with a proper EC constructor
+const mockEcVerify = jest.fn();
+const mockKeyFromPublic = jest.fn(() => ({
+  verify: mockEcVerify,
+}));
+// @ts-expect-error - ESM mocking requires top-level await
+await jest.unstable_mockModule('elliptic', () => ({
+  __esModule: true,
+  ec: jest.fn(function (this: any, curve: string) {
+    this.curve = curve;
+    this.keyFromPublic = mockKeyFromPublic;
+    return this;
+  }),
+}));
+
+const ethUtils = await import('../../src/exits/ethUtils.js');
+const bls = await import('@chainsafe/bls');
+const { Exit } = await import('../../src/exits/exit.js');
 
 const mockedEthUtils = ethUtils as jest.Mocked<typeof ethUtils>;
-const mockedBls = bls.default as any;
+const mockedBls = bls as any;
+
+// Setup default mock return values
+mockBlsVerify.mockReturnValue(true);
+mockAggregateSignatures.mockReturnValue('0xaggregatedSignature');
 
 // --- Test Data ---
 const MAINNET_BASE_FORK_VERSION = '0x00000000';
@@ -336,7 +344,7 @@ describe('exit', () => {
     });
 
     it('should throw if a partial exit signature is invalid', async () => {
-      mockedBls.verify.mockReturnValue(false);
+      mockBlsVerify.mockReturnValue(false);
       await expect(
         exit.validateExitBlobs(
           mockClusterConfig,
@@ -603,15 +611,13 @@ describe('exit', () => {
       };
       const expectedAggregatedSig = '0x' + 'ff'.repeat(96);
       const expectedAggregatedSigBytes = fromHexString(expectedAggregatedSig);
-      (mockedBls.aggregateSignatures as jest.Mock).mockReturnValue(
-        expectedAggregatedSigBytes,
-      );
+      mockAggregateSignatures.mockReturnValue(expectedAggregatedSigBytes);
 
       const result = await exit.recombineExitBlobs(mockExistingBlob);
 
-      expect(mockedBls.aggregateSignatures).toHaveBeenCalledTimes(1);
+      expect(mockAggregateSignatures).toHaveBeenCalledTimes(1);
 
-      const calls = (mockedBls.aggregateSignatures as jest.Mock).mock.calls;
+      const calls = mockAggregateSignatures.mock.calls;
       const rawSignatures = calls[0][0];
 
       // Check if signatures were passed in sorted order of operator index

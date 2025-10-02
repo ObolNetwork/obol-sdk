@@ -102,7 +102,7 @@ export async function submitEOABatchDeposit({
 
       const receipt = await tx.wait();
       if (receipt?.hash) {
-        txHashes.push(receipt.hash);
+        txHashes.push(receipt.hash as string);
       }
     }
     return { txHashes };
