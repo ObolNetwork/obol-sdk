@@ -10,8 +10,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // known signer
-const privateKey = process.env.PRIVATE_KEY as string;
-const provider = new JsonRpcProvider('https://holesky.gateway.tenderly.co');
+const privateKey = "0x"+ process.env.PRIVATE_KEY as string;
+const provider = new JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/taBm2YkxMubBs-p-LosN6ICX5lH5l3xc');
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);
 /* eslint-disable */

@@ -26,7 +26,8 @@ import {
   type DepositData,
 } from '../types';
 import { verifyDepositData } from './common.js';
-import bls from '@chainsafe/bls';
+import { init } from '@chainsafe/bls';
+import * as bls from '@chainsafe/bls';
 
 // cluster definition
 type DefinitionFieldsV1X6 = {
@@ -192,7 +193,7 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
 
 // DV verification
 export const verifyDVV1X6 = async (clusterLock: ClusterLock): Promise<boolean> => {
-  await bls.init();
+  await init("herumi");
   const validators = clusterLock.distributed_validators;
   const pubShares = [];
   const pubKeys = [];
@@ -227,10 +228,10 @@ export const verifyDVV1X6 = async (clusterLock: ClusterLock): Promise<boolean> =
     );
   }
 
-  const aggregateBLSSignature = bls.aggregateSignatures(blsSignatures);
+  const aggregateBLSSignature = bls.bls.aggregateSignatures(blsSignatures);
 
   if (
-    !bls.verifyMultiple(
+    !bls.bls.verifyMultiple(
       pubKeys,
       builderRegistrationAndDepositDataMessages,
       aggregateBLSSignature,
@@ -240,7 +241,7 @@ export const verifyDVV1X6 = async (clusterLock: ClusterLock): Promise<boolean> =
   }
 
   if (
-    !bls.verifyAggregate(
+    !bls.bls.verifyAggregate(
       pubShares,
       fromHexString(clusterLock.lock_hash),
       fromHexString(clusterLock.signature_aggregate),

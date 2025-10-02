@@ -10,6 +10,8 @@ export default defineConfig([
     sourcemap: true,
     // Bundle ESM-only dependencies so they work in CJS
     noExternal: ['@chainsafe/enr'],
+    // Keep @chainsafe/bls external - bundling breaks its WASM initialization
+    external: ['@chainsafe/bls', '@chainsafe/blst'],
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -24,6 +26,8 @@ export default defineConfig([
     outExtension: () => ({ js: '.js' }), // Use .js instead of .mjs
     // Bundle ESM-only dependencies
     noExternal: ['@chainsafe/enr'],
+    // Keep @chainsafe/bls external - bundling breaks its WASM initialization
+    external: ['@chainsafe/bls', '@chainsafe/blst'],
     esbuildOptions(options) {
       options.platform = 'node';
     },

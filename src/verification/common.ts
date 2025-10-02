@@ -52,7 +52,7 @@ import {
   hashClusterLockV1X10,
   verifyDVV1X10,
 } from './v1.10.0.js';
-import bls from '@chainsafe/bls';
+import * as bls from '@chainsafe/bls';
 
 // cluster-definition hash
 
@@ -388,7 +388,7 @@ export const verifyDepositData = (
   const depositDataRoot = signingRoot(depositDomain, depositMessageBuffer);
   if (!depositData.signature) return { isValidDepositData: false, depositDataMsg: depositDataRoot }
 
-  const isValidDepositData = bls.verify(
+  const isValidDepositData = bls.bls.verify(
     fromHexString(depositData.pubkey),
     depositDataRoot,
     fromHexString(depositData.signature),
