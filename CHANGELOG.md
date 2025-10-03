@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.5-rc.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.4...v2.11.5-rc.0)
+
+- fix critical vulnerabilities [`#155`](https://github.com/ObolNetwork/obol-sdk/pull/155)
+
 #### [v2.11.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.3...v2.11.4)
 
+> 19 September 2025
+
+- chore(release): v2.11.4 [`#154`](https://github.com/ObolNetwork/obol-sdk/pull/154)
 - update ovm factory info [`#153`](https://github.com/ObolNetwork/obol-sdk/pull/153)
 
 #### [v2.11.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.2...v2.11.3)
