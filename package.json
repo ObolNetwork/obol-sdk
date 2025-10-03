@@ -18,6 +18,7 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest test/**/**.spec.ts --testPathIgnorePatterns=test/sdk-package/",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
+    "npm:publish:next": "npm publish --tag next",
     "release": "release-it",
     "release:dry": "release-it --dry-run --no-npm",
     "lint": "eslint \"{src,test}/**/*.{js,ts}\" --fix",
