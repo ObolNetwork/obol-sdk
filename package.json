@@ -42,7 +42,7 @@
   "dependencies": {
     "@chainsafe/bls": "6.0.3",
     "@chainsafe/blst": "^0.2.0",
-    "@chainsafe/enr": "^5.0.0",
+    "@chainsafe/enr": "^5.0.1",
     "@chainsafe/ssz": "^0.14.0",
     "@metamask/eth-sig-util": "^8.2.0",
     "@safe-global/protocol-kit": "6.1.1",

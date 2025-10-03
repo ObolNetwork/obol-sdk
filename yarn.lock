@@ -337,7 +337,7 @@
     node-fetch "^2.6.1"
     node-gyp "^8.4.0"
 
-"@chainsafe/enr@^5.0.0":
+"@chainsafe/enr@^5.0.1":
   version "5.0.1"
   resolved "https://registry.yarnpkg.com/@chainsafe/enr/-/enr-5.0.1.tgz#ac7622ee381475110239af75073969fad1faf412"
   integrity sha512-RP5XxJOSYt0f775ne6NqlaG33Qia+IaMjWlP7PlWagz6SOpXlfbm+vaqHx3by6lKPb9aW4UQtO+fiRxz85XwaQ==

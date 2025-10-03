@@ -302,8 +302,3 @@ export const CAPELLA_FORK_MAPPING: Record<string, string> = {
   '0x01017000': '0x04017000', // Holesky
   '0x10000910': '0x40000910', // Hoodi
 };
-
-export const CHAIN_PUBLIC_RPC_URL: Record<number, string> = {
-  1: process.env.RPC_MAINNET || 'https://ethereum-rpc.publicnode.com', // Mainnet
-  560048: process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com', // Hoodi
-};
