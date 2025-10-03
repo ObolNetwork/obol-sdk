@@ -1,7 +1,7 @@
-import { ETHER_TO_GWEI } from '../constants';
-import { type SignerType, type ProviderType } from '../types';
+import { ETHER_TO_GWEI } from '../constants.js';
+import { type SignerType, type ProviderType } from '../types.js';
 import { Contract } from 'ethers';
-import { BatchDepositContract } from '../abi/BatchDeposit';
+import { BatchDepositContract } from '../abi/BatchDeposit.js';
 
 /**
  * Helper function to submit withdrawal request for EOA
@@ -102,7 +102,7 @@ export async function submitEOABatchDeposit({
 
       const receipt = await tx.wait();
       if (receipt?.hash) {
-        txHashes.push(receipt.hash);
+        txHashes.push(receipt.hash as string);
       }
     }
     return { txHashes };

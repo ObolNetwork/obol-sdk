@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: '18.x'
+          node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
           scope: '@obolnetwork'
 
@@ -51,12 +51,22 @@ jobs:
           body: |
             ## Release notes:
             ${{ steps.extract-release-notes.outputs.release_notes }}
-      
+          prerelease: ${{ contains(steps.package-version.outputs.current-version, '-rc.') }}
+
       ############# NPM RELEASE ##############
       - run: yarn install --frozen-lockfile
       - run: yarn run build
       - run: yarn run generate-typedoc 
-      - run: yarn run npm:publish
+      - name: Publish to NPM
+        run: |
+          VERSION="${{ steps.package-version.outputs.current-version }}"
+          if [[ "$VERSION" == *"-rc."* ]]; then
+            echo "Publishing RC version: $VERSION"
+            yarn run npm:publish:next
+          else
+            echo "Publishing stable version: $VERSION"
+            yarn run npm:publish
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           RPC_HOLESKY: ${{ secrets.RPC_HOLESKY }}

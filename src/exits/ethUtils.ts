@@ -1,4 +1,4 @@
-import { CAPELLA_FORK_MAPPING } from '../constants';
+import { CAPELLA_FORK_MAPPING } from '../constants.js';
 
 /**
  * Retrieves the Capella fork version for a given base fork version.

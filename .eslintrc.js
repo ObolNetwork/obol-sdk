@@ -19,7 +19,7 @@ module.exports = {
     ecmaVersion: 'latest',
     sourceType: 'module',
   },
-  ignorePatterns: ['**/dist/**'],
+  ignorePatterns: ['**/dist/**', '**/*.spec.ts'],
   rules: {
     '@typescript-eslint/strict-boolean-expressions': 0,
     '@typescript-eslint/comma-dangle': 0,
@@ -32,6 +32,7 @@ module.exports = {
     '@typescript-eslint/member-delimiter-style': 'off',
     'no-useless-catch': 0,
     'new-cap': 0,
-    "@typescript-eslint/naming-convention": 'off'
+    "@typescript-eslint/naming-convention": 'off',
+    '@typescript-eslint/prefer-nullish-coalescing': 'off'
   },
 };

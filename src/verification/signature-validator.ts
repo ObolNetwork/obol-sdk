@@ -5,12 +5,11 @@ import {
   TypedDataUtils,
   type TypedMessage,
 } from '@metamask/eth-sig-util';
-import Safe from '@safe-global/protocol-kit';
-import { PROVIDER_MAP } from '../constants';
-import { hashTypedData } from '@safe-global/protocol-kit/dist/src/utils';
-import { type EIP712TypedData } from '@safe-global/safe-core-sdk-types';
-import { isContractAvailable, getProvider } from '../utils';
-import { type SafeRpcUrl } from '../types';
+import Safe, { hashSafeMessage } from '@safe-global/protocol-kit';
+import { PROVIDER_MAP } from '../constants.js';
+import { type EIP712TypedData } from '@safe-global/types-kit';
+import { isContractAvailable, getProvider } from '../utils.js';
+import { type SafeRpcUrl } from '../types.js';
 
 export const validateAddressSignature = async ({
   address,
@@ -88,7 +87,7 @@ export const validateSmartContractSignature = async ({
       provider: safeProvider,
       safeAddress: address,
     });
-    const messageHash = hashTypedData(data);
+    const messageHash = hashSafeMessage(data);
     const isValidSignature = await protocolKit.isValidSignature(
       messageHash,
       token,

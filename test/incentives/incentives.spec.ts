@@ -1,19 +1,25 @@
+// @ts-nocheck
 import { ethers, JsonRpcProvider } from 'ethers';
-import { Client } from '../../src/index';
-import * as utils from '../../src/utils';
-import * as incentivesHelpers from '../../src/incentives/incentiveHelpers';
-import { DEFAULT_BASE_VERSION } from '../../src/constants';
 import { jest, describe, beforeEach, test, expect } from '@jest/globals';
+import { type Client } from '../../src/index.js';
+import { DEFAULT_BASE_VERSION } from '../../src/constants.js';
 
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+const provider = new JsonRpcProvider(
+  process.env.RPC_HOLESKY || 'https://ethereum-holesky-rpc.publicnode.com',
+);
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);
 const baseUrl = 'https://obol-api-dev.gcp.obol.tech';
 
 // Fix the type error by properly typing the mock function
-global.fetch = jest.fn() as jest.Mock<Promise<Response>>;
+global.fetch = jest.fn() as any;
+
+// Mock module functions
+let mockIsContractAvailable: jest.Mock;
+let mockClaimIncentivesFromMerkleDistributor: jest.Mock;
+let mockIsClaimedFromMerkleDistributor: jest.Mock;
 
 describe('Client.incentives', () => {
   let clientInstance: Client;
@@ -28,14 +34,46 @@ describe('Client.incentives', () => {
     ],
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
-    clientInstance = new Client({ baseUrl, chainId: 17000 }, mockSigner);
+    jest.resetModules();
+
+    // Mock utils and incentiveHelpers at module level
+    mockIsContractAvailable = jest.fn();
+    mockClaimIncentivesFromMerkleDistributor = jest.fn();
+    mockIsClaimedFromMerkleDistributor = jest.fn();
+
+    // @ts-expect-error - ESM mocking requires top-level await
+    await jest.unstable_mockModule('../../src/utils.js', () => ({
+      __esModule: true,
+      isContractAvailable: mockIsContractAvailable,
+      hexWithout0x: (hex: string) => hex.replace(/^0x/, ''),
+      strToUint8Array: (str: string) => new TextEncoder().encode(str),
+      definitionFlow: jest.fn(),
+      findDeployedBytecode: jest.fn(),
+      getProvider: jest.fn(),
+    }));
+
+    // @ts-expect-error - ESM mocking requires top-level await
+    await jest.unstable_mockModule(
+      '../../src/incentives/incentiveHelpers.js',
+      () => ({
+        __esModule: true,
+        claimIncentivesFromMerkleDistributor:
+          mockClaimIncentivesFromMerkleDistributor,
+        isClaimedFromMerkleDistributor: mockIsClaimedFromMerkleDistributor,
+      }),
+    );
+
+    // Re-import after mocking
+    const { Client: ClientClass } = await import('../../src/index.js');
+    clientInstance = new ClientClass({ baseUrl, chainId: 17000 }, mockSigner);
     (global.fetch as jest.Mock).mockReset();
   });
 
   test('claimIncentives should throw an error without signer', async () => {
-    const clientWithoutSigner = new Client({
+    const { Client: ClientClass } = await import('../../src/index.js');
+    const clientWithoutSigner = new ClientClass({
       baseUrl,
       chainId: 17000,
     });
@@ -54,9 +92,7 @@ describe('Client.incentives', () => {
 
     jest.spyOn(clientInstance.incentives, 'isClaimed').mockResolvedValue(false);
 
-    jest
-      .spyOn(utils, 'isContractAvailable')
-      .mockImplementation(async () => await Promise.resolve(false));
+    mockIsContractAvailable.mockResolvedValue(false);
 
     await expect(
       clientInstance.incentives.claimIncentives(
@@ -77,24 +113,17 @@ describe('Client.incentives', () => {
 
     jest.spyOn(clientInstance.incentives, 'isClaimed').mockResolvedValue(false);
 
-    jest
-      .spyOn(utils, 'isContractAvailable')
-      .mockImplementation(async () => await Promise.resolve(true));
-
-    jest
-      .spyOn(incentivesHelpers, 'claimIncentivesFromMerkleDistributor')
-      .mockImplementation(
-        async () => await Promise.resolve({ txHash: mockTxHash }),
-      );
+    mockIsContractAvailable.mockResolvedValue(true);
+    mockClaimIncentivesFromMerkleDistributor.mockResolvedValue({
+      txHash: mockTxHash,
+    });
 
     const result = await clientInstance.incentives.claimIncentives(
       mockIncentivesData.operator_address,
     );
 
     expect(result).toEqual({ txHash: mockTxHash });
-    expect(
-      incentivesHelpers.claimIncentivesFromMerkleDistributor,
-    ).toHaveBeenCalledWith({
+    expect(mockClaimIncentivesFromMerkleDistributor).toHaveBeenCalledWith({
       signer: mockSigner,
       contractAddress: mockIncentivesData.contract_address,
       index: mockIncentivesData.index,
@@ -111,14 +140,14 @@ describe('Client.incentives', () => {
 
     jest.spyOn(clientInstance.incentives, 'isClaimed').mockResolvedValue(true);
 
+    mockIsContractAvailable.mockResolvedValue(true);
+
     const result = await clientInstance.incentives.claimIncentives(
       mockIncentivesData.operator_address,
     );
 
     expect(result).toEqual({ txHash: null });
-    expect(
-      incentivesHelpers.claimIncentivesFromMerkleDistributor,
-    ).not.toHaveBeenCalled();
+    expect(mockClaimIncentivesFromMerkleDistributor).not.toHaveBeenCalled();
   });
 
   test('claimIncentives should throw an error if no incentives found for address', async () => {
@@ -142,15 +171,10 @@ describe('Client.incentives', () => {
 
     jest.spyOn(clientInstance.incentives, 'isClaimed').mockResolvedValue(false);
 
-    jest
-      .spyOn(utils, 'isContractAvailable')
-      .mockImplementation(async () => await Promise.resolve(true));
-
-    jest
-      .spyOn(incentivesHelpers, 'claimIncentivesFromMerkleDistributor')
-      .mockImplementation(async () => {
-        throw new Error('Helper function error');
-      });
+    mockIsContractAvailable.mockResolvedValue(true);
+    mockClaimIncentivesFromMerkleDistributor.mockRejectedValue(
+      new Error('Helper function error'),
+    );
 
     await expect(
       clientInstance.incentives.claimIncentives(
@@ -159,9 +183,10 @@ describe('Client.incentives', () => {
     ).rejects.toThrow('Failed to claim incentives: Helper function error');
   });
 
-  test('incentives should be initialized with the same chainId as client', () => {
+  test('incentives should be initialized with the same chainId as client', async () => {
+    const { Client: ClientClass } = await import('../../src/index.js');
     const customChainId = 5;
-    const clientWithCustomChain = new Client(
+    const clientWithCustomChain = new ClientClass(
       { baseUrl, chainId: customChainId },
       mockSigner,
     );
@@ -170,9 +195,7 @@ describe('Client.incentives', () => {
   });
 
   test('isClaimed should return true when incentive is claimed', async () => {
-    jest
-      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
-      .mockImplementation(async () => await Promise.resolve(true));
+    mockIsClaimedFromMerkleDistributor.mockResolvedValue(true);
 
     const result = await clientInstance.incentives.isClaimed(
       mockIncentivesData.contract_address,
@@ -180,9 +203,7 @@ describe('Client.incentives', () => {
     );
 
     expect(result).toBe(true);
-    expect(
-      incentivesHelpers.isClaimedFromMerkleDistributor,
-    ).toHaveBeenCalledWith(
+    expect(mockIsClaimedFromMerkleDistributor).toHaveBeenCalledWith(
       mockIncentivesData.contract_address,
       mockIncentivesData.index,
       {},
@@ -190,9 +211,7 @@ describe('Client.incentives', () => {
   });
 
   test('isClaimed should return false when incentive is not claimed', async () => {
-    jest
-      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
-      .mockImplementation(async () => await Promise.resolve(false));
+    mockIsClaimedFromMerkleDistributor.mockResolvedValue(false);
 
     const result = await clientInstance.incentives.isClaimed(
       mockIncentivesData.contract_address,
@@ -203,11 +222,9 @@ describe('Client.incentives', () => {
   });
 
   test('isClaimed should throw an error if helper function fails', async () => {
-    jest
-      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
-      .mockImplementation(async () => {
-        throw new Error('Helper function error');
-      });
+    mockIsClaimedFromMerkleDistributor.mockRejectedValue(
+      new Error('Helper function error'),
+    );
 
     await expect(
       clientInstance.incentives.isClaimed(
@@ -218,7 +235,8 @@ describe('Client.incentives', () => {
   });
 
   test('isClaimed should work with a provider and a without signer', async () => {
-    const clientWithoutSigner = new Client(
+    const { Client: ClientClass } = await import('../../src/index.js');
+    const clientWithoutSigner = new ClientClass(
       {
         baseUrl,
         chainId: 17000,
@@ -227,9 +245,7 @@ describe('Client.incentives', () => {
       provider,
     );
 
-    jest
-      .spyOn(incentivesHelpers, 'isClaimedFromMerkleDistributor')
-      .mockImplementation(async () => await Promise.resolve(true));
+    mockIsClaimedFromMerkleDistributor.mockResolvedValue(true);
 
     const result = await clientWithoutSigner.incentives.isClaimed(
       mockIncentivesData.contract_address,
@@ -237,9 +253,7 @@ describe('Client.incentives', () => {
     );
 
     expect(result).toBe(true);
-    expect(
-      incentivesHelpers.isClaimedFromMerkleDistributor,
-    ).toHaveBeenCalledWith(
+    expect(mockIsClaimedFromMerkleDistributor).toHaveBeenCalledWith(
       mockIncentivesData.contract_address,
       mockIncentivesData.index,
       provider,

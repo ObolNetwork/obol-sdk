@@ -1,7 +1,7 @@
 import { type TypedMessage } from '@metamask/eth-sig-util';
 import { type TypedDataDomain } from 'ethers';
 import pjson from '../package.json';
-import { type ChainConfig, FORK_MAPPING } from './types';
+import { type ChainConfig, FORK_MAPPING } from './types.js';
 import {
   HOLESKY_MULTICALL3_BYTECODE,
   HOLESKY_OVM_FACTORY_BYTECODE,
@@ -301,9 +301,4 @@ export const CAPELLA_FORK_MAPPING: Record<string, string> = {
   '0x90000069': '0x90000072', // Sepolia
   '0x01017000': '0x04017000', // Holesky
   '0x10000910': '0x40000910', // Hoodi
-};
-
-export const CHAIN_PUBLIC_RPC_URL: Record<number, string> = {
-  1: 'https://ethereum-rpc.publicnode.com', // Mainnet
-  560048: 'https://ethereum-hoodi-rpc.publicnode.com', // Hoodi
 };

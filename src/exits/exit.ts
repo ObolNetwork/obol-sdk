@@ -1,6 +1,7 @@
-import { ENR } from '@chainsafe/discv5';
+import { ENR } from '@chainsafe/enr';
 import * as elliptic from 'elliptic';
-import { init, verify, aggregateSignatures } from '@chainsafe/bls';
+import { init } from '@chainsafe/bls';
+import * as bls from '@chainsafe/bls';
 import {
   ByteVectorType,
   ContainerType,
@@ -18,8 +19,8 @@ import type {
   ExistingExitValidationBlobData,
   FullExitBlob,
 } from '../types';
-import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils';
-import { computeDomain, signingRoot } from './verificationHelpers';
+import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils.js';
+import { computeDomain, signingRoot } from './verificationHelpers.js';
 
 // Constants from obol-api/src/verification/exit.ts (assuming these might be needed or were in the original context)
 const DOMAIN_VOLUNTARY_EXIT = '0x04000000';
@@ -195,7 +196,6 @@ export class Exit {
     genesisValidatorsRootString: string,
   ): Promise<boolean> {
     await init('herumi');
-
     const capellaForkVersionString = await getCapellaFork(forkVersion);
     if (!capellaForkVersionString) {
       throw new Error(
@@ -218,7 +218,7 @@ export class Exit {
       partialExitMessageBuffer,
     );
 
-    return verify(
+    return bls.bls.verify(
       fromHexString(publicShareKey),
       messageSigningRoot,
       fromHexString(signedExitMessage.signature),
@@ -262,7 +262,7 @@ export class Exit {
 
     let pubKeyHex;
     try {
-      pubKeyHex = ENR.decodeTxt(enrString).publicKey.toString('hex');
+      pubKeyHex = ENR.decodeTxt(enrString).publicKey.toString();
     } catch (e: any) {
       throw new Error(
         `Invalid ENR string: ${enrString}. Error: ${e.message ?? String(e)}`,
@@ -585,8 +585,6 @@ export class Exit {
   async recombineExitBlobs(
     exitBlob: ExistingExitValidationBlobData,
   ): Promise<FullExitBlob> {
-    await init('herumi');
-
     // Map to store signatures by their share index (matching Go's map[int]tbls.Signature)
     const signaturesByIndex = new Map<number, Uint8Array>();
 
@@ -645,7 +643,7 @@ export class Exit {
 
     // Aggregate signatures (equivalent to tbls.ThresholdAggregate in Go)
     // Note: @chainsafe/bls doesn't have explicit threshold aggregation, but ordering should be preserved
-    const fullSig = aggregateSignatures(rawSignatures);
+    const fullSig = bls.bls.aggregateSignatures(rawSignatures);
 
     return {
       public_key: exitBlob.public_key,

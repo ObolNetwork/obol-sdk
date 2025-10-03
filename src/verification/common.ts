@@ -1,6 +1,5 @@
 import { fromHexString } from '@chainsafe/ssz';
 import elliptic from 'elliptic';
-import { init } from '@chainsafe/bls';
 import {
   FORK_MAPPING,
   type ClusterDefinition,
@@ -39,7 +38,7 @@ import {
   signingRootType,
 } from './sszTypes.js';
 import { definitionFlow, hexWithout0x } from '../utils.js';
-import { ENR } from '@chainsafe/discv5';
+import { ENR } from '@chainsafe/enr';
 import {
   clusterDefinitionContainerTypeV1X8,
   hashClusterDefinitionV1X8,
@@ -53,6 +52,7 @@ import {
   hashClusterLockV1X10,
   verifyDVV1X10,
 } from './v1.10.0.js';
+import * as bls from '@chainsafe/bls';
 
 // cluster-definition hash
 
@@ -172,7 +172,7 @@ const validatePOSTConfigHashSigner = async (
   try {
     const data = signCreatorConfigHashPayload(
       { creator_config_hash: configHash },
-      chainId,
+      chainId as number,
     );
 
     return await validateAddressSignature({
@@ -263,7 +263,7 @@ const verifyDefinitionSignatures = async (
         clusterDefinition.config_hash,
         FORK_MAPPING[
           clusterDefinition.fork_version as keyof typeof FORK_MAPPING
-        ],
+        ] as number,
         safeRpcUrl,
       );
 
@@ -273,7 +273,7 @@ const verifyDefinitionSignatures = async (
         operator.enr as string,
         FORK_MAPPING[
           clusterDefinition.fork_version as keyof typeof FORK_MAPPING
-        ],
+        ] as number,
         safeRpcUrl,
       );
 
@@ -385,9 +385,18 @@ export const verifyDepositData = (
   }
 
   const depositMessageBuffer = computeDepositMsgRoot(depositData);
-  const depositDataMessage = signingRoot(depositDomain, depositMessageBuffer);
+  const depositDataRoot = signingRoot(depositDomain, depositMessageBuffer);
+  if (!depositData.signature) {
+    return { isValidDepositData: false, depositDataMsg: depositDataRoot };
+  }
 
-  return { isValidDepositData: true, depositDataMsg: depositDataMessage };
+  const isValidDepositData = bls.bls.verify(
+    fromHexString(depositData.pubkey),
+    depositDataRoot,
+    fromHexString(depositData.signature),
+  );
+
+  return { isValidDepositData, depositDataMsg: depositDataRoot };
 };
 
 export const verifyBuilderRegistration = (
@@ -444,9 +453,10 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
   const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash);
   // node(ENR) signatures
   for (let i = 0; i < (nodeSignatures as string[]).length; i++) {
-    const pubkey = ENR.decodeTxt(
+    const publicKeyBytes = ENR.decodeTxt(
       clusterLock.cluster_definition.operators[i].enr as string,
-    ).publicKey.toString('hex');
+    ).publicKey;
+    const pubkey = Buffer.from(publicKeyBytes).toString('hex');
 
     const ENRsignature = {
       r: (nodeSignatures as string[])[i].slice(2, 66),
@@ -473,22 +483,20 @@ export const signingRoot = (
 };
 
 const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
-  await init('herumi');
-
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.6.0')) {
-    return verifyDVV1X6(clusterLock);
+    return await verifyDVV1X6(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.7.0')) {
-    return verifyDVV1X7(clusterLock);
+    return await verifyDVV1X7(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.8.0')) {
-    return verifyDVV1X8(clusterLock);
+    return await verifyDVV1X8(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.10.0')) {
-    return verifyDVV1X10(clusterLock);
+    return await verifyDVV1X10(clusterLock);
   }
   return false;
 };

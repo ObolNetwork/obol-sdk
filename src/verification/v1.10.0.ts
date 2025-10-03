@@ -2,7 +2,7 @@ import {
   type UintNumberByteLen,
   UintNumberType,
 } from '@chainsafe/ssz/lib/type/uint';
-import { strToUint8Array } from '../utils';
+import { strToUint8Array } from '../utils.js';
 import {
   builderRegistrationContainer,
   type creatorAddressWrapperType,
@@ -29,7 +29,7 @@ import {
   type ClusterLock,
   type DepositData,
 } from '../types';
-import { verifyDVV1X8 } from './v1.8.0';
+import { verifyDVV1X8 } from './v1.8.0.js';
 
 // cluster definition
 type DefinitionFieldsV1X10 = {

@@ -9,12 +9,12 @@ import {
   type ChainConfig,
 } from '../types';
 import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
-import { OWRContract, OWRFactoryContract } from '../abi/OWR';
-import { OVMFactoryContract, OVMContract } from '../abi/OVM';
-import { splitMainEthereumAbi } from '../abi/SplitMain';
-import { CHAIN_CONFIGURATION, ETHER_TO_GWEI } from '../constants';
-import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi';
-import { MultiCall3Contract } from '../abi/Multicall3';
+import { OWRContract, OWRFactoryContract } from '../abi/OWR.js';
+import { OVMFactoryContract, OVMContract } from '../abi/OVM.js';
+import { splitMainEthereumAbi } from '../abi/SplitMain.js';
+import { CHAIN_CONFIGURATION, ETHER_TO_GWEI } from '../constants.js';
+import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi.js';
+import { MultiCall3Contract } from '../abi/Multicall3.js';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
@@ -1017,7 +1017,7 @@ export const depositWithMulticall3 = async ({
 
       const receipt = await tx.wait();
       if (receipt?.hash) {
-        txHashes.push(receipt.hash);
+        txHashes.push(receipt.hash as string);
       }
     }
 

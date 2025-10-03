@@ -1,8 +1,10 @@
+// @ts-nocheck
 import {
   getCapellaFork,
   getGenesisValidatorsRoot,
 } from '../../src/exits/ethUtils';
 import { CAPELLA_FORK_MAPPING } from '../../src/constants';
+import { jest } from '@jest/globals';
 
 describe('ethUtils', () => {
   describe('getCapellaFork', () => {
