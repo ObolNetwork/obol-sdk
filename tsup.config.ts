@@ -18,7 +18,6 @@ export default defineConfig([
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
-      'viem',
       'ethers',                      // ← Very large (~2MB), consumers always have it
       'pdf-parse-debugging-disabled', // ← Has native deps, breaks when bundled
     ],
@@ -44,7 +43,6 @@ export default defineConfig([
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
-      'viem',
       'ethers',                      // ← Very large (~2MB), consumers always have it
       'pdf-parse-debugging-disabled', // ← Has native deps, breaks when bundled
     ],
@@ -79,7 +77,6 @@ export default defineConfig([
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
-      'viem',
       'ethers'
     ],
     esbuildOptions(options) {

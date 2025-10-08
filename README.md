@@ -55,22 +55,33 @@ Thank you for contributing to Obol-SDK!
 
 ## Next.js / SSR Configuration
 
-If using this SDK in **Next.js** or other SSR frameworks, add this to your `next.config.js`:
+If using this SDK in **Next.js** or other SSR frameworks, add this minimal config to your `next.config.js`:
 
 ```javascript
-webpack: (config, { webpack }) => {
-  config.externals = config.externals || [];
-  config.externals.push({
-    '@chainsafe/bls': 'commonjs @chainsafe/bls',
-    '@chainsafe/blst': 'commonjs @chainsafe/blst',
-  });
-
+webpack: (config, { isServer, webpack }) => {
+  if (!isServer) {
+    config.plugins.push(
+      new webpack.DefinePlugin({
+        'process.stdout.isTTY': 'false',
+        'process.stderr.isTTY': 'false',
+      })
+    );
+  } else {
+    // Server: Externalize native dependencies
+    config.externals = config.externals || [];
+    config.externals.push({
+      '@chainsafe/bls': 'commonjs @chainsafe/bls',
+      '@chainsafe/blst': 'commonjs @chainsafe/blst',
+      'bcrypto': 'commonjs bcrypto',
+    });
+  }
+  
+  // Ignore .node files
   config.plugins.push(
     new webpack.IgnorePlugin({ resourceRegExp: /\.node$/ })
   );
-
+  
   return config;
 }
 ```
 
-This externalizes native dependencies that cannot be bundled for the browser.

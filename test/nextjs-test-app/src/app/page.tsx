@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Client } from '@obolnetwork/obol-sdk'
+import { ethers } from 'ethers'
 
 // Extend Window interface to include ethereum property from MetaMask
 declare global {
@@ -47,18 +49,15 @@ export default function Home() {
   const testSDK = async () => {
     try {
       setError(null)
-      setMessage('Loading SDK...')
-      
-      const { Client } = await import('@obolnetwork/obol-sdk')
-      
       setMessage('Instantiating Client...')
+      
       const client = new Client({
         baseUrl: 'https://api.obol.tech',
         chainId: 1
       })
       
       console.log('Client created:', client)
-      setMessage(`✅ Success! SDK loaded and Client created. Chain: ${client.chainId}`)
+      setMessage(`✅ Success! SDK Client created. Chain: ${client.chainId}`)
     } catch (error: any) {
       const errorDetails = {
         message: error.message,
@@ -78,14 +77,8 @@ export default function Home() {
       }
 
       setError(null)
-      setMessage('Loading SDK and ethers...')
-      
-      const [{ Client }, { ethers }] = await Promise.all([
-        import('@obolnetwork/obol-sdk'),
-        import('ethers')
-      ])
-
       setMessage('Getting signer...')
+      
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
 
