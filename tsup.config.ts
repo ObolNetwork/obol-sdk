@@ -60,16 +60,17 @@ export default defineConfig([
     outDir: 'dist/browser/src',
     sourcemap: true,
     outExtension: () => ({ js: '.js' }),
-    // Only bundle safe dependencies for browser
-    noExternal: [
-      '@chainsafe/enr',
+    // Only bundle @chainsafe/enr (ESM-only, breaks in CJS)
+    noExternal: ['@chainsafe/enr'],
+    // Externalize everything else - works like tsc
+    external: [
+      'ajv',
+      'ajv-formats',
+      'ajv-keywords',
       'cross-fetch',
       'elliptic',
       'semver',
-      'uuid'
-    ],
-    // Externalize packages that have Node.js dependencies or are problematic in browser
-    external: [
+      'uuid',
       'pdf-parse-debugging-disabled',
       'dotenv',
       '@chainsafe/bls',
@@ -79,10 +80,7 @@ export default defineConfig([
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'viem',
-      'ethers', // User typically has this installed (large library)
-      'ajv', // Generates code with require() - must be external for browser
-      'ajv-formats',
-      'ajv-keywords'
+      'ethers'
     ],
     esbuildOptions(options) {
       options.platform = 'browser';
