@@ -22,8 +22,8 @@
     "npm:publish:next": "npm publish --tag next",
     "release": "release-it",
     "release:dry": "release-it --dry-run --no-npm",
-    "lint": "eslint \"{src,test}/**/*.{js,ts}\" --fix --ignore-pattern \"test/nextjs-test-app/**\"",
-    "lint-ci": "eslint \"{src,test}/**/*.{js,ts}\" --ignore-pattern \"test/nextjs-test-app/**\"",
+    "lint": "eslint \"{src,test}/**/*.{js,ts}\" --fix",
+    "lint-ci": "eslint \"{src,test}/**/*.{js,ts}\"",
     "prettier-ci": "prettier --check \"{src,test}/**/*.{js,ts}\" --ignore-path .prettierignore",
     "prettier": "prettier --write \"{src,test}/**/*.{js,ts}\" --ignore-path .prettierignore",
     "docs": "typedoc"

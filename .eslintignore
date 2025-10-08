@@ -1,0 +1,8 @@
+test/nextjs-test-app/**
+test/sdk-package/**
+node_modules
+dist
+.next
+coverage
+*.log
+
