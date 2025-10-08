@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig([
-  // CJS build
+  // Node.js CJS build
   {
     entry: ['src/index.ts'],
     format: ['cjs'],
@@ -16,7 +16,7 @@ export default defineConfig([
       options.platform = 'node';
     },
   },
-  // ESM build
+  // Node.js ESM build
   {
     entry: ['src/index.ts'],
     format: ['esm'],
@@ -30,6 +30,45 @@ export default defineConfig([
     external: ['@chainsafe/bls', '@chainsafe/blst'],
     esbuildOptions(options) {
       options.platform = 'node';
+    },
+  },
+  // Browser ESM build
+  {
+    entry: ['src/index.ts'],
+    format: ['esm'],
+    dts: false,
+    outDir: 'dist/browser/src',
+    sourcemap: true,
+    outExtension: () => ({ js: '.js' }),
+    // Only bundle safe dependencies for browser
+    noExternal: [
+      '@chainsafe/enr',
+      '@chainsafe/ssz',
+      'ajv',
+      'ajv-formats',
+      'ajv-keywords',
+      'cross-fetch',
+      'elliptic',
+      'semver',
+      'uuid'
+    ],
+    // Externalize packages that have Node.js dependencies or are problematic in browser
+    external: [
+      'pdf-parse-debugging-disabled',
+      'dotenv',
+      '@chainsafe/bls',
+      '@chainsafe/blst',
+      '@metamask/eth-sig-util',
+      '@safe-global/protocol-kit',
+      '@safe-global/types-kit',
+      'ethers' // User typically has this installed (large library)
+    ],
+    esbuildOptions(options) {
+      options.platform = 'browser';
+      options.define = {
+        'process.env': '{}',
+        'global': 'globalThis'
+      };
     },
   },
 ]);

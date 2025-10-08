@@ -29,7 +29,19 @@
   },
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
+  "browser": "./dist/browser/src/index.js",
   "typings": "./dist/types/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "node": {
+        "import": "./dist/esm/src/index.js",
+        "require": "./dist/cjs/src/index.js"
+      },
+      "browser": "./dist/browser/src/index.js",
+      "default": "./dist/esm/src/index.js"
+    }
+  },
   "author": "Obol Labs (https://obol.org)",
   "repository": {
     "type": "git",
