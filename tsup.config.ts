@@ -11,7 +11,17 @@ export default defineConfig([
     // Bundle ESM-only dependencies so they work in CJS
     noExternal: ['@chainsafe/enr'],
     // Keep @chainsafe/bls external - bundling breaks its WASM initialization
-    external: ['@chainsafe/bls', '@chainsafe/blst'],
+    // Also keep problematic TypeScript dependencies external
+    external: [
+      '@chainsafe/bls',
+      '@chainsafe/blst',
+      '@chainsafe/ssz',           
+      '@safe-global/protocol-kit',
+      '@safe-global/types-kit',
+      'viem',
+      'ethers',                      // ← Very large (~2MB), consumers always have it
+      'pdf-parse-debugging-disabled', // ← Has native deps, breaks when bundled
+    ],
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -27,7 +37,17 @@ export default defineConfig([
     // Bundle ESM-only dependencies
     noExternal: ['@chainsafe/enr'],
     // Keep @chainsafe/bls external - bundling breaks its WASM initialization
-    external: ['@chainsafe/bls', '@chainsafe/blst'],
+    // Also keep problematic TypeScript dependencies external
+    external: [
+      '@chainsafe/bls',
+      '@chainsafe/blst',
+      '@chainsafe/ssz',
+      '@safe-global/protocol-kit',
+      '@safe-global/types-kit',
+      'viem',
+      'ethers',                      // ← Very large (~2MB), consumers always have it
+      'pdf-parse-debugging-disabled', // ← Has native deps, breaks when bundled
+    ],
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -61,6 +81,7 @@ export default defineConfig([
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
+      'viem',
       'ethers' // User typically has this installed (large library)
     ],
     esbuildOptions(options) {
@@ -72,4 +93,3 @@ export default defineConfig([
     },
   },
 ]);
-
