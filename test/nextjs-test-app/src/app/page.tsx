@@ -2,26 +2,47 @@
 
 import { useState, useEffect } from 'react'
 
+// Extend Window interface to include ethereum property from MetaMask
+declare global {
+  interface Window {
+    ethereum?: any
+  }
+}
+
 export default function Home() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState<any>(null)
+  const [walletAddress, setWalletAddress] = useState('')
+  const [isConnected, setIsConnected] = useState(false)
 
-  // Catch any errors during render
   useEffect(() => {
     setMessage('Page mounted successfully ✅')
-    
-    const handleError = (event: ErrorEvent) => {
-      console.error('Global error:', event.error)
-      setError({
-        message: event.error?.message || 'Unknown error',
-        stack: event.error?.stack || '',
-        name: event.error?.name || 'Error'
-      })
-    }
-
-    window.addEventListener('error', handleError)
-    return () => window.removeEventListener('error', handleError)
   }, [])
+
+  const connectWallet = async () => {
+    try {
+      setError(null)
+      setMessage('Checking for MetaMask...')
+
+      if (!window.ethereum) {
+        throw new Error('MetaMask is not installed! Please install MetaMask.')
+      }
+
+      setMessage('Requesting account access...')
+      const { ethers } = await import('ethers')
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      await provider.send('eth_requestAccounts', [])
+      const signer = await provider.getSigner()
+      const address = await signer.getAddress()
+
+      setWalletAddress(address)
+      setIsConnected(true)
+      setMessage(`✅ Connected to ${address.slice(0, 6)}...${address.slice(-4)}`)
+    } catch (err: any) {
+      setError({ message: err.message, stack: err.stack })
+      setMessage(`❌ Error: ${err.message}`)
+    }
+  }
 
   const testSDK = async () => {
     try {
@@ -50,25 +71,103 @@ export default function Home() {
     }
   }
 
+  const signTermsAndConditions = async () => {
+    try {
+      if (!isConnected) {
+        throw new Error('Please connect MetaMask first')
+      }
+
+      setError(null)
+      setMessage('Loading SDK and ethers...')
+      
+      const [{ Client }, { ethers }] = await Promise.all([
+        import('@obolnetwork/obol-sdk'),
+        import('ethers')
+      ])
+
+      setMessage('Getting signer...')
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+
+      setMessage('Creating SDK Client...')
+      const client = new Client({
+        baseUrl: 'https://api.obol.tech',
+        chainId: 1
+      }, signer)
+
+      setMessage('Signing Terms and Conditions...')
+      const result = await client.acceptObolLatestTermsAndConditions()
+
+      console.log('Terms signed:', result)
+      setMessage(`✅ Terms and Conditions signed successfully!`)
+    } catch (error: any) {
+      const errorDetails = {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      }
+      setError(errorDetails)
+      setMessage(`❌ Error: ${error.message}`)
+      console.error('Caught error:', errorDetails)
+    }
+  }
+
   return (
     <div style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '1200px' }}>
       <h1>Obol SDK Next.js Test</h1>
       
-      <button 
-        onClick={testSDK}
-        style={{
-          padding: '1rem 2rem',
-          fontSize: '16px',
-          background: '#0070f3',
-          color: 'white',
-          border: 'none',
-          borderRadius: '5px',
-          cursor: 'pointer',
-          marginTop: '1rem'
-        }}
-      >
-        Test SDK Import
-      </button>
+      <div style={{ marginBottom: '2rem' }}>
+        <button 
+          onClick={connectWallet}
+          disabled={isConnected}
+          style={{
+            padding: '1rem 2rem',
+            fontSize: '16px',
+            background: isConnected ? '#10b981' : '#0070f3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: isConnected ? 'default' : 'pointer',
+            marginRight: '1rem',
+            opacity: isConnected ? 0.7 : 1
+          }}
+        >
+          {isConnected ? `Connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Connect MetaMask'}
+        </button>
+
+        <button 
+          onClick={testSDK}
+          style={{
+            padding: '1rem 2rem',
+            fontSize: '16px',
+            background: '#8b5cf6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            marginRight: '1rem'
+          }}
+        >
+          Test SDK Import
+        </button>
+
+        <button 
+          onClick={signTermsAndConditions}
+          disabled={!isConnected}
+          style={{
+            padding: '1rem 2rem',
+            fontSize: '16px',
+            background: '#059669',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: isConnected ? 'pointer' : 'not-allowed',
+            opacity: isConnected ? 1 : 0.5
+          }}
+        >
+          Sign Terms & Conditions
+        </button>
+      </div>
 
       {message && (
         <div style={{ 
