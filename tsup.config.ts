@@ -15,7 +15,7 @@ export default defineConfig([
     external: [
       '@chainsafe/bls',
       '@chainsafe/blst',
-      '@chainsafe/ssz',           
+      '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'viem',
@@ -63,10 +63,6 @@ export default defineConfig([
     // Only bundle safe dependencies for browser
     noExternal: [
       '@chainsafe/enr',
-      '@chainsafe/ssz',
-      'ajv',
-      'ajv-formats',
-      'ajv-keywords',
       'cross-fetch',
       'elliptic',
       'semver',
@@ -78,11 +74,15 @@ export default defineConfig([
       'dotenv',
       '@chainsafe/bls',
       '@chainsafe/blst',
+      '@chainsafe/ssz',
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'viem',
-      'ethers' // User typically has this installed (large library)
+      'ethers', // User typically has this installed (large library)
+      'ajv', // Generates code with require() - must be external for browser
+      'ajv-formats',
+      'ajv-keywords'
     ],
     esbuildOptions(options) {
       options.platform = 'browser';

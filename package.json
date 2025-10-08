@@ -2,6 +2,7 @@
   "name": "@obolnetwork/obol-sdk",
   "version": "2.11.5-rc.0",
   "description": "A package for creating Distributed Validators using the Obol API.",
+  "sideEffects": false,
   "bugs": {
     "url": "https://github.com/obolnetwork/obol-sdk/issues"
   },
@@ -34,11 +35,14 @@
   "exports": {
     ".": {
       "types": "./dist/types/src/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/index.js",
+        "default": "./dist/browser/src/index.js"
+      },
       "node": {
         "import": "./dist/esm/src/index.js",
         "require": "./dist/cjs/src/index.js"
       },
-      "browser": "./dist/browser/src/index.js",
       "default": "./dist/esm/src/index.js"
     }
   },
