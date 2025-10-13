@@ -1,0 +1,15 @@
+{
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-misused-promises": "off",
+    "@typescript-eslint/no-unsafe-argument": "off",
+    "@typescript-eslint/no-confusing-void-expression": "off",
+    "@typescript-eslint/quotes": "off",
+    "no-trailing-spaces": "off",
+    "padded-blocks": "off",
+    "no-multiple-empty-lines": "off",
+    "multiline-ternary": "off",
+    "no-multi-spaces": "off"
+  }
+}

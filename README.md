@@ -52,3 +52,36 @@ If you'd like to propose improvements or new features, please follow these steps
 All contributions are reviewed before they are merged into the main branch. Please address any feedback provided during the review process.
 
 Thank you for contributing to Obol-SDK!
+
+## Next.js / SSR Configuration
+
+If using this SDK in **Next.js** or other SSR frameworks, add this minimal config to your `next.config.js`:
+
+```javascript
+webpack: (config, { isServer, webpack }) => {
+  if (!isServer) {
+    config.plugins.push(
+      new webpack.DefinePlugin({
+        'process.stdout.isTTY': 'false',
+        'process.stderr.isTTY': 'false',
+      })
+    );
+  } else {
+    // Server: Externalize native dependencies
+    config.externals = config.externals || [];
+    config.externals.push({
+      '@chainsafe/bls': 'commonjs @chainsafe/bls',
+      '@chainsafe/blst': 'commonjs @chainsafe/blst',
+      'bcrypto': 'commonjs bcrypto',
+    });
+  }
+  
+  // Ignore .node files
+  config.plugins.push(
+    new webpack.IgnorePlugin({ resourceRegExp: /\.node$/ })
+  );
+  
+  return config;
+}
+```
+

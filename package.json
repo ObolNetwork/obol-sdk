@@ -21,15 +21,30 @@
     "npm:publish:next": "npm publish --tag next",
     "release": "release-it",
     "release:dry": "release-it --dry-run --no-npm",
-    "lint": "eslint \"{src,test}/**/*.{js,ts}\" --fix",
-    "lint-ci": "eslint \"{src,test}/**/*.{js,ts}\"",
-    "prettier-ci": "prettier --check \"{src,test}/**/*.{js,ts}\"",
-    "prettier": "prettier --write \"{src,test}/**/*.{js,ts}\"",
+    "lint": "eslint \"{src}/**/*.{js,ts}\" --fix",
+    "lint-ci": "eslint ./src --ext .ts,.js",
+    "prettier-ci": "prettier --check ./src --ext .ts,.js",
+    "prettier": "prettier --write \"{src}/**/*.{js,ts}\"",
     "docs": "typedoc"
   },
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
+  "browser": "./dist/browser/src/index.js",
   "typings": "./dist/types/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/index.js",
+        "default": "./dist/browser/src/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/index.js",
+        "require": "./dist/cjs/src/index.js"
+      },
+      "default": "./dist/esm/src/index.js"
+    }
+  },
   "author": "Obol Labs (https://obol.org)",
   "repository": {
     "type": "git",
