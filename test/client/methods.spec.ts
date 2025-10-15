@@ -2,7 +2,6 @@
 import { jest } from '@jest/globals';
 import { ethers, JsonRpcProvider } from 'ethers';
 import { Client, validateClusterLock, type SignerType } from '../../src/index';
-import { hashTermsAndConditions } from '../../src/verification/termsAndConditions';
 import {
   clusterConfigV1X7,
   clusterConfigV1X10,
@@ -310,17 +309,6 @@ describe('Cluster Client without a signer', () => {
       ],
     });
     expect(isValidLock).toEqual(false);
-  });
-  test('Finds the hash of the latest version of terms and conditions', async () => {
-    // This test validates that hashTermsAndConditions:
-    // 1. Fetches the REAL PDF from https://obol.org/terms.pdf (network call)
-    // 2. Processes it through REAL pdf-parse library (extracts text)
-    // 3. Computes the REAL SSZ hash using @chainsafe/ssz
-    // NO MOCKING - this is a full end-to-end test of the function!
-    const termsAndConditionsHash = await hashTermsAndConditions();
-    expect(termsAndConditionsHash).toEqual(
-      '0xd33721644e8f3afab1495a74abe3523cec12d48b8da6cb760972492ca3f1a273',
-    );
   });
 });
 

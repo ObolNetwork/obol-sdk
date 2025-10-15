@@ -19,7 +19,6 @@ export default defineConfig([
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'ethers',                      // ← Very large (~2MB), consumers always have it
-      'pdf-parse-debugging-disabled', // ← Has native deps, breaks when bundled
     ],
     esbuildOptions(options) {
       options.platform = 'node';
@@ -44,7 +43,6 @@ export default defineConfig([
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'ethers',                      // ← Very large (~2MB), consumers always have it
-      'pdf-parse-debugging-disabled', // ← Has native deps, breaks when bundled
     ],
     esbuildOptions(options) {
       options.platform = 'node';
@@ -69,7 +67,6 @@ export default defineConfig([
       'elliptic',
       'semver',
       'uuid',
-      'pdf-parse-debugging-disabled',
       'dotenv',
       '@chainsafe/bls',
       '@chainsafe/blst',
