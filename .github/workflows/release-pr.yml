@@ -43,6 +43,10 @@ jobs:
         working-directory: ./test/sdk-package
         run: yarn upgrade
 
+      - name: Update nextjs dependancies
+        working-directory: ./test/nextjs-test-app
+        run: yarn upgrade
+
       - name: Show git status
         if: failure()
         run: git status && git diff
