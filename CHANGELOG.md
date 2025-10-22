@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.1...v2.11.5)
+
+- add js extension to missed files [`#161`](https://github.com/ObolNetwork/obol-sdk/pull/161)
+
 #### [v2.11.5-rc.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.0...v2.11.5-rc.1)
 
+> 16 October 2025
+
+- [Release] v2.11.5 [`#160`](https://github.com/ObolNetwork/obol-sdk/pull/160)
 - remove ot used function [`#159`](https://github.com/ObolNetwork/obol-sdk/pull/159)
 - Hanan/browser bundler config [`#157`](https://github.com/ObolNetwork/obol-sdk/pull/157)
 
