@@ -4,16 +4,16 @@
     "testEnvironment": "node",
     "testRegex": ".(test|spec)\\.ts$",
     "transform": {
-      "^.+\\.ts$": "ts-jest"
+      "^.+\\.(ts|js)$": ["ts-jest", {
+        "useESM": true,
+        "tsconfig": {
+          "allowJs": true
+        }
+      }]
     },
     "transformIgnorePatterns": [
       "node_modules/(?!(@paralleldrive/cuid2|formidable)/)"
     ],
-    "globals": {
-      "ts-jest": {
-        "useESM": true
-      }
-    },
     "moduleNameMapper": {
       "^bn.js$": "<rootDir>/node_modules/bn.js",
       "^asn1.js$": "<rootDir>/node_modules/asn1.js",
