@@ -3,7 +3,7 @@ import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
   PRINCIPAL_THRESHOLD,
-} from './constants';
+} from './constants.js';
 import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv.js';
 
 export const operatorPayloadSchema = {

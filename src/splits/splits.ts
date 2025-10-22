@@ -6,13 +6,13 @@ import {
   deployOVMAndSplitV2,
   requestWithdrawalFromOVM,
   depositWithMulticall3,
-} from './splitHelpers';
+} from './splitHelpers.js';
 import {
   CHAIN_CONFIGURATION,
   SPLITS_V2_SALT,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   isChainSupportedForSplitters,
-} from '../constants';
+} from '../constants.js';
 import {
   ovmRewardsSplitPayloadSchema,
   ovmTotalSplitPayloadSchema,
@@ -29,7 +29,7 @@ import {
   type OVMTotalSplitPayload,
   type OVMRequestWithdrawalPayload,
   type OVMDepositPayload,
-} from '../types';
+} from '../types.js';
 
 /**
  * ObolSplits can be used for creating and managing Obol splits.

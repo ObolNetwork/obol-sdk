@@ -1,7 +1,7 @@
 import {
   type UintNumberByteLen,
   UintNumberType,
-} from '@chainsafe/ssz/lib/type/uint';
+} from '@chainsafe/ssz/lib/type/uint.js';
 import { strToUint8Array } from '../utils.js';
 import {
   builderRegistrationContainer,
@@ -13,7 +13,7 @@ import {
   type operatorAddressWrapperType,
   type operatorContainerType,
   validatorsContainerType,
-} from './sszTypes';
+} from './sszTypes.js';
 import {
   ByteListType,
   ByteVectorType,
@@ -23,12 +23,12 @@ import {
   fromHexString,
   BooleanType,
 } from '@chainsafe/ssz';
-import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container';
+import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container.js';
 import {
   type ClusterDefinition,
   type ClusterLock,
   type DepositData,
-} from '../types';
+} from '../types.js';
 import { verifyDVV1X8 } from './v1.8.0.js';
 
 // cluster definition

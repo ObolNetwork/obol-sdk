@@ -1,7 +1,7 @@
 import {
   submitEOAWithdrawalRequest,
   submitEOABatchDeposit,
-} from './eoaHelpers';
+} from './eoaHelpers.js';
 import { validatePayload } from '../ajv.js';
 import {
   eoaWithdrawalPayloadSchema,
@@ -13,7 +13,7 @@ import {
   type SignerType,
   type EOAWithdrawalPayload,
   type EOADepositPayload,
-} from '../types';
+} from '../types.js';
 
 /**
  * EOA can be used for managing EOA (Externally Owned Account) operations like withdrawals.

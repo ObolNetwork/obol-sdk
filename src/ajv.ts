@@ -7,12 +7,12 @@ import {
   type RewardsSplitPayload,
   type TotalSplitPayload,
   type OVMRequestWithdrawalPayload,
-} from './types';
+} from './types.js';
 import Ajv from 'ajv';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-} from './constants';
+} from './constants.js';
 
 export const VALID_DEPOSIT_AMOUNTS = [
   parseUnits('1', 'gwei').toString(),
