@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### [v2.11.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.1...v2.11.5)
+#### [2.11.5-rc.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.1...v2.11.5)
 
 - add js extension to missed files [`#161`](https://github.com/ObolNetwork/obol-sdk/pull/161)
 
