@@ -18,7 +18,7 @@ import type {
   SignedExitValidationMessage,
   ExistingExitValidationBlobData,
   FullExitBlob,
-} from '../types';
+} from '../types.js';
 import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils.js';
 import { computeDomain, signingRoot } from './verificationHelpers.js';
 

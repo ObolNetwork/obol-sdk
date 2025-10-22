@@ -19,7 +19,7 @@ import {
   MAINNET_SPLIT_V2_FACTORY_BYTECODE,
   MAINNET_SPLITMAIN_BYTECODE,
   MAINNET_WAREHOUSE_BYTECODE,
-} from './bytecodes';
+} from './bytecodes.js';
 
 import * as dotenv from 'dotenv';
 dotenv.config();

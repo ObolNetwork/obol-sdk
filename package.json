@@ -55,6 +55,9 @@
     "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
+  "overrides": {
+    "viem": "2.21.8"
+  },
   "dependencies": {
     "@chainsafe/bls": "6.0.3",
     "@chainsafe/blst": "^0.2.0",

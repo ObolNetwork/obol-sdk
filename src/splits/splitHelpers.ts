@@ -7,7 +7,7 @@ import {
   type SplitV2Recipient,
   type OVMArgs,
   type ChainConfig,
-} from '../types';
+} from '../types.js';
 import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR.js';
 import { OVMFactoryContract, OVMContract } from '../abi/OVM.js';

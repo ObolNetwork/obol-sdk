@@ -4,7 +4,7 @@ import {
   ContainerType,
   UintNumberType,
 } from '@chainsafe/ssz';
-import { type UintNumberByteLen } from '@chainsafe/ssz/lib/type/uint';
+import { type UintNumberByteLen } from '@chainsafe/ssz/lib/type/uint.js';
 
 export const operatorAddressWrapperType = new ContainerType({
   address: new ByteVectorType(20),

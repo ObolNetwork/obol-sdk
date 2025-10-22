@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020", "DOM"],
     "composite": false,
     "declaration": true,
     "declarationMap": true,
@@ -12,12 +15,12 @@
     "noUnusedParameters": false,
     "preserveWatchOutput": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true,
     "strict": true,
     "outDir": "./dist",
+    "skipLibCheck": true
   },
   "exclude": [
     "dist",
-    "node_modules",
+    "node_modules"
   ]
 }

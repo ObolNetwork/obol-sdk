@@ -6,11 +6,11 @@ import {
   type ProviderType,
   type SignerType,
   type ClaimIncentivesResponse,
-} from '../types';
+} from '../types.js';
 import {
   claimIncentivesFromMerkleDistributor,
   isClaimedFromMerkleDistributor,
-} from './incentiveHelpers';
+} from './incentiveHelpers.js';
 import { DEFAULT_BASE_VERSION } from '../constants.js';
 
 /**
