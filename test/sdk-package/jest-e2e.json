@@ -6,6 +6,9 @@
     "transform": {
       "^.+\\.ts$": "ts-jest"
     },
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@paralleldrive/cuid2|formidable)/)"
+    ],
     "globals": {
       "ts-jest": {
         "useESM": true
