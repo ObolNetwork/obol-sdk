@@ -3,6 +3,7 @@
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020", "DOM"],
+    "allowJs": true,
     "composite": false,
     "declaration": true,
     "declarationMap": true,
@@ -21,6 +22,7 @@
   },
   "exclude": [
     "dist",
-    "node_modules"
+    "node_modules",
+    "__mocks__"
   ]
 }

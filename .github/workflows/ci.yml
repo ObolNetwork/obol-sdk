@@ -10,6 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22.x
+          cache: yarn
+
       - name: Install SDK dependencies
         run: yarn install --frozen-lockfile
 
@@ -38,6 +44,10 @@ jobs:
       - name: Build e2e
         working-directory: ./test/sdk-package
         run: yarn run build
+
+      - name: Clear Jest cache
+        working-directory: ./test/sdk-package
+        run: yarn jest --clearCache || true
 
       - name: Run e2e tests
         working-directory: ./test/sdk-package
