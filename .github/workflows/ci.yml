@@ -45,6 +45,10 @@ jobs:
         working-directory: ./test/sdk-package
         run: yarn run build
 
+      - name: Clear Jest cache
+        working-directory: ./test/sdk-package
+        run: yarn jest --clearCache || true
+
       - name: Run e2e tests
         working-directory: ./test/sdk-package
         run: yarn run test:e2e
