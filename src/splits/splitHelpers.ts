@@ -8,7 +8,13 @@ import {
   type OVMArgs,
   type ChainConfig,
 } from '../types.js';
-import { Contract, Interface, parseEther, ZeroAddress } from 'ethers';
+import {
+  Contract,
+  Interface,
+  parseEther,
+  ZeroAddress,
+  getAddress as toChecksumAddress,
+} from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR.js';
 import { OVMFactoryContract, OVMContract } from '../abi/OVM.js';
 import { splitMainEthereumAbi } from '../abi/SplitMain.js';
@@ -754,7 +760,7 @@ export const deployOVMContract = async ({
     }
 
     const ovmAddress = '0x' + ovmAddressLog.slice(26, 66);
-    return ovmAddress;
+    return toChecksumAddress(ovmAddress);
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM contract: ${error.message ?? 'OVM deployment failed'}`,
