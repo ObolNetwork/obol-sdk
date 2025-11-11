@@ -95,7 +95,6 @@ export class EOA {
       requiredFee: validatedPayload.requiredFee,
       chainId: this.chainId,
       signer: this.signer,
-      provider: this.provider,
     });
   }
 

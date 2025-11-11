@@ -14,7 +14,6 @@ export async function submitEOAWithdrawalRequest({
   requiredFee,
   chainId,
   signer,
-  provider,
 }: {
   pubkey: string;
   allocation: number;
@@ -23,10 +22,9 @@ export async function submitEOAWithdrawalRequest({
   requiredFee: string;
   chainId: number;
   signer: SignerType;
-  provider: ProviderType;
 }): Promise<{ txHash: string | null }> {
   if (!withdrawalAddress) throw new Error('No withdrawal address provided');
-  if (!allocation) throw new Error('No allocation provided');
+  if (allocation === undefined || allocation === null) throw new Error('No allocation provided');
 
   const amountInGwei = BigInt(Math.floor(Number(allocation) * ETHER_TO_GWEI));
   const data = `0x${pubkey.slice(2)}${amountInGwei.toString(16).padStart(16, '0')}`;
