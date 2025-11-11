@@ -80,7 +80,6 @@ describe('EOA', () => {
         requiredFee: mockPayload.requiredFee,
         chainId: 1,
         signer: mockSigner,
-        provider: mockProvider,
       });
 
       expect(result).toEqual(mockResult);
