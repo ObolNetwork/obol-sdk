@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.6](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5...v2.11.6)
+
+- accept 0 for full withdrawal [`#166`](https://github.com/ObolNetwork/obol-sdk/pull/166)
+
 #### [v2.11.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.2...v2.11.5)
 
+> 7 November 2025
+
+- chore(release): v2.11.5 [`#165`](https://github.com/ObolNetwork/obol-sdk/pull/165)
 - return checksummed ovm address [`#164`](https://github.com/ObolNetwork/obol-sdk/pull/164)
 
 #### [v2.11.5-rc.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.1...v2.11.5-rc.2)
