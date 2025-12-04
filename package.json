@@ -21,10 +21,10 @@
     "npm:publish:next": "npm publish --tag next",
     "release": "release-it",
     "release:dry": "release-it --dry-run --no-npm",
-    "lint": "eslint \"{src}/**/*.{js,ts}\" --fix",
+    "lint": "eslint ./src --ext .ts,.js --fix",
     "lint-ci": "eslint ./src --ext .ts,.js",
     "prettier-ci": "prettier --check ./src --ext .ts,.js",
-    "prettier": "prettier --write \"{src}/**/*.{js,ts}\"",
+    "prettier": "prettier --write \"src/**/*.{js,ts}\"",
     "docs": "typedoc"
   },
   "main": "./dist/cjs/src/index.js",

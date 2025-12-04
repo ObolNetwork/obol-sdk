@@ -641,6 +641,8 @@ export class Exit {
       return signature;
     });
 
+    await init('herumi');
+
     // Aggregate signatures (equivalent to tbls.ThresholdAggregate in Go)
     // Note: @chainsafe/bls doesn't have explicit threshold aggregation, but ordering should be preserved
     const fullSig = bls.bls.aggregateSignatures(rawSignatures);

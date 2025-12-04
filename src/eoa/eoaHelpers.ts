@@ -1,5 +1,5 @@
 import { ETHER_TO_GWEI } from '../constants.js';
-import { type SignerType, type ProviderType } from '../types.js';
+import { type SignerType } from '../types.js';
 import { Contract } from 'ethers';
 import { BatchDepositContract } from '../abi/BatchDeposit.js';
 
@@ -23,8 +23,12 @@ export async function submitEOAWithdrawalRequest({
   chainId: number;
   signer: SignerType;
 }): Promise<{ txHash: string | null }> {
-  if (!withdrawalAddress) throw new Error('No withdrawal address provided');
-  if (allocation === undefined || allocation === null) throw new Error('No allocation provided');
+  if (!withdrawalAddress) {
+    throw new Error('No withdrawal address provided');
+  }
+  if (allocation === undefined || allocation === null) {
+    throw new Error('No allocation provided');
+  }
 
   const amountInGwei = BigInt(Math.floor(Number(allocation) * ETHER_TO_GWEI));
   const data = `0x${pubkey.slice(2)}${amountInGwei.toString(16).padStart(16, '0')}`;
