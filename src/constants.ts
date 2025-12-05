@@ -4,7 +4,6 @@ import pjson from '../package.json';
 import { type ChainConfig, FORK_MAPPING } from './types.js';
 import {
   HOLESKY_MULTICALL3_BYTECODE,
-  HOLESKY_OVM_FACTORY_BYTECODE,
   HOLESKY_OWR_FACTORY_BYTECODE,
   HOLESKY_SPLITMAIN_BYTECODE,
   HOODI_MULTICALL3_BYTECODE,
@@ -189,7 +188,7 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     },
     // OVM and SplitV2 Contract Addresses
     OVM_FACTORY_CONTRACT: {
-      address: '0xA755669f314022ED2158e93867af5183E88370fe',
+      address: '0x2c26B5A373294CaccBd3DE817D9B7C6aea7De584',
       bytecode: MAINNET_OVM_FACTORY_BYTECODE,
     },
     WAREHOUSE_CONTRACT: {
@@ -227,10 +226,6 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     EOA_WITHDRAWAL_CONTRACT: {
       address: '0x00000961Ef480Eb55e80D19ad83579A64c007002',
     },
-    OVM_FACTORY_CONTRACT: {
-      address: '0x4B157b79277E44D12C234680ACE17Db028075EA5',
-      bytecode: HOLESKY_OVM_FACTORY_BYTECODE,
-    },
   },
   [FORK_MAPPING['0x10000910']]: {
     SPLITMAIN_CONTRACT: {
@@ -251,7 +246,7 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     },
     // OVM and SplitV2 Contract Addresses
     OVM_FACTORY_CONTRACT: {
-      address: '0x885E7D97E3987BA57EF0d693C508d675e4Bf82FC',
+      address: '0x5754C8665B7e7BF15E83fCdF6d9636684B782b12',
       bytecode: HOODI_OVM_FACTORY_BYTECODE,
     },
     WAREHOUSE_CONTRACT: {

@@ -50,7 +50,7 @@ export const OVMFactoryContract = {
         {
           indexed: false,
           internalType: 'address',
-          name: 'principalRecipient',
+          name: 'beneficiary',
           type: 'address',
         },
         {
@@ -79,11 +79,7 @@ export const OVMFactoryContract = {
     {
       inputs: [
         { internalType: 'address', name: 'owner', type: 'address' },
-        {
-          internalType: 'address',
-          name: 'principalRecipient',
-          type: 'address',
-        },
+        { internalType: 'address', name: 'beneficiary', type: 'address' },
         { internalType: 'address', name: 'rewardRecipient', type: 'address' },
         { internalType: 'uint64', name: 'principalThreshold', type: 'uint64' },
       ],
@@ -114,6 +110,7 @@ export const OVMFactoryContract = {
     },
   ],
 };
+
 export const OVMContract = {
   abi: [
     {
@@ -134,11 +131,7 @@ export const OVMContract = {
           type: 'address',
         },
         { internalType: 'address', name: '_owner', type: 'address' },
-        {
-          internalType: 'address',
-          name: '_principalRecipient',
-          type: 'address',
-        },
+        { internalType: 'address', name: '_beneficiary', type: 'address' },
         { internalType: 'address', name: '_rewardRecipient', type: 'address' },
         { internalType: 'uint64', name: '_principalThreshold', type: 'uint64' },
       ],
@@ -160,11 +153,34 @@ export const OVMContract = {
         {
           indexed: true,
           internalType: 'address',
-          name: 'requester',
+          name: 'newBeneficiary',
           type: 'address',
         },
-        { indexed: true, internalType: 'bytes', name: 'source', type: 'bytes' },
-        { indexed: true, internalType: 'bytes', name: 'target', type: 'bytes' },
+      ],
+      name: 'BeneficiaryUpdated',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: false,
+          internalType: 'bytes',
+          name: 'srcPubKey',
+          type: 'bytes',
+        },
+        {
+          indexed: false,
+          internalType: 'bytes',
+          name: 'targetPubKey',
+          type: 'bytes',
+        },
+        {
+          indexed: true,
+          internalType: 'uint256',
+          name: 'fee',
+          type: 'uint256',
+        },
       ],
       name: 'ConsolidationRequested',
       type: 'event',
@@ -192,25 +208,6 @@ export const OVMContract = {
         },
       ],
       name: 'DistributeFunds',
-      type: 'event',
-    },
-    {
-      anonymous: false,
-      inputs: [
-        {
-          indexed: true,
-          internalType: 'address',
-          name: 'newPrincipalRecipient',
-          type: 'address',
-        },
-        {
-          indexed: true,
-          internalType: 'address',
-          name: 'oldPrincipalRecipient',
-          type: 'address',
-        },
-      ],
-      name: 'NewPrincipalRecipient',
       type: 'event',
     },
     {
@@ -262,6 +259,44 @@ export const OVMContract = {
       anonymous: false,
       inputs: [
         {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'newPrincipalStakeAmount',
+          type: 'uint256',
+        },
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'oldPrincipalStakeAmount',
+          type: 'uint256',
+        },
+      ],
+      name: 'PrincipalStakeAmountUpdated',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: true,
+          internalType: 'address',
+          name: 'account',
+          type: 'address',
+        },
+        {
+          indexed: false,
+          internalType: 'uint256',
+          name: 'amount',
+          type: 'uint256',
+        },
+      ],
+      name: 'PullBalanceWithdrawn',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
           indexed: true,
           internalType: 'address',
           name: 'nonOVMToken',
@@ -289,6 +324,19 @@ export const OVMContract = {
         {
           indexed: true,
           internalType: 'address',
+          name: 'newRewardRecipient',
+          type: 'address',
+        },
+      ],
+      name: 'RewardRecipientUpdated',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: true,
+          internalType: 'address',
           name: 'user',
           type: 'address',
         },
@@ -308,17 +356,17 @@ export const OVMContract = {
         {
           indexed: true,
           internalType: 'address',
-          name: 'account',
+          name: 'beneficiary',
           type: 'address',
         },
         {
-          indexed: false,
+          indexed: true,
           internalType: 'uint256',
           name: 'amount',
           type: 'uint256',
         },
       ],
-      name: 'Withdrawal',
+      name: 'Swept',
       type: 'event',
     },
     {
@@ -327,14 +375,57 @@ export const OVMContract = {
         {
           indexed: true,
           internalType: 'address',
-          name: 'requester',
+          name: 'newBeneficiary',
           type: 'address',
         },
-        { indexed: true, internalType: 'bytes', name: 'pubKey', type: 'bytes' },
+        {
+          indexed: true,
+          internalType: 'address',
+          name: 'newOwner',
+          type: 'address',
+        },
+      ],
+      name: 'Transferred',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
+        {
+          indexed: true,
+          internalType: 'address',
+          name: 'excessFeeRecipient',
+          type: 'address',
+        },
+        {
+          indexed: true,
+          internalType: 'uint256',
+          name: 'excessFee',
+          type: 'uint256',
+        },
+      ],
+      name: 'UnsentExcessFee',
+      type: 'event',
+    },
+    {
+      anonymous: false,
+      inputs: [
         {
           indexed: false,
-          internalType: 'uint256',
+          internalType: 'bytes',
+          name: 'pubKey',
+          type: 'bytes',
+        },
+        {
+          indexed: true,
+          internalType: 'uint64',
           name: 'amount',
+          type: 'uint64',
+        },
+        {
+          indexed: true,
+          internalType: 'uint256',
+          name: 'fee',
           type: 'uint256',
         },
       ],
@@ -350,6 +441,13 @@ export const OVMContract = {
     },
     {
       inputs: [],
+      name: 'DEPOSIT_ROLE',
+      outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+      stateMutability: 'view',
+      type: 'function',
+    },
+    {
+      inputs: [],
       name: 'RECOVER_FUNDS_ROLE',
       outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
       stateMutability: 'view',
@@ -357,7 +455,14 @@ export const OVMContract = {
     },
     {
       inputs: [],
-      name: 'SET_PRINCIPAL_ROLE',
+      name: 'SET_BENEFICIARY_ROLE',
+      outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+      stateMutability: 'view',
+      type: 'function',
+    },
+    {
+      inputs: [],
+      name: 'SET_REWARD_ROLE',
       outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
       stateMutability: 'view',
       type: 'function',
@@ -388,6 +493,33 @@ export const OVMContract = {
         { internalType: 'address', name: 'pendingOwner', type: 'address' },
       ],
       name: 'completeOwnershipHandover',
+      outputs: [],
+      stateMutability: 'payable',
+      type: 'function',
+    },
+    {
+      inputs: [
+        {
+          components: [
+            { internalType: 'bytes[]', name: 'srcPubKeys', type: 'bytes[]' },
+            { internalType: 'bytes', name: 'targetPubKey', type: 'bytes' },
+          ],
+          internalType: 'struct IObolValidatorManager.ConsolidationRequest[]',
+          name: 'requests',
+          type: 'tuple[]',
+        },
+        {
+          internalType: 'uint256',
+          name: 'maxFeePerConsolidation',
+          type: 'uint256',
+        },
+        {
+          internalType: 'address',
+          name: 'excessFeeRecipient',
+          type: 'address',
+        },
+      ],
+      name: 'consolidate',
       outputs: [],
       stateMutability: 'payable',
       type: 'function',
@@ -440,6 +572,13 @@ export const OVMContract = {
       inputs: [],
       name: 'fundsPendingWithdrawal',
       outputs: [{ internalType: 'uint128', name: '', type: 'uint128' }],
+      stateMutability: 'view',
+      type: 'function',
+    },
+    {
+      inputs: [],
+      name: 'getBeneficiary',
+      outputs: [{ internalType: 'address', name: '', type: 'address' }],
       stateMutability: 'view',
       type: 'function',
     },
@@ -535,28 +674,8 @@ export const OVMContract = {
       type: 'function',
     },
     {
-      inputs: [
-        { internalType: 'bytes[]', name: 'sourcePubKeys', type: 'bytes[]' },
-        { internalType: 'bytes', name: 'targetPubKey', type: 'bytes' },
-      ],
-      name: 'requestConsolidation',
-      outputs: [],
-      stateMutability: 'payable',
-      type: 'function',
-    },
-    {
       inputs: [],
       name: 'requestOwnershipHandover',
-      outputs: [],
-      stateMutability: 'payable',
-      type: 'function',
-    },
-    {
-      inputs: [
-        { internalType: 'bytes[]', name: 'pubKeys', type: 'bytes[]' },
-        { internalType: 'uint64[]', name: 'amounts', type: 'uint64[]' },
-      ],
-      name: 'requestWithdrawal',
       outputs: [],
       stateMutability: 'payable',
       type: 'function',
@@ -586,14 +705,60 @@ export const OVMContract = {
       type: 'function',
     },
     {
+      inputs: [{ internalType: 'uint256', name: 'newAmount', type: 'uint256' }],
+      name: 'setAmountOfPrincipalStake',
+      outputs: [],
+      stateMutability: 'nonpayable',
+      type: 'function',
+    },
+    {
+      inputs: [
+        { internalType: 'address', name: 'newBeneficiary', type: 'address' },
+      ],
+      name: 'setBeneficiary',
+      outputs: [],
+      stateMutability: 'nonpayable',
+      type: 'function',
+    },
+    {
       inputs: [
         {
           internalType: 'address',
-          name: 'newPrincipalRecipient',
+          name: 'newRewardRecipient',
           type: 'address',
         },
       ],
-      name: 'setPrincipalRecipient',
+      name: 'setRewardRecipient',
+      outputs: [],
+      stateMutability: 'nonpayable',
+      type: 'function',
+    },
+    {
+      inputs: [
+        { internalType: 'address', name: 'beneficiary', type: 'address' },
+        { internalType: 'uint256', name: 'amount', type: 'uint256' },
+      ],
+      name: 'sweep',
+      outputs: [],
+      stateMutability: 'nonpayable',
+      type: 'function',
+    },
+    {
+      inputs: [
+        { internalType: 'address', name: '', type: 'address' },
+        { internalType: 'uint256', name: '', type: 'uint256' },
+      ],
+      name: 'sweepToBeneficiaryContract',
+      outputs: [],
+      stateMutability: 'nonpayable',
+      type: 'function',
+    },
+    {
+      inputs: [
+        { internalType: 'address', name: 'newBeneficiary', type: 'address' },
+        { internalType: 'address', name: 'newOwner', type: 'address' },
+      ],
+      name: 'transfer',
       outputs: [],
       stateMutability: 'nonpayable',
       type: 'function',
@@ -606,8 +771,35 @@ export const OVMContract = {
       type: 'function',
     },
     {
-      inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+      inputs: [],
+      name: 'version',
+      outputs: [{ internalType: 'string', name: '', type: 'string' }],
+      stateMutability: 'pure',
+      type: 'function',
+    },
+    {
+      inputs: [
+        { internalType: 'bytes[]', name: 'pubKeys', type: 'bytes[]' },
+        { internalType: 'uint64[]', name: 'amounts', type: 'uint64[]' },
+        {
+          internalType: 'uint256',
+          name: 'maxFeePerWithdrawal',
+          type: 'uint256',
+        },
+        {
+          internalType: 'address',
+          name: 'excessFeeRecipient',
+          type: 'address',
+        },
+      ],
       name: 'withdraw',
+      outputs: [],
+      stateMutability: 'payable',
+      type: 'function',
+    },
+    {
+      inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+      name: 'withdrawPullBalance',
       outputs: [],
       stateMutability: 'nonpayable',
       type: 'function',

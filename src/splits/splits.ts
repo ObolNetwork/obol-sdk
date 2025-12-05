@@ -429,7 +429,8 @@ export class ObolSplits {
    * const result = await client.splits.requestWithdrawal({
    *   ovmAddress: '0x1234567890123456789012345678901234567890',
    *   pubKeys: ['0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456'],
-   *   amounts: ['32000000000'] // 32 ETH in gwei
+   *   amounts: ['32000000000'], // 32 ETH in gwei
+   *   withdrawalFees: '1000000000000000' // Total fees in wei
    * });
    * console.log('Withdrawal requested:', result.txHash);
    * ```

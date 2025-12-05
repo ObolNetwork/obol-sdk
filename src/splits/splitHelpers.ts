@@ -922,6 +922,7 @@ const getChainConfig = (chainId: number): ChainConfig => {
  * @param ovmAddress - The address of the OVM contract
  * @param pubKeys - Array of validator public keys in bytes format
  * @param amounts - Array of withdrawal amounts in wei (uint64)
+ * @param withdrawalFees - Total withdrawal fees in wei
  * @param signer - The signer to use for the transaction
  * @returns Promise that resolves to the transaction hash
  */
@@ -939,14 +940,29 @@ export const requestWithdrawalFromOVM = async ({
   signer: SignerType;
 }): Promise<{ txHash: string }> => {
   try {
+    if (pubKeys.length === 0) {
+      throw new Error('pubKeys array cannot be empty');
+    }
     // Convert string amounts to bigint
     const bigintAmounts = amounts.map(amount => BigInt(amount));
 
+    // Calculate maxFeePerWithdrawal as withdrawalFees / pubKeys.length
+    const maxFeePerWithdrawal = BigInt(withdrawalFees) / BigInt(pubKeys.length);
+
+    // Use ovmAddress as excessFeeRecipient
+    const excessFeeRecipient = ovmAddress;
+
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
 
-    const tx = await ovmContract.requestWithdrawal(pubKeys, bigintAmounts, {
-      value: BigInt(withdrawalFees),
-    });
+    const tx = await ovmContract.withdraw(
+      pubKeys,
+      bigintAmounts,
+      maxFeePerWithdrawal,
+      excessFeeRecipient,
+      {
+        value: BigInt(withdrawalFees),
+      },
+    );
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };
