@@ -940,6 +940,9 @@ export const requestWithdrawalFromOVM = async ({
   signer: SignerType;
 }): Promise<{ txHash: string }> => {
   try {
+    if (pubKeys.length === 0) {
+      throw new Error('pubKeys array cannot be empty');
+    }
     // Convert string amounts to bigint
     const bigintAmounts = amounts.map(amount => BigInt(amount));
 
