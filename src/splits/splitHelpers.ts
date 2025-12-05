@@ -958,7 +958,7 @@ export const requestWithdrawalFromOVM = async ({
       excessFeeRecipient,
       {
         value: BigInt(withdrawalFees),
-      }
+      },
     );
     const receipt = await tx.wait();
 
