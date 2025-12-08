@@ -1022,8 +1022,6 @@ export const depositOVM = async ({
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : 'Deposit failed';
-    throw new Error(
-      `Failed to deposit to OVM: ${errorMessage}`,
-    );
+    throw new Error(`Failed to deposit to OVM: ${errorMessage}`);
   }
 };
