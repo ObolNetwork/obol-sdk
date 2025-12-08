@@ -26,7 +26,7 @@ await jest.unstable_mockModule('../../src/splits/splitHelpers.js', () => ({
   deployOVMContract: jest.fn(),
   deployOVMAndSplitV2: jest.fn(),
   requestWithdrawalFromOVM: jest.fn(),
-  depositWithMulticall3: jest.fn(),
+  depositOVM: jest.fn(),
 }));
 
 // Mock utils using unstable_mockModule
@@ -77,7 +77,7 @@ const mockDeployOVMContract =
   >;
 const mockRequestWithdrawalFromOVM =
   splitHelpers.requestWithdrawalFromOVM as any;
-const mockdepositWithMulticall3 = splitHelpers.depositWithMulticall3 as any;
+const mockdepositOVM = splitHelpers.depositOVM as any;
 const mockIsContractAvailable = utils.isContractAvailable as any;
 
 // Global test variables
@@ -403,7 +403,7 @@ describe('deposit', () => {
   ];
 
   it('should deposit successfully', async () => {
-    mockdepositWithMulticall3.mockResolvedValue({
+    mockdepositOVM.mockResolvedValue({
       txHashes: [
         '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       ],
@@ -420,11 +420,10 @@ describe('deposit', () => {
       ],
     });
 
-    expect(mockdepositWithMulticall3).toHaveBeenCalledWith({
+    expect(mockdepositOVM).toHaveBeenCalledWith({
       ovmAddress: mockOVMAddress,
       deposits: singleDeposit,
       signer: mockSigner,
-      chainId: 1,
     });
   });
 
@@ -445,7 +444,7 @@ describe('deposit', () => {
 
   it('should handle multiple deposits', async () => {
     const multipleDeposits = [...singleDeposit, ...singleDeposit];
-    mockdepositWithMulticall3.mockResolvedValue({
+    mockdepositOVM.mockResolvedValue({
       txHashes: [
         '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       ],
@@ -462,11 +461,10 @@ describe('deposit', () => {
       ],
     });
 
-    expect(mockdepositWithMulticall3).toHaveBeenCalledWith({
+    expect(mockdepositOVM).toHaveBeenCalledWith({
       ovmAddress: mockOVMAddress,
       deposits: multipleDeposits,
       signer: mockSigner,
-      chainId: 1,
     });
   });
 });
