@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.8](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.7...v2.11.8)
+
+- Hanan/fix ovm deposit [`#173`](https://github.com/ObolNetwork/obol-sdk/pull/173)
+
 #### [v2.11.7](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.6...v2.11.7)
 
+> 5 December 2025
+
+- chore(release): v2.11.7 [`#172`](https://github.com/ObolNetwork/obol-sdk/pull/172)
 - new ovm [`#171`](https://github.com/ObolNetwork/obol-sdk/pull/171)
 - Hanna/recombine signature fix [`#170`](https://github.com/ObolNetwork/obol-sdk/pull/170)
 
