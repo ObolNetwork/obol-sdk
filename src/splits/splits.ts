@@ -5,7 +5,7 @@ import {
   deployOVMContract,
   deployOVMAndSplitV2,
   requestWithdrawalFromOVM,
-  depositWithMulticall3,
+  depositOVM,
 } from './splitHelpers.js';
 import {
   CHAIN_CONFIGURATION,
@@ -457,9 +457,9 @@ export class ObolSplits {
   }
 
   /**
-   * Deposits to OVM contract using multicall3 for batch operations.
+   * Deposits to OVM contract by sending individual transactions for each deposit.
    *
-   * This method allows depositing to an OVM contract using multicall3 for efficient batch processing.
+   * This method allows depositing to an OVM contract. Each deposit is sent as a separate transaction
    * Each deposit includes validator public key, withdrawal credentials, signature, deposit data root, and amount.
    *
    * @remarks
@@ -467,7 +467,7 @@ export class ObolSplits {
    * and not pushed to version control.
    *
    * @param {OVMDepositPayload} payload - Data needed to deposit to OVM
-   * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes for all batches
+   * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes, one for each deposit
    * @throws Will throw an error if the signer is not provided, OVM address is invalid, or the deposit fails
    *
    * An example of how to use deposit:
@@ -495,11 +495,10 @@ export class ObolSplits {
       ovmDepositPayloadSchema,
     );
 
-    return await depositWithMulticall3({
+    return await depositOVM({
       ovmAddress: validatedPayload.ovmAddress,
       deposits: validatedPayload.deposits,
       signer: this.signer,
-      chainId: this.chainId,
     });
   }
 }

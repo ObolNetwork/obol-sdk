@@ -974,17 +974,16 @@ export const requestWithdrawalFromOVM = async ({
 };
 
 /**
- * Deposits to OVM contract using multicall3 for batch operations
+ * Deposits to OVM contract by sending individual transactions for each deposit.
  * @param ovmAddress - The address of the OVM contract
  * @param deposits - Array of deposit objects with all required parameters
  * @param signer - The signer to use for the transaction
  * @returns Promise that resolves to an array of transaction hashes
  */
-export const depositWithMulticall3 = async ({
+export const depositOVM = async ({
   ovmAddress,
   deposits,
   signer,
-  chainId,
 }: {
   ovmAddress: string;
   deposits: Array<{
@@ -995,46 +994,22 @@ export const depositWithMulticall3 = async ({
     amount: string;
   }>;
   signer: SignerType;
-  chainId: number;
 }): Promise<{ txHashes: string[] }> => {
   try {
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
-    const chainConfig = getChainConfig(chainId);
-    const multicall3Address = chainConfig.MULTICALL3_CONTRACT.address;
-    const multiCall3ContractInstance = new Contract(
-      multicall3Address,
-      MultiCall3Contract.abi,
-      signer,
-    );
-
-    const BATCH_SIZE = 500;
     const txHashes: string[] = [];
 
-    // Process deposits in batches of 500
-    for (let i = 0; i < deposits.length; i += BATCH_SIZE) {
-      const batchDeposits = deposits.slice(i, i + BATCH_SIZE);
-
-      // Use Multicall3 aggregate3Value (payable per-call)
-      const callsWithValue = batchDeposits.map(deposit => ({
-        target: ovmAddress,
-        allowFailure: false,
-        callData: ovmContract.interface.encodeFunctionData('deposit', [
-          deposit.pubkey,
-          deposit.withdrawal_credentials,
-          deposit.signature,
-          deposit.deposit_data_root,
-        ]),
-        value: BigInt(deposit.amount),
-      }));
-
-      const totalBatchValue = callsWithValue.reduce(
-        (sum: bigint, c: { value: bigint }) => sum + c.value,
-        BigInt(0),
-      );
-
-      const tx = await multiCall3ContractInstance.aggregate3Value(
-        callsWithValue,
-        { value: totalBatchValue },
+    // Process each deposit as a separate transaction
+    // Multicall3 cannot be used because it doesn't have the DEPOSIT_ROLE
+    for (const deposit of deposits) {
+      const tx = await ovmContract.deposit(
+        deposit.pubkey,
+        deposit.withdrawal_credentials,
+        deposit.signature,
+        deposit.deposit_data_root,
+        {
+          value: BigInt(deposit.amount),
+        },
       );
 
       const receipt = await tx.wait();
@@ -1047,8 +1022,6 @@ export const depositWithMulticall3 = async ({
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : 'Deposit failed';
-    throw new Error(
-      `Failed to deposit to OVM with multicall3: ${errorMessage}`,
-    );
+    throw new Error(`Failed to deposit to OVM: ${errorMessage}`);
   }
 };
