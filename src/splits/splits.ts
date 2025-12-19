@@ -64,6 +64,8 @@ export class ObolSplits {
    * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
    * and not pushed to version control.
    *
+   * **📌 Note:** The Obol Validator Manager (OVM) feature is only enabled on Hoodi on launchpad.
+   *
    * @param {OVMRewardsSplitPayload} payload - Data needed to deploy OVM and SplitV2
    * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient
    * @throws Will throw an error if the splitter configuration is not supported or deployment fails
@@ -229,6 +231,8 @@ export class ObolSplits {
    * @remarks
    * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
    * and not pushed to version control.
+   *
+   * **📌 Note:** The Obol Validator Manager (OVM) feature is only enabled on Hoodi on launchpad.
    *
    * @param {OVMTotalSplitPayload} payload - Data needed to deploy OVM and SplitV2
    * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient

@@ -7,10 +7,15 @@
   "propertiesFormat": "table",
   "enumMembersFormat": "table",
   "typeDeclarationFormat": "table",
-  "hidePageTitle": true,
+  "hidePageTitle": false,
+  "hidePageHeader": true,
+  "hideBreadcrumbs": true,
   "excludeNotDocumented": true,
   "sort": ["source-order"],
   "plugin": ["typedoc-plugin-markdown"],
   "entryFileName": "index.md",
   "excludeInternal": false,
+  "pageTitleTemplates": {
+    "member": "{name}"
+  }
 }
