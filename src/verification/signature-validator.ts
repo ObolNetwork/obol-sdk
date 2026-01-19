@@ -58,8 +58,7 @@ export const validateEOASignature = ({
     const digest = TypedDataUtils.eip712Hash(data, SignTypedDataVersion.V4);
 
     return (
-      ethers.recoverAddress(digest, sig).toLowerCase() ===
-      address.toLowerCase()
+      ethers.recoverAddress(digest, sig).toLowerCase() === address.toLowerCase()
     );
   } catch (err) {
     console.error(`validate EOA Signature error: ${err}`);
