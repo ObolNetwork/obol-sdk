@@ -59,7 +59,7 @@ export const validateEOASignature = ({
 
     return (
       ethers.recoverAddress(digest, sig).toLowerCase() ===
-      address.toLocaleLowerCase()
+      address.toLowerCase()
     );
   } catch (err) {
     console.error(`validate EOA Signature error: ${err}`);
