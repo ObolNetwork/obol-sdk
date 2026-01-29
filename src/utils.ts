@@ -77,7 +77,7 @@ export const isContractAvailable = async (
   if (bytecode) {
     return !!code && code === bytecode;
   }
-  return !!code && code !== '0x' && code !== '0x0';
+  return !!code && code !== '0x' && code !== '0x0' && !code.startsWith("0xef0100") //for delegated address;
 };
 
 export const getProvider = (
