@@ -2,8 +2,22 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.9...v2.11.9)
+
+- support delegated EOA [`#178`](https://github.com/ObolNetwork/obol-sdk/pull/178)
+- fix docs [`#176`](https://github.com/ObolNetwork/obol-sdk/pull/176)
+
+#### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.8...v2.11.9)
+
+> 19 January 2026
+
+- Fix: Correct method name in signature validator [`#177`](https://github.com/ObolNetwork/obol-sdk/pull/177)
+
 #### [v2.11.8](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.7...v2.11.8)
 
+> 9 December 2025
+
+- chore(release): v2.11.8 [`#174`](https://github.com/ObolNetwork/obol-sdk/pull/174)
 - Hanan/fix ovm deposit [`#173`](https://github.com/ObolNetwork/obol-sdk/pull/173)
 
 #### [v2.11.7](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.6...v2.11.7)
