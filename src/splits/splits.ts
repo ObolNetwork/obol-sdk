@@ -13,6 +13,7 @@ import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   isChainSupportedForSplitters,
 } from '../constants.js';
+import { SignerRequiredError, UnsupportedChainError } from '../errors.js';
 import {
   ovmRewardsSplitPayloadSchema,
   ovmTotalSplitPayloadSchema,
@@ -32,12 +33,33 @@ import {
 } from '../types.js';
 
 /**
- * ObolSplits can be used for creating and managing Obol splits.
- * @class
- * @internal Access it through Client.splits.
+ * Deploys and manages Obol Validator Manager (OVM) and SplitV2 contracts
+ * for automated reward and principal splitting among cluster participants.
+ *
+ * Do not instantiate directly; access via `client.splits`.
+ *
+ * Available methods:
+ * - {@link ObolSplits.createValidatorManagerAndRewardsSplit} – rewards-only split (single principal recipient)
+ * - {@link ObolSplits.createValidatorManagerAndTotalSplit} – total split (principal also split)
+ * - {@link ObolSplits.requestWithdrawal} – request withdrawal from an OVM contract
+ * - {@link ObolSplits.deposit} – deposit to an OVM contract
+ *
+ * All write methods send on-chain transactions and require a signer with ETH for gas.
+ *
  * @example
- * const obolClient = new Client(config);
- * await obolClient.splits.createValidatorManagerAndRewardsSplit(OVMRewardsSplitPayload);
+ * ```typescript
+ * const client = new Client({ chainId: 560048 }, signer);
+ *
+ * const { withdrawal_address, fee_recipient_address } =
+ *   await client.splits.createValidatorManagerAndRewardsSplit({
+ *     rewardSplitRecipients: [
+ *       { address: "0xOp1...", percentAllocation: 50 },
+ *       { address: "0xOp2...", percentAllocation: 49 },
+ *     ],
+ *     principalRecipient: "0xPrincipal...",
+ *     OVMOwnerAddress: "0xOwner...",
+ *   });
+ * ```
  */
 export class ObolSplits {
   private readonly signer: SignerType | undefined;
@@ -55,32 +77,38 @@ export class ObolSplits {
   }
 
   /**
-   * Creates an Obol OVM and Pull split configuration for rewards-only scenario.
+   * Deploys an OVM and SplitV2 contract for a **rewards-only** split scenario.
    *
-   * This method deploys OVM and SplitV2 contracts for managing validator rewards only.
-   * Principal is handled by a single address, while rewards are split among recipients.
+   * Principal goes to a single address; only validator rewards are split among
+   * the configured recipients. Automatically appends the Obol RAF recipient.
    *
-   * @remarks
-   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
-   * and not pushed to version control.
+   * - Sends one or more on-chain transactions (irreversible).
+   * - Only supported on chains with OVM factory contracts (Mainnet, Holesky, Hoodi).
    *
-   * **📌 Note:** The Obol Validator Manager (OVM) feature is only enabled on Hoodi on launchpad.
+   * @param payload - Configuration for the OVM and SplitV2 deployment.
+   * @returns The OVM address as `withdrawal_address` and splitter as `fee_recipient_address`.
+   * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {UnsupportedChainError} If the chain does not support splitters.
    *
-   * @param {OVMRewardsSplitPayload} payload - Data needed to deploy OVM and SplitV2
-   * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient
-   * @throws Will throw an error if the splitter configuration is not supported or deployment fails
-   *
-   * An example of how to use createValidatorManagerAndRewardsSplit:
-   * [createValidatorManagerAndRewardsSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L333)
+   * @example
+   * ```typescript
+   * const { withdrawal_address, fee_recipient_address } =
+   *   await client.splits.createValidatorManagerAndRewardsSplit({
+   *     rewardSplitRecipients: [
+   *       { address: "0xOp1...", percentAllocation: 50 },
+   *       { address: "0xOp2...", percentAllocation: 49 },
+   *     ],
+   *     principalRecipient: "0xPrincipal...",
+   *     OVMOwnerAddress: "0xOwner...",
+   *   });
+   * ```
    */
   async createValidatorManagerAndRewardsSplit(
     payload: OVMRewardsSplitPayload,
   ): Promise<ClusterValidator> {
     const salt = SPLITS_V2_SALT;
     if (!this.signer) {
-      throw new Error(
-        'Signer is required in createValidatorManagerAndRewardsSplit',
-      );
+      throw new SignerRequiredError('createValidatorManagerAndRewardsSplit');
     }
 
     const validatedPayload = validatePayload<Required<OVMRewardsSplitPayload>>(
@@ -89,15 +117,17 @@ export class ObolSplits {
     );
 
     if (!isChainSupportedForSplitters(this.chainId)) {
-      throw new Error(
-        `Splitter configuration is not supported on ${this.chainId} chain`,
+      throw new UnsupportedChainError(
+        this.chainId,
+        'createValidatorManagerAndRewardsSplit',
       );
     }
 
     const chainConfig = CHAIN_CONFIGURATION[this.chainId];
     if (!chainConfig?.OVM_FACTORY_CONTRACT) {
-      throw new Error(
-        `OVM contract factory is not configured for chain ${this.chainId}`,
+      throw new UnsupportedChainError(
+        this.chainId,
+        'createValidatorManagerAndRewardsSplit',
       );
     }
 
@@ -118,8 +148,9 @@ export class ObolSplits {
       !multiCall3Config?.address ||
       !multiCall3Config?.bytecode
     ) {
-      throw new Error(
-        `Contracts configuration is incomplete for chain ${this.chainId}`,
+      throw new UnsupportedChainError(
+        this.chainId,
+        'createValidatorManagerAndRewardsSplit',
       );
     }
 
@@ -147,7 +178,7 @@ export class ObolSplits {
       !checkMultiCall3Contract
     ) {
       throw new Error(
-        `Splitter contract is not deployed or available on chain ${this.chainId}`,
+        `Required factory contracts are not available on chain ${this.chainId}`,
       );
     }
 
@@ -223,32 +254,41 @@ export class ObolSplits {
   }
 
   /**
-   * Creates an Obol OVM and Total split configuration for total split scenario.
+   * Deploys an OVM and SplitV2 contract for a **total split** scenario.
    *
-   * This method deploys OVM and SplitV2 contracts for managing both validator rewards and principal.
-   * Both rewards and principal are split among recipients, with rewards including RAF recipient.
+   * Both principal and rewards are split among recipients via separate SplitV2
+   * contracts. Automatically appends the Obol RAF recipient to rewards.
    *
-   * @remarks
-   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
-   * and not pushed to version control.
+   * - Sends one or more on-chain transactions (irreversible).
+   * - Only supported on chains with OVM factory contracts (Mainnet, Holesky, Hoodi).
    *
-   * **📌 Note:** The Obol Validator Manager (OVM) feature is only enabled on Hoodi on launchpad.
+   * @param payload - Configuration for the OVM and SplitV2 deployment.
+   * @returns The OVM address as `withdrawal_address` and rewards splitter as `fee_recipient_address`.
+   * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {UnsupportedChainError} If the chain does not support splitters.
    *
-   * @param {OVMTotalSplitPayload} payload - Data needed to deploy OVM and SplitV2
-   * @returns {Promise<ClusterValidator>} OVM address as withdrawal address and splitter as fee recipient
-   * @throws Will throw an error if the splitter configuration is not supported or deployment fails
-   *
-   * An example of how to use createValidatorManagerAndTotalSplit:
-   * [createValidatorManagerAndTotalSplit](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#340)
+   * @example
+   * ```typescript
+   * const { withdrawal_address, fee_recipient_address } =
+   *   await client.splits.createValidatorManagerAndTotalSplit({
+   *     rewardSplitRecipients: [
+   *       { address: "0xOp1...", percentAllocation: 50 },
+   *       { address: "0xOp2...", percentAllocation: 49 },
+   *     ],
+   *     principalSplitRecipients: [
+   *       { address: "0xOp1...", percentAllocation: 50 },
+   *       { address: "0xOp2...", percentAllocation: 50 },
+   *     ],
+   *     OVMOwnerAddress: "0xOwner...",
+   *   });
+   * ```
    */
   async createValidatorManagerAndTotalSplit(
     payload: OVMTotalSplitPayload,
   ): Promise<ClusterValidator> {
     const salt = SPLITS_V2_SALT;
     if (!this.signer) {
-      throw new Error(
-        'Signer is required in createValidatorManagerAndTotalSplit',
-      );
+      throw new SignerRequiredError('createValidatorManagerAndTotalSplit');
     }
 
     const validatedPayload = validatePayload<Required<OVMTotalSplitPayload>>(
@@ -257,15 +297,17 @@ export class ObolSplits {
     );
 
     if (!isChainSupportedForSplitters(this.chainId)) {
-      throw new Error(
-        `Splitter configuration is not supported on ${this.chainId} chain`,
+      throw new UnsupportedChainError(
+        this.chainId,
+        'createValidatorManagerAndTotalSplit',
       );
     }
 
     const chainConfig = CHAIN_CONFIGURATION[this.chainId];
     if (!chainConfig?.OVM_FACTORY_CONTRACT) {
-      throw new Error(
-        `OVM contract factory is not configured for chain ${this.chainId}`,
+      throw new UnsupportedChainError(
+        this.chainId,
+        'createValidatorManagerAndTotalSplit',
       );
     }
 
@@ -287,8 +329,9 @@ export class ObolSplits {
       !multiCall3Config?.address ||
       !multiCall3Config?.bytecode
     ) {
-      throw new Error(
-        `Contracts configuration is incomplete for chain ${this.chainId}`,
+      throw new UnsupportedChainError(
+        this.chainId,
+        'createValidatorManagerAndTotalSplit',
       );
     }
 
@@ -316,7 +359,7 @@ export class ObolSplits {
       !checkMultiCall3Contract
     ) {
       throw new Error(
-        `Splitter contract is not deployed or available on chain ${this.chainId}`,
+        `Required factory contracts are not available on chain ${this.chainId}`,
       );
     }
 
@@ -415,35 +458,31 @@ export class ObolSplits {
   }
 
   /**
-   * Requests withdrawal from an OVM contract.
+   * Requests withdrawal of validator funds from an OVM contract.
    *
-   * This method allows requesting withdrawal of validator funds from an OVM contract.
-   * The withdrawal request includes OVM address, validator public keys and corresponding withdrawal amounts.
+   * Sends an on-chain transaction to the OVM contract requesting withdrawal
+   * for the specified validator public keys and amounts.
    *
-   * @remarks
-   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
-   * and not pushed to version control.
+   * @param payload - Withdrawal request data including OVM address, validator
+   *   public keys, amounts, and fees.
+   * @returns The transaction hash of the withdrawal request.
+   * @throws {SignerRequiredError} If no signer was provided.
    *
-   * @param {OVMRequestWithdrawalPayload} payload - Data needed to request withdrawal
-   * @returns {Promise<{txHash: string}>} Transaction hash of the withdrawal request
-   * @throws Will throw an error if the signer is not provided, OVM address is invalid, or the request fails
-   *
-   * An example of how to use requestWithdrawal:
+   * @example
    * ```typescript
-   * const result = await client.splits.requestWithdrawal({
-   *   ovmAddress: '0x1234567890123456789012345678901234567890',
-   *   pubKeys: ['0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456'],
-   *   amounts: ['32000000000'], // 32 ETH in gwei
-   *   withdrawalFees: '1000000000000000' // Total fees in wei
+   * const { txHash } = await client.splits.requestWithdrawal({
+   *   ovmAddress: "0xOVM...",
+   *   pubKeys: ["0xValidatorPubkey..."],
+   *   amounts: ["32000000000"],
+   *   withdrawalFees: "1000000000000000",
    * });
-   * console.log('Withdrawal requested:', result.txHash);
    * ```
    */
   async requestWithdrawal(
     payload: OVMRequestWithdrawalPayload,
   ): Promise<{ txHash: string }> {
     if (!this.signer) {
-      throw new Error('Signer is required in requestWithdrawal');
+      throw new SignerRequiredError('requestWithdrawal');
     }
     // [TBD] need to move ovm verification to sdk method and use it here
     const validatedPayload = validatePayload<OVMRequestWithdrawalPayload>(
@@ -461,37 +500,32 @@ export class ObolSplits {
   }
 
   /**
-   * Deposits to OVM contract by sending individual transactions for each deposit.
+   * Deposits validators to an OVM contract. Each deposit is sent as a separate
+   * on-chain transaction.
    *
-   * This method allows depositing to an OVM contract. Each deposit is sent as a separate transaction
-   * Each deposit includes validator public key, withdrawal credentials, signature, deposit data root, and amount.
+   * @param payload - Deposit data including the OVM address and an array of
+   *   validator deposit objects (pubkey, withdrawal_credentials, signature,
+   *   deposit_data_root, amount).
+   * @returns An array of transaction hashes, one per deposit.
+   * @throws {SignerRequiredError} If no signer was provided.
    *
-   * @remarks
-   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
-   * and not pushed to version control.
-   *
-   * @param {OVMDepositPayload} payload - Data needed to deposit to OVM
-   * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes, one for each deposit
-   * @throws Will throw an error if the signer is not provided, OVM address is invalid, or the deposit fails
-   *
-   * An example of how to use deposit:
+   * @example
    * ```typescript
-   * const result = await client.splits.deposit({
-   *   ovmAddress: '0x1234567890123456789012345678901234567890',
+   * const { txHashes } = await client.splits.deposit({
+   *   ovmAddress: "0xOVM...",
    *   deposits: [{
-   *     pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-   *     withdrawal_credentials: '0x1234567890123456789012345678901234567890',
-   *     signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-   *     deposit_data_root: '0x1234567890123456789012345678901234567890123456789012345678901234',
-   *     amount: '32000000000000000000' // 32 ETH in wei
-   *   }]
+   *     pubkey: "0x...",
+   *     withdrawal_credentials: "0x...",
+   *     signature: "0x...",
+   *     deposit_data_root: "0x...",
+   *     amount: "32000000000000000000",
+   *   }],
    * });
-   * console.log('Deposits completed:', result.txHashes);
    * ```
    */
   async deposit(payload: OVMDepositPayload): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
-      throw new Error('Signer is required in deposit');
+      throw new SignerRequiredError('deposit');
     }
 
     const validatedPayload = validatePayload<OVMDepositPayload>(

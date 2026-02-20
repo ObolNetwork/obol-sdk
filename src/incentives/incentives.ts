@@ -12,14 +12,27 @@ import {
   isClaimedFromMerkleDistributor,
 } from './incentiveHelpers.js';
 import { DEFAULT_BASE_VERSION } from '../constants.js';
+import { SignerRequiredError } from '../errors.js';
 
 /**
- * Incentives can be used for fetching and claiming Obol incentives.
- * @class
- * @internal Access it through Client.incentives.
+ * Manages Obol incentive rewards – querying eligibility and claiming from
+ * on-chain Merkle Distributor contracts.
+ *
+ * Do not instantiate directly; access via `client.incentives`.
+ *
  * @example
- * const obolClient = new Client(config);
- * await obolClient.incentives.claimIncentives(address);
+ * ```typescript
+ * const client = new Client({ chainId: 17000 }, signer);
+ *
+ * // Check claimable incentives
+ * const data = await client.incentives.getIncentivesByAddress("0xOperator...");
+ *
+ * // Check if already claimed
+ * const claimed = await client.incentives.isClaimed(data.contract_address, data.index);
+ *
+ * // Claim (sends on-chain transaction)
+ * const { txHash } = await client.incentives.claimIncentives("0xOperator...");
+ * ```
  */
 export class Incentives {
   private readonly signer: SignerType | undefined;
@@ -44,27 +57,30 @@ export class Incentives {
   }
 
   /**
-   * Claims Obol incentives from a Merkle Distributor contract using an address.
+   * Claims Obol incentives from a Merkle Distributor contract for the given address.
    *
-   * This method automatically fetches incentive data and verifies whether the incentives have already been claimed.
-   * If `txHash` is `null`, it indicates that the incentives were already claimed.
+   * Automatically fetches incentive data, checks if already claimed, and submits
+   * the on-chain claim transaction. Returns `{ txHash: null }` if incentives were
+   * already claimed (idempotent).
    *
-   * Note: This method is not yet enabled and will throw an error if called.
+   * @param address - The operator's Ethereum address to claim incentives for.
+   * @returns The transaction hash, or `{ txHash: null }` if already claimed.
+   * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {Error} If no incentives are found for the address.
    *
-   * @remarks
-   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
-   * and not pushed to version control.
-   *
-   * @param {string} address - The address to claim incentives for
-   * @returns {Promise<ClaimIncentivesResponse>} The transaction hash or already claimed status
-   * @throws Will throw an error if the incentives data is not found or the claim fails
-   *
-   * An example of how to use claimIncentives:
-   * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L281)
+   * @example
+   * ```typescript
+   * const { txHash } = await client.incentives.claimIncentives("0xOperator...");
+   * if (txHash) {
+   *   console.log("Claimed:", txHash);
+   * } else {
+   *   console.log("Already claimed");
+   * }
+   * ```
    */
   async claimIncentives(address: string): Promise<ClaimIncentivesResponse> {
     if (!this.signer) {
-      throw new Error('Signer is required in claimIncentives');
+      throw new SignerRequiredError('claimIncentives');
     }
 
     try {
@@ -111,15 +127,21 @@ export class Incentives {
   }
 
   /**
-   * Read isClaimed.
+   * Checks whether incentives have already been claimed for a given operator index.
    *
-   * @param {ETH_ADDRESS} contractAddress - Address of the Merkle Distributor Contract
-   * @param {ETH_ADDRESS} index - operator index in merkle tree
-   * @returns {Promise<boolean>} true if incentives are already claime
+   * Read-only on-chain call – no transaction sent.
    *
+   * @param contractAddress - Address of the Merkle Distributor contract.
+   * @param index - The operator's index in the Merkle tree (from {@link Incentives.getIncentivesByAddress}).
+   * @returns `true` if the incentives at that index have already been claimed.
    *
-   * An example of how to use isClaimed:
-   * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L266)
+   * @example
+   * ```typescript
+   * const claimed = await client.incentives.isClaimed(
+   *   "0xMerkleDistributor...",
+   *   42,
+   * );
+   * ```
    */
   async isClaimed(
     contractAddress: ETH_ADDRESS,
@@ -133,12 +155,20 @@ export class Incentives {
   }
 
   /**
-   * @param address - Operator address
-   * @returns {Promise<IncentivesType>} The matched incentives from DB
-   * @throws On not found if address not found.
+   * Fetches claimable incentive data for an operator address from the Obol API.
    *
-   * An example of how to use getIncentivesByAddress:
-   * [obolClient](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L250)
+   * The returned data includes the Merkle proof, amount, and contract address
+   * needed to claim on-chain. This is a read-only API call.
+   *
+   * @param address - The operator's Ethereum address.
+   * @returns Claimable incentive data including amount, Merkle proof, and contract address.
+   * @throws {Error} If no incentives are found for the given address (404).
+   *
+   * @example
+   * ```typescript
+   * const incentives = await client.incentives.getIncentivesByAddress("0xOperator...");
+   * console.log(incentives.amount, incentives.contract_address);
+   * ```
    */
   async getIncentivesByAddress(address: string): Promise<ClaimableIncentives> {
     const network = FORK_NAMES[this.chainId];
