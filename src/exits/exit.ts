@@ -49,36 +49,36 @@ const SSZPartialExitsPayloadType = new ContainerType({
 });
 
 /**
- * Exit validation and verification class for Obol distributed validators.
+ * Validates and verifies voluntary exit signatures for Obol distributed validators.
  *
- * This class provides functionality to validate and verify voluntary exit signatures
- * for distributed validators in an Obol cluster. It handles both partial exit signatures
- * from individual operators and payload signatures that authorize exit operations.
+ * Do not instantiate directly; access via `client.exit`.
  *
- * The class supports:
- * - Verification of BLS signatures for partial exit messages
- * - Verification of ECDSA signatures for exit payload authorization
- * - Validation of exit blobs against cluster configuration
- * - Duplicate detection and epoch validation
+ * Available methods:
+ * - {@link Exit.verifyPartialExitSignature} – verify a BLS partial exit signature
+ * - {@link Exit.verifyExitPayloadSignature} – verify an ECDSA exit payload signature
+ * - {@link Exit.validateExitBlobs} – validate exit blobs against cluster config
+ * - {@link Exit.recombineExitBlobs} – aggregate partial signatures into a full exit blob
+ *
+ * All methods are read-only (no on-chain transactions). No signer is required.
  *
  * @example
  * ```typescript
- * const exit = new Exit(1, provider); // Mainnet with provider
+ * const client = new Client({ chainId: 1 }, signer, provider);
  *
  * // Verify a partial exit signature
- * const isValid = await exit.verifyPartialExitSignature(
+ * const isValid = await client.exit.verifyPartialExitSignature(
  *   publicShareKey,
  *   signedExitMessage,
  *   forkVersion,
- *   genesisValidatorsRoot
+ *   genesisValidatorsRoot,
  * );
  *
  * // Validate exit blobs for a cluster
- * const validBlobs = await exit.validateExitBlobs(
+ * const validBlobs = await client.exit.validateExitBlobs(
  *   clusterConfig,
  *   exitsPayload,
  *   beaconNodeApiUrl,
- *   existingBlobData
+ *   existingBlobData,
  * );
  * ```
  */

@@ -211,7 +211,7 @@ describe('ObolSplits', () => {
         clientUnsupportedChain.splits.createValidatorManagerAndRewardsSplit(
           mockRewardsSplitPayload,
         ),
-      ).rejects.toThrow('Splitter configuration is not supported on 999 chain');
+      ).rejects.toThrow('createValidatorManagerAndRewardsSplit is not supported on chain 999');
     });
   });
 

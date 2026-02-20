@@ -8,6 +8,7 @@ import {
   eoaDepositPayloadSchema,
 } from '../schema.js';
 import { CHAIN_CONFIGURATION } from '../constants.js';
+import { SignerRequiredError, UnsupportedChainError } from '../errors.js';
 import {
   type ProviderType,
   type SignerType,
@@ -16,12 +17,33 @@ import {
 } from '../types.js';
 
 /**
- * EOA can be used for managing EOA (Externally Owned Account) operations like withdrawals.
- * @class
- * @internal Access it through Client.eoa.
+ * Manages Externally Owned Account (EOA) operations: validator withdrawals
+ * and batch deposits via on-chain contracts.
+ *
+ * Do not instantiate directly; access via `client.eoa`.
+ *
+ * Available methods:
+ * - {@link EOA.requestWithdrawal} – request validator withdrawal
+ * - {@link EOA.deposit} – batch-deposit validators for gas efficiency
+ *
+ * All methods send on-chain transactions and require a signer with ETH for gas.
+ *
  * @example
- * const obolClient = new Client(config);
- * await obolClient.eoa.requestWithdrawal(EOAWithdrawalPayload);
+ * ```typescript
+ * const client = new Client({ chainId: 1 }, signer, provider);
+ *
+ * // Request withdrawal
+ * const { txHash } = await client.eoa.requestWithdrawal({
+ *   pubkey: "0xValidatorPubkey...",
+ *   allocation: 32,
+ *   requiredFee: "1",
+ * });
+ *
+ * // Batch deposit
+ * const { txHashes } = await client.eoa.deposit({
+ *   deposits: [{ pubkey: "0x...", withdrawal_credentials: "0x...", ... }],
+ * });
+ * ```
  */
 export class EOA {
   private readonly signer: SignerType | undefined;
@@ -39,34 +61,30 @@ export class EOA {
   }
 
   /**
-   * Requests withdrawal from an EOA contract.
+   * Requests withdrawal of validator funds via the EOA withdrawal contract.
    *
-   * This method allows requesting withdrawal of validator funds.
-   * The withdrawal request includes validator public key and corresponding withdrawal amount.
+   * Sends an on-chain transaction. Requires both a signer and a provider.
    *
-   * @remarks
-   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
-   * and not pushed to version control.
+   * @param payload - Withdrawal data including validator `pubkey`, `allocation`
+   *   (in ETH), and `requiredFee` (in wei).
+   * @returns The transaction hash, or `null` if no transaction was needed.
+   * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {UnsupportedChainError} If the chain has no EOA withdrawal contract.
    *
-   * @param {EOAWithdrawalPayload} payload - Data needed to request withdrawal
-   * @returns {Promise<{txHash: string}>} Transaction hash of the withdrawal request
-   * @throws Will throw an error if the signer is not provided or the request fails
-   *
-   * An example of how to use requestWithdrawal:
+   * @example
    * ```typescript
-   * const result = await client.eoa.requestWithdrawal({
-   *   pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-   *   allocation: 32, // 32 ETH
-   *   requiredFee: '1' // in wei
+   * const { txHash } = await client.eoa.requestWithdrawal({
+   *   pubkey: "0xValidatorPubkey...",
+   *   allocation: 32,
+   *   requiredFee: "1",
    * });
-   * console.log('Withdrawal requested:', result.txHash);
    * ```
    */
   async requestWithdrawal(
     payload: EOAWithdrawalPayload,
   ): Promise<{ txHash: string | null }> {
     if (!this.signer) {
-      throw new Error('Signer is required in requestWithdrawal');
+      throw new SignerRequiredError('requestWithdrawal');
     }
 
     if (!this.provider) {
@@ -75,9 +93,7 @@ export class EOA {
 
     const chainConfig = CHAIN_CONFIGURATION[this.chainId];
     if (!chainConfig?.EOA_WITHDRAWAL_CONTRACT?.address) {
-      throw new Error(
-        `EOA withdrawal contract is not configured for chain ${this.chainId}`,
-      );
+      throw new UnsupportedChainError(this.chainId, 'EOA requestWithdrawal');
     }
 
     const validatedPayload = validatePayload<EOAWithdrawalPayload>(
@@ -99,46 +115,38 @@ export class EOA {
   }
 
   /**
-   * Deposits to batch deposit contract.
+   * Batch-deposits validators to the beacon chain via the Pier Two batch
+   * deposit contract for gas efficiency.
    *
-   * This method allows depositing multiple validators to the Ethereum beacon chain
-   * using the Pier Two batch deposit contract for gas efficiency.
-   * Each deposit includes validator public key, withdrawal credentials, signature, and amount.
+   * Due to EVM gas limits, it is recommended to deposit at most 500
+   * validators per call.
    *
-   * @remarks
-   * **⚠️ Important:**  If you're storing the private key in an `.env` file, ensure it is securely managed
-   * and not pushed to version control.
+   * @param payload - Deposit data including an array of validator deposit objects.
+   * @returns An array of transaction hashes, one per batch.
+   * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {UnsupportedChainError} If the chain has no batch deposit contract.
    *
-   * **⚠️ Gas Limit:** Due to EVM constraints, it is recommended to deposit in batches of up to 500 at a time.
-   *
-   * @param {EOADepositPayload} payload - Data needed to deposit to batch contract
-   * @returns {Promise<{txHashes: string[]}>} Array of transaction hashes for all batches
-   * @throws Will throw an error if the signer is not provided, contract is not configured, or the deposit fails
-   *
-   * An example of how to use deposit:
+   * @example
    * ```typescript
-   * const result = await client.eoa.deposit({
+   * const { txHashes } = await client.eoa.deposit({
    *   deposits: [{
-   *     pubkey: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-   *     withdrawal_credentials: '0x1234567890123456789012345678901234567890',
-   *     deposit_data_root: '0x1234567890123456789012345678901234567890123456789012345678901234',
-   *     signature: '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-   *     amount: '32000000000000000000' // 32 ETH in wei
-   *   }]
+   *     pubkey: "0x...",
+   *     withdrawal_credentials: "0x...",
+   *     deposit_data_root: "0x...",
+   *     signature: "0x...",
+   *     amount: "32000000000000000000",
+   *   }],
    * });
-   * console.log('Deposits completed:', result.txHashes);
    * ```
    */
   async deposit(payload: EOADepositPayload): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
-      throw new Error('Signer is required in deposit');
+      throw new SignerRequiredError('deposit');
     }
 
     const chainConfig = CHAIN_CONFIGURATION[this.chainId];
     if (!chainConfig?.BATCH_DEPOSIT_CONTRACT?.address) {
-      throw new Error(
-        `Batch deposit contract is not configured for chain ${this.chainId}`,
-      );
+      throw new UnsupportedChainError(this.chainId, 'EOA deposit');
     }
 
     const validatedPayload = validatePayload<EOADepositPayload>(

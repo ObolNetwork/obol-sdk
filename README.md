@@ -4,6 +4,34 @@
 
 This repo contains the Obol Software Development Kit, for creating Distributed Validators with the help of the [Obol API](https://docs.obol.org/api).
 
+## Quick Start
+
+```typescript
+import { Client } from "@obolnetwork/obol-sdk";
+import { Wallet } from "ethers";
+
+// 1. Create a client (Holesky testnet)
+const signer = new Wallet(process.env.PRIVATE_KEY!);
+const client = new Client({ chainId: 17000 }, signer);
+
+// 2. Accept terms and conditions (required once per address)
+await client.acceptObolLatestTermsAndConditions();
+
+// 3. Create a cluster definition
+const configHash = await client.createClusterDefinition({
+  name: "my-cluster",
+  operators: [{ address: "0xOperator1..." }, { address: "0xOperator2..." }],
+  validators: [{
+    fee_recipient_address: "0xFeeRecipient...",
+    withdrawal_address: "0xWithdrawal...",
+  }],
+});
+
+// 4. Retrieve the definition / lock (read-only, no signer needed)
+const definition = await client.getClusterDefinition(configHash);
+const lock = await client.getClusterLock(configHash);
+```
+
 ## Getting Started
 
 Checkout our [docs](https://docs.obol.org/docs/advanced/quickstart-sdk), [examples](https://github.com/ObolNetwork/obol-sdk-examples/), and SDK [reference](https://obolnetwork.github.io/obol-sdk). Further guides and walkthroughs coming soon.
@@ -52,6 +80,55 @@ If you'd like to propose improvements or new features, please follow these steps
 All contributions are reviewed before they are merged into the main branch. Please address any feedback provided during the review process.
 
 Thank you for contributing to Obol-SDK!
+
+## For AI Agents and Code Generators
+
+If you are an LLM, code-generation agent, or tool using this SDK programmatically, follow these guidelines to avoid common mistakes:
+
+- **Primary entrypoint:** `Client` from `@obolnetwork/obol-sdk`.
+- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `17000` (Holesky).
+- **All operations are namespaced** under the client instance. Do **not** construct HTTP requests manually.
+
+### Client API Surface
+
+| Namespace | Method | Description |
+|-----------|--------|-------------|
+| *(root)* | `acceptObolLatestTermsAndConditions()` | Accept T&C (required once before writes) |
+| *(root)* | `createClusterDefinition(payload)` | Create a new cluster → returns `config_hash` |
+| *(root)* | `acceptClusterDefinition(operatorPayload, configHash)` | Join a cluster as an operator |
+| *(root)* | `getClusterDefinition(configHash)` | Fetch cluster definition (read-only) |
+| *(root)* | `getClusterLock(configHash)` | Fetch cluster lock by config hash (read-only) |
+| *(root)* | `getClusterLockByHash(lockHash)` | Fetch cluster lock by lock hash (read-only) |
+| *(root)* | `createObolRewardsSplit(payload)` | Deploy OWR + splitter (rewards-only split) |
+| *(root)* | `createObolTotalSplit(payload)` | Deploy splitter (total split) |
+| *(root)* | `getOWRTranches(owrAddress)` | Read OWR tranche info (read-only on-chain) |
+| `client.splits` | `createValidatorManagerAndRewardsSplit(payload)` | Deploy OVM + SplitV2 (rewards-only) |
+| `client.splits` | `createValidatorManagerAndTotalSplit(payload)` | Deploy OVM + SplitV2 (total) |
+| `client.splits` | `requestWithdrawal(payload)` | Request withdrawal from OVM |
+| `client.splits` | `deposit(payload)` | Deposit to OVM contract |
+| `client.incentives` | `getIncentivesByAddress(address)` | Fetch claimable incentives (read-only) |
+| `client.incentives` | `isClaimed(contractAddress, index)` | Check if incentives claimed (read-only) |
+| `client.incentives` | `claimIncentives(address)` | Claim incentives on-chain |
+| `client.eoa` | `requestWithdrawal(payload)` | Request EOA withdrawal |
+| `client.eoa` | `deposit(payload)` | Batch deposit validators |
+| `client.exit` | `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
+| `client.exit` | `verifyExitPayloadSignature(...)` | Verify ECDSA exit payload signature |
+| `client.exit` | `validateExitBlobs(...)` | Validate exit blobs against cluster config |
+| `client.exit` | `recombineExitBlobs(...)` | Aggregate partial exit signatures |
+
+### Standalone Utilities
+
+| Export | Description |
+|--------|-------------|
+| `validateClusterLock(lock, safeRpcUrl?)` | Verify a cluster lock's cryptographic validity |
+
+### Key Rules
+
+1. All request/response types are exported from the package root.
+2. Error types exported: `ConflictError`, `SignerRequiredError`, `UnsupportedChainError`.
+3. Methods that **write** (create, deploy, claim) require a `signer`. Methods that **read** (get, fetch) do not.
+4. Supported chain IDs: `1` (Mainnet), `17000` (Holesky), `560048` (Hoodi), `100` (Gnosis), `11155111` (Sepolia).
+5. Splitter/OVM deployment is only supported on chains 1, 17000, and 560048.
 
 ## Next.js / SSR Configuration
 
