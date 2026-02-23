@@ -127,7 +127,7 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 1. All request/response types are exported from the package root.
 2. Error types exported: `ConflictError`, `SignerRequiredError`, `UnsupportedChainError`.
 3. Methods that **write** (create, deploy, claim) require a `signer`. Methods that **read** (get, fetch) do not.
-4. Supported chain IDs: `1` (Mainnet), `17000` (Holesky), `560048` (Hoodi), `100` (Gnosis), `11155111` (Sepolia).
+4. Supported chain IDs: `1` (Mainnet), `560048` (Hoodi).
 5. Splitter/OVM deployment is only supported on chains 1, 17000, and 560048.
 
 ## Next.js / SSR Configuration

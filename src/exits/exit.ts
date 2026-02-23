@@ -94,11 +94,8 @@ export class Exit {
    *
    * @example
    * ```typescript
-   * // For mainnet with a provider
-   * const exit = new Exit(1, provider);
-   *
-   * // For goerli testnet without provider
-   * const exit = new Exit(5, null);
+   * const client = new Client({ chainId: 1 }, signer, provider);
+   * const exit = client.exit; // Access via client, do not instantiate directly
    * ```
    */
   constructor(chainId: number, provider: ProviderType | undefined | null) {
