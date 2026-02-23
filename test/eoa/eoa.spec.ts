@@ -125,7 +125,7 @@ describe('EOA', () => {
       await expect(
         eoaUnsupportedChain.requestWithdrawal(mockPayload),
       ).rejects.toThrow(
-        'EOA withdrawal contract is not configured for chain 999',
+        'EOA requestWithdrawal is not supported on chain 999',
       );
     });
 
@@ -224,7 +224,7 @@ describe('EOA', () => {
       };
 
       await expect(eoaUnsupportedChain.deposit(mockPayload)).rejects.toThrow(
-        'Batch deposit contract is not configured for chain 999',
+        'EOA deposit is not supported on chain 999',
       );
     });
 

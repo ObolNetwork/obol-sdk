@@ -8,7 +8,15 @@ import {
 } from 'ethers';
 
 /**
- * Permitted ChainID's
+ * Maps Ethereum consensus-layer fork versions (hex) to execution-layer chain IDs.
+ *
+ * Supported networks:
+ * - `0x00000000` → 1 (Mainnet)
+ * - `0x00001020` → 5 (Goerli/Prater) – deprecated
+ * - `0x00000064` → 100 (Gnosis Chain)
+ * - `0x01017000` → 17000 (Holesky)
+ * - `0x90000069` → 11155111 (Sepolia)
+ * - `0x10000910` → 560048 (Hoodi)
  */
 export enum FORK_MAPPING {
   /** Mainnet. */
@@ -40,7 +48,11 @@ export const FORK_NAMES: Record<number, string> = {
 } as const;
 
 /**
- * Node operator data
+ * Represents a node operator in a distributed validator cluster.
+ *
+ * When creating a cluster definition via {@link Client.createClusterDefinition},
+ * only `address` is required. The remaining fields are populated during the
+ * cluster acceptance and DKG process.
  */
 export type ClusterOperator = {
   /** The operator address. */
@@ -63,7 +75,11 @@ export type ClusterOperator = {
 };
 
 /**
- * A partial view of `ClusterOperator` with `enr` and `version` as required properties.
+ * Payload an operator provides when joining a cluster via
+ * {@link Client.acceptClusterDefinition}.
+ *
+ * Requires at minimum `enr` (Ethereum Node Record) and `version`.
+ * Other `ClusterOperator` fields are optional overrides.
  */
 export type OperatorPayload = Partial<ClusterOperator> &
   Required<Pick<ClusterOperator, 'enr' | 'version'>>;
@@ -90,7 +106,11 @@ export type ClusterValidator = {
 };
 
 /**
- * Cluster configuration
+ * Input payload for creating a new cluster definition via
+ * {@link Client.createClusterDefinition}.
+ *
+ * Required fields: `name`, `operators`, `validators`.
+ * Optional fields have sensible defaults applied by the SDK.
  */
 export type ClusterPayload = {
   /** The cluster name. */
@@ -116,7 +136,11 @@ export type ClusterPayload = {
 };
 
 /**
- * Cluster definition data needed for dkg
+ * Full cluster definition as stored by the Obol API. Extends {@link ClusterPayload}
+ * with server-generated metadata (uuid, timestamp, config_hash, etc.).
+ *
+ * Returned by {@link Client.createClusterDefinition},
+ * {@link Client.acceptClusterDefinition}, and {@link Client.getClusterDefinition}.
  */
 export interface ClusterDefinition extends ClusterPayload {
   /** The creator of the cluster. */
@@ -160,7 +184,8 @@ export interface ClusterDefinition extends ClusterPayload {
 }
 
 /**
- * Split Recipient Keys
+ * A recipient in a V1 splitter contract configuration.
+ * Used with {@link Client.createObolRewardsSplit} and {@link Client.createObolTotalSplit}.
  */
 export type SplitRecipient = {
   /** The split recipient address. */
@@ -171,7 +196,8 @@ export type SplitRecipient = {
 };
 
 /**
- * Split Proxy Params
+ * Input payload for {@link Client.createObolTotalSplit}.
+ * Deploys a splitter that splits **both principal and rewards**.
  */
 export type TotalSplitPayload = {
   /** The split recipients addresses and splits. */
@@ -188,7 +214,8 @@ export type TotalSplitPayload = {
 };
 
 /**
- * OWR and Split Proxy Params
+ * Input payload for {@link Client.createObolRewardsSplit}.
+ * Deploys an OWR (principal goes to one address) and a splitter (rewards split among recipients).
  */
 export interface RewardsSplitPayload extends TotalSplitPayload {
   /** Address that will reclaim validator principal after exit. */
@@ -202,7 +229,9 @@ export interface RewardsSplitPayload extends TotalSplitPayload {
 }
 
 /**
- * OVM and SplitV2 Base Params
+ * Base parameters shared by both OVM split scenarios (rewards-only and total split).
+ * Used with {@link ObolSplits.createValidatorManagerAndRewardsSplit} and
+ * {@link ObolSplits.createValidatorManagerAndTotalSplit}.
  */
 export type OVMBaseSplitPayload = {
   /** The split recipients addresses and splits. */
@@ -222,7 +251,8 @@ export type OVMBaseSplitPayload = {
 };
 
 /**
- * OVM and SplitV2 Params for rewards-only split
+ * Input payload for {@link ObolSplits.createValidatorManagerAndRewardsSplit}.
+ * Principal goes to a single address; rewards are split among recipients.
  */
 export type OVMRewardsSplitPayload = OVMBaseSplitPayload & {
   /** Principal recipient address (single address for rewards-only split). */
@@ -230,7 +260,8 @@ export type OVMRewardsSplitPayload = OVMBaseSplitPayload & {
 };
 
 /**
- * OVM and SplitV2 Params for total split scenario
+ * Input payload for {@link ObolSplits.createValidatorManagerAndTotalSplit}.
+ * Both principal and rewards are split among recipients.
  */
 export type OVMTotalSplitPayload = OVMBaseSplitPayload & {
   /** Principal recipients addresses and splits (array for total split scenario). */
@@ -238,7 +269,9 @@ export type OVMTotalSplitPayload = OVMBaseSplitPayload & {
 };
 
 /**
- * Union type for both OVM split scenarios
+ * Union type covering both OVM split scenarios.
+ * Discriminate by checking for `principalRecipient` (rewards-only) vs
+ * `principalSplitRecipients` (total split).
  */
 export type OVMSplitPayload = OVMRewardsSplitPayload | OVMTotalSplitPayload;
 
@@ -316,7 +349,8 @@ export type DepositData = {
 };
 
 /**
- * Required deposit data for validator activation
+ * A distributed validator within a cluster lock.
+ * Contains the aggregate public key, per-operator public shares, and deposit data.
  */
 export type DistributedValidator = {
   /** The public key of the distributed validator. */
@@ -336,7 +370,12 @@ export type DistributedValidator = {
 };
 
 /**
- * Cluster Details after DKG is complete
+ * Cluster lock – the finalized cluster state after a successful DKG ceremony.
+ *
+ * Contains the distributed validators with their public key shares and deposit data,
+ * plus the aggregated BLS signature.
+ *
+ * Returned by {@link Client.getClusterLock} and {@link Client.getClusterLockByHash}.
  */
 export type ClusterLock = {
   /** The cluster definition. */
@@ -376,12 +415,13 @@ export type ClaimableIncentives = {
 };
 
 /**
- * String expected to be Ethereum Address
+ * A string expected to be a checksummed or lowercase Ethereum address (e.g. `"0xAbC...123"`).
  */
 export type ETH_ADDRESS = string;
 
 /**
- * Provider Types
+ * Accepted ethers provider types for on-chain reads.
+ * Pass any of these as the third argument to `new Client(config, signer, provider)`.
  */
 export type ProviderType =
   | Provider
@@ -395,7 +435,8 @@ export type ProviderType =
 export type SafeRpcUrl = string;
 
 /**
- * Signer Types
+ * Accepted ethers signer types for signing transactions and EIP-712 messages.
+ * Pass as the second argument to `new Client(config, signer)`.
  */
 export type SignerType = JsonRpcSigner | Wallet;
 
@@ -615,7 +656,8 @@ export type ChainConfig = {
 };
 
 /**
- * Payload for requesting withdrawal from OVM contract
+ * Input payload for {@link ObolSplits.requestWithdrawal}.
+ * Requests withdrawal of validator funds from an OVM contract.
  */
 export type OVMRequestWithdrawalPayload = {
   /** request withdrawal fees in wei */
@@ -632,7 +674,7 @@ export type OVMRequestWithdrawalPayload = {
 };
 
 /**
- * Payload for requesting withdrawal from EOA contract
+ * Input payload for {@link EOA.requestWithdrawal}.
  */
 export type EOAWithdrawalPayload = {
   /** Validator public key in hex format */
@@ -646,7 +688,8 @@ export type EOAWithdrawalPayload = {
 };
 
 /**
- * Payload for depositing to OVM contract with multicall3
+ * Input payload for {@link ObolSplits.deposit}.
+ * Deposits one or more validators to an OVM contract.
  */
 export type OVMDepositPayload = {
   /** OVM contract address */
@@ -668,7 +711,8 @@ export type OVMDepositPayload = {
 };
 
 /**
- * Payload for depositing to batch deposit contract
+ * Input payload for {@link EOA.deposit}.
+ * Batch-deposits validators to the beacon chain via the Pier Two batch deposit contract.
  */
 export type EOADepositPayload = {
   /** Array of deposit objects */

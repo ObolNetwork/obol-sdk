@@ -2,14 +2,28 @@ import { type SafeRpcUrl, type ClusterLock } from './types.js';
 import { isValidClusterLock } from './verification/common.js';
 
 /**
- * Verifies Cluster Lock's validity.
- * @param lock - cluster lock
- * @param safeRpcUrl - optional safeRpcUrl for safe wallet verification
- * @returns {Promise<{ result: boolean }> } boolean result to indicate if lock is valid
- * @throws on missing keys or values.
+ * Verifies the cryptographic validity of a cluster lock.
  *
- * An example of how to use validateClusterLock:
- * [validateClusterLock](https://github.com/ObolNetwork/obol-sdk-examples/blob/main/TS-Example/index.ts#L127)
+ * Checks all operator signatures, config hashes, and definition hashes within
+ * the lock. Supports both EOA and Safe Wallet signatures.
+ *
+ * This is a standalone utility – it does **not** require a `Client` instance.
+ *
+ * @param lock - The cluster lock object (e.g. from {@link Client.getClusterLock}).
+ * @param safeRpcUrl - Optional RPC URL for Safe Wallet signature verification.
+ *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOLESKY` / etc. env vars.
+ * @returns `true` if the lock is cryptographically valid; `false` if invalid
+ *   (e.g. missing keys, invalid signatures, hash mismatches) or on any error.
+ *
+ * @example
+ * ```typescript
+ * import { validateClusterLock, Client } from "@obolnetwork/obol-sdk";
+ *
+ * const configHash = "0x..."; // your cluster config hash
+ * const client = new Client({ chainId: 17000 });
+ * const lock = await client.getClusterLock(configHash);
+ * const isValid = await validateClusterLock(lock);
+ * ```
  */
 export const validateClusterLock = async (
   lock: ClusterLock,
