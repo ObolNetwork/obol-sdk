@@ -14,7 +14,6 @@ const nextConfig = {
       config.externals = config.externals || [];
       config.externals.push({
         '@chainsafe/bls': 'commonjs @chainsafe/bls',
-        '@chainsafe/blst': 'commonjs @chainsafe/blst',
         'bcrypto': 'commonjs bcrypto',
       });
     }

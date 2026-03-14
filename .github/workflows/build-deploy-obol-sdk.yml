@@ -69,7 +69,6 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          RPC_HOLESKY: ${{ secrets.RPC_HOLESKY }}
           RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
           RPC_GNOSIS: ${{ secrets.RPC_GNOSIS }}
           RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}

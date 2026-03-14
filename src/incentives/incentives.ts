@@ -22,7 +22,7 @@ import { SignerRequiredError } from '../errors.js';
  *
  * @example
  * ```typescript
- * const client = new Client({ chainId: 17000 }, signer);
+ * const client = new Client({ chainId: 560048 }, signer);
  *
  * // Check claimable incentives
  * const data = await client.incentives.getIncentivesByAddress("0xOperator...");

@@ -23,7 +23,7 @@ jest.setTimeout(20000);
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider(
-  process.env.RPC_HOLESKY || 'https://ethereum-holesky-rpc.publicnode.com',
+  process.env.RPC_HOODI || 'https://rpc.hoodi.io',
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider) as unknown as SignerType;
@@ -34,7 +34,7 @@ describe('Cluster Client', () => {
     '0x1f6c94e6c070393a68c1aa6073a21cb1fd57f0e14d2a475a2958990ab728c2fd';
 
   const clientInstance = new Client(
-    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 560048 },
     mockSigner,
   );
 
@@ -186,7 +186,7 @@ describe('Cluster Client', () => {
 describe('Cluster Client without a signer', () => {
   const clientInstance = new Client({
     baseUrl: 'https://obol-api-dev.gcp.obol.tech',
-    chainId: 17000,
+    chainId: 560048,
   });
 
   beforeAll(() => {
@@ -262,14 +262,10 @@ describe('Cluster Client without a signer', () => {
   test.each([
     { version: 'v1.6.0', clusterLock: clusterLockV1X6 },
     { version: 'v1.7.0', clusterLock: clusterLockV1X7 },
-    { version: 'v1.8.0', clusterLock: clusterLockV1X8 },
+    { version: 'v1.10.0 solo', clusterLock: clusterLockV1X8 },
     {
       version: 'null deposit_amounts v1.8.0',
       clusterLock: nullDepositAmountsClusterLockV1X8,
-    },
-    {
-      version: 'Cluster with safe address v1.8.0',
-      clusterLock: clusterLockWithSafe,
     },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
     {
@@ -285,9 +281,11 @@ describe('Cluster Client without a signer', () => {
   );
 
   test('should return true on verified cluster lock with Safe wallet and safe rpc url', async () => {
-    process.env.RPC_HOLESKY = undefined;
+    process.env.RPC_HOODI = undefined;
 
-    const safeRpcUrl = 'https://holesky.gateway.tenderly.co';
+    // Mainnet cluster - fourth operator 0x4d6c432b7E2F326B4DDf524ea9E56649e5A7C298 is the Safe wallet
+    const safeRpcUrl =
+      process.env.RPC_MAINNET || 'https://eth.llamarpc.com';
     const isValidLock: boolean = await validateClusterLock(
       clusterLockWithSafe,
       safeRpcUrl,

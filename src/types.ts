@@ -14,7 +14,6 @@ import {
  * - `0x00000000` → 1 (Mainnet)
  * - `0x00001020` → 5 (Goerli/Prater) – deprecated
  * - `0x00000064` → 100 (Gnosis Chain)
- * - `0x01017000` → 17000 (Holesky)
  * - `0x90000069` → 11155111 (Sepolia)
  * - `0x10000910` → 560048 (Hoodi)
  */
@@ -28,9 +27,6 @@ export enum FORK_MAPPING {
   /** Gnosis Chain. */
   '0x00000064' = 100,
 
-  /** Holesky. */
-  '0x01017000' = 17000,
-
   /** Sepolia. */
   '0x90000069' = 11155111,
 
@@ -42,7 +38,6 @@ export const FORK_NAMES: Record<number, string> = {
   [FORK_MAPPING['0x00000000']]: 'mainnet',
   [FORK_MAPPING['0x00001020']]: 'goerli',
   [FORK_MAPPING['0x00000064']]: 'gnosis',
-  [FORK_MAPPING['0x01017000']]: 'holesky',
   [FORK_MAPPING['0x90000069']]: 'sepolia',
   [FORK_MAPPING['0x10000910']]: 'hoodi',
 } as const;

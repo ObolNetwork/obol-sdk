@@ -83,7 +83,7 @@ export class ObolSplits {
    * the configured recipients. Automatically appends the Obol RAF recipient.
    *
    * - Sends one or more on-chain transactions (irreversible).
-   * - Only supported on chains with OVM factory contracts (Mainnet, Holesky, Hoodi).
+   * - Only supported on chains with OVM factory contracts (Mainnet, Hoodi).
    *
    * @param payload - Configuration for the OVM and SplitV2 deployment.
    * @returns The OVM address as `withdrawal_address` and splitter as `fee_recipient_address`.
@@ -260,7 +260,7 @@ export class ObolSplits {
    * contracts. Automatically appends the Obol RAF recipient to rewards.
    *
    * - Sends one or more on-chain transactions (irreversible).
-   * - Only supported on chains with OVM factory contracts (Mainnet, Holesky, Hoodi).
+   * - Only supported on chains with OVM factory contracts (Mainnet, Hoodi).
    *
    * @param payload - Configuration for the OVM and SplitV2 deployment.
    * @returns The OVM address as `withdrawal_address` and rewards splitter as `fee_recipient_address`.

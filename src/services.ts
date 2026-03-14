@@ -11,7 +11,7 @@ import { isValidClusterLock } from './verification/common.js';
  *
  * @param lock - The cluster lock object (e.g. from {@link Client.getClusterLock}).
  * @param safeRpcUrl - Optional RPC URL for Safe Wallet signature verification.
- *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOLESKY` / etc. env vars.
+ *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOODI` / etc. env vars.
  * @returns `true` if the lock is cryptographically valid; `false` if invalid
  *   (e.g. missing keys, invalid signatures, hash mismatches) or on any error.
  *
@@ -20,7 +20,7 @@ import { isValidClusterLock } from './verification/common.js';
  * import { validateClusterLock, Client } from "@obolnetwork/obol-sdk";
  *
  * const configHash = "0x..."; // your cluster config hash
- * const client = new Client({ chainId: 17000 });
+ * const client = new Client({ chainId: 560048 });
  * const lock = await client.getClusterLock(configHash);
  * const isValid = await validateClusterLock(lock);
  * ```
