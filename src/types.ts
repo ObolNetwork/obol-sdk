@@ -12,7 +12,6 @@ import {
  *
  * Supported networks:
  * - `0x00000000` → 1 (Mainnet)
- * - `0x00001020` → 5 (Goerli/Prater) – deprecated
  * - `0x00000064` → 100 (Gnosis Chain)
  * - `0x90000069` → 11155111 (Sepolia)
  * - `0x10000910` → 560048 (Hoodi)
@@ -20,9 +19,6 @@ import {
 export enum FORK_MAPPING {
   /** Mainnet. */
   '0x00000000' = 1,
-
-  /** Goerli/Prater. */
-  '0x00001020' = 5,
 
   /** Gnosis Chain. */
   '0x00000064' = 100,
@@ -36,7 +32,6 @@ export enum FORK_MAPPING {
 
 export const FORK_NAMES: Record<number, string> = {
   [FORK_MAPPING['0x00000000']]: 'mainnet',
-  [FORK_MAPPING['0x00001020']]: 'goerli',
   [FORK_MAPPING['0x00000064']]: 'gnosis',
   [FORK_MAPPING['0x90000069']]: 'sepolia',
   [FORK_MAPPING['0x10000910']]: 'hoodi',

@@ -7,7 +7,7 @@ import { DEFAULT_BASE_VERSION } from '../../src/constants.js';
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider(
-  process.env.RPC_HOODI || 'https://rpc.hoodi.io',
+  process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);

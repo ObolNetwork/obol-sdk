@@ -14,7 +14,7 @@ const privateKey = process.env.PRIVATE_KEY?.startsWith('0x')
   ? process.env.PRIVATE_KEY
   : '0x' + process.env.PRIVATE_KEY;
 const provider = new JsonRpcProvider(
-  process.env.RPC_HOODI || 'https://rpc.hoodi.io',
+  process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);

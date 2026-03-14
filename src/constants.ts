@@ -265,7 +265,6 @@ export const PROVIDER_MAP: Record<number, string> = {
  */
 export const CAPELLA_FORK_MAPPING: Record<string, string> = {
   '0x00000000': '0x03000000', // Mainnet
-  '0x00001020': '0x03001020', // Goerli
   '0x00000064': '0x03000064', // Gnosis
   '0x90000069': '0x90000072', // Sepolia
   '0x10000910': '0x40000910', // Hoodi

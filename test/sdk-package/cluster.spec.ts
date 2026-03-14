@@ -2,13 +2,12 @@ import request from 'supertest';
 import {
   soloClusterConfigV1X10,
   clusterConfigV1X10,
-  clusterLockV1X6,
-  clusterLockV1X7,
-  clusterLockV1X8,
   clusterLockV1X10,
   enr,
   nullDepositAmountsClusterLockV1X8,
   clusterLockWithCompoundingWithdrawals,
+  clusterLockWithSafe,
+  clusterLockSoloV1X10,
 } from '../fixtures';
 import {
   client,
@@ -464,18 +463,20 @@ describe('Poll Cluster Lock', () => {
 
   // clusterLockWithSafe excluded from test.each - Safe validation requires custom RPC (see methods.spec)
   test.each([
-    { version: 'v1.6.0', clusterLock: clusterLockV1X6 },
-    { version: 'v1.7.0', clusterLock: clusterLockV1X7 },
-    { version: 'v1.10.0 solo', clusterLock: clusterLockV1X8 },
+    { version: 'v1.10.0 solo', clusterLock: clusterLockSoloV1X10 },
+    {
+      version: 'v1.10.0 with compunding withdrawals',
+      clusterLock: clusterLockWithCompoundingWithdrawals,
+    },
+    {
+      version: 'Cluster with safe address v1.10.0',
+      clusterLock: clusterLockWithSafe,
+    },
     {
       version: 'null deposit_amounts v1.8.0',
       clusterLock: nullDepositAmountsClusterLockV1X8,
     },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
-    {
-      version: 'v1.10.0 with compunding withdrawals',
-      clusterLock: clusterLockWithCompoundingWithdrawals,
-    },
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {
