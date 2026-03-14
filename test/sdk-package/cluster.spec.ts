@@ -461,7 +461,6 @@ describe('Poll Cluster Lock', () => {
     );
   });
 
-  // clusterLockWithSafe excluded from test.each - Safe validation requires custom RPC (see methods.spec)
   test.each([
     { version: 'v1.10.0 solo', clusterLock: clusterLockSoloV1X10 },
     {
