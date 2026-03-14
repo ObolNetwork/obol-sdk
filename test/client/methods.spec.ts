@@ -235,7 +235,7 @@ describe('Cluster Client without a signer', () => {
     },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
     {
-      version: 'v1.10.0 with compunding withdrawals',
+      version: 'v1.10.0 with compounding withdrawals',
       clusterLock: clusterLockWithCompoundingWithdrawals,
     },
     {
