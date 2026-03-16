@@ -3,9 +3,6 @@ import { type TypedDataDomain } from 'ethers';
 import pjson from '../package.json';
 import { type ChainConfig, FORK_MAPPING } from './types.js';
 import {
-  HOLESKY_MULTICALL3_BYTECODE,
-  HOLESKY_OWR_FACTORY_BYTECODE,
-  HOLESKY_SPLITMAIN_BYTECODE,
   HOODI_MULTICALL3_BYTECODE,
   HOODI_OVM_FACTORY_BYTECODE,
   HOODI_OWR_FACTORY_BYTECODE,
@@ -146,7 +143,7 @@ export enum DefinitionFlow {
 
 export const DEFAULT_BASE_URL = 'https://api.obol.tech';
 export const DEFAULT_BASE_VERSION = 'v1';
-export const DEFAULT_CHAIN_ID = 17000;
+export const DEFAULT_CHAIN_ID = 560048;
 
 export const ETHER_TO_GWEI = 10 ** 9;
 
@@ -160,7 +157,6 @@ export const TERMS_AND_CONDITIONS_HASH =
 
 export const AVAILABLE_SPLITTER_CHAINS = {
   [FORK_MAPPING['0x00000000']]: true, // Mainnet
-  [FORK_MAPPING['0x01017000']]: true, // Holesky
   [FORK_MAPPING['0x10000910']]: true, // Hoodi
 } as const;
 
@@ -204,27 +200,6 @@ export const CHAIN_CONFIGURATION: Record<number, ChainConfig> = {
     },
     BATCH_DEPOSIT_CONTRACT: {
       address: '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
-    },
-  },
-  [FORK_MAPPING['0x01017000']]: {
-    SPLITMAIN_CONTRACT: {
-      address: '0xfC8a305728051367797DADE6Aa0344E0987f5286',
-      bytecode: HOLESKY_SPLITMAIN_BYTECODE,
-    },
-    MULTICALL3_CONTRACT: {
-      address: '0xcA11bde05977b3631167028862bE2a173976CA11',
-      bytecode: HOLESKY_MULTICALL3_BYTECODE,
-    },
-    OWR_FACTORY_CONTRACT: {
-      address: '0xc0961353fcc43a99e3041db07ac646720e116256',
-      bytecode: HOLESKY_OWR_FACTORY_BYTECODE,
-    },
-    RETROACTIVE_FUNDING_CONTRACT: {
-      address: '0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5',
-      bytecode: '',
-    },
-    EOA_WITHDRAWAL_CONTRACT: {
-      address: '0x00000961Ef480Eb55e80D19ad83579A64c007002',
     },
   },
   [FORK_MAPPING['0x10000910']]: {
@@ -279,7 +254,6 @@ export const OBOL_SDK_EMAIL = 'sdk@dvlabs.tech';
 
 export const PROVIDER_MAP: Record<number, string> = {
   1: `${process.env.RPC_MAINNET}`, // Mainnet
-  17000: `${process.env.RPC_HOLESKY}`, // Holesky
   11155111: `${process.env.RPC_SEPOLIA}`, // Sepolia
   100: `${process.env.RPC_GNOSIS}`, // Gnosis
   560048: `${process.env.RPC_HOODI}`, // Hoodi
@@ -291,9 +265,7 @@ export const PROVIDER_MAP: Record<number, string> = {
  */
 export const CAPELLA_FORK_MAPPING: Record<string, string> = {
   '0x00000000': '0x03000000', // Mainnet
-  '0x00001020': '0x03001020', // Goerli
   '0x00000064': '0x03000064', // Gnosis
   '0x90000069': '0x90000072', // Sepolia
-  '0x01017000': '0x04017000', // Holesky
   '0x10000910': '0x40000910', // Hoodi
 };

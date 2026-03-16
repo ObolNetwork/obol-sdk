@@ -2,14 +2,12 @@ import request from 'supertest';
 import {
   soloClusterConfigV1X10,
   clusterConfigV1X10,
-  clusterLockV1X6,
-  clusterLockV1X7,
-  clusterLockV1X8,
   clusterLockV1X10,
-  clusterLockWithSafe,
   enr,
   nullDepositAmountsClusterLockV1X8,
   clusterLockWithCompoundingWithdrawals,
+  clusterLockWithSafe,
+  clusterLockSoloV1X10,
 } from '../fixtures';
 import {
   client,
@@ -39,7 +37,7 @@ describe('Cluster Definition', () => {
   let randomConfigHash: string;
   const clientWithoutAsigner = new Client({
     baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
-    chainId: 17000,
+    chainId: 560048,
   });
 
   const unauthorisedClient = randomClient;
@@ -382,7 +380,7 @@ describe('Poll Cluster Lock', () => {
   const clusterWithoutDefHash = rest;
   const clientWithoutAsigner = new Client({
     baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
-    chainId: 17000,
+    chainId: 560048,
   });
 
   beforeAll(async () => {
@@ -464,22 +462,20 @@ describe('Poll Cluster Lock', () => {
   });
 
   test.each([
-    { version: 'v1.6.0', clusterLock: clusterLockV1X6 },
-    { version: 'v1.7.0', clusterLock: clusterLockV1X7 },
-    { version: 'v1.8.0', clusterLock: clusterLockV1X8 },
+    { version: 'v1.10.0 solo', clusterLock: clusterLockSoloV1X10 },
+    {
+      version: 'v1.10.0 with compounding withdrawals',
+      clusterLock: clusterLockWithCompoundingWithdrawals,
+    },
+    {
+      version: 'Cluster with safe address v1.10.0',
+      clusterLock: clusterLockWithSafe,
+    },
     {
       version: 'null deposit_amounts v1.8.0',
       clusterLock: nullDepositAmountsClusterLockV1X8,
     },
-    {
-      version: 'Cluster with safe address v1.8.0',
-      clusterLock: clusterLockWithSafe,
-    },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
-    {
-      version: 'v1.10.0 with compunding withdrawals',
-      clusterLock: clusterLockWithCompoundingWithdrawals,
-    },
   ])(
     "$version: 'should return true on verified cluster lock'",
     async ({ clusterLock }) => {

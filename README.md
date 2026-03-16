@@ -10,9 +10,9 @@ This repo contains the Obol Software Development Kit, for creating Distributed V
 import { Client } from "@obolnetwork/obol-sdk";
 import { Wallet } from "ethers";
 
-// 1. Create a client (Holesky testnet)
+// 1. Create a client (Hoodi testnet)
 const signer = new Wallet(process.env.PRIVATE_KEY!);
-const client = new Client({ chainId: 17000 }, signer);
+const client = new Client({ chainId: 560048 }, signer);
 
 // 2. Accept terms and conditions (required once per address)
 await client.acceptObolLatestTermsAndConditions();
@@ -47,7 +47,7 @@ If you're integrating this SDK with a **backend** (e.g., in Node.js), and you st
 
 ## ⚡️ Integration with Safe Wallet
 
-When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_HOLESKY` or `RPC_GNOSIS` or `RPC_SEPOLIA` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
+When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_GNOSIS` or `RPC_SEPOLIA` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
 
 
 ## Contributing
@@ -86,7 +86,7 @@ Thank you for contributing to Obol-SDK!
 If you are an LLM, code-generation agent, or tool using this SDK programmatically, follow these guidelines to avoid common mistakes:
 
 - **Primary entrypoint:** `Client` from `@obolnetwork/obol-sdk`.
-- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `17000` (Holesky).
+- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi).
 - **All operations are namespaced** under the client instance. Do **not** construct HTTP requests manually.
 
 ### Client API Surface
@@ -128,7 +128,7 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 2. Error types exported: `ConflictError`, `SignerRequiredError`, `UnsupportedChainError`.
 3. Methods that **write** (create, deploy, claim) require a `signer`. Methods that **read** (get, fetch) do not.
 4. Supported chain IDs: `1` (Mainnet), `560048` (Hoodi).
-5. Splitter/OVM deployment is only supported on chains 1, 17000, and 560048.
+5. Splitter/OVM deployment is only supported on chains 1 and 560048.
 
 ## Next.js / SSR Configuration
 
@@ -148,7 +148,6 @@ webpack: (config, { isServer, webpack }) => {
     config.externals = config.externals || [];
     config.externals.push({
       '@chainsafe/bls': 'commonjs @chainsafe/bls',
-      '@chainsafe/blst': 'commonjs @chainsafe/blst',
       'bcrypto': 'commonjs bcrypto',
     });
   }

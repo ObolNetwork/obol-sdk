@@ -3,15 +3,12 @@ import { jest } from '@jest/globals';
 import { ethers, JsonRpcProvider } from 'ethers';
 import { Client, validateClusterLock, type SignerType } from '../../src/index';
 import {
-  clusterConfigV1X7,
   clusterConfigV1X10,
   clusterLockV1X10,
-  clusterLockV1X6,
-  clusterLockV1X7,
-  clusterLockV1X8,
   clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
+  clusterLockSoloV1X10
 } from '../fixtures.js';
 import { SDK_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
@@ -23,7 +20,7 @@ jest.setTimeout(20000);
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider(
-  process.env.RPC_HOLESKY || 'https://ethereum-holesky-rpc.publicnode.com',
+  process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider) as unknown as SignerType;
@@ -34,7 +31,7 @@ describe('Cluster Client', () => {
     '0x1f6c94e6c070393a68c1aa6073a21cb1fd57f0e14d2a475a2958990ab728c2fd';
 
   const clientInstance = new Client(
-    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 17000 },
+    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 560048 },
     mockSigner,
   );
 
@@ -87,35 +84,6 @@ describe('Cluster Client', () => {
     } catch (error: any) {
       expect(error.message).toEqual(
         'Validation failed: /operators must pass "validateUniqueAddresses" keyword validation, /operators must NOT have fewer than 4 items',
-      );
-    }
-  });
-
-  // cause we default to null
-  test('createClusterDefinition should accept a configuration without deposit_amounts', async () => {
-    clientInstance['request'] = jest
-      .fn()
-      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
-
-    const configHash = await clientInstance.createClusterDefinition({
-      ...clusterConfigV1X7,
-    });
-
-    expect(configHash).toEqual(mockConfigHash);
-  });
-
-  test('createClusterDefinition should throw on not valid deposit_amounts ', async () => {
-    clientInstance['request'] = jest
-      .fn()
-      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
-    try {
-      await clientInstance.createClusterDefinition({
-        ...clusterConfigV1X7,
-        deposit_amounts: ['34000000'],
-      });
-    } catch (error: any) {
-      expect(error.message).toEqual(
-        'Validation failed: /deposit_amounts/0 must be equal to one of the allowed values, /deposit_amounts must match "then" schema',
       );
     }
   });
@@ -186,7 +154,7 @@ describe('Cluster Client', () => {
 describe('Cluster Client without a signer', () => {
   const clientInstance = new Client({
     baseUrl: 'https://obol-api-dev.gcp.obol.tech',
-    chainId: 17000,
+    chainId: 560048,
   });
 
   beforeAll(() => {
@@ -260,21 +228,19 @@ describe('Cluster Client without a signer', () => {
    * Therefore, when these tests return true, it's a REAL validation result!
    */
   test.each([
-    { version: 'v1.6.0', clusterLock: clusterLockV1X6 },
-    { version: 'v1.7.0', clusterLock: clusterLockV1X7 },
-    { version: 'v1.8.0', clusterLock: clusterLockV1X8 },
+    { version: 'v1.10.0 solo', clusterLock: clusterLockSoloV1X10 },
     {
       version: 'null deposit_amounts v1.8.0',
       clusterLock: nullDepositAmountsClusterLockV1X8,
     },
-    {
-      version: 'Cluster with safe address v1.8.0',
-      clusterLock: clusterLockWithSafe,
-    },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
     {
-      version: 'v1.10.0 with compunding withdrawals',
+      version: 'v1.10.0 with compounding withdrawals',
       clusterLock: clusterLockWithCompoundingWithdrawals,
+    },
+    {
+      version: 'Cluster with safe address v1.10.0',
+      clusterLock: clusterLockWithSafe,
     },
   ])(
     "$version: 'should return true on verified cluster lock'",
@@ -285,9 +251,11 @@ describe('Cluster Client without a signer', () => {
   );
 
   test('should return true on verified cluster lock with Safe wallet and safe rpc url', async () => {
-    process.env.RPC_HOLESKY = undefined;
+    process.env.RPC_HOODI = undefined;
 
-    const safeRpcUrl = 'https://holesky.gateway.tenderly.co';
+    // Mainnet cluster - fourth operator 0x4d6c432b7E2F326B4DDf524ea9E56649e5A7C298 is the Safe wallet
+    const safeRpcUrl =
+      process.env.RPC_MAINNET || 'https://ethereum-rpc.publicnode.com';
     const isValidLock: boolean = await validateClusterLock(
       clusterLockWithSafe,
       safeRpcUrl,

@@ -91,8 +91,8 @@ export { EOA } from './eoa/eoa.js';
  * - {@link Client.createObolTotalSplit}
  * - {@link Client.getOWRTranches}
  *
- * Supported networks (by `chainId`): Mainnet (1), Holesky (17000),
- * Hoodi (560048), Gnosis (100), Sepolia (11155111).
+ * Supported networks (by `chainId`): Mainnet (1), Hoodi (560048),
+ * Gnosis (100), Sepolia (11155111).
  *
  * @example
  * ```typescript
@@ -100,7 +100,7 @@ export { EOA } from './eoa/eoa.js';
  * import { Wallet } from "ethers";
  *
  * const signer = new Wallet(process.env.PRIVATE_KEY!);
- * const client = new Client({ chainId: 17000 }, signer);
+ * const client = new Client({ chainId: 560048 }, signer);
  *
  * // 1. Accept terms (required once before creating/updating data)
  * await client.acceptObolLatestTermsAndConditions();
@@ -164,8 +164,8 @@ export class Client extends Base {
    *
    * @param config - Client configuration object.
    * @param config.baseUrl - Obol API base URL. Defaults to `https://api.obol.tech`.
-   * @param config.chainId - Target chain ID. Defaults to `17000` (Holesky).
-   *   Supported: 1 (Mainnet), 17000 (Holesky), 560048 (Hoodi), 100 (Gnosis), 11155111 (Sepolia).
+   * @param config.chainId - Target chain ID. Defaults to `560048` (Hoodi).
+   *   Supported: 1 (Mainnet), 560048 (Hoodi), 100 (Gnosis), 11155111 (Sepolia).
    * @param signer - An ethers `Wallet` or `JsonRpcSigner`. Required for any
    *   write operation (creating clusters, deploying splits, claiming incentives).
    *   Read-only operations (`getClusterDefinition`, `getClusterLock`) work without a signer.
@@ -178,7 +178,7 @@ export class Client extends Base {
    * const def = await readClient.getClusterDefinition(configHash);
    *
    * // Full client with signer for write operations
-   * const client = new Client({ chainId: 17000 }, signer);
+   * const client = new Client({ chainId: 560048 }, signer);
    * ```
    */
   constructor(
@@ -276,7 +276,7 @@ export class Client extends Base {
    * - Sends one or more on-chain transactions (irreversible).
    * - Automatically appends the Obol Retroactive Funding (RAF) recipient at the
    *   configured percentage (default 1%).
-   * - Only supported on Mainnet (1), Holesky (17000), and Hoodi (560048).
+   * - Only supported on Mainnet (1) and Hoodi (560048).
    *
    * @param rewardsSplitPayload - Configuration for the OWR and splitter deployment.
    * @returns The deployed OWR address as `withdrawal_address` and the
@@ -418,7 +418,7 @@ export class Client extends Base {
    * - If the predicted splitter is already deployed, returns the existing address without
    *   sending a transaction (idempotent).
    * - Automatically appends the Obol RAF recipient.
-   * - Only supported on Mainnet (1), Holesky (17000), and Hoodi (560048).
+   * - Only supported on Mainnet (1) and Hoodi (560048).
    *
    * @param totalSplitPayload - Configuration for the splitter deployment.
    * @returns The splitter address as both `withdrawal_address` and `fee_recipient_address`.

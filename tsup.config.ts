@@ -14,7 +14,6 @@ export default defineConfig([
     // Also keep problematic TypeScript dependencies external
     external: [
       '@chainsafe/bls',
-      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
@@ -38,7 +37,6 @@ export default defineConfig([
     // Also keep problematic TypeScript dependencies external
     external: [
       '@chainsafe/bls',
-      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
@@ -69,7 +67,6 @@ export default defineConfig([
       'uuid',
       'dotenv',
       '@chainsafe/bls',
-      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',

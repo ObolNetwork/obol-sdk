@@ -7,7 +7,7 @@ import { DEFAULT_BASE_VERSION } from '../../src/constants.js';
 const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider(
-  process.env.RPC_HOLESKY || 'https://ethereum-holesky-rpc.publicnode.com',
+  process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);
@@ -67,7 +67,7 @@ describe('Client.incentives', () => {
 
     // Re-import after mocking
     const { Client: ClientClass } = await import('../../src/index.js');
-    clientInstance = new ClientClass({ baseUrl, chainId: 17000 }, mockSigner);
+    clientInstance = new ClientClass({ baseUrl, chainId: 560048 }, mockSigner);
     (global.fetch as jest.Mock).mockReset();
   });
 
@@ -75,7 +75,7 @@ describe('Client.incentives', () => {
     const { Client: ClientClass } = await import('../../src/index.js');
     const clientWithoutSigner = new ClientClass({
       baseUrl,
-      chainId: 17000,
+      chainId: 560048,
     });
 
     await expect(
@@ -239,7 +239,7 @@ describe('Client.incentives', () => {
     const clientWithoutSigner = new ClientClass(
       {
         baseUrl,
-        chainId: 17000,
+        chainId: 560048,
       },
       undefined,
       provider,
@@ -282,7 +282,7 @@ describe('Client.incentives', () => {
     expect(result).toEqual(mockIncentives);
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/${DEFAULT_BASE_VERSION}/address/incentives/holesky/${mockAddress}`,
+      `${baseUrl}/${DEFAULT_BASE_VERSION}/address/incentives/hoodi/${mockAddress}`,
       expect.objectContaining({ method: 'GET' }),
     );
   });
