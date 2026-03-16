@@ -2,15 +2,18 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.9...v2.11.9)
+#### [v2.11.10](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.9...v2.11.10)
 
-- support delegated EOA [`#178`](https://github.com/ObolNetwork/obol-sdk/pull/178)
-- fix docs [`#176`](https://github.com/ObolNetwork/obol-sdk/pull/176)
+- remove holesky [`#181`](https://github.com/ObolNetwork/obol-sdk/pull/181)
+- improve sdk docs and error handling [`#180`](https://github.com/ObolNetwork/obol-sdk/pull/180)
 
 #### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.8...v2.11.9)
 
-> 19 January 2026
+> 30 January 2026
 
+- chore(release): v2.11.9 [`#179`](https://github.com/ObolNetwork/obol-sdk/pull/179)
+- support delegated EOA [`#178`](https://github.com/ObolNetwork/obol-sdk/pull/178)
+- fix docs [`#176`](https://github.com/ObolNetwork/obol-sdk/pull/176)
 - Fix: Correct method name in signature validator [`#177`](https://github.com/ObolNetwork/obol-sdk/pull/177)
 
 #### [v2.11.8](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.7...v2.11.8)
