@@ -21,6 +21,9 @@ yarn build
 # Run unit tests (excludes E2E)
 yarn test
 
+# Watch mode during development
+yarn test --watch
+
 # Lint
 yarn lint          # with --fix
 yarn lint-ci       # CI mode, no fix
@@ -31,6 +34,12 @@ yarn prettier-ci   # check only
 
 # E2E tests (from test/sdk-package/)
 cd test/sdk-package && yarn install && yarn build && yarn test:e2e
+```
+
+**Development workflow**: make changes → `yarn build` → `yarn test`. For faster iteration on a specific area, use `yarn test --watch` or run Jest directly on a single file:
+
+```bash
+npx jest test/client/methods.test.ts --watch
 ```
 
 ## Project Structure
@@ -145,10 +154,19 @@ client.exit.*         // Verify/recombine exit signatures
 | `validateExitBlobs(config, payload, beaconUrl, existing)` | Comprehensive exit blob validation |
 | `recombineExitBlobs(exitBlob)` | Aggregate partial BLS signatures |
 
-**Standalone** (`import { validateClusterLock } from '@obolnetwork/obol-sdk'`)
-| Function | Description |
-|----------|-------------|
-| `validateClusterLock(lock, safeRpcUrl?)` | Verify cluster lock cryptographic validity |
+### Standalone Exports
+
+**`validateClusterLock`** (`import { validateClusterLock } from '@obolnetwork/obol-sdk'`)
+
+Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs.
+
+```typescript
+import { validateClusterLock } from '@obolnetwork/obol-sdk';
+
+const isValid = await validateClusterLock(lockObject, safeRpcUrl?);
+```
+
+**Performance note**: For large cluster locks (many validators or operators), `validateClusterLock` can be slow due to BLS aggregation being CPU-bound. If performance is a concern with large files, consider running it off the main thread (Web Worker in browser, worker_threads in Node.js). This is a known limitation worth improving — if you find a faster aggregation path, it belongs in `src/verification/`.
 
 ### Key Types (from `src/types.ts`)
 
@@ -189,6 +207,20 @@ All payloads are validated via **AJV** schemas before API/contract calls. Custom
 
 Write operations use **EIP-712 typed-data signing**. The signature is passed as `Authorization: Bearer {signature}` header. No session/token management — the signature is the proof of authorization.
 
+## SDK as Public API Surface
+
+**This SDK is the official programmatic interface to Obol for external developers.**
+
+Any capability added to `obol-api` that external clients could reasonably use should be exposed via a corresponding SDK method. When you add or update an API endpoint:
+
+1. Add the corresponding method to the SDK `Client` class (or a sub-module)
+2. Add types to `src/types.ts`
+3. Add AJV validation schema to `src/schema.ts` if the method takes a payload
+4. Write unit tests in `test/<module>/`
+5. Add an example in `obol-sdk-examples/TS-Example/index.ts` (see that repo's CLAUDE.md)
+
+This keeps the SDK in sync with the API and ensures external developers always have a typed, validated, documented way to interact with the platform.
+
 ## Testing
 
 ### Test Framework
@@ -200,10 +232,16 @@ Write operations use **EIP-712 typed-data signing**. The signature is passed as 
 ### Running Tests
 
 ```bash
-# Unit tests only
+# Unit tests only (fast, no network)
 yarn test
 
-# E2E tests (requires PRIVATE_KEY and DEL_AUTH env vars)
+# Single file
+npx jest test/client/methods.test.ts
+
+# Watch mode
+yarn test --watch
+
+# E2E tests (requires PRIVATE_KEY and DEL_AUTH env vars, hits real Hoodi testnet)
 cd test/sdk-package
 yarn install
 yarn build
@@ -311,6 +349,33 @@ DEL_AUTH=...      # API deletion auth token
 | `ajv` | JSON schema payload validation |
 | `cross-fetch` | Isomorphic HTTP fetch |
 
+## Dependencies policy
+
+When adding a new dependency:
+- Use the **latest stable exact version** (e.g. `"some-lib": "3.2.1"` not `"^3.2.1"`)
+- Verify compatibility with both Node.js and browser build targets — some packages are Node-only
+- Check for peer dependency conflicts with `ethers ^6`, `@chainsafe/bls`, and `typescript ~5.9`
+- Run `yarn build` and `yarn test` after adding to confirm all three build outputs still work
+
+## Release and Publishing
+
+**Never publish from local.** The release process is:
+
+1. Make changes, open a PR, get it reviewed and merged to `main`
+2. Manually trigger the **"Release PR"** GitHub Actions workflow — this bumps the version via `release-it` and opens a release PR with the `release` label
+3. Review and merge the release PR
+4. Manually trigger the **"Publish Obol-SDK to NPM"** workflow — this publishes the package to npm
+
+Version bumping follows semantic versioning:
+- **Patch**: bug fixes, no API changes
+- **Minor**: new methods, new supported chains, backwards-compatible additions
+- **Major**: breaking changes to the `Client` API, removed methods, type signature changes
+
+## CI/CD
+
+- **PR checks**: lint, prettier, build, unit tests, E2E tests (GitHub Actions)
+- **Node version in CI**: 22.x
+
 ## Common Patterns When Modifying Code
 
 ### Adding a New Client Method
@@ -323,6 +388,7 @@ DEL_AUTH=...      # API deletion auth token
 6. Validate payload with AJV before API/contract call
 7. Add unit test in `test/<module>/`
 8. Add E2E test in `test/sdk-package/` if it involves real chain interaction
+9. Add example in `obol-sdk-examples/TS-Example/index.ts`
 
 ### Adding a New Sub-Module
 
@@ -352,13 +418,6 @@ if (isDeployed) return predictedAddress; // skip deployment
 const tx = await deployContract(...);
 ```
 
-## CI/CD
-
-- **PR checks**: lint, prettier, build, unit tests, E2E tests (GitHub Actions)
-- **Release**: `release-it` bumps version, creates release PR with `release` label
-- **Publish**: Triggered on merged PR with `release` label → npm publish
-- **Node version in CI**: 22.x
-
 ## Do Not
 
 - Do not read `src/bytecodes.ts` unless specifically working on contract deployments — it's 200KB of hex bytecodes
@@ -366,3 +425,4 @@ const tx = await deployContract(...);
 - Do not skip AJV validation — all payloads must be validated before API/contract calls
 - Do not use `jest.mock()` — use `jest.unstable_mockModule()` for ESM compatibility
 - Do not hardcode test addresses — use `TEST_ADDRESSES` from `test/fixtures.ts`
+- Do not publish to npm from local — always use the GitHub Actions workflow
