@@ -58,9 +58,16 @@
   "overrides": {
     "viem": "2.21.8"
   },
+  "peerDependencies": {
+    "@chainsafe/blst": "^0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@chainsafe/blst": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "@chainsafe/bls": "6.0.3",
-    "@chainsafe/blst": "^0.2.0",
     "@chainsafe/enr": "^5.0.1",
     "@chainsafe/ssz": "^0.14.0",
     "@metamask/eth-sig-util": "^8.2.0",
@@ -77,6 +84,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@chainsafe/blst": "^0.2.0",
     "@release-it/conventional-changelog": "^10.0.1",
     "@types/elliptic": "^6.4.18",
     "@types/jest": "^29.5.12",
