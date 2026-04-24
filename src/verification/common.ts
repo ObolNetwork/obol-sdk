@@ -451,8 +451,9 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
   const nodeSignatures = clusterLock.node_signatures;
 
   if (
+    !nodeSignatures ||
     (nodeSignatures as string[]).length !==
-    clusterLock.cluster_definition.operators.length
+      clusterLock.cluster_definition.operators.length
   ) {
     return false;
   }
