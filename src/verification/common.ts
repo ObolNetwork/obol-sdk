@@ -450,6 +450,13 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
   const ec = new elliptic.ec('secp256k1');
   const nodeSignatures = clusterLock.node_signatures;
 
+  if (
+    (nodeSignatures as string[]).length !==
+    clusterLock.cluster_definition.operators.length
+  ) {
+    return false;
+  }
+
   const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash);
   // node(ENR) signatures
   for (let i = 0; i < (nodeSignatures as string[]).length; i++) {
