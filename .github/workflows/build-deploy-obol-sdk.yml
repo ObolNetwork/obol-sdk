@@ -6,19 +6,23 @@ on:
       - closed
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: write
+
 jobs:
   build:
     if: (github.event.pull_request.merged == true && github.event.pull_request.head.label.name == 'release') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          persist-credentials: false # Required to make GitHub forget this checkout for the next step
+          persist-credentials: false
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: '22.x'
+          node-version: '24.x'
           registry-url: 'https://registry.npmjs.org'
           scope: '@obolnetwork'
 
@@ -29,22 +33,22 @@ jobs:
 
       - name: get-npm-version
         id: package-version
-        uses: martinbeentjes/npm-get-version-action@main
+        uses: martinbeentjes/npm-get-version-action@3cf273023a0dda27efcd3164bdfb51908dd46a5b # main
 
       - name: Extract release notes
         id: extract-release-notes
-        uses: ffurrer2/extract-release-notes@v2.2.0
+        uses: ffurrer2/extract-release-notes@9989ccec43d726ef05aa1cd7b2854fb96b6df6ab # v2.2.0
 
       ############# TAG RELEASE ##############
       - name: "Push tag v${{ steps.package-version.outputs.current-version }}"
-        uses: rickstaa/action-create-tag@v1
+        uses: rickstaa/action-create-tag@a1c7777fcb2fee4f19b0f283ba888afa11678b72 # v1
         id: tag_version
         with:
           tag: "v${{ steps.package-version.outputs.current-version }}"
-      
+
       ############# GITHUB RELEASE ##############
       - name: "Create a GitHub release v${{ steps.package-version.outputs.current-version }}"
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
           tag: "v${{ steps.package-version.outputs.current-version }}"
           name: "Release v${{ steps.package-version.outputs.current-version }}"
@@ -56,7 +60,7 @@ jobs:
       ############# NPM RELEASE ##############
       - run: yarn install --frozen-lockfile
       - run: yarn run build
-      - run: yarn run generate-typedoc 
+      - run: yarn run generate-typedoc
       - name: Publish to NPM
         run: |
           VERSION="${{ steps.package-version.outputs.current-version }}"
@@ -68,9 +72,4 @@ jobs:
             yarn run npm:publish
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
-          RPC_GNOSIS: ${{ secrets.RPC_GNOSIS }}
-          RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}
-          RPC_HOODI: ${{ secrets.RPC_HOODI }}
           HUSKY: 0
