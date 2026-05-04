@@ -139,18 +139,12 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.10.0')) {
-    // if (
-    //   clusterLock.cluster_definition.deposit_amounts === null &&
-    //   clusterLock.distributed_validators.some(
-    //     distributedValidator =>
-    //       distributedValidator.partial_deposit_data?.length !== 1 ||
-    //       distributedValidator.partial_deposit_data[0].amount !== '32000000000',
-    //   )
-    // ) {
-    //   throw new Error(
-    //     'mismatch between deposit_amounts and partial_deposit_data fields',
-    //   );
-    // }
+    // Charon uses the same SSZ DV hashing for v1.8–v1.10 (`hashValidatorV1x8OrLater` in
+    // cluster/ssz.go): a list of partial deposits, not the v1.8-only JSON convention
+    // where null `deposit_amounts` implies a single 32 ETH partial. The v1.10 fixture
+    // `cluster/testdata/cluster_lock_v1_10_0.json` uses explicit partial amounts (e.g.
+    // 16+16 ETH) and multiple `partial_deposit_data` entries per validator; do not
+    // apply the v1.8.0 guard here.
     return hashClusterLockV1X10(clusterLock);
   }
 
