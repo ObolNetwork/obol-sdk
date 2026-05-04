@@ -1,0 +1,18 @@
+{
+    "preset": "ts-jest",
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": ".",
+    "testEnvironment": "node",
+    "testRegex": ".(test|spec)\\.ts$",
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", {
+        "tsconfig": {
+          "module": "commonjs",
+          "target": "es2020",
+          "moduleResolution": "node",
+          "esModuleInterop": true,
+          "allowJs": true
+        }
+      }]
+    }
+}

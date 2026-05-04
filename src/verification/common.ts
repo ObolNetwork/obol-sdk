@@ -1,7 +1,5 @@
 import { fromHexString } from '@chainsafe/ssz';
 import elliptic from 'elliptic';
-import { init } from '@chainsafe/bls';
-
 import {
   FORK_MAPPING,
   type ClusterDefinition,
@@ -9,6 +7,7 @@ import {
   type DepositData,
   type BuilderRegistrationMessage,
   type DistributedValidator,
+  type SafeRpcUrl,
 } from '../types.js';
 import * as semver from 'semver';
 import {
@@ -23,7 +22,6 @@ import {
   hashClusterLockV1X7,
   verifyDVV1X7,
 } from './v1.7.0.js';
-import { ethers } from 'ethers';
 import {
   DOMAIN_APPLICATION_BUILDER,
   DOMAIN_DEPOSIT,
@@ -33,7 +31,6 @@ import {
   signEnrPayload,
   signOperatorConfigHashPayload,
 } from '../constants.js';
-import { SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util';
 import {
   builderRegistrationMessageType,
   depositMessageType,
@@ -41,13 +38,21 @@ import {
   signingRootType,
 } from './sszTypes.js';
 import { definitionFlow, hexWithout0x } from '../utils.js';
-import { ENR } from '@chainsafe/discv5';
+import { ENR } from '@chainsafe/enr';
 import {
   clusterDefinitionContainerTypeV1X8,
   hashClusterDefinitionV1X8,
   hashClusterLockV1X8,
   verifyDVV1X8,
 } from './v1.8.0.js';
+import { validateAddressSignature } from './signature-validator.js';
+import {
+  clusterDefinitionContainerTypeV1X10,
+  hashClusterDefinitionV1X10,
+  hashClusterLockV1X10,
+  verifyDVV1X10,
+} from './v1.10.0.js';
+import * as bls from '@chainsafe/bls';
 
 // cluster-definition hash
 
@@ -89,6 +94,15 @@ export const clusterConfigOrDefinitionHash = (
     );
   }
 
+  if (semver.eq(cluster.version, 'v1.10.0')) {
+    definitionType = clusterDefinitionContainerTypeV1X10(configOnly);
+    val = hashClusterDefinitionV1X10(cluster, configOnly);
+    const x =
+      '0x' +
+      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex');
+    return x;
+  }
+
   throw new Error('unsupported version');
 };
 
@@ -124,6 +138,22 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
     return hashClusterLockV1X8(clusterLock);
   }
 
+  if (semver.eq(clusterLock.cluster_definition.version, 'v1.10.0')) {
+    // if (
+    //   clusterLock.cluster_definition.deposit_amounts === null &&
+    //   clusterLock.distributed_validators.some(
+    //     distributedValidator =>
+    //       distributedValidator.partial_deposit_data?.length !== 1 ||
+    //       distributedValidator.partial_deposit_data[0].amount !== '32000000000',
+    //   )
+    // ) {
+    //   throw new Error(
+    //     'mismatch between deposit_amounts and partial_deposit_data fields',
+    //   );
+    // }
+    return hashClusterLockV1X10(clusterLock);
+  }
+
   // other versions
   throw new Error('unsupported version');
 };
@@ -132,105 +162,127 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
 
 // cluster-definition signatures verification
 
-const getPOSTConfigHashSigner = (
+const validatePOSTConfigHashSigner = async (
+  address: string,
   signature: string,
   configHash: string,
   chainId: FORK_MAPPING,
-): string => {
+  safeRpcUrl?: SafeRpcUrl,
+): Promise<boolean> => {
   try {
-    const sig = ethers.Signature.from(signature);
     const data = signCreatorConfigHashPayload(
       { creator_config_hash: configHash },
-      chainId,
+      chainId as number,
     );
-    const digest = TypedDataUtils.eip712Hash(data, SignTypedDataVersion.V4);
 
-    return ethers.recoverAddress(digest, sig).toLowerCase();
+    return await validateAddressSignature({
+      address,
+      token: signature,
+      data,
+      chainId,
+      safeRpcUrl,
+    });
   } catch (err) {
     throw err;
   }
 };
 
-const getPUTConfigHashSigner = (
+const validatePUTConfigHashSigner = async (
+  address: string,
   signature: string,
   configHash: string,
   chainId: number,
-): string => {
+  safeRpcUrl?: SafeRpcUrl,
+): Promise<boolean> => {
   try {
-    const sig = ethers.Signature.from(signature);
     const data = signOperatorConfigHashPayload(
       { operator_config_hash: configHash },
       chainId,
     );
-    const digest = TypedDataUtils.eip712Hash(data, SignTypedDataVersion.V4);
-
-    return ethers.recoverAddress(digest, sig).toLowerCase();
+    return await validateAddressSignature({
+      address,
+      token: signature,
+      data,
+      chainId,
+      safeRpcUrl,
+    });
   } catch (err) {
     throw err;
   }
 };
 
-const getEnrSigner = (
+const validateEnrSigner = async (
+  address: string,
   signature: string,
   payload: string,
   chainId: number,
-): string => {
+  safeRpcUrl?: SafeRpcUrl,
+): Promise<boolean> => {
   try {
-    const sig = ethers.Signature.from(signature);
-
     const data = signEnrPayload({ enr: payload }, chainId);
-    const digest = TypedDataUtils.eip712Hash(data, SignTypedDataVersion.V4);
 
-    return ethers.recoverAddress(digest, sig).toLowerCase();
+    return await validateAddressSignature({
+      address,
+      token: signature,
+      data,
+      chainId,
+      safeRpcUrl,
+    });
   } catch (err) {
     throw err;
   }
 };
 
-const verifyDefinitionSignatures = (
+const verifyDefinitionSignatures = async (
   clusterDefinition: ClusterDefinition,
   definitionType: DefinitionFlow,
-): boolean => {
+  safeRpcUrl?: SafeRpcUrl,
+): Promise<boolean> => {
   if (definitionType === DefinitionFlow.Charon) {
     return true;
   } else {
-    const configSigner = getPOSTConfigHashSigner(
+    const isPOSTConfigHashSignerValid = await validatePOSTConfigHashSigner(
+      clusterDefinition.creator.address,
       clusterDefinition.creator.config_signature as string,
       clusterDefinition.config_hash,
       FORK_MAPPING[clusterDefinition.fork_version as keyof typeof FORK_MAPPING],
+      safeRpcUrl,
     );
 
-    if (configSigner !== clusterDefinition.creator.address.toLowerCase()) {
+    if (!isPOSTConfigHashSignerValid) {
       return false;
     }
     if (definitionType === DefinitionFlow.Solo) {
       return true;
     }
-    return clusterDefinition.operators.every(operator => {
-      const configSigner = getPUTConfigHashSigner(
+
+    for (const operator of clusterDefinition.operators) {
+      const isPUTConfigHashSignerValid = await validatePUTConfigHashSigner(
+        operator.address,
         operator.config_signature as string,
         clusterDefinition.config_hash,
         FORK_MAPPING[
           clusterDefinition.fork_version as keyof typeof FORK_MAPPING
-        ],
+        ] as number,
+        safeRpcUrl,
       );
 
-      const enrSigner = getEnrSigner(
+      const isENRSignerValid = await validateEnrSigner(
+        operator.address,
         operator.enr_signature as string,
         operator.enr as string,
         FORK_MAPPING[
           clusterDefinition.fork_version as keyof typeof FORK_MAPPING
-        ],
+        ] as number,
+        safeRpcUrl,
       );
 
-      if (
-        configSigner !== operator.address.toLowerCase() ||
-        enrSigner !== operator.address.toLowerCase()
-      ) {
+      if (!isPUTConfigHashSignerValid || !isENRSignerValid) {
         return false;
       }
-      return true;
-    });
+    }
+
+    return true;
   }
 };
 
@@ -312,18 +364,19 @@ export const verifyDepositData = (
   depositData: Partial<DepositData>,
   withdrawalAddress: string,
   forkVersion: string,
+  compounding?: boolean,
 ): { isValidDepositData: boolean; depositDataMsg: Uint8Array } => {
   const depositDomain = computeDomain(
     fromHexString(DOMAIN_DEPOSIT),
     forkVersion,
   );
-  const eth1AddressWithdrawalPrefix = '0x01';
-  if (
-    eth1AddressWithdrawalPrefix +
-      '0'.repeat(22) +
-      withdrawalAddress.toLowerCase().slice(2) !==
-    depositData.withdrawal_credentials
-  ) {
+  const withdrawalPrefix = compounding ? '0x02' : '0x01';
+  const expectedWithdrawalCredentials =
+    withdrawalPrefix +
+    '0'.repeat(22) +
+    withdrawalAddress.toLowerCase().slice(2);
+
+  if (expectedWithdrawalCredentials !== depositData.withdrawal_credentials) {
     return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
   }
 
@@ -332,9 +385,18 @@ export const verifyDepositData = (
   }
 
   const depositMessageBuffer = computeDepositMsgRoot(depositData);
-  const depositDataMessage = signingRoot(depositDomain, depositMessageBuffer);
+  const depositDataRoot = signingRoot(depositDomain, depositMessageBuffer);
+  if (!depositData.signature) {
+    return { isValidDepositData: false, depositDataMsg: depositDataRoot };
+  }
 
-  return { isValidDepositData: true, depositDataMsg: depositDataMessage };
+  const isValidDepositData = bls.bls.verify(
+    fromHexString(depositData.pubkey),
+    depositDataRoot,
+    fromHexString(depositData.signature),
+  );
+
+  return { isValidDepositData, depositDataMsg: depositDataRoot };
 };
 
 export const verifyBuilderRegistration = (
@@ -391,9 +453,10 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
   const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash);
   // node(ENR) signatures
   for (let i = 0; i < (nodeSignatures as string[]).length; i++) {
-    const pubkey = ENR.decodeTxt(
+    const publicKeyBytes = ENR.decodeTxt(
       clusterLock.cluster_definition.operators[i].enr as string,
-    ).publicKey.toString('hex');
+    ).publicKey;
+    const pubkey = Buffer.from(publicKeyBytes).toString('hex');
 
     const ENRsignature = {
       r: (nodeSignatures as string[])[i].slice(2, 66),
@@ -420,33 +483,37 @@ export const signingRoot = (
 };
 
 const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
-  await init('herumi');
-
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.6.0')) {
-    return verifyDVV1X6(clusterLock);
+    return await verifyDVV1X6(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.7.0')) {
-    return verifyDVV1X7(clusterLock);
+    return await verifyDVV1X7(clusterLock);
   }
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.8.0')) {
-    return verifyDVV1X8(clusterLock);
+    return await verifyDVV1X8(clusterLock);
+  }
+
+  if (semver.eq(clusterLock.cluster_definition.version, 'v1.10.0')) {
+    return await verifyDVV1X10(clusterLock);
   }
   return false;
 };
 
 export const isValidClusterLock = async (
   clusterLock: ClusterLock,
+  safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
     const definitionType = definitionFlow(clusterLock.cluster_definition);
     if (definitionType == null) {
       return false;
     }
-    const isValidDefinitionData = verifyDefinitionSignatures(
+    const isValidDefinitionData = await verifyDefinitionSignatures(
       clusterLock.cluster_definition,
       definitionType,
+      safeRpcUrl,
     );
     if (!isValidDefinitionData) {
       return false;

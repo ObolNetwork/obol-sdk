@@ -8,8 +8,11 @@ yarn-error.log*
 
 # build
 dist
+.next
 
 .DS_Store
 
 .env
+
+docs
 

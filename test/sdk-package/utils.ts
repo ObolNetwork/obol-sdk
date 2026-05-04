@@ -10,13 +10,17 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // known signer
-const privateKey = process.env.PRIVATE_KEY as string;
-const provider = new JsonRpcProvider('https://ethereum-holesky.publicnode.com');
+const privateKey = process.env.PRIVATE_KEY?.startsWith('0x')
+  ? process.env.PRIVATE_KEY
+  : '0x' + process.env.PRIVATE_KEY;
+const provider = new JsonRpcProvider(
+  process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
+);
 const wallet = new ethers.Wallet(privateKey, provider);
 export const signer = wallet.connect(provider);
 /* eslint-disable */
 export const client: Client = new Client(
-  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
+  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 560048 },
   signer as any,
 );
 
@@ -25,7 +29,7 @@ const randomprivateKey = ethers.Wallet.fromPhrase(randomMnemonic).privateKey;
 const randomWallet = new ethers.Wallet(randomprivateKey);
 export const randomSigner = randomWallet.connect(null);
 export const randomClient: Client = new Client(
-  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
+  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 560048 },
   randomSigner as any,
 );
 
@@ -37,11 +41,13 @@ const secondRandomprivateKey =
 const secondRandomWallet = new ethers.Wallet(randomprivateKey);
 export const secondRandomSigner = randomWallet.connect(null);
 export const secondRandomClient: Client = new Client(
-  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 17000 },
+  { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 560048 },
   secondRandomSigner as any,
 );
 
 export const app = client.baseUrl;
+
+export const DEL_AUTH = process.env.DEL_AUTH;
 
 export const postClusterDef = async (
   clusterWithoutDefHash: ClusterDefinition,

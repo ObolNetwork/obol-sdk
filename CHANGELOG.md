@@ -2,8 +2,288 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.10](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.9...v2.11.10)
+
+- remove holesky [`#181`](https://github.com/ObolNetwork/obol-sdk/pull/181)
+- improve sdk docs and error handling [`#180`](https://github.com/ObolNetwork/obol-sdk/pull/180)
+
+#### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.8...v2.11.9)
+
+> 30 January 2026
+
+- chore(release): v2.11.9 [`#179`](https://github.com/ObolNetwork/obol-sdk/pull/179)
+- support delegated EOA [`#178`](https://github.com/ObolNetwork/obol-sdk/pull/178)
+- fix docs [`#176`](https://github.com/ObolNetwork/obol-sdk/pull/176)
+- Fix: Correct method name in signature validator [`#177`](https://github.com/ObolNetwork/obol-sdk/pull/177)
+
+#### [v2.11.8](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.7...v2.11.8)
+
+> 9 December 2025
+
+- chore(release): v2.11.8 [`#174`](https://github.com/ObolNetwork/obol-sdk/pull/174)
+- Hanan/fix ovm deposit [`#173`](https://github.com/ObolNetwork/obol-sdk/pull/173)
+
+#### [v2.11.7](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.6...v2.11.7)
+
+> 5 December 2025
+
+- chore(release): v2.11.7 [`#172`](https://github.com/ObolNetwork/obol-sdk/pull/172)
+- new ovm [`#171`](https://github.com/ObolNetwork/obol-sdk/pull/171)
+- Hanna/recombine signature fix [`#170`](https://github.com/ObolNetwork/obol-sdk/pull/170)
+
+#### [v2.11.6](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5...v2.11.6)
+
+> 11 November 2025
+
+- chore(release): v2.11.6 [`#167`](https://github.com/ObolNetwork/obol-sdk/pull/167)
+- accept 0 for full withdrawal [`#166`](https://github.com/ObolNetwork/obol-sdk/pull/166)
+
+#### [v2.11.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.2...v2.11.5)
+
+> 7 November 2025
+
+- chore(release): v2.11.5 [`#165`](https://github.com/ObolNetwork/obol-sdk/pull/165)
+- return checksummed ovm address [`#164`](https://github.com/ObolNetwork/obol-sdk/pull/164)
+
+#### [v2.11.5-rc.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.1...v2.11.5-rc.2)
+
+> 23 October 2025
+
+- [Release] v2.11.5-rc.2 [`#162`](https://github.com/ObolNetwork/obol-sdk/pull/162)
+- add js extension to missed files [`#161`](https://github.com/ObolNetwork/obol-sdk/pull/161)
+
+#### [v2.11.5-rc.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.5-rc.0...v2.11.5-rc.1)
+
+> 16 October 2025
+
+- [Release] v2.11.5 [`#160`](https://github.com/ObolNetwork/obol-sdk/pull/160)
+- remove ot used function [`#159`](https://github.com/ObolNetwork/obol-sdk/pull/159)
+- Hanan/browser bundler config [`#157`](https://github.com/ObolNetwork/obol-sdk/pull/157)
+
+#### [v2.11.5-rc.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.4...v2.11.5-rc.0)
+
+> 3 October 2025
+
+- [Release] v2.11.5-rc.0 [`#156`](https://github.com/ObolNetwork/obol-sdk/pull/156)
+- fix critical vulnerabilities [`#155`](https://github.com/ObolNetwork/obol-sdk/pull/155)
+
+#### [v2.11.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.3...v2.11.4)
+
+> 19 September 2025
+
+- chore(release): v2.11.4 [`#154`](https://github.com/ObolNetwork/obol-sdk/pull/154)
+- update ovm factory info [`#153`](https://github.com/ObolNetwork/obol-sdk/pull/153)
+
+#### [v2.11.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.2...v2.11.3)
+
+> 18 September 2025
+
+- chore(release): v2.11.3 [`#152`](https://github.com/ObolNetwork/obol-sdk/pull/152)
+- update  validation for deposit_amounts [`#151`](https://github.com/ObolNetwork/obol-sdk/pull/151)
+
+#### [v2.11.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.1...v2.11.2)
+
+> 15 August 2025
+
+- chore(release): v2.11.2 [`#148`](https://github.com/ObolNetwork/obol-sdk/pull/148)
+- Hanan/deposit methods [`#147`](https://github.com/ObolNetwork/obol-sdk/pull/147)
+
+#### [v2.11.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.0...v2.11.1)
+
+> 15 August 2025
+
+- chore(release): v2.11.1 [`#146`](https://github.com/ObolNetwork/obol-sdk/pull/146)
+- Hanan/deposit methods [`#145`](https://github.com/ObolNetwork/obol-sdk/pull/145)
+
+#### [v2.11.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.10.2...v2.11.0)
+
+> 14 August 2025
+
+- chore(release): v2.11.0 [`#144`](https://github.com/ObolNetwork/obol-sdk/pull/144)
+- Hanan/deposit methods [`#143`](https://github.com/ObolNetwork/obol-sdk/pull/143)
+
+#### [v2.10.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.10.1...v2.10.2)
+
+> 12 August 2025
+
+- chore(release): v2.10.2 [`#141`](https://github.com/ObolNetwork/obol-sdk/pull/141)
+- hoodi support [`#139`](https://github.com/ObolNetwork/obol-sdk/pull/139)
+
+#### [v2.10.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.10.0...v2.10.1)
+
+> 7 August 2025
+
+- chore(release): v2.10.1 [`#138`](https://github.com/ObolNetwork/obol-sdk/pull/138)
+- Hanan/await tx [`#137`](https://github.com/ObolNetwork/obol-sdk/pull/137)
+
+#### [v2.10.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.9.1...v2.10.0)
+
+> 6 August 2025
+
+- chore(release): v2.10.0 [`#136`](https://github.com/ObolNetwork/obol-sdk/pull/136)
+- Hanan/eoa withdrawal [`#135`](https://github.com/ObolNetwork/obol-sdk/pull/135)
+
+#### [v2.9.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.9.0...v2.9.1)
+
+> 26 July 2025
+
+- chore(release): v2.9.1 [`#134`](https://github.com/ObolNetwork/obol-sdk/pull/134)
+- Hanan/ovm request withdrawal [`#133`](https://github.com/ObolNetwork/obol-sdk/pull/133)
+
+#### [v2.9.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.8.1...v2.9.0)
+
+> 25 July 2025
+
+- chore(release): v2.9.0 [`#132`](https://github.com/ObolNetwork/obol-sdk/pull/132)
+- Hanan/ovm request withdrawal [`#131`](https://github.com/ObolNetwork/obol-sdk/pull/131)
+
+#### [v2.8.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.8.0...v2.8.1)
+
+> 27 June 2025
+
+- chore(release): v2.8.1 [`#130`](https://github.com/ObolNetwork/obol-sdk/pull/130)
+- use splitv2Factory contract instead of sdk [`#129`](https://github.com/ObolNetwork/obol-sdk/pull/129)
+
+#### [v2.8.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.7.0...v2.8.0)
+
+> 25 June 2025
+
+- chore(release): v2.8.0 [`#128`](https://github.com/ObolNetwork/obol-sdk/pull/128)
+- Hanan/ovm methods [`#126`](https://github.com/ObolNetwork/obol-sdk/pull/126)
+
+#### [v2.7.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.6.0...v2.7.0)
+
+> 11 June 2025
+
+- chore(release): v2.7.0 [`#125`](https://github.com/ObolNetwork/obol-sdk/pull/125)
+- Adding BLS aggregation for exits [`#123`](https://github.com/ObolNetwork/obol-sdk/pull/123)
+
+#### [v2.6.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.5.1...v2.6.0)
+
+> 6 June 2025
+
+- chore(release): v2.6.0 [`#122`](https://github.com/ObolNetwork/obol-sdk/pull/122)
+- Update release-pr.yml [`#121`](https://github.com/ObolNetwork/obol-sdk/pull/121)
+- Exit sdk commands [`#120`](https://github.com/ObolNetwork/obol-sdk/pull/120)
+
+#### [v2.5.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.5.0...v2.5.1)
+
+> 30 May 2025
+
+- chore(release): v2.5.1 [`#117`](https://github.com/ObolNetwork/obol-sdk/pull/117)
+- default compounding to false [`#116`](https://github.com/ObolNetwork/obol-sdk/pull/116)
+
+#### [v2.5.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.6...v2.5.0)
+
+> 23 May 2025
+
+- chore(release): v2.5.0 [`#114`](https://github.com/ObolNetwork/obol-sdk/pull/114)
+- default to v1.10.0 [`#111`](https://github.com/ObolNetwork/obol-sdk/pull/111)
+
+#### [v2.4.6](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.5...v2.4.6)
+
+> 24 March 2025
+
+- chore(release): v2.4.6 [`#105`](https://github.com/ObolNetwork/obol-sdk/pull/105)
+- fix incentives type and accept rpcul in validateClusterLock [`#104`](https://github.com/ObolNetwork/obol-sdk/pull/104)
+
+#### [v2.4.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.4...v2.4.5)
+
+> 20 March 2025
+
+- chore(release): v2.4.5 [`#103`](https://github.com/ObolNetwork/obol-sdk/pull/103)
+- Hanna/small fix [`#102`](https://github.com/ObolNetwork/obol-sdk/pull/102)
+
+#### [v2.4.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.3...v2.4.4)
+
+> 19 March 2025
+
+- chore(release): v2.4.4 [`#101`](https://github.com/ObolNetwork/obol-sdk/pull/101)
+- remove not needed assignment [`#100`](https://github.com/ObolNetwork/obol-sdk/pull/100)
+
+#### [v2.4.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.2...v2.4.3)
+
+> 18 March 2025
+
+- chore(release): v2.4.3 [`#98`](https://github.com/ObolNetwork/obol-sdk/pull/98)
+- add hoodi [`#97`](https://github.com/ObolNetwork/obol-sdk/pull/97)
+
+#### [v2.4.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.1...v2.4.2)
+
+> 14 March 2025
+
+- chore(release): v2.4.2 [`#96`](https://github.com/ObolNetwork/obol-sdk/pull/96)
+- fetch incentives by network [`#95`](https://github.com/ObolNetwork/obol-sdk/pull/95)
+
+#### [v2.4.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.4.0...v2.4.1)
+
+> 13 March 2025
+
+- chore(release): v2.4.1 [`#94`](https://github.com/ObolNetwork/obol-sdk/pull/94)
+- expect a provider in client [`#93`](https://github.com/ObolNetwork/obol-sdk/pull/93)
+
+#### [v2.4.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.3.0...v2.4.0)
+
+> 13 March 2025
+
+- chore(release): v2.4.0 [`#92`](https://github.com/ObolNetwork/obol-sdk/pull/92)
+- incentives methods [`#90`](https://github.com/ObolNetwork/obol-sdk/pull/90)
+
+#### [v2.3.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.4...v2.3.0)
+
+> 6 March 2025
+
+- chore(release): v2.3.0 [`#89`](https://github.com/ObolNetwork/obol-sdk/pull/89)
+- feat: add getIncentivesByAddress method to fetch incentives for a given address [`#77`](https://github.com/ObolNetwork/obol-sdk/pull/77)
+
+#### [v2.2.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.3...v2.2.4)
+
+> 24 February 2025
+
+- chore(release): v2.2.4 [`#87`](https://github.com/ObolNetwork/obol-sdk/pull/87)
+- Hanan/v1.10.0 [`#86`](https://github.com/ObolNetwork/obol-sdk/pull/86)
+
+#### [v2.2.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.2...v2.2.3)
+
+> 21 February 2025
+
+- chore(release): v2.2.3 [`#85`](https://github.com/ObolNetwork/obol-sdk/pull/85)
+- v1.10.0 [`#81`](https://github.com/ObolNetwork/obol-sdk/pull/81)
+- feat: add renovate.json [`#75`](https://github.com/ObolNetwork/obol-sdk/pull/75)
+
+#### [v2.2.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.1...v2.2.2)
+
+> 7 February 2025
+
+- chore(release): v2.2.2 [`#74`](https://github.com/ObolNetwork/obol-sdk/pull/74)
+- fix environment variable check and update readme [`#73`](https://github.com/ObolNetwork/obol-sdk/pull/73)
+
+#### [v2.2.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.2.0...v2.2.1)
+
+> 7 February 2025
+
+- chore(release): v2.2.1 [`#72`](https://github.com/ObolNetwork/obol-sdk/pull/72)
+- fix verify eoa and safe signatures when publishing a lock [`#71`](https://github.com/ObolNetwork/obol-sdk/pull/71)
+
+#### [v2.2.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.2...v2.2.0)
+
+> 7 February 2025
+
+- chore(release): v2.2.0 [`#69`](https://github.com/ObolNetwork/obol-sdk/pull/69)
+- Hanan/support safe [`#68`](https://github.com/ObolNetwork/obol-sdk/pull/68)
+
+#### [v2.1.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.1...v2.1.2)
+
+> 8 January 2025
+
+- chore(release): v2.1.2 [`#66`](https://github.com/ObolNetwork/obol-sdk/pull/66)
+- Hanan/safe fix [`#65`](https://github.com/ObolNetwork/obol-sdk/pull/65)
+
 #### [v2.1.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.1.0...v2.1.1)
 
+> 23 October 2024
+
+- chore(release): v2.1.1 [`#62`](https://github.com/ObolNetwork/obol-sdk/pull/62)
 - Add owr tranch function [`#61`](https://github.com/ObolNetwork/obol-sdk/pull/61)
 
 #### [v2.1.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.0.1...v2.1.0)

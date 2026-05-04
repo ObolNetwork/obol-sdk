@@ -1,17 +1,16 @@
+import { ZeroAddress } from 'ethers';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-} from './constants';
+  PRINCIPAL_THRESHOLD,
+} from './constants.js';
+import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv.js';
 
 export const operatorPayloadSchema = {
   type: 'object',
   properties: {
-    version: {
-      type: 'string',
-    },
-    enr: {
-      type: 'string',
-    },
+    version: { type: 'string' },
+    enr: { type: 'string' },
   },
   required: ['version', 'enr'],
 };
@@ -19,24 +18,20 @@ export const operatorPayloadSchema = {
 export const definitionSchema = {
   type: 'object',
   properties: {
-    name: {
-      type: 'string',
-    },
+    name: { type: 'string' },
     operators: {
       type: 'array',
       minItems: 4,
-      uniqueItems: true,
       items: {
         type: 'object',
         properties: {
           address: {
             type: 'string',
-            minLength: 42,
-            maxLength: 42,
           },
         },
         required: ['address'],
       },
+      validateUniqueAddresses: true,
     },
     validators: {
       type: 'array',
@@ -57,12 +52,39 @@ export const definitionSchema = {
       },
     },
     deposit_amounts: {
-      type: 'array',
+      type: ['array', 'null'],
       items: {
         type: 'string',
         pattern: '^[0-9]+$',
       },
-      validDepositAmounts: true,
+      if: {
+        $data: '1/compounding',
+      },
+      then: {
+        items: {
+          enum: VALID_DEPOSIT_AMOUNTS,
+        },
+      },
+      else: {
+        items: {
+          enum: VALID_NON_COMPOUNDING_AMOUNTS,
+        },
+      },
+      default: null,
+    },
+    compounding: {
+      type: 'boolean',
+      default: false,
+    },
+    target_gas_limit: {
+      type: 'number',
+      minimum: 1,
+      default: 36000000,
+    },
+    consensus_protocol: {
+      type: 'string',
+      enum: ['qbft', ''],
+      default: '',
     },
   },
   required: ['name', 'operators', 'validators'],
@@ -80,9 +102,7 @@ export const totalSplitterPayloadSchema = {
             type: 'string',
             pattern: '^0x[a-fA-F0-9]{40}$',
           },
-          percentAllocation: {
-            type: 'number',
-          },
+          percentAllocation: { type: 'number' },
         },
         required: ['account', 'percentAllocation'],
       },
@@ -90,40 +110,267 @@ export const totalSplitterPayloadSchema = {
     ObolRAFSplit: {
       type: 'number',
       minimum: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
+      default: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
     },
     distributorFee: {
       type: 'number',
       maximum: 10,
       multipleOf: 0.01,
+      default: 0,
     },
     controllerAddress: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
+      default: ZeroAddress,
     },
-    validateSplitRecipients: true,
   },
+  validateTotalSplitRecipients: true,
   required: ['splitRecipients'],
 };
 
 export const rewardsSplitterPayloadSchema = {
-  ...totalSplitterPayloadSchema,
+  type: 'object',
   properties: {
     ...totalSplitterPayloadSchema.properties,
     ObolRAFSplit: {
       type: 'number',
       minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
+      default: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
     },
     recoveryAddress: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
+      default: ZeroAddress,
     },
-    etherAmount: {
-      type: 'number',
-    },
+    etherAmount: { type: 'number' },
     principalRecipient: {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
     },
   },
+  validateRewardsSplitRecipients: true,
   required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
+};
+
+export const ovmBaseSplitPayload = {
+  rewardSplitRecipients: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        address: {
+          type: 'string',
+          pattern: '^0x[a-fA-F0-9]{40}$',
+        },
+        percentAllocation: { type: 'number' },
+      },
+      required: ['address', 'percentAllocation'],
+    },
+  },
+  OVMOwnerAddress: {
+    type: 'string',
+    pattern: '^0x[a-fA-F0-9]{40}$',
+  },
+  splitOwnerAddress: {
+    type: 'string',
+    pattern: '^0x[a-fA-F0-9]{40}$',
+    default: ZeroAddress,
+  },
+  principalThreshold: {
+    type: 'number',
+    minimum: 16,
+    default: PRINCIPAL_THRESHOLD,
+  },
+  distributorFeePercent: {
+    type: 'number',
+    minimum: 0,
+    maximum: 10,
+    default: 0,
+  },
+};
+
+export const ovmRewardsSplitPayloadSchema = {
+  type: 'object',
+  properties: {
+    ...ovmBaseSplitPayload,
+    principalRecipient: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+  },
+  validateOVMRewardsSplitRecipients: true,
+  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'principalRecipient'],
+};
+
+export const ovmTotalSplitPayloadSchema = {
+  type: 'object',
+  properties: {
+    ...ovmBaseSplitPayload,
+    principalSplitRecipients: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          address: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{40}$',
+          },
+          percentAllocation: { type: 'number' },
+        },
+        required: ['address', 'percentAllocation'],
+      },
+    },
+  },
+  validateOVMRewardsSplitRecipients: true,
+  validateOVMTotalSplitRecipients: true,
+  required: [
+    'rewardSplitRecipients',
+    'principalSplitRecipients',
+    'OVMOwnerAddress',
+  ],
+};
+
+export const ovmRequestWithdrawalPayloadSchema = {
+  type: 'object',
+  properties: {
+    withdrawalFees: {
+      type: 'string',
+      pattern: '^[0-9]+$',
+    },
+    ovmAddress: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+    pubKeys: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'string',
+        pattern: '^0x[a-fA-F0-9]{96}$', // 48 bytes = 96 hex chars + 0x prefix
+      },
+    },
+    amounts: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'string',
+        pattern: '^[0-9]+$',
+      },
+    },
+  },
+  validateOVMRequestWithdrawalPayload: true,
+  required: ['ovmAddress', 'pubKeys', 'amounts', 'withdrawalFees'],
+};
+
+export const eoaWithdrawalPayloadSchema = {
+  type: 'object',
+  properties: {
+    pubkey: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{96}$', // 48 bytes = 96 hex chars + 0x prefix
+    },
+    allocation: {
+      type: 'number',
+      minimum: 0,
+    },
+    requiredFee: {
+      type: 'string',
+      pattern: '^[0-9]+$',
+    },
+  },
+  required: ['pubkey', 'allocation', 'requiredFee'],
+};
+
+export const ovmDepositPayloadSchema = {
+  type: 'object',
+  properties: {
+    ovmAddress: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+    deposits: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        properties: {
+          pubkey: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{96}$',
+          },
+          withdrawal_credentials: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{64}$',
+            description: '32 bytes withdrawal credentials',
+          },
+          signature: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{192}$',
+            description: '96 bytes signature (190 hex chars + 0x prefix)',
+          },
+          deposit_data_root: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{64}$', // 32 bytes = 64 hex chars + 0x prefix
+          },
+          amount: {
+            type: 'string',
+            pattern: '^[0-9]+$',
+          },
+        },
+        required: [
+          'pubkey',
+          'withdrawal_credentials',
+          'signature',
+          'deposit_data_root',
+          'amount',
+        ],
+      },
+    },
+  },
+  required: ['ovmAddress', 'deposits'],
+};
+
+export const eoaDepositPayloadSchema = {
+  type: 'object',
+  properties: {
+    deposits: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        properties: {
+          pubkey: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{96}$',
+          },
+          withdrawal_credentials: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{64}$',
+            description: '32 bytes withdrawal credentials',
+          },
+          signature: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{192}$',
+            description: '96 bytes signature (190 hex chars + 0x prefix)',
+          },
+          deposit_data_root: {
+            type: 'string',
+            pattern: '^0x[a-fA-F0-9]{64}$', // 32 bytes = 64 hex chars + 0x prefix
+          },
+          amount: {
+            type: 'string',
+            pattern: '^[0-9]+$',
+          },
+        },
+        required: [
+          'pubkey',
+          'withdrawal_credentials',
+          'signature',
+          'deposit_data_root',
+          'amount',
+        ],
+      },
+    },
+  },
+  required: ['deposits'],
 };

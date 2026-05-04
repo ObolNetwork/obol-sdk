@@ -1,78 +1,191 @@
-import Ajv, { type ErrorObject } from 'ajv';
+import addFormats from 'ajv-formats';
+import addKeywords from 'ajv-keywords';
 import { parseUnits } from 'ethers';
 import {
+  type OVMRewardsSplitPayload,
+  type OVMTotalSplitPayload,
   type RewardsSplitPayload,
-  type SplitRecipient,
   type TotalSplitPayload,
-} from './types';
+  type OVMRequestWithdrawalPayload,
+} from './types.js';
+import Ajv from 'ajv';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-} from './constants';
+} from './constants.js';
 
-const validDepositAmounts = (data: boolean, deposits: string[]): boolean => {
-  let sum = 0;
-  // from ether togwei is same as from gwei to wei
-  const maxDeposit = Number(parseUnits('32', 'gwei'));
-  const minDeposit = Number(parseUnits('1', 'gwei'));
+export const VALID_DEPOSIT_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+  parseUnits('8', 'gwei').toString(),
+  parseUnits('256', 'gwei').toString(),
+];
 
-  for (const element of deposits) {
-    const amountInGWei = Number(element);
+export const VALID_NON_COMPOUNDING_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+];
 
-    if (
-      !Number.isInteger(amountInGWei) ||
-      amountInGWei > maxDeposit ||
-      amountInGWei < minDeposit
-    ) {
-      return false;
-    }
-    sum += amountInGWei;
-  }
-  if (sum / minDeposit !== 32) {
+const calculateTotalPercentage = (
+  recipients: Array<{ percentAllocation: number }>,
+): number => {
+  return recipients.reduce((acc, curr) => acc + curr.percentAllocation, 0);
+};
+
+const validateTotalPercentage = (totalPercentage: number): boolean => {
+  return totalPercentage === 100;
+};
+
+const validateTotalPercentageWithRAF = (
+  totalPercentage: number,
+  rafPercentage: number,
+): boolean => {
+  return totalPercentage + rafPercentage === 100;
+};
+
+const validateRewardsSplitRecipients = (
+  _: boolean,
+  data: RewardsSplitPayload,
+): boolean => {
+  const obolRAFSplit =
+    data?.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.splitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
+};
+
+const validateTotalSplitRecipients = (
+  _: boolean,
+  data: TotalSplitPayload,
+): boolean => {
+  const obolRAFSplit =
+    data.ObolRAFSplit ?? DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.splitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
+};
+
+const validateUniqueAddresses = (
+  _: boolean,
+  operators: Array<{ address: string }>,
+): boolean => {
+  if (!operators) {
     return false;
-  } else {
+  }
+
+  if (operators.length < 4) {
+    return false;
+  }
+
+  if (operators.every(op => op.address === '')) {
     return true;
   }
-};
 
-const validateSplitRecipients = (
-  _: boolean,
-  data: RewardsSplitPayload | TotalSplitPayload,
-): boolean => {
-  const splitPercentage = data.splitRecipients.reduce(
-    (acc: number, curr: SplitRecipient) => acc + curr.percentAllocation,
-    0,
-  );
-  const ObolRAFSplitParam = data.ObolRAFSplit
-    ? data.ObolRAFSplit
-    : 'principalRecipient' in data
-      ? DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT
-      : DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT;
-  return splitPercentage + ObolRAFSplitParam === 100;
-};
-
-export function validatePayload(
-  data: any,
-  schema: any,
-): ErrorObject[] | undefined | null | boolean {
-  const ajv = new Ajv();
-  ajv.addKeyword({
-    keyword: 'validDepositAmounts',
-    validate: validDepositAmounts,
-    errors: true,
-  });
-
-  ajv.addKeyword({
-    keyword: 'validateSplitRecipients',
-    validate: validateSplitRecipients,
-    errors: true,
-  });
-  const validate = ajv.compile(schema);
-  const isValid = validate(data);
-  if (!isValid) {
-    throw new Error(
-      `Schema compilation errors', ${validate.errors?.[0].message}`,
-    );
+  if (operators.some(op => op.address.length !== 42)) {
+    return false;
   }
-  return isValid;
+
+  const addresses = operators.map(op => op.address);
+  const uniqueAddresses = new Set(addresses);
+  const isUnique = uniqueAddresses.size === addresses.length;
+  return isUnique;
+};
+
+const validateOVMRewardsSplitRecipients = (
+  _: boolean,
+  data: OVMRewardsSplitPayload,
+): boolean => {
+  const obolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
+  const splitPercentage = calculateTotalPercentage(data.rewardSplitRecipients);
+  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
+};
+
+const validateOVMTotalSplitRecipients = (
+  _: boolean,
+  data: OVMTotalSplitPayload,
+): boolean => {
+  const splitPercentage = calculateTotalPercentage(
+    data.principalSplitRecipients,
+  );
+  return validateTotalPercentage(splitPercentage);
+};
+
+const validateOVMRequestWithdrawalPayload = (
+  _: boolean,
+  data: OVMRequestWithdrawalPayload,
+): boolean => {
+  if (!data.pubKeys || !data.amounts) {
+    return false;
+  }
+
+  if (data.pubKeys.length !== data.amounts.length) {
+    return false;
+  }
+
+  // // Validate that all amounts are at least 1,000,000 gwei
+  // const minAmount = BigInt(1000000);
+  // for (const amountStr of data.amounts) {
+  //   const minAmount = BigInt(1000000);
+  //   const amount = BigInt(amountStr);
+  //   if (amount < minAmount) {
+  //     return false;
+  //   }
+  // }
+
+  return true;
+};
+
+const ajv = new Ajv({
+  allErrors: true,
+  useDefaults: true,
+  strict: false,
+  $data: true,
+});
+addFormats(ajv);
+addKeywords(ajv, ['patternRequired']);
+
+ajv.addKeyword({
+  keyword: 'validateRewardsSplitRecipients',
+  validate: validateRewardsSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateTotalSplitRecipients',
+  validate: validateTotalSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateUniqueAddresses',
+  validate: validateUniqueAddresses,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMRewardsSplitRecipients',
+  validate: validateOVMRewardsSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMTotalSplitRecipients',
+  validate: validateOVMTotalSplitRecipients,
+  schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'validateOVMRequestWithdrawalPayload',
+  validate: validateOVMRequestWithdrawalPayload,
+  schemaType: 'boolean',
+});
+
+export function validatePayload<T>(data: unknown, schema: object): T {
+  const validate = ajv.compile<T>(schema);
+  const valid = validate(data);
+  if (!valid) {
+    const errors = validate.errors
+      ?.map(e => `${e.instancePath} ${e.message}`)
+      .join(', ');
+    throw new Error(`Validation failed: ${errors}`);
+  }
+  return data;
 }

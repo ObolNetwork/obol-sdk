@@ -15,32 +15,37 @@ jobs:
   releaseIt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-      
+
       - name: git config
         run: |
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-      
+
       - name: Setup node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: 18.x
-          cache: npm
+          node-version: '24'
+          cache: yarn
+          cache-dependency-path: yarn.lock
 
       - name: Install dependancies
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-scripts
 
       - name: Prepare release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TYPE_ARG: ${{ fromJSON('{"auto":"", "patch":"patch", "minor":"minor", "major":"major"}')[github.event.inputs.type] }}
         run: yarn run release $TYPE_ARG --ci --verbose --no-git.push --no-git.commit --no-git.tag --no-github
-      
+
       - name: Update e2e dependencies
-        working-directory: ./test/sdk-package-test
+        working-directory: ./test/sdk-package
+        run: yarn upgrade
+
+      - name: Update nextjs dependancies
+        working-directory: ./test/nextjs-test-app
         run: yarn upgrade
 
       - name: Show git status
@@ -49,10 +54,10 @@ jobs:
 
       - name: get-npm-version
         id: package-version
-        uses: martinbeentjes/npm-get-version-action@main
+        uses: martinbeentjes/npm-get-version-action@3cf273023a0dda27efcd3164bdfb51908dd46a5b # main
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@38e0b6e68b4c852a5500a94740f0e535e0d7ba54 # v4
         id: cpr
         with:
           branch: release

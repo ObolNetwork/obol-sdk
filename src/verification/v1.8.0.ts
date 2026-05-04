@@ -1,8 +1,8 @@
 import {
   type UintNumberByteLen,
   UintNumberType,
-} from '@chainsafe/ssz/lib/type/uint';
-import { strToUint8Array } from '../utils';
+} from '@chainsafe/ssz/lib/type/uint.js';
+import { strToUint8Array } from '../utils.js';
 import {
   builderRegistrationContainer,
   type creatorAddressWrapperType,
@@ -13,7 +13,7 @@ import {
   type operatorAddressWrapperType,
   type operatorContainerType,
   validatorsContainerType,
-} from './sszTypes';
+} from './sszTypes.js';
 import {
   ByteListType,
   ByteVectorType,
@@ -22,22 +22,19 @@ import {
   ListCompositeType,
   fromHexString,
 } from '@chainsafe/ssz';
-import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container';
+import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container.js';
 import {
   type ClusterDefinition,
   type ClusterLock,
   type DepositData,
-} from '../types';
+} from '../types.js';
 import {
   verifyBuilderRegistration,
   verifyDepositData,
   verifyNodeSignatures,
-} from './common';
-import {
-  aggregateSignatures,
-  verifyAggregate,
-  verifyMultiple,
-} from '@chainsafe/bls';
+} from './common.js';
+import { init } from '@chainsafe/bls';
+import * as bls from '@chainsafe/bls';
 
 // cluster definition
 type DefinitionFieldsV1X8 = {
@@ -234,7 +231,10 @@ export const hashClusterLockV1X8 = (cluster: ClusterLock): string => {
 };
 
 // DV verification
-export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
+export const verifyDVV1X8 = async (
+  clusterLock: ClusterLock,
+): Promise<boolean> => {
+  await init('herumi');
   const validators = clusterLock.distributed_validators;
   const pubShares = [];
   const pubKeys = [];
@@ -251,6 +251,23 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
       pubShares.push(fromHexString(element));
     }
 
+    // Check deposit amounts match exactly if they are defined
+    const depositAmounts = clusterLock.cluster_definition.deposit_amounts;
+    if (!!depositAmounts && depositAmounts !== null) {
+      const partialDepositAmounts = (
+        validator.partial_deposit_data as DepositData[]
+      ).map(d => d.amount);
+
+      // Check that partialDepositAmounts includes all unique elements of depositAmounts
+      const uniqueDepositAmounts = [...new Set(depositAmounts.map(Number))];
+      const partialAmountsSet = new Set(partialDepositAmounts.map(Number));
+
+      if (
+        !uniqueDepositAmounts.every(amount => partialAmountsSet.has(amount))
+      ) {
+        return false;
+      }
+    }
     // Deposit Data Verification
     for (const element of validator.partial_deposit_data as DepositData[]) {
       const depositData = element;
@@ -259,6 +276,7 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
         depositData as Partial<DepositData>,
         clusterLock.cluster_definition.validators[i].withdrawal_address,
         clusterLock.cluster_definition.fork_version,
+        clusterLock.cluster_definition.compounding,
       );
 
       if (!isValidDepositData) {
@@ -290,10 +308,10 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
   }
 
   // BLS signatures verification
-  const aggregateBLSSignature = aggregateSignatures(blsSignatures);
+  const aggregateBLSSignature = bls.bls.aggregateSignatures(blsSignatures);
 
   if (
-    !verifyMultiple(
+    !bls.bls.verifyMultiple(
       pubKeys,
       builderRegistrationAndDepositDataMessages,
       aggregateBLSSignature,
@@ -309,7 +327,7 @@ export const verifyDVV1X8 = (clusterLock: ClusterLock): boolean => {
 
   // signature_aggregate verification
   if (
-    !verifyAggregate(
+    !bls.bls.verifyAggregate(
       pubShares,
       fromHexString(clusterLock.lock_hash),
       fromHexString(clusterLock.signature_aggregate),
