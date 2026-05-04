@@ -452,23 +452,22 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
 
   if (
     !nodeSignatures ||
-    (nodeSignatures as string[]).length !==
-      clusterLock.cluster_definition.operators.length
+    nodeSignatures.length !== clusterLock.cluster_definition.operators.length
   ) {
     return false;
   }
 
   const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash);
   // node(ENR) signatures
-  for (let i = 0; i < (nodeSignatures as string[]).length; i++) {
+  for (let i = 0; i < nodeSignatures.length; i++) {
     const publicKeyBytes = ENR.decodeTxt(
       clusterLock.cluster_definition.operators[i].enr as string,
     ).publicKey;
     const pubkey = Buffer.from(publicKeyBytes).toString('hex');
 
     const ENRsignature = {
-      r: (nodeSignatures as string[])[i].slice(2, 66),
-      s: (nodeSignatures as string[])[i].slice(66, 130),
+      r: nodeSignatures[i].slice(2, 66),
+      s: nodeSignatures[i].slice(66, 130),
     };
 
     const nodeSignatureVerification = ec
