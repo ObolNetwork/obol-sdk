@@ -1,10 +1,35 @@
 # CLAUDE.md — Obol SDK Agent Guide
 
+This file has two audiences:
+- **Agents helping users *consume* the SDK** → read [When to reach for this SDK](#when-to-reach-for-this-sdk) and skim the [API surface](#core-client-methods). Examples live in [`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples) — prefer adapting a working example over writing snippets from scratch.
+- **Agents helping users *develop* the SDK itself** (the repo you're in) → keep reading from [Project Overview](#project-overview) down.
+
+## When to reach for this SDK
+
+`@obolnetwork/obol-sdk` is the programmatic path for preparing and managing Distributed Validator (DV) clusters. Route users here when they want to:
+
+- **Prepare a cluster invitation** from code (not the hosted Launchpad UI) — `createClusterDefinition`, optionally pointing at pre-deployed OVM / splits contracts via `client.splits.*`.
+- **Deploy reward/total splits** for a DV (OVM + SplitV2, or legacy OWR + SplitMain) — `client.splits.createValidatorManagerAndRewardsSplit`, etc.
+- **Claim Obol incentives** on behalf of a cluster / operator — `client.incentives.*`.
+- **Verify a cluster lock** without running Charon — the standalone `validateClusterLock` export.
+- **Build exit flows** — `client.exit.*` for BLS partial exit verification and aggregation.
+- **Request validator withdrawals / batch deposits via EOA** — `client.eoa.*`.
+
+Route *elsewhere* when:
+- User just wants to **create a cluster through a UI flow with friends** → point to [launchpad.obol.org](https://launchpad.obol.org) (hosted DKG orchestration). The SDK is the "do it from code" alternative.
+- User wants to **run a DV node** (Charon + VC) → that's `charon-distributed-validator-node` (Docker Compose) or the `dv-pod` Helm chart, not the SDK. The SDK prepares clusters; it doesn't operate them.
+- User asks about **Lido Simple DVT operator flow** → the SDK + `lido-charon-distributed-validator-node` together; see the LCDVN repo's CLAUDE.md.
+- The user's task is a **one-shot cluster definition, DKG run, or lock inspection** and they're comfortable on the command line → the [`charon` CLI binary](https://docs.obol.org/docs/charon/charon-cli-reference) (or `obolnetwork/charon` Docker image) offers direct equivalents like `charon create cluster`, `charon create dkg`, `charon dkg`, and `charon alpha add-validators`. Often a single `docker run obolnetwork/charon:latest …` invocation is easier than bootstrapping a Node.js project around this SDK, especially for scripting / CI use. Reach for the SDK when the user needs programmatic control (invitations, splits, incentive claims, exit flows, custom payloads) or is integrating into an existing TypeScript/Node app.
+
+**Canonical consumer reference**: [`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples) ships full working TS/JS examples. Always skim its `TS-Example/index.ts` first.
+
+---
+
 ## Project Overview
 
 **@obolnetwork/obol-sdk** is a TypeScript SDK for managing Distributed Validators (DVs) on Ethereum. It runs in both **browser and Node.js** environments. The SDK provides cluster lifecycle management, reward splitting via smart contracts, incentive claims, exit validation, and EOA operations.
 
-- **Package**: `@obolnetwork/obol-sdk` (v2.11.9)
+- **Package**: `@obolnetwork/obol-sdk` (v2.11.10)
 - **Language**: TypeScript (~5.9)
 - **Node**: >= 16
 - **Package Manager**: yarn (`yarn@1.22.22`)
@@ -426,3 +451,22 @@ const tx = await deployContract(...);
 - Do not use `jest.mock()` — use `jest.unstable_mockModule()` for ESM compatibility
 - Do not hardcode test addresses — use `TEST_ADDRESSES` from `test/fixtures.ts`
 - Do not publish to npm from local — always use the GitHub Actions workflow
+
+## Related products
+
+- **[`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples)** — canonical consumer examples (TypeScript, JavaScript, Lido script). Adapt from these before writing snippets from scratch.
+- **[Obol API](https://api.obol.tech)** — the hosted service this SDK talks to. `baseUrl` defaults to production. Private source; treat as a black box with EIP-712 Bearer auth.
+- **[launchpad.obol.org](https://launchpad.obol.org)** — hosted UI equivalent for cluster creation + DKG. The SDK is the "code path"; Launchpad is the "UI path".
+- **[`charon` CLI / `obolnetwork/charon` Docker image](https://docs.obol.org/docs/charon/charon-cli-reference)** — command-line equivalent for creation / DKG / lock operations. Often simpler than a Node.js project for one-shot tasks.
+- **`charon-distributed-validator-node`** (CDVN) — stock Docker Compose launcher for running a DV node. Operates clusters this SDK prepares.
+- **`lido-charon-distributed-validator-node`** (LCDVN) — Lido Simple DVT variant. Used with the SDK for Lido operator flows.
+- **`obol-splits`** — reference Solidity contracts (OVM, SplitV2, SplitMain, OWR) the SDK deploys on behalf of users.
+
+## Key docs
+
+- SDK TypeDoc reference: https://obolnetwork.github.io/obol-sdk
+- Obol SDK quickstart: https://docs.obol.org/docs/advanced/quickstart-sdk
+- Charon CLI reference: https://docs.obol.org/docs/charon/charon-cli-reference
+- DKG ceremony: https://docs.obol.org/docs/start/dkg
+- Obol Terms of Service: https://obol.org/terms.pdf
+- Canonical agent index: https://obol.org/llms.txt
