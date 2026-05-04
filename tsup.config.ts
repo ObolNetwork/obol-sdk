@@ -11,9 +11,11 @@ export default defineConfig([
     // Bundle ESM-only dependencies so they work in CJS
     noExternal: ['@chainsafe/enr'],
     // Keep @chainsafe/bls external - bundling breaks its WASM initialization
+    // @chainsafe/blst is Node-only (native bindings); never bundle
     // Also keep problematic TypeScript dependencies external
     external: [
       '@chainsafe/bls',
+      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
@@ -34,9 +36,11 @@ export default defineConfig([
     // Bundle ESM-only dependencies
     noExternal: ['@chainsafe/enr'],
     // Keep @chainsafe/bls external - bundling breaks its WASM initialization
+    // @chainsafe/blst is Node-only (native bindings); never bundle
     // Also keep problematic TypeScript dependencies external
     external: [
       '@chainsafe/bls',
+      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
@@ -57,6 +61,7 @@ export default defineConfig([
     // Only bundle @chainsafe/enr (ESM-only, breaks in CJS)
     noExternal: ['@chainsafe/enr'],
     // Externalize everything else - works like tsc
+    // @chainsafe/blst is Node-only (native bindings); never bundle for browser
     external: [
       'ajv',
       'ajv-formats',
@@ -67,6 +72,7 @@ export default defineConfig([
       'uuid',
       'dotenv',
       '@chainsafe/bls',
+      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',
