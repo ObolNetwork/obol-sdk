@@ -9,6 +9,11 @@ import { isValidClusterLock } from './verification/common.js';
  *
  * This is a standalone utility – it does **not** require a `Client` instance.
  *
+ * **Charon:** this covers cryptographic and structural checks in this SDK only.
+ * Charon adds further runtime/protocol rules. `true` here does not guarantee
+ * Charon will accept the lock; use Charon or its supported tooling as the
+ * final gate before operating a cluster.
+ *
  * @param lock - The cluster lock object (e.g. from {@link Client.getClusterLock}).
  * @param safeRpcUrl - Optional RPC URL for Safe Wallet signature verification.
  *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOODI` / etc. env vars.

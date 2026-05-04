@@ -120,7 +120,7 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 
 | Export | Description |
 |--------|-------------|
-| `validateClusterLock(lock, safeRpcUrl?)` | Verify a cluster lock's cryptographic validity |
+| `validateClusterLock(lock, safeRpcUrl?)` | Cryptographic verification (signatures, hashes). Does not mirror every Charon runtime check—passing here is necessary, not sufficient, for Charon. |
 
 ### Key Rules
 
