@@ -61,8 +61,13 @@
     "@chainsafe/ssz MUST stay at ^0.14.x — v0.15+ set type:module (ESM-only), same CJS constraint.",
     "@typescript-eslint/* stays at ^6.x — eslint-config-standard-with-typescript@43 requires plugin ^6; v8 causes peer conflict.",
     "uuid stays at ^9.x — v11+ sets type:module (ESM-only).",
-    "viem override pins a single resolved version to prevent duplicates across @safe-global/protocol-kit."
+    "viem override pins a single resolved version to prevent duplicates across @safe-global/protocol-kit.",
+    "Use Node 22 LTS locally (see .nvmrc): @chainsafe/blst (peer of @chainsafe/bls) often has no prebuild for brand-new Node majors; install then falls back to node-gyp and may fail without full Xcode CLT.",
+    "resolutions.tar: force patched node-tar (GHSA hardlink/symlink) for @chainsafe/blst's node-gyp; verify yarn install + tests after changes."
   ],
+  "resolutions": {
+    "tar": "^7.5.8"
+  },
   "overrides": {
     "viem": "2.48.7"
   },
