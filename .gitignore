@@ -12,6 +12,8 @@ dist
 
 .DS_Store
 
+.claude/
+
 .env
 
 docs
