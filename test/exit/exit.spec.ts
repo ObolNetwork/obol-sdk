@@ -21,17 +21,14 @@ await jest.unstable_mockModule('../../src/exits/ethUtils.js', () => ({
   getGenesisValidatorsRoot: jest.fn(),
 }));
 
-// Mock @chainsafe/bls
+// Mock blsUtils
 const mockBlsVerify = jest.fn();
 const mockAggregateSignatures = jest.fn();
 // @ts-expect-error - ESM mocking requires top-level await
-await jest.unstable_mockModule('@chainsafe/bls', () => ({
+await jest.unstable_mockModule('../../src/blsUtils.js', () => ({
   __esModule: true,
-  init: jest.fn().mockResolvedValue(undefined),
-  bls: {
-    verify: mockBlsVerify,
-    aggregateSignatures: mockAggregateSignatures,
-  },
+  blsVerify: mockBlsVerify,
+  blsAggregateSignatures: mockAggregateSignatures,
 }));
 
 // Mock elliptic with a proper EC constructor
@@ -50,11 +47,9 @@ await jest.unstable_mockModule('elliptic', () => ({
 }));
 
 const ethUtils = await import('../../src/exits/ethUtils.js');
-const bls = await import('@chainsafe/bls');
 const { Exit } = await import('../../src/exits/exit.js');
 
 const mockedEthUtils = ethUtils as jest.Mocked<typeof ethUtils>;
-const mockedBls = bls as any;
 
 // Setup default mock return values
 mockBlsVerify.mockReturnValue(true);

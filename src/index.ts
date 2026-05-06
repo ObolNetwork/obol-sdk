@@ -69,6 +69,7 @@ export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
 export { ObolSplits } from './splits/splits.js';
 export { EOA } from './eoa/eoa.js';
+export { blsVerify } from './blsUtils.js';
 
 /**
  * Primary entrypoint for the Obol SDK. Use this class to create, manage,

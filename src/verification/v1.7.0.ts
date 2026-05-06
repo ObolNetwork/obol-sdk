@@ -32,8 +32,11 @@ import {
   verifyDepositData,
   verifyNodeSignatures,
 } from './common.js';
-import { init } from '@chainsafe/bls';
-import * as bls from '@chainsafe/bls';
+import {
+  blsAggregateSignatures,
+  blsVerifyMultiple,
+  blsVerifyAggregate,
+} from '../blsUtils.js';
 
 // cluster definition
 type DefinitionFieldsV1X7 = {
@@ -220,7 +223,6 @@ export const hashClusterLockV1X7 = (cluster: ClusterLock): string => {
 export const verifyDVV1X7 = async (
   clusterLock: ClusterLock,
 ): Promise<boolean> => {
-  await init('herumi');
   const validators = clusterLock.distributed_validators;
 
   const pubShares = [];
@@ -277,10 +279,10 @@ export const verifyDVV1X7 = async (
   }
 
   // BLS signatures verification
-  const aggregateBLSSignature = bls.bls.aggregateSignatures(blsSignatures);
+  const aggregateBLSSignature = blsAggregateSignatures(blsSignatures);
 
   if (
-    !bls.bls.verifyMultiple(
+    !blsVerifyMultiple(
       pubKeys,
       builderRegistrationAndDepositDataMessages,
       aggregateBLSSignature,
@@ -296,7 +298,7 @@ export const verifyDVV1X7 = async (
 
   // signature_aggregate verification
   if (
-    !bls.bls.verifyAggregate(
+    !blsVerifyAggregate(
       pubShares,
       fromHexString(clusterLock.lock_hash),
       fromHexString(clusterLock.signature_aggregate),
