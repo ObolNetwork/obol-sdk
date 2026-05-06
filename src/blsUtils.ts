@@ -51,7 +51,5 @@ export function blsVerifyMultiple(
 }
 
 export function blsAggregateSignatures(signatures: Uint8Array[]): Uint8Array {
-  return ls.Signature.toBytes(
-    ls.aggregateSignatures(signatures),
-  ) as Uint8Array;
+  return ls.Signature.toBytes(ls.aggregateSignatures(signatures)) as Uint8Array;
 }
