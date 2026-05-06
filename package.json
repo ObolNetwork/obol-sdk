@@ -57,23 +57,19 @@
   },
   "//": [
     "PINNING NOTES:",
-    "@chainsafe/bls MUST stay at 6.0.3 — v7+ dropped CommonJS exports; this SDK outputs dist/cjs/ so upgrading would break the CJS build.",
     "@chainsafe/ssz MUST stay at ^0.14.x — v0.15+ set type:module (ESM-only), same CJS constraint.",
     "@typescript-eslint/* stays at ^6.x — eslint-config-standard-with-typescript@43 requires plugin ^6; v8 causes peer conflict.",
     "uuid stays at ^9.x — v11+ sets type:module (ESM-only).",
     "viem override pins a single resolved version to prevent duplicates across @safe-global/protocol-kit.",
-    "Use Node 22 LTS locally (see .nvmrc): @chainsafe/blst (peer of @chainsafe/bls) often has no prebuild for brand-new Node majors; install then falls back to node-gyp and may fail without full Xcode CLT.",
-    "resolutions.tar: force patched node-tar (GHSA hardlink/symlink) for @chainsafe/blst's node-gyp; verify yarn install + tests after changes."
+    "@noble/curves replaces @chainsafe/bls — pure-JS CJS+ESM, no native addon, same ETH2 BLS12-381 spec. See CHAINSAFE_MIGRATION_PLAN.md."
   ],
-  "resolutions": {
-    "tar": "^7.5.8"
-  },
+  "resolutions": {},
   "overrides": {
     "viem": "2.48.7"
   },
   "dependencies": {
-    "@chainsafe/bls": "6.0.3",
     "@chainsafe/enr": "6.0.1",
+    "@noble/curves": "2.2.0",
     "@chainsafe/ssz": "0.14.3",
     "@metamask/eth-sig-util": "8.2.0",
     "@safe-global/protocol-kit": "7.1.0",
@@ -89,7 +85,6 @@
     "uuid": "9.0.1"
   },
   "devDependencies": {
-    "@chainsafe/blst": "0.2.11",
     "@release-it/conventional-changelog": "11.0.0",
     "@types/elliptic": "6.4.18",
     "@types/jest": "29.5.14",

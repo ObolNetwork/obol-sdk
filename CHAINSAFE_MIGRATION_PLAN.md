@@ -12,78 +12,73 @@ Repos in scope:
 
 Packages in scope:
 
-- `@chainsafe/bls`
-- `@chainsafe/blst`
-- `@chainsafe/ssz`
-- `@chainsafe/enr`
-- `@chainsafe/discv5`
+- `@chainsafe/bls` → **replaced by `@noble/curves`**
+- `@chainsafe/blst` → **removed (was native peer dep of @chainsafe/bls)**
+- `@chainsafe/ssz` → **stays pinned at 0.14.x (see below)**
+- `@chainsafe/enr` → **already at latest (6.0.1) in obol-sdk**
+- `@chainsafe/discv5` → **stays pinned in obol-api (see below)**
 
 ---
 
-## Current State (What We Learned)
+## Resolved: @chainsafe/bls → @noble/curves
 
-### Module format reality
+**Status: Done in obol-sdk.**
 
-- Newer ChainSafe releases are increasingly ESM-first (or ESM-only).
-- `obol-sdk` still ships dual output including **CJS** (`dist/cjs`).
-- `obol-api` (Nest) is still effectively CJS-oriented in runtime/build assumptions.
-- `dv-launchpad` is a frontend bundle and can usually consume ESM, but has browser/runtime constraints.
+`@noble/curves` (by Paul Miller) is a pure-TypeScript BLS12-381 implementation that:
 
-### Practical implication
+- Ships both CJS (`./bls12-381.js`) and ESM (`./esm/bls12-381.js`) — no module format problem
+- Has no native addon, no WASM — no node-gyp, no platform rebuild issues in CI
+- Is independently audited
+- Is used by ethers, viem, wagmi, and the wider Ethereum tooling stack
+- Implements the same ETH2 BLS spec (NUL DST, G1 pubkeys / G2 signatures) — cryptographically compatible with existing signatures
 
-If we "upgrade all ChainSafe packages to latest" immediately in all repos, we are likely to break `obol-sdk` and `obol-api` build/runtime compatibility due to CJS/ESM mismatch.
+### Why this works without an ESM migration
 
-### Runtime behavior and warnings
+`@noble/curves` is CJS-compatible. The installed `./bls12-381.js` is `"use strict"; exports...` CommonJS.
+This means:
+- `obol-sdk` CJS build continues working
+- `obol-api` (NestJS/CJS) can use it too — separate PR
+- `dv-launchpad` frontend can use it (it has the ESM build too)
 
-In browser contexts (especially `dv-launchpad`), crypto/discovery dependencies can log warnings when native/server paths are unavailable. This is expected unless imports and implementation selection are tightly controlled.
+### Operations mapped
 
----
+| @chainsafe/bls | @noble/curves (via longSignatures) |
+|---|---|
+| `await init('herumi')` | Not needed (fully synchronous) |
+| `bls.bls.verify(pk, msg, sig)` | `blsVerify(pk, msg, sig)` |
+| `bls.bls.verifyAggregate(pks, msg, sig)` | `blsVerifyAggregate(pks, msg, sig)` |
+| `bls.bls.verifyMultiple(pks, msgs, sig)` | `blsVerifyMultiple(pks, msgs, sig)` |
+| `bls.bls.aggregateSignatures(sigs)` | `blsAggregateSignatures(sigs)` |
 
-## blst / herumi / wasm / native: What It Means
-
-`@chainsafe/bls` is an abstraction over multiple backends:
-
-- **blst-native**
-  - Uses native addon bindings.
-  - Fastest in Node/server.
-  - Can be fragile in CI/dev machines if prebuilds are missing and node-gyp toolchain is not ready.
-- **herumi / wasm-backed path**
-  - More portable across environments, including browser-compatible flows.
-  - Slower than native in many cases.
-  - Often used as fallback when native cannot load.
-- **switchable implementation layer**
-  - Package chooses an implementation depending on environment and availability.
-
-Why we see logs in frontend:
-
-- Browser cannot use native Node addons.
-- Bundlers may include paths that are irrelevant in browser runtime, causing warnings/noise.
-- Incorrect import boundaries (Node-only code in client bundles) can crash at runtime.
+All wrappers live in `src/blsUtils.ts`.
 
 ---
 
-## Why Dynamic Imports May Not "Solve It"
+## Not changing: @chainsafe/ssz
 
-Dynamic import can help only when used correctly and with static bundling constraints in mind.
+**Status: Stays pinned at 0.14.x.**
 
-### Common pitfalls
+`@chainsafe/ssz` 1.x sets `type: "module"` — it is ESM-only. Upgrading it requires:
+- Dropping CJS output from `obol-sdk` (breaking change for consumers)
+- Full NestJS ESM migration in `obol-api` (multi-week project)
 
-- Dynamic importing a module that still gets statically pulled by another import path.
-- Dynamic importing Node-only modules from client components.
-- Assuming runtime conditional import prevents bundler from analyzing or bundling server-only dependencies.
-- Mixing server and client module graphs in Next.js without explicit boundaries.
+SSZ is a **serialization library for protocol-defined types** (DepositData, VoluntaryExit, etc.).
+The types are specified by the Ethereum consensus spec and do not change. There is no security
+concern from staying on 0.14.3 — it is stable and correct.
 
-### What is needed for dynamic import to be useful
+If we ever do a dedicated ESM migration program, SSZ would upgrade as part of that.
 
-- Clear environment split:
-  - server-only files (Node-only deps),
-  - client-safe files (browser-safe deps).
-- No accidental re-export chain that pulls server-only code into client bundle.
-- For Next.js:
-  - keep Node-only modules in server-side contexts,
-  - avoid importing them from client components/hooks.
+---
 
-Dynamic import is a tool, not a guarantee. Correct module boundaries are the real fix.
+## Not changing: @chainsafe/discv5 in obol-api
+
+**Status: Stays at 0.5.x in obol-api.**
+
+`obol-api` uses `@chainsafe/discv5` only to get `ENR` for parsing.
+`@chainsafe/enr` 6.x is ESM-only — same problem as bls 7+. Using it in obol-api would break the
+NestJS/CJS build. The discv5 0.5.1 transitive dep already provides enr 5.x which is CJS-compatible.
+
+**dv-launchpad** can use `@chainsafe/enr` directly (frontend/ESM — fine).
 
 ---
 
@@ -91,7 +86,7 @@ Dynamic import is a tool, not a guarantee. Correct module boundaries are the rea
 
 ### `obol-sdk`
 
-Not recommended to switch to ESM-only immediately.
+Not recommended to switch to ESM-only.
 
 Reason:
 
@@ -100,93 +95,46 @@ Reason:
 
 Recommendation:
 
-- Keep dual output during transition.
-- Plan ESM-only as a major-version project with explicit migration guide.
+- Keep dual output. Plan ESM-only as a major-version project with explicit migration guide if needed.
 
 ### `obol-api`
 
-Possible to move toward ESM, but not as part of quick ChainSafe bumps.
-
-Reason:
-
-- NestJS apps can be run in ESM, but this impacts tooling, tsconfig, test setup, runtime loader assumptions, and imports across the codebase.
-
-Recommendation:
-
-- Do not mix "ChainSafe upgrades" and "CJS->ESM migration" in one PR.
-- If desired, execute ESM migration as a dedicated stream.
+Possible to move toward ESM, but treat as a dedicated separate project — not bundled with dependency bumps.
 
 ### `dv-launchpad`
 
-ESM-only packages are acceptable in principle, but browser safety still matters.
-
-Reason:
-
-- Frontend bundling can consume ESM.
-- Node-only transitive behavior can still leak and break client runtime if imports are not isolated.
-
-Recommendation:
-
-- Keep strict client/server import hygiene.
-- Validate with `next build` and Playwright before concluding migration safety.
+ESM-only packages are acceptable. Keep strict client/server import hygiene.
+Validate with `next build` and Playwright before concluding migration safety.
 
 ---
 
-## Recommended Strategy (Phased)
+## Remaining Gap
 
-## Phase 0 - Baseline freeze
+The only remaining ChainSafe debt after the BLS replacement:
 
-- Keep known-good pins in `obol-sdk` and `obol-api`.
-- Document constraints (this file + package comments).
-- Ensure baseline build/tests are green.
+| Package | Repo | Current | Latest | Blocker |
+|---|---|---|---|---|
+| `@chainsafe/ssz` | obol-sdk, obol-api | 0.14.3 | 1.4.0 | ESM-only in 1.x |
+| `@chainsafe/ssz` | dv-launchpad | 0.9.4 | 1.4.0 | ESM-only in 1.x; also behind obol-sdk |
+| `@chainsafe/discv5` | obol-api | 0.5.1 | latest | ESM-only in newer versions |
 
-## Phase 1 - Low-risk experiments in `dv-launchpad`
+The dv-launchpad SSZ version (0.9.4) should be caught up to 0.14.3 for consistency with the other
+repos — even if we are not going to 1.x yet. This is a safe same-API bump.
 
-- Test newer ChainSafe versions where frontend can tolerate ESM better.
-- Capture real breakages and required mitigations.
-- Confirm Playwright + Next build stability.
+If the team decides to do a dedicated ESM migration:
+1. Migrate `obol-api` to ESM (NestJS supports it, but impacts tooling and all imports)
+2. Drop CJS output from `obol-sdk` (major version bump, migration guide required)
+3. Upgrade `@chainsafe/ssz` to 1.x in both repos
 
-## Phase 2 - `obol-sdk` compatibility track
-
-- Keep CJS compatibility while testing incremental upgrades.
-- Evaluate whether each package version still works with dual build output.
-- Add compatibility wrappers where necessary.
-
-## Phase 3 - `obol-api` consumer alignment
-
-- Consume tested SDK output.
-- Fix import/tooling mismatches.
-- Validate lint + test + CI.
-
-## Phase 4 - Optional ESM migration program
-
-- If desired, run dedicated migration:
-  - define target module policy per repo,
-  - update build + test + runtime config,
-  - publish migration notes for consumers.
+Treat that as a separate tracked project with its own cost/benefit analysis.
 
 ---
 
-## Practical Rules During Experiments
+## Practical Rules During Dependency Changes
 
-- Upgrade one dependency family step at a time, not all at once.
+- Upgrade one dependency family at a time, not all at once.
 - Keep PRs small and reversible.
-- Separate concerns:
-  - dependency bump PRs
-  - module-system migration PRs
-  - test/runtime stabilization PRs
 - Verify each step with:
   - `obol-sdk`: `yarn build && yarn test`
   - `obol-api`: lint + tests
   - `dv-launchpad`: build + Playwright
-
----
-
-## Current Recommendation Summary
-
-1. Do **not** force latest ChainSafe across all repos immediately.
-2. Keep `obol-sdk` and `obol-api` on CJS-compatible line for now.
-3. Use `dv-launchpad` for first controlled ESM-oriented experiments.
-4. Treat ESM-only migration as a dedicated project if we choose to do it.
-5. Revisit full latest-version adoption after compatibility track is complete.
-

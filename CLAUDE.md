@@ -109,7 +109,7 @@ Uses **tsup** to produce three outputs:
 Types are generated separately via `tsc --emitDeclarationOnly` → `dist/types/`.
 
 Key build notes:
-- `@chainsafe/bls` is kept external (WASM initialization issues when bundled)
+- `@noble/curves` is bundled in the browser build (pure JS, safe to bundle); kept external in Node builds
 - `ethers` is kept external (~2MB, consumers already have it)
 - `@chainsafe/enr` is bundled (ESM-only package)
 - Browser build defines `process.env` as empty and `global` as `globalThis`
@@ -367,7 +367,7 @@ DEL_AUTH=...      # API deletion auth token
 | Package | Purpose |
 |---------|---------|
 | `ethers` ^6 | Ethereum wallet, provider, contract interactions |
-| `@chainsafe/bls` | BLS signature verification |
+| `@noble/curves` | BLS12-381 signature verification (replaces @chainsafe/bls) |
 | `@chainsafe/ssz` | SSZ serialization for consensus types |
 | `@chainsafe/enr` | Ethereum Node Record parsing |
 | `@safe-global/protocol-kit` | Safe multisig wallet integration |
@@ -379,7 +379,7 @@ DEL_AUTH=...      # API deletion auth token
 When adding a new dependency:
 - Use the **latest stable exact version** (e.g. `"some-lib": "3.2.1"` not `"^3.2.1"`)
 - Verify compatibility with both Node.js and browser build targets — some packages are Node-only
-- Check for peer dependency conflicts with `ethers ^6`, `@chainsafe/bls`, and `typescript ~5.9`
+- Check for peer dependency conflicts with `ethers ^6`, `@noble/curves`, and `typescript ~5.9`
 - Run `yarn build` and `yarn test` after adding to confirm all three build outputs still work
 
 ## Release and Publishing

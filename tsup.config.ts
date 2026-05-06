@@ -8,14 +8,10 @@ export default defineConfig([
     dts: false,
     outDir: 'dist/cjs/src',
     sourcemap: true,
-    // Bundle ESM-only dependencies so they work in CJS
-    noExternal: ['@chainsafe/enr'],
-    // Keep @chainsafe/bls external - bundling breaks its WASM initialization
-    // @chainsafe/blst is Node-only (native bindings); never bundle
-    // Also keep problematic TypeScript dependencies external
+    // Bundle ESM-only deps and @noble/curves (avoids ESM resolution issues in CJS consumers)
+    noExternal: ['@chainsafe/enr', '@noble/curves', '@noble/hashes'],
+    // Keep large or problematic dependencies external
     external: [
-      '@chainsafe/bls',
-      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
@@ -33,14 +29,10 @@ export default defineConfig([
     outDir: 'dist/esm/src',
     sourcemap: true,
     outExtension: () => ({ js: '.js' }), // Use .js instead of .mjs
-    // Bundle ESM-only dependencies
-    noExternal: ['@chainsafe/enr'],
-    // Keep @chainsafe/bls external - bundling breaks its WASM initialization
-    // @chainsafe/blst is Node-only (native bindings); never bundle
-    // Also keep problematic TypeScript dependencies external
+    // Bundle ESM-only deps and @noble/curves
+    noExternal: ['@chainsafe/enr', '@noble/curves', '@noble/hashes'],
+    // Keep large or problematic dependencies external
     external: [
-      '@chainsafe/bls',
-      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
@@ -58,10 +50,9 @@ export default defineConfig([
     outDir: 'dist/browser/src',
     sourcemap: true,
     outExtension: () => ({ js: '.js' }),
-    // Only bundle @chainsafe/enr (ESM-only, breaks in CJS)
-    noExternal: ['@chainsafe/enr'],
-    // Externalize everything else - works like tsc
-    // @chainsafe/blst is Node-only (native bindings); never bundle for browser
+    // Bundle @chainsafe/enr (ESM-only) and @noble/curves (pure JS, safe to bundle)
+    noExternal: ['@chainsafe/enr', '@noble/curves', '@noble/hashes'],
+    // Externalize everything else
     external: [
       'ajv',
       'ajv-formats',
@@ -71,8 +62,6 @@ export default defineConfig([
       'semver',
       'uuid',
       'dotenv',
-      '@chainsafe/bls',
-      '@chainsafe/blst',
       '@chainsafe/ssz',
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',
