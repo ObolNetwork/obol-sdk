@@ -530,6 +530,13 @@ export const isValidClusterLock = async (
       return false;
     }
 
+    const dvKeys = clusterLock.distributed_validators.map(
+      v => v.distributed_public_key,
+    );
+    if (new Set(dvKeys).size !== dvKeys.length) {
+      return false;
+    }
+
     const isValidLockData = await verifyLockData(clusterLock);
     if (!isValidLockData) {
       return false;

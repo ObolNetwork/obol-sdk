@@ -279,16 +279,32 @@ describe('Cluster Client without a signer', () => {
     expect(isValidLock).toEqual(false);
   });
 
+  test('validateCluster should return false when distributed public keys are not unique', async () => {
+    const tamperedLock = structuredClone(clusterLockV1X10);
+    const validator0 = tamperedLock.distributed_validators[0];
+
+    if (!validator0) {
+      throw new Error('Fixture requires at least one distributed validator');
+    }
+
+    // Duplicate the validator entry — same distributed key appears twice.
+    tamperedLock.distributed_validators.push(structuredClone(validator0));
+
+    const isValidLock: boolean = await validateClusterLock(tamperedLock);
+    expect(isValidLock).toEqual(false);
+  });
+
   test('validateCluster should return false when public shares do not reconstruct distributed public key', async () => {
     const tamperedLock = structuredClone(clusterLockV1X10);
     const validator0 = tamperedLock.distributed_validators[0];
-    const validator1 = tamperedLock.distributed_validators[1];
 
-    if (!validator0 || !validator1) {
-      throw new Error('Fixture requires at least two distributed validators');
+    if (!validator0) {
+      throw new Error('Fixture requires at least one distributed validator');
     }
 
-    validator0.public_shares = [...validator1.public_shares];
+    // Reverse share order — shares remain unique but map to wrong positional
+    // indices, so Lagrange interpolation at x=0 yields a different key.
+    validator0.public_shares = [...validator0.public_shares].reverse();
 
     const isValidLock: boolean = await validateClusterLock(tamperedLock);
     expect(isValidLock).toEqual(false);
