@@ -309,6 +309,26 @@ describe('Cluster Client without a signer', () => {
     const isValidLock: boolean = await validateClusterLock(tamperedLock);
     expect(isValidLock).toEqual(false);
   });
+
+  test('validateCluster should return false when an extra share does not lie on the polynomial', async () => {
+    const tamperedLock = structuredClone(clusterLockV1X10);
+    const validator0 = tamperedLock.distributed_validators[0];
+
+    if (!validator0) {
+      throw new Error('Fixture requires at least one distributed validator');
+    }
+
+    // Keep first threshold (3) shares intact so the main reconstruction passes;
+    // replace the extra share with a different valid G1 point (the DV key itself)
+    // which is not on the share polynomial.
+    validator0.public_shares = [
+      ...validator0.public_shares.slice(0, 3),
+      validator0.distributed_public_key,
+    ];
+
+    const isValidLock: boolean = await validateClusterLock(tamperedLock);
+    expect(isValidLock).toEqual(false);
+  });
 });
 
 /**
