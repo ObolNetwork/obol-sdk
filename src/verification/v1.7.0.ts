@@ -34,6 +34,7 @@ import {
 } from './common.js';
 import {
   blsAggregateSignatures,
+  blsRecoverDistributedPubkeyFromShares,
   blsVerifyMultiple,
   blsVerifyAggregate,
 } from '../blsUtils.js';
@@ -235,10 +236,29 @@ export const verifyDVV1X7 = async (
     const validator = validators[i];
     const validatorPublicShares = validator.public_shares;
     const distributedPublicKey = validator.distributed_public_key;
+    const threshold = clusterLock.cluster_definition.threshold;
+
+    const validatorPublicSharesBytes = validatorPublicShares.map(share =>
+      fromHexString(share),
+    );
+    const recoveredDistributedPubkey = blsRecoverDistributedPubkeyFromShares(
+      validatorPublicSharesBytes,
+      threshold,
+    );
+    if (!recoveredDistributedPubkey) {
+      return false;
+    }
+    if (
+      !Buffer.from(recoveredDistributedPubkey).equals(
+        Buffer.from(fromHexString(distributedPublicKey)),
+      )
+    ) {
+      return false;
+    }
 
     // Needed in signature_aggregate verification
-    for (const element of validatorPublicShares) {
-      pubShares.push(fromHexString(element));
+    for (const share of validatorPublicSharesBytes) {
+      pubShares.push(share);
     }
 
     // Deposit Data Verification
