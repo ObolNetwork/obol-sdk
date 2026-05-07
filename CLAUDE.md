@@ -399,7 +399,7 @@ Version bumping follows semantic versioning:
 ## CI/CD
 
 - **PR checks**: lint, prettier, build, unit tests, E2E tests (GitHub Actions)
-- **Node version in CI**: 22.x
+- **Node version in CI**: 24.x
 
 ## Common Patterns When Modifying Code
 
