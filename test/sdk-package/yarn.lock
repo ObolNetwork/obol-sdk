@@ -773,7 +773,7 @@
   integrity sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==
 
 "@obolnetwork/obol-sdk@file:../..":
-  version "2.11.10"
+  version "2.11.11"
   dependencies:
     "@chainsafe/enr" "6.0.1"
     "@chainsafe/ssz" "0.14.3"
