@@ -127,7 +127,10 @@ export function blsVerifyExtraShares(
       const shares = [...baseShares, pubshares[i]];
       const indices = [...baseIndices, BigInt(i + 1)];
       const recovered = blsRecoverWithIndices(shares, indices);
-      if (!recovered || !recovered.every((b, j) => b === distributedPubkey[j])) {
+      if (
+        !recovered ||
+        !recovered.every((b, j) => b === distributedPubkey[j])
+      ) {
         return false;
       }
     }
