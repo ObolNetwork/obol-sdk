@@ -81,27 +81,58 @@ export function blsHasIdentityShare(pubshares: Uint8Array[]): boolean {
   }
 }
 
+function blsRecoverWithIndices(
+  shares: Uint8Array[],
+  indices: bigint[],
+): Uint8Array | null {
+  try {
+    let recovered = bls12_381.G1.Point.ZERO;
+    for (let i = 0; i < shares.length; i++) {
+      const point = bls12_381.G1.Point.fromBytes(shares[i]);
+      const coeff = lagrangeCoeffAtZero(indices[i], indices);
+      recovered = recovered.add(point.multiply(coeff));
+    }
+    return recovered.toBytes() as Uint8Array;
+  } catch {
+    return null;
+  }
+}
+
 // Recover validator distributed pubkey from threshold public shares using
-// Lagrange interpolation in G1 at x=0.
+// Lagrange interpolation in G1 at x=0. Shares are assumed to be at 1-based
+// consecutive positions (index 1, 2, ..., threshold).
 export function blsRecoverDistributedPubkeyFromShares(
   pubshares: Uint8Array[],
   threshold: number,
 ): Uint8Array | null {
+  if (threshold <= 0 || pubshares.length < threshold) return null;
+  const selected = pubshares.slice(0, threshold);
+  const indices = selected.map((_, i) => BigInt(i + 1));
+  return blsRecoverWithIndices(selected, indices);
+}
+
+// Verify that every share beyond the first threshold lies on the same
+// polynomial as the first threshold shares. Replaces the last share of the
+// threshold subset with the extra share (keeping its real 1-based index) and
+// checks the reconstruction still produces the same distributed key.
+export function blsVerifyExtraShares(
+  pubshares: Uint8Array[],
+  threshold: number,
+  distributedPubkey: Uint8Array,
+): boolean {
   try {
-    if (threshold <= 0 || pubshares.length < threshold) return null;
-
-    const selectedShares = pubshares.slice(0, threshold);
-    const indices = selectedShares.map((_, i) => BigInt(i + 1));
-
-    let recovered = bls12_381.G1.Point.ZERO;
-    for (let i = 0; i < selectedShares.length; i++) {
-      const point = bls12_381.G1.Point.fromBytes(selectedShares[i]);
-      const coeff = lagrangeCoeffAtZero(indices[i], indices);
-      recovered = recovered.add(point.multiply(coeff));
+    const baseShares = pubshares.slice(0, threshold - 1);
+    const baseIndices = baseShares.map((_, i) => BigInt(i + 1));
+    for (let i = threshold; i < pubshares.length; i++) {
+      const shares = [...baseShares, pubshares[i]];
+      const indices = [...baseIndices, BigInt(i + 1)];
+      const recovered = blsRecoverWithIndices(shares, indices);
+      if (!recovered || !recovered.every((b, j) => b === distributedPubkey[j])) {
+        return false;
+      }
     }
-
-    return recovered.toBytes() as Uint8Array;
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
