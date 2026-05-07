@@ -1,7 +1,6 @@
 import { ENR } from '@chainsafe/enr';
 import * as elliptic from 'elliptic';
-import { init } from '@chainsafe/bls';
-import * as bls from '@chainsafe/bls';
+import { blsVerify, blsAggregateSignatures } from '../blsUtils.js';
 import {
   ByteVectorType,
   ContainerType,
@@ -192,7 +191,6 @@ export class Exit {
     forkVersion: string,
     genesisValidatorsRootString: string,
   ): Promise<boolean> {
-    await init('herumi');
     const capellaForkVersionString = await getCapellaFork(forkVersion);
     if (!capellaForkVersionString) {
       throw new Error(
@@ -215,7 +213,7 @@ export class Exit {
       partialExitMessageBuffer,
     );
 
-    return bls.bls.verify(
+    return blsVerify(
       fromHexString(publicShareKey),
       messageSigningRoot,
       fromHexString(signedExitMessage.signature),
@@ -638,11 +636,8 @@ export class Exit {
       return signature;
     });
 
-    await init('herumi');
-
     // Aggregate signatures (equivalent to tbls.ThresholdAggregate in Go)
-    // Note: @chainsafe/bls doesn't have explicit threshold aggregation, but ordering should be preserved
-    const fullSig = bls.bls.aggregateSignatures(rawSignatures);
+    const fullSig = blsAggregateSignatures(rawSignatures);
 
     return {
       public_key: exitBlob.public_key,
