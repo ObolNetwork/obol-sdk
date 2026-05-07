@@ -28,7 +28,6 @@ import {
 import { verifyDepositData } from './common.js';
 import {
   blsAggregateSignatures,
-  blsHasIdentityShare,
   blsRecoverDistributedPubkeyFromShares,
   blsVerifyExtraShares,
   blsVerifyMultiple,
@@ -224,9 +223,6 @@ export const verifyDVV1X6 = async (
     const validatorPublicSharesBytes = validatorPublicShares.map(share =>
       fromHexString(share),
     );
-    if (blsHasIdentityShare(validatorPublicSharesBytes)) {
-      return false;
-    }
     const recoveredDistributedPubkey = blsRecoverDistributedPubkeyFromShares(
       validatorPublicSharesBytes,
       threshold,

@@ -66,21 +66,6 @@ function lagrangeCoeffAtZero(shareIndex: bigint, indices: bigint[]): bigint {
   return Fr.mul(num, Fr.inv(den));
 }
 
-// Returns true if any share is the BLS G1 identity point (secret key = 0).
-// Must be called on ALL shares before reconstruction — an identity share not
-// used in the threshold reconstruction is invisible to the Lagrange check but
-// still silently excluded from the signature_aggregate, letting an attacker
-// reduce the real threshold without failing verification.
-export function blsHasIdentityShare(pubshares: Uint8Array[]): boolean {
-  try {
-    return pubshares.some(s =>
-      bls12_381.G1.Point.fromBytes(s).equals(bls12_381.G1.Point.ZERO),
-    );
-  } catch {
-    return true;
-  }
-}
-
 function blsRecoverWithIndices(
   shares: Uint8Array[],
   indices: bigint[],
