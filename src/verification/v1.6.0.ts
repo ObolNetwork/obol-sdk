@@ -200,6 +200,8 @@ export const verifyDVV1X6 = async (
   clusterLock: ClusterLock,
 ): Promise<boolean> => {
   const validators = clusterLock.distributed_validators;
+  const operatorCount = clusterLock.cluster_definition.operators.length;
+  const threshold = clusterLock.cluster_definition.threshold;
   const pubShares = [];
   const pubKeys = [];
   const builderRegistrationAndDepositDataMessages = [];
@@ -209,7 +211,13 @@ export const verifyDVV1X6 = async (
     const validator = validators[i];
     const validatorPublicShares = validator.public_shares;
     const distributedPublicKey = validator.distributed_public_key;
-    const threshold = clusterLock.cluster_definition.threshold;
+    if (validatorPublicShares.length !== operatorCount) {
+      return false;
+    }
+    const uniqueShareCount = new Set(validatorPublicShares).size;
+    if (uniqueShareCount !== validatorPublicShares.length) {
+      return false;
+    }
 
     const validatorPublicSharesBytes = validatorPublicShares.map(share =>
       fromHexString(share),
