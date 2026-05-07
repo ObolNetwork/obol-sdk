@@ -34,6 +34,7 @@ import {
 } from './common.js';
 import {
   blsAggregateSignatures,
+  blsHasIdentityShare,
   blsRecoverDistributedPubkeyFromShares,
   blsVerifyMultiple,
   blsVerifyAggregate,
@@ -249,6 +250,9 @@ export const verifyDVV1X7 = async (
     const validatorPublicSharesBytes = validatorPublicShares.map(share =>
       fromHexString(share),
     );
+    if (blsHasIdentityShare(validatorPublicSharesBytes)) {
+      return false;
+    }
     const recoveredDistributedPubkey = blsRecoverDistributedPubkeyFromShares(
       validatorPublicSharesBytes,
       threshold,
