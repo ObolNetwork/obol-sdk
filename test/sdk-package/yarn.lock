@@ -772,24 +772,9 @@
   resolved "https://registry.yarnpkg.com/@noble/hashes/-/hashes-2.2.0.tgz#22da1d16a469954fce877055d559900a6c73b63b"
   integrity sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==
 
-"@obolnetwork/obol-sdk@file:../..":
-  version "2.11.11"
-  dependencies:
-    "@chainsafe/enr" "6.0.1"
-    "@chainsafe/ssz" "0.14.3"
-    "@metamask/eth-sig-util" "8.2.0"
-    "@noble/curves" "2.2.0"
-    "@safe-global/protocol-kit" "7.1.0"
-    "@safe-global/types-kit" "3.1.0"
-    ajv "8.20.0"
-    ajv-formats "3.0.1"
-    ajv-keywords "5.1.0"
-    cross-fetch "4.1.0"
-    dotenv "17.4.2"
-    elliptic "6.6.1"
-    ethers "6.16.0"
-    semver "7.7.4"
-    uuid "9.0.1"
+"@obolnetwork/obol-sdk@link:../..":
+  version "0.0.0"
+  uid ""
 
 "@paralleldrive/cuid2@^2.2.2":
   version "2.3.1"
