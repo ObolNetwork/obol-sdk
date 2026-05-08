@@ -2,18 +2,42 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.11](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.10...v2.11.11)
+
+- Chore/update dependencies [`#198`](https://github.com/ObolNetwork/obol-sdk/pull/198)
+- chore: update dependencies to latest stable versions [`#193`](https://github.com/ObolNetwork/obol-sdk/pull/193)
+- fix: pin GitHub Actions to SHA for supply chain security [`#183`](https://github.com/ObolNetwork/obol-sdk/pull/183)
+- fix: enforce semantic commits in Renovate config [`#186`](https://github.com/ObolNetwork/obol-sdk/pull/186)
+- fix: enforce node signatures count equals operators count in validate… [`#189`](https://github.com/ObolNetwork/obol-sdk/pull/189)
+- Update actions/github-script action to v9 [`#187`](https://github.com/ObolNetwork/obol-sdk/pull/187)
+- Updates claude.md to consider outside parties [`#188`](https://github.com/ObolNetwork/obol-sdk/pull/188)
+- Update peter-evans/create-pull-request action to v8 [`#175`](https://github.com/ObolNetwork/obol-sdk/pull/175)
+- Update ffurrer2/extract-release-notes action to v3 [`#169`](https://github.com/ObolNetwork/obol-sdk/pull/169)
+- Update actions/checkout action to v6 [`#168`](https://github.com/ObolNetwork/obol-sdk/pull/168)
+- Update actions/setup-node action to v6 [`#158`](https://github.com/ObolNetwork/obol-sdk/pull/158)
+- Update README.md [`#64`](https://github.com/ObolNetwork/obol-sdk/pull/64)
+- Update ffurrer2/extract-release-notes action to v2.3.0 [`#106`](https://github.com/ObolNetwork/obol-sdk/pull/106)
+- fix: use Node 24 with --ignore-scripts for OIDC publishing [`#192`](https://github.com/ObolNetwork/obol-sdk/pull/192)
+- fix: use Node 22.x for @chainsafe/blst compatibility [`#191`](https://github.com/ObolNetwork/obol-sdk/pull/191)
+- chore: migrate npm publishing to OIDC trusted publishers [`#190`](https://github.com/ObolNetwork/obol-sdk/pull/190)
+- update claude.md [`#184`](https://github.com/ObolNetwork/obol-sdk/pull/184)
+- chore: use yarn cache in release-pr workflow [`248de15`](https://github.com/ObolNetwork/obol-sdk/commit/248de15f0f942b174570f62bea2363698ec06a3a)
+
 #### [v2.11.10](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.9...v2.11.10)
 
+> 16 March 2026
+
+- chore(release): v2.11.10 [`#182`](https://github.com/ObolNetwork/obol-sdk/pull/182)
 - remove holesky [`#181`](https://github.com/ObolNetwork/obol-sdk/pull/181)
 - improve sdk docs and error handling [`#180`](https://github.com/ObolNetwork/obol-sdk/pull/180)
-
-#### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.8...v2.11.9)
-
-> 30 January 2026
-
 - chore(release): v2.11.9 [`#179`](https://github.com/ObolNetwork/obol-sdk/pull/179)
 - support delegated EOA [`#178`](https://github.com/ObolNetwork/obol-sdk/pull/178)
 - fix docs [`#176`](https://github.com/ObolNetwork/obol-sdk/pull/176)
+
+#### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.8...v2.11.9)
+
+> 19 January 2026
+
 - Fix: Correct method name in signature validator [`#177`](https://github.com/ObolNetwork/obol-sdk/pull/177)
 
 #### [v2.11.8](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.7...v2.11.8)

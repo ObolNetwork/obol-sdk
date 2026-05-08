@@ -26,7 +26,7 @@
   },
   "homepage": "https://docs.obol.org/",
   "dependencies": {
-    "@obolnetwork/obol-sdk": "file:../..",
+    "@obolnetwork/obol-sdk": "link:../..",
     "dotenv": "^16.3.1",
     "ethers": "^6.13.5"
   },

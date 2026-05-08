@@ -42,11 +42,15 @@ jobs:
 
       - name: Update e2e dependencies
         working-directory: ./test/sdk-package
-        run: yarn upgrade
+        run: |
+          yarn install --ignore-scripts
+          yarn upgrade
 
       - name: Update nextjs dependancies
         working-directory: ./test/nextjs-test-app
-        run: yarn upgrade
+        run: |
+          yarn install --ignore-scripts
+          yarn upgrade
 
       - name: Show git status
         if: failure()
