@@ -5,6 +5,24 @@ import { bls12_381 } from '@noble/curves/bls12-381.js';
 const { longSignatures: ls } = bls12_381;
 const ETH2_DST = 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_';
 
+export function blsSign(
+  secretKey: Uint8Array,
+  message: Uint8Array,
+): Uint8Array {
+  return ls.Signature.toBytes(ls.sign(ls.hash(message, ETH2_DST), secretKey)) as Uint8Array;
+}
+
+export function blsGetPublicKey(secretKey: Uint8Array): Uint8Array {
+  // getPublicKey returns a G1 Point object; call toBytes() to get the
+  // compressed 48-byte Uint8Array needed for transfer through workerData.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (ls.getPublicKey(secretKey) as any).toBytes() as Uint8Array;
+}
+
+export function blsKeygen(seed: Uint8Array): Uint8Array {
+  return ls.keygen(seed).secretKey as Uint8Array;
+}
+
 export function blsVerify(
   pubkey: Uint8Array,
   message: Uint8Array,

@@ -1,27 +1,37 @@
 // Worker entry point loaded by parallelPool via Node's worker_threads.
 //
-// Responsibility: verify the share-binding step (Lagrange + extra shares)
-// for a chunk of validators. This is the dominant CPU cost in
-// validateClusterLock (~75% on a 500-validator lock per blsBench.mjs).
+// Two modes (dispatched on workerData.mode):
+//   'shareBinding' — Lagrange + extra-share verification for a validator chunk.
+//   'verifyBatch'  — blsVerifyMultiple on a (pubkeys, messages, aggregateSig)
+//                    chunk of the deposit+builder batch.
 //
-// Returns simple boolean — the main thread re-runs other validation steps
-// itself; this worker only handles the expensive math.
+// Both modes return a simple boolean; main thread combines results.
 
 import { parentPort, workerData } from 'node:worker_threads';
 import { fromHexString } from '@chainsafe/ssz';
 import {
   blsRecoverDistributedPubkeyFromShares,
   blsVerifyExtraShares,
+  blsVerifyMultiple,
 } from '../blsUtils.js';
 
-interface WorkerInput {
-  // For each validator in the chunk: hex strings.
+interface ShareBindingInput {
+  mode: 'shareBinding';
   shares: string[][];
   distributedKeys: string[];
   threshold: number;
 }
 
-function verifyChunk(input: WorkerInput): boolean {
+interface VerifyBatchInput {
+  mode: 'verifyBatch';
+  pubkeys: Uint8Array[];
+  messages: Uint8Array[];
+  aggregateSignature: Uint8Array;
+}
+
+type WorkerInput = ShareBindingInput | VerifyBatchInput;
+
+function verifyShareBindingChunk(input: ShareBindingInput): boolean {
   const { shares, distributedKeys, threshold } = input;
   if (shares.length !== distributedKeys.length) return false;
 
@@ -35,15 +45,9 @@ function verifyChunk(input: WorkerInput): boolean {
     );
     if (!recovered) return false;
     if (recovered.length !== dkBytes.length) return false;
-    let equal = true;
     for (let j = 0; j < recovered.length; j++) {
-      if (recovered[j] !== dkBytes[j]) {
-        equal = false;
-        break;
-      }
+      if (recovered[j] !== dkBytes[j]) return false;
     }
-    if (!equal) return false;
-
     if (!blsVerifyExtraShares(sharesBytes, threshold, dkBytes)) {
       return false;
     }
@@ -51,10 +55,23 @@ function verifyChunk(input: WorkerInput): boolean {
   return true;
 }
 
+function verifyBatchChunk(input: VerifyBatchInput): boolean {
+  return blsVerifyMultiple(
+    input.pubkeys,
+    input.messages,
+    input.aggregateSignature,
+  );
+}
+
+function dispatch(input: WorkerInput): boolean {
+  if (input.mode === 'shareBinding') return verifyShareBindingChunk(input);
+  if (input.mode === 'verifyBatch') return verifyBatchChunk(input);
+  return false;
+}
+
 if (parentPort) {
   try {
-    const ok = verifyChunk(workerData as WorkerInput);
-    parentPort.postMessage(ok);
+    parentPort.postMessage(dispatch(workerData as WorkerInput));
   } catch {
     parentPort.postMessage(false);
   }

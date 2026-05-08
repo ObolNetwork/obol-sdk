@@ -33,12 +33,11 @@ import {
   verifyDepositData,
   verifyNodeSignatures,
 } from './common.js';
+import { blsVerifyAggregate } from '../blsUtils.js';
 import {
-  blsAggregateSignatures,
-  blsVerifyMultiple,
-  blsVerifyAggregate,
-} from '../blsUtils.js';
-import { verifySharesBinding } from './parallelPool.js';
+  verifyBatchParallel,
+  verifySharesBinding,
+} from './parallelPool.js';
 
 // cluster definition
 type DefinitionFieldsV1X8 = {
@@ -336,14 +335,12 @@ export const verifyDVV1X8 = async (
   }
 
   // BLS signatures verification
-  const aggregateBLSSignature = blsAggregateSignatures(blsSignatures);
-
   if (
-    !blsVerifyMultiple(
+    !(await verifyBatchParallel(
       pubKeys,
       builderRegistrationAndDepositDataMessages,
-      aggregateBLSSignature,
-    )
+      blsSignatures,
+    ))
   ) {
     return false;
   }
