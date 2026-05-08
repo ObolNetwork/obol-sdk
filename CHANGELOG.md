@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.12](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.11...v2.11.12)
+
+- Fix/release pr lockfile sync [`#202`](https://github.com/ObolNetwork/obol-sdk/pull/202)
+
 #### [v2.11.11](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.10...v2.11.11)
 
+> 8 May 2026
+
+- fix(release): sync subproject lockfiles before dependency upgrades [`#201`](https://github.com/ObolNetwork/obol-sdk/pull/201)
 - Chore/update dependencies [`#198`](https://github.com/ObolNetwork/obol-sdk/pull/198)
 - chore: update dependencies to latest stable versions [`#193`](https://github.com/ObolNetwork/obol-sdk/pull/193)
 - fix: pin GitHub Actions to SHA for supply chain security [`#183`](https://github.com/ObolNetwork/obol-sdk/pull/183)
@@ -30,14 +37,14 @@ All notable changes to this project will be documented in this file. Dates are d
 - chore(release): v2.11.10 [`#182`](https://github.com/ObolNetwork/obol-sdk/pull/182)
 - remove holesky [`#181`](https://github.com/ObolNetwork/obol-sdk/pull/181)
 - improve sdk docs and error handling [`#180`](https://github.com/ObolNetwork/obol-sdk/pull/180)
-- chore(release): v2.11.9 [`#179`](https://github.com/ObolNetwork/obol-sdk/pull/179)
-- support delegated EOA [`#178`](https://github.com/ObolNetwork/obol-sdk/pull/178)
-- fix docs [`#176`](https://github.com/ObolNetwork/obol-sdk/pull/176)
 
 #### [v2.11.9](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.8...v2.11.9)
 
-> 19 January 2026
+> 30 January 2026
 
+- chore(release): v2.11.9 [`#179`](https://github.com/ObolNetwork/obol-sdk/pull/179)
+- support delegated EOA [`#178`](https://github.com/ObolNetwork/obol-sdk/pull/178)
+- fix docs [`#176`](https://github.com/ObolNetwork/obol-sdk/pull/176)
 - Fix: Correct method name in signature validator [`#177`](https://github.com/ObolNetwork/obol-sdk/pull/177)
 
 #### [v2.11.8](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.7...v2.11.8)
