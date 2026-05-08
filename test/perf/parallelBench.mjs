@@ -14,11 +14,11 @@ const {
   blsVerifyExtraShares,
   blsAggregateSignatures,
   blsVerifyMultiple,
-  blsSign,
-  blsGetPublicKey,
-  blsKeygen,
 } = require('../../dist/cjs/src/blsUtils.js');
 const { fromHexString } = require('@chainsafe/ssz');
+const { bls12_381 } = require('@noble/curves/bls12-381.js');
+const ls = bls12_381.longSignatures;
+const ETH2_DST = 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_';
 
 // ----- Real fixture-derived data for the share-binding bench -----
 const SHARES = [
@@ -46,8 +46,10 @@ function syncShares(shares, distributedKeys, threshold) {
 }
 
 // ----- Synthetic real BLS keypairs/sigs for the batch-verify bench -----
-// Uses the SDK's own blsSign/blsGetPublicKey (same bundled noble instance as
-// blsVerifyMultiple) to avoid cross-module type issues.
+// Important: noble's getPublicKey() returns a Point object (not Uint8Array),
+// and Point's class prototype is stripped by structured clone when sent
+// through workerData. So we explicitly call .toBytes() to keep everything
+// as Uint8Array across the worker boundary.
 function buildBatchCorpus(n) {
   const pubkeys = [];
   const messages = [];
@@ -56,13 +58,13 @@ function buildBatchCorpus(n) {
     const seed = new Uint8Array(48);
     seed[0] = (i + 1) & 0xff;
     seed[1] = ((i + 1) >> 8) & 0xff;
-    const sk = blsKeygen(seed);
-    pubkeys.push(blsGetPublicKey(sk));
+    const sk = ls.keygen(seed).secretKey;
+    pubkeys.push(ls.getPublicKey(sk).toBytes());
     const msg = new Uint8Array(32);
     msg[0] = i & 0xff;
     msg[1] = (i >> 8) & 0xff;
     messages.push(msg);
-    signatures.push(blsSign(sk, msg));
+    signatures.push(ls.Signature.toBytes(ls.sign(ls.hash(msg, ETH2_DST), sk)));
   }
   return { pubkeys, messages, signatures };
 }

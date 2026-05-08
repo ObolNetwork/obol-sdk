@@ -1,14 +1,16 @@
-// Parallel share-binding verification via Node worker_threads.
+// Parallel BLS verification via Node worker_threads.
+//
+// IMPORTANT: only the CJS build actually runs in parallel. ESM Node and
+// browser bundles transparently fall back to sync. See the matrix in
+// PARALLEL_VALIDATION_PLAN.md. The main consumer flow (charon DKG ->
+// obol-api NestJS handler -> SDK CJS) is CJS, so it gets the speedup.
 //
 // Strategy:
-// - Detect worker_threads at runtime. Browser/restricted envs => sync fallback.
-// - Below MIN_PARALLEL_VALIDATORS, sync wins (worker spin-up dominates).
+// - Look up the worker file via __dirname (CJS only). If undefined or the
+//   file isn't where we expect (ESM, browser, source-mode tsx/jest), return
+//   undefined and fall back to sync.
+// - Below MIN_PARALLEL_* thresholds, sync wins (worker spin-up dominates).
 // - Spawn one worker per chunk, await all, collapse to a single boolean.
-//
-// We resolve the worker file path from the same directory as this module —
-// tsup emits `lockWorker.js` next to `parallelPool.js` in both CJS and ESM
-// Node builds. Browser build excludes the worker entry; bundlers that
-// re-bundle the SDK and break path resolution will hit the sync fallback.
 
 import { fromHexString } from '@chainsafe/ssz';
 import {
@@ -55,29 +57,15 @@ function loadOs(): NodeOs | null {
 
 function getWorkerPath(): string | undefined {
   if (workerPathCache) return workerPathCache;
-  let candidate: string | undefined;
-  if (typeof __dirname !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require('node:path') as typeof import('node:path');
-    candidate = path.join(__dirname, 'lockWorker.js');
-  } else {
-    // ESM: resolve via import.meta.url — set by build/runtime.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const meta = (globalThis as any).__OBOL_SDK_IMPORT_META__;
-    if (meta && meta.url) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const path = require('node:path') as typeof import('node:path');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const url = require('node:url') as typeof import('node:url');
-      candidate = path.join(
-        path.dirname(url.fileURLToPath(meta.url)),
-        'lockWorker.js',
-      );
-    }
-  }
-  if (!candidate) return undefined;
-  // Verify the worker file actually exists — running from source (tsx, ts-node,
-  // jest without a build) hits this path; the worker is only emitted by tsup.
+  // CJS only. In ESM and browser builds __dirname is undefined, so this
+  // returns undefined and the caller falls back to sync. See plan for the
+  // full coverage matrix.
+  if (typeof __dirname === 'undefined') return undefined;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require('node:path') as typeof import('node:path');
+  const candidate = path.join(__dirname, 'lockWorker.js');
+  // Sanity check: running from source (tsx, ts-node, jest without a build)
+  // also hits the CJS branch but the .js file isn't there yet.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('node:fs') as typeof import('node:fs');
