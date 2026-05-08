@@ -24,7 +24,7 @@ of any reasonable HTTP timeout.
 | Build target | Worker path | Outcome | Why |
 |---|---|---|---|
 | **CJS Node** (obol-api / NestJS) | `dist/cjs/src/verification/lockWorker.js` | **Parallel** ✅ | `__dirname` resolves; `worker_threads` available; everything wires up |
-| ESM Node | none | Sync fallback | tsup ESM build has no `__dirname`; no `import.meta.url` plumbing in place. Documented limitation. |
+| ESM Node | none | Sync fallback | See "Why ESM is sync" below. |
 | Browser (dv-launchpad / Next.js) | none (worker not emitted) | Sync fallback | Browser has no `worker_threads`; would need Web Workers + Next.js bundler config. Out of scope. |
 | Source-mode (jest, tsx, ts-node) | resolves but file missing | Sync fallback | The `.js` file isn't there pre-build; `fs.existsSync` check returns false. |
 | Small lock (`< MIN_PARALLEL_VALIDATORS`) | available | Sync fallback | Worker spin-up dominates for small inputs (~30-100ms each). |
@@ -68,6 +68,36 @@ sync, and that's both fast enough and intentional.
 
 No new public surface. `validateClusterLock(lock, safeRpcUrl?)` keeps the
 same signature; parallelization is transparent.
+
+## Why ESM is sync (and not "just shim `__dirname` in tsup")
+
+The obvious-looking fix — adding a tsup `banner` that defines `__dirname`
+via `import.meta.url` for the ESM build — was tried and **does not work**.
+Two compounding problems:
+
+1. `parallelPool.ts` uses `require('node:path')` / `require('node:fs')`
+   inside `getWorkerPath()` to keep these imports out of the browser
+   bundle. tsup polyfills `require()` in ESM output to throw
+   `"Dynamic require of "path" is not supported"`. So even with the
+   `__dirname` shim, the function crashes on the first `require()`.
+2. tsup splits `parallelPool.ts`'s implementation into a shared chunk
+   (`dist/esm/src/chunk-XXXX.js`); the entry `parallelPool.js` is just a
+   re-export. The chunk's `__dirname` resolves to `dist/esm/src/`, not
+   `dist/esm/src/verification/`, so the worker file lookup misses and
+   falls back to sync.
+
+A real ESM fix needs either:
+- Refactoring `parallelPool.ts` to use top-level `import` for `node:path`
+  and friends (which then either breaks browser builds or needs
+  per-build entry shimming),
+- Disabling tsup `splitting` for the ESM build (loses code-sharing,
+  bigger output),
+- Or using `import.meta.url` directly in source, which is ESM-only
+  syntax that breaks the CJS build unless gated behind a runtime trick.
+
+None of these are "small". The CJS path covers obol-api (the only known
+heavy consumer), so this is left as a documented limitation rather than
+a multi-day refactor.
 
 ## Caveats / fragility
 
