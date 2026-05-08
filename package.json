@@ -48,7 +48,7 @@
   "author": "Obol Labs (https://obol.org)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/obolnetwork/obol-sdk.git"
+    "url": "https://github.com/ObolNetwork/obol-sdk"
   },
   "license": "ISC",
   "publishConfig": {
