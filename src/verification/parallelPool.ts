@@ -19,6 +19,12 @@ import {
   blsVerifyExtraShares,
   blsVerifyMultiple,
 } from '../blsUtils.js';
+// Type-only imports — erased at compile time, so they don't pull node:*
+// modules into the browser bundle.
+import type * as WTNs from 'node:worker_threads';
+import type * as OsNs from 'node:os';
+import type * as PathNs from 'node:path';
+import type * as FsNs from 'node:fs';
 
 const MIN_PARALLEL_VALIDATORS = 50;
 const MIN_PARALLEL_BATCH_PAIRS = 100;
@@ -26,8 +32,8 @@ const MAX_WORKERS = 8;
 const MIN_VALIDATORS_PER_WORKER = 25;
 const MIN_PAIRS_PER_WORKER = 50;
 
-type WorkerThreads = typeof import('node:worker_threads');
-type NodeOs = typeof import('node:os');
+type WorkerThreads = typeof WTNs;
+type NodeOs = typeof OsNs;
 
 let workerThreadsCache: WorkerThreads | null | undefined;
 let osCache: NodeOs | null | undefined;
@@ -36,7 +42,7 @@ let workerPathCache: string | undefined;
 function loadWorkerThreads(): WorkerThreads | null {
   if (workerThreadsCache !== undefined) return workerThreadsCache;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
     workerThreadsCache = require('node:worker_threads') as WorkerThreads;
   } catch {
     workerThreadsCache = null;
@@ -47,7 +53,7 @@ function loadWorkerThreads(): WorkerThreads | null {
 function loadOs(): NodeOs | null {
   if (osCache !== undefined) return osCache;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
     osCache = require('node:os') as NodeOs;
   } catch {
     osCache = null;
@@ -61,14 +67,14 @@ function getWorkerPath(): string | undefined {
   // returns undefined and the caller falls back to sync. See plan for the
   // full coverage matrix.
   if (typeof __dirname === 'undefined') return undefined;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const path = require('node:path') as typeof import('node:path');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+  const path = require('node:path') as typeof PathNs;
   const candidate = path.join(__dirname, 'lockWorker.js');
   // Sanity check: running from source (tsx, ts-node, jest without a build)
   // also hits the CJS branch but the .js file isn't there yet.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('node:fs') as typeof import('node:fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const fs = require('node:fs') as typeof FsNs;
     if (!fs.existsSync(candidate)) return undefined;
   } catch {
     return undefined;
@@ -110,13 +116,13 @@ function verifySharesSync(
   return true;
 }
 
-function runWorker(
+async function runWorker(
   wt: WorkerThreads,
   workerFile: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: Record<string, any>,
 ): Promise<boolean> {
-  return new Promise(resolve => {
+  return await new Promise(resolve => {
     let settled = false;
     const finish = (result: boolean): void => {
       if (settled) return;
@@ -126,8 +132,12 @@ function runWorker(
       resolve(result);
     };
     const worker = new wt.Worker(workerFile, { workerData: data });
-    worker.once('message', (msg: unknown) => finish(msg === true));
-    worker.once('error', () => finish(false));
+    worker.once('message', (msg: unknown) => {
+      finish(msg === true);
+    });
+    worker.once('error', () => {
+      finish(false);
+    });
     worker.once('exit', code => {
       if (code !== 0) finish(false);
     });
@@ -164,13 +174,14 @@ export async function verifySharesBinding(
     MIN_VALIDATORS_PER_WORKER,
   );
 
-  const useParallel =
-    wt !== null &&
-    workerFile !== undefined &&
-    shares.length >= MIN_PARALLEL_VALIDATORS &&
-    numWorkers >= 2;
-
-  if (!useParallel) {
+  // Inline the guard so TS narrows wt/workerFile for the parallel path below
+  // (avoids non-null assertions).
+  if (
+    wt === null ||
+    workerFile === undefined ||
+    shares.length < MIN_PARALLEL_VALIDATORS ||
+    numWorkers < 2
+  ) {
     return verifySharesSync(shares, distributedKeys, threshold);
   }
 
@@ -178,8 +189,8 @@ export async function verifySharesBinding(
   const keyChunks = chunkArrays(distributedKeys, numWorkers);
 
   const results = await Promise.all(
-    shareChunks.map((chunk, i) =>
-      runWorker(wt!, workerFile!, {
+    shareChunks.map(async (chunk, i) =>
+      await runWorker(wt, workerFile, {
         mode: 'shareBinding',
         shares: chunk,
         distributedKeys: keyChunks[i],
@@ -213,13 +224,12 @@ export async function verifyBatchParallel(
     MIN_PAIRS_PER_WORKER,
   );
 
-  const useParallel =
-    wt !== null &&
-    workerFile !== undefined &&
-    pubkeys.length >= MIN_PARALLEL_BATCH_PAIRS &&
-    numWorkers >= 2;
-
-  if (!useParallel) {
+  if (
+    wt === null ||
+    workerFile === undefined ||
+    pubkeys.length < MIN_PARALLEL_BATCH_PAIRS ||
+    numWorkers < 2
+  ) {
     return blsVerifyMultiple(
       pubkeys,
       messages,
@@ -232,8 +242,8 @@ export async function verifyBatchParallel(
   const sigChunks = chunkArrays(signatures, numWorkers);
 
   const results = await Promise.all(
-    pkChunks.map((pks, i) =>
-      runWorker(wt!, workerFile!, {
+    pkChunks.map(async (pks, i) =>
+      await runWorker(wt, workerFile, {
         mode: 'verifyBatch',
         pubkeys: pks,
         messages: msgChunks[i],
