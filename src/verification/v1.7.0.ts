@@ -33,10 +33,7 @@ import {
   verifyNodeSignatures,
 } from './common.js';
 import { blsVerifyAggregate } from '../blsUtils.js';
-import {
-  verifyBatchParallel,
-  verifySharesBinding,
-} from './parallelPool.js';
+import { verifyBatchParallel, verifySharesBinding } from './parallelPool.js';
 
 // cluster definition
 type DefinitionFieldsV1X7 = {

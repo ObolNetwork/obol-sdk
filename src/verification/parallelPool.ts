@@ -144,7 +144,10 @@ async function runWorker(
   });
 }
 
-function poolSize(itemCount: number, minPerWorker: number): {
+function poolSize(
+  itemCount: number,
+  minPerWorker: number,
+): {
   numWorkers: number;
   wt: WorkerThreads | null;
   workerFile: string | undefined;
@@ -189,13 +192,14 @@ export async function verifySharesBinding(
   const keyChunks = chunkArrays(distributedKeys, numWorkers);
 
   const results = await Promise.all(
-    shareChunks.map(async (chunk, i) =>
-      await runWorker(wt, workerFile, {
-        mode: 'shareBinding',
-        shares: chunk,
-        distributedKeys: keyChunks[i],
-        threshold,
-      }),
+    shareChunks.map(
+      async (chunk, i) =>
+        await runWorker(wt, workerFile, {
+          mode: 'shareBinding',
+          shares: chunk,
+          distributedKeys: keyChunks[i],
+          threshold,
+        }),
     ),
   );
   return results.every(Boolean);
@@ -242,13 +246,14 @@ export async function verifyBatchParallel(
   const sigChunks = chunkArrays(signatures, numWorkers);
 
   const results = await Promise.all(
-    pkChunks.map(async (pks, i) =>
-      await runWorker(wt, workerFile, {
-        mode: 'verifyBatch',
-        pubkeys: pks,
-        messages: msgChunks[i],
-        aggregateSignature: blsAggregateSignatures(sigChunks[i]),
-      }),
+    pkChunks.map(
+      async (pks, i) =>
+        await runWorker(wt, workerFile, {
+          mode: 'verifyBatch',
+          pubkeys: pks,
+          messages: msgChunks[i],
+          aggregateSignature: blsAggregateSignatures(sigChunks[i]),
+        }),
     ),
   );
   return results.every(Boolean);

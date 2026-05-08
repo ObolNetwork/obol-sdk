@@ -27,10 +27,7 @@ import {
 } from '../types.js';
 import { verifyDepositData } from './common.js';
 import { blsVerifyAggregate } from '../blsUtils.js';
-import {
-  verifyBatchParallel,
-  verifySharesBinding,
-} from './parallelPool.js';
+import { verifyBatchParallel, verifySharesBinding } from './parallelPool.js';
 
 // cluster definition
 type DefinitionFieldsV1X6 = {

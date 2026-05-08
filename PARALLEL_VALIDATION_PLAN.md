@@ -118,6 +118,63 @@ a multi-day refactor.
    bench (`test/perf/parallelBench.mjs`) is the only thing that exercises
    workers. If the worker breaks, CI stays green.
 
+## Decision record: `require()` in `parallelPool.ts`
+
+`parallelPool.ts` intentionally uses guarded `require('node:*')` calls
+inside `try/catch` (with narrow eslint disables) instead of top-level
+`import` for `worker_threads`, `os`, `path`, and `fs`.
+
+### Why this works
+
+The current pattern preserves three required behaviors:
+
+1. **Lazy runtime load** - Node-only modules are resolved only when needed.
+2. **No static Node import pull-in for browser bundles** - avoids bundler
+   statically binding `node:*` in browser output.
+3. **Synchronous probing** - callsites stay sync/cheap for environment checks.
+
+Observed runtime behavior:
+
+| Build target | `require('node:worker_threads')` result | Outcome |
+|---|---|---|
+| CJS Node | Loads real module | Parallel path enabled ✅ |
+| ESM Node | tsup dynamic-require shim throws; caught | Sync fallback |
+| Browser | shim/unsupported require throws; caught | Sync fallback |
+
+So the runtime behavior is correct across supported targets.
+
+### Why this is not ideal stylistically
+
+- `require()` in modern TS source is less idiomatic than `import()`.
+- Each call needs local eslint disables (`no-require-imports` /
+  `no-var-requires`), which adds review noise.
+- It depends on current tsup ESM dynamic-require behavior (throw + catch).
+
+### Preferred cleanup path (future)
+
+Refactor lazy loaders to dynamic import:
+
+```ts
+async function loadWorkerThreads(): Promise<WorkerThreads | null> {
+  try {
+    return await import('node:worker_threads');
+  } catch {
+    return null;
+  }
+}
+```
+
+Trade-offs of this refactor:
+
+- **Pros:** idiomatic ESM/CJS-compatible runtime loading; no eslint disables.
+- **Cons:** loader/cache flow becomes async (`Promise<Module>` cache), so
+  callers need small plumbing changes.
+- **Build note:** browser output still needs `node:*` treated as external in
+  bundling config so runtime `import()` can fail safely and be caught.
+
+Status today: keep `require()` because it is functionally correct, CI/bench are
+green, and it keeps the current sync fallback behavior simple.
+
 ## Out of scope (explicit followups)
 
 - Web Workers for browser parallelization (requires Next.js bundler work)
