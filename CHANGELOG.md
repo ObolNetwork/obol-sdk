@@ -2,8 +2,16 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.11.13](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.12...v2.11.13)
+
+- Feat/export enr [`#204`](https://github.com/ObolNetwork/obol-sdk/pull/204)
+- fix: sign release PR commits for branch protection compliance [`#205`](https://github.com/ObolNetwork/obol-sdk/pull/205)
+
 #### [v2.11.12](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.11...v2.11.12)
 
+> 8 May 2026
+
+- chore(release): v2.11.12 [`#203`](https://github.com/ObolNetwork/obol-sdk/pull/203)
 - Fix/release pr lockfile sync [`#202`](https://github.com/ObolNetwork/obol-sdk/pull/202)
 
 #### [v2.11.11](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.10...v2.11.11)
