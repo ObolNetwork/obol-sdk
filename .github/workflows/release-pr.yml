@@ -75,3 +75,4 @@ jobs:
             automated pr
           signoff: false
           draft: false
+          sign-commits: true
