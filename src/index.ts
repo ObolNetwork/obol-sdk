@@ -70,6 +70,7 @@ export { Exit } from './exits/exit.js';
 export { ObolSplits } from './splits/splits.js';
 export { EOA } from './eoa/eoa.js';
 export { blsVerify } from './blsUtils.js';
+export { ENR } from '@chainsafe/enr';
 
 /**
  * Primary entrypoint for the Obol SDK. Use this class to create, manage,
