@@ -25,19 +25,25 @@ import type * as WTNs from 'node:worker_threads';
 import type * as OsNs from 'node:os';
 import type * as PathNs from 'node:path';
 import type * as FsNs from 'node:fs';
+import type { WorkerInput } from './lockWorker.js';
 
 const MIN_PARALLEL_VALIDATORS = 50;
 const MIN_PARALLEL_BATCH_PAIRS = 100;
 const MAX_WORKERS = 8;
 const MIN_VALIDATORS_PER_WORKER = 25;
 const MIN_PAIRS_PER_WORKER = 50;
+// Hard ceiling so a stuck worker can't leak past obol-api's HTTP timeout.
+// Biggest legitimate batch (~1000 pairs) finishes in ~3s on the bench; 60s
+// is conservative enough to never false-trip on real input.
+const WORKER_TIMEOUT_MS = 60_000;
 
 type WorkerThreads = typeof WTNs;
 type NodeOs = typeof OsNs;
 
 let workerThreadsCache: WorkerThreads | null | undefined;
 let osCache: NodeOs | null | undefined;
-let workerPathCache: string | undefined;
+// Tri-state: undefined = uncached, null = checked & unavailable, string = path.
+let workerPathCache: string | null | undefined;
 
 function loadWorkerThreads(): WorkerThreads | null {
   if (workerThreadsCache !== undefined) return workerThreadsCache;
@@ -61,26 +67,26 @@ function loadOs(): NodeOs | null {
   return osCache;
 }
 
-function getWorkerPath(): string | undefined {
-  if (workerPathCache) return workerPathCache;
+function getWorkerPath(): string | null {
+  if (workerPathCache !== undefined) return workerPathCache;
   // CJS only. In ESM and browser builds __dirname is undefined, so this
-  // returns undefined and the caller falls back to sync. See plan for the
+  // memoizes null and the caller falls back to sync. See plan for the
   // full coverage matrix.
-  if (typeof __dirname === 'undefined') return undefined;
+  if (typeof __dirname === 'undefined') return (workerPathCache = null);
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
   const path = require('node:path') as typeof PathNs;
   const candidate = path.join(__dirname, 'lockWorker.js');
   // Sanity check: running from source (tsx, ts-node, jest without a build)
-  // also hits the CJS branch but the .js file isn't there yet.
+  // also hits the CJS branch but the .js file isn't there yet. Without
+  // memoizing null we'd re-run existsSync on every call.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
     const fs = require('node:fs') as typeof FsNs;
-    if (!fs.existsSync(candidate)) return undefined;
+    if (!fs.existsSync(candidate)) return (workerPathCache = null);
   } catch {
-    return undefined;
+    return (workerPathCache = null);
   }
-  workerPathCache = candidate;
-  return workerPathCache;
+  return (workerPathCache = candidate);
 }
 
 function chunkArrays<T>(arr: T[], n: number): T[][] {
@@ -119,19 +125,22 @@ function verifySharesSync(
 async function runWorker(
   wt: WorkerThreads,
   workerFile: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: Record<string, any>,
+  data: WorkerInput,
 ): Promise<boolean> {
   return await new Promise(resolve => {
     let settled = false;
+    const worker = new wt.Worker(workerFile, { workerData: data });
     const finish = (result: boolean): void => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       worker.terminate();
       resolve(result);
     };
-    const worker = new wt.Worker(workerFile, { workerData: data });
+    const timer = setTimeout(() => {
+      finish(false);
+    }, WORKER_TIMEOUT_MS);
     worker.once('message', (msg: unknown) => {
       finish(msg === true);
     });
@@ -150,7 +159,7 @@ function poolSize(
 ): {
   numWorkers: number;
   wt: WorkerThreads | null;
-  workerFile: string | undefined;
+  workerFile: string | null;
 } {
   const wt = loadWorkerThreads();
   const os = loadOs();
@@ -181,7 +190,7 @@ export async function verifySharesBinding(
   // (avoids non-null assertions).
   if (
     wt === null ||
-    workerFile === undefined ||
+    workerFile === null ||
     shares.length < MIN_PARALLEL_VALIDATORS ||
     numWorkers < 2
   ) {
@@ -230,7 +239,7 @@ export async function verifyBatchParallel(
 
   if (
     wt === null ||
-    workerFile === undefined ||
+    workerFile === null ||
     pubkeys.length < MIN_PARALLEL_BATCH_PAIRS ||
     numWorkers < 2
   ) {

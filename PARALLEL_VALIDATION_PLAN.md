@@ -113,10 +113,20 @@ a multi-day refactor.
    call processing hundreds of validators, this is amortized; for
    high-frequency repeated calls on small locks, sync is still chosen by
    the threshold.
-3. **No automated test for the parallel path.** Existing fixtures are
-   small enough to trip `MIN_PARALLEL_VALIDATORS=50` and run sync. The
-   bench (`test/perf/parallelBench.mjs`) is the only thing that exercises
-   workers. If the worker breaks, CI stays green.
+3. **No automated test for the actual worker path.** `test/verification/
+   parallelPool.spec.ts` exercises the public `verifySharesBinding` and
+   `verifyBatchParallel` API with 50-100 input batches — enough to trip
+   the parallel threshold — but jest runs from source so the built
+   `lockWorker.js` doesn't exist; `getWorkerPath()` returns `null` and
+   the tests transparently run the **sync fallback**. They catch:
+   - sync-fallback correctness regressions
+   - `WorkerInput` shape mismatches at compile time (now typed)
+   - API signature drift
+
+   They do **not** catch worker-thread-specific breakage (path
+   resolution, structured-clone issues, the worker entry crashing).
+   For that, run `node test/perf/parallelBench.mjs` after `yarn build` —
+   that is the only thing that exercises the real worker code today.
 
 ## Decision record: `require()` in `parallelPool.ts`
 
@@ -188,6 +198,6 @@ green, and it keeps the current sync fallback behavior simple.
 ```bash
 yarn install
 yarn build           # emits the three dist entries the pool needs
-yarn test            # 131 unit tests, all sync (small fixtures)
-node test/perf/parallelBench.mjs   # confirms speedup on a real machine
+yarn test            # 141 unit tests, all sync (pool tests hit fallback)
+node test/perf/parallelBench.mjs   # confirms parallel speedup on dist
 ```

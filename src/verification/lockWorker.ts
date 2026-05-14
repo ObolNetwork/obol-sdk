@@ -15,21 +15,21 @@ import {
   blsVerifyMultiple,
 } from '../blsUtils.js';
 
-interface ShareBindingInput {
+export interface ShareBindingInput {
   mode: 'shareBinding';
   shares: string[][];
   distributedKeys: string[];
   threshold: number;
 }
 
-interface VerifyBatchInput {
+export interface VerifyBatchInput {
   mode: 'verifyBatch';
   pubkeys: Uint8Array[];
   messages: Uint8Array[];
   aggregateSignature: Uint8Array;
 }
 
-type WorkerInput = ShareBindingInput | VerifyBatchInput;
+export type WorkerInput = ShareBindingInput | VerifyBatchInput;
 
 function verifyShareBindingChunk(input: ShareBindingInput): boolean {
   const { shares, distributedKeys, threshold } = input;
