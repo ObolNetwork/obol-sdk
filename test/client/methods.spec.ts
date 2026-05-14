@@ -12,6 +12,12 @@ import {
 } from '../fixtures.js';
 import { SDK_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
+import { hasUniqueDistributedKeys } from '../../src/verification/common.js';
+import {
+  blsRecoverDistributedPubkeyFromShares,
+  blsVerifyExtraShares,
+} from '../../src/blsUtils.js';
+import { fromHexString } from '@chainsafe/ssz';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 
@@ -279,58 +285,106 @@ describe('Cluster Client without a signer', () => {
     expect(isValidLock).toEqual(false);
   });
 
-  test('validateCluster should return false when distributed public keys are not unique', async () => {
-    const tamperedLock = structuredClone(clusterLockV1X10);
-    const validator0 = tamperedLock.distributed_validators[0];
+  // Unit tests of the new lock-binding validators. These target the pure
+  // helpers directly rather than driving through validateClusterLock —
+  // tampered locks short-circuit at either the lock_hash integrity check or
+  // the downstream signature_aggregate / node_signatures checks, so they
+  // can't isolate the new branches without the original signing keys.
 
-    if (!validator0) {
-      throw new Error('Fixture requires at least one distributed validator');
-    }
+  describe('hasUniqueDistributedKeys', () => {
+    const mkLock = (keys: string[]) =>
+      ({
+        distributed_validators: keys.map(k => ({ distributed_public_key: k })),
+      } as any);
 
-    // Duplicate the validator entry — same distributed key appears twice.
-    tamperedLock.distributed_validators.push(structuredClone(validator0));
+    test('returns true for unique distributed public keys', () => {
+      expect(hasUniqueDistributedKeys(mkLock(['0xaa', '0xbb']))).toBe(true);
+    });
 
-    const isValidLock: boolean = await validateClusterLock(tamperedLock);
-    expect(isValidLock).toEqual(false);
+    test('returns false for duplicate keys', () => {
+      expect(hasUniqueDistributedKeys(mkLock(['0xaa', '0xaa']))).toBe(false);
+    });
+
+    test('treats mixed-case hex as the same key', () => {
+      expect(hasUniqueDistributedKeys(mkLock(['0xAA', '0xaa']))).toBe(false);
+    });
+
+    test('returns true for an empty validator list', () => {
+      expect(hasUniqueDistributedKeys(mkLock([]))).toBe(true);
+    });
   });
 
-  test('validateCluster should return false when public shares do not reconstruct distributed public key', async () => {
-    const tamperedLock = structuredClone(clusterLockV1X10);
-    const validator0 = tamperedLock.distributed_validators[0];
+  describe('blsRecoverDistributedPubkeyFromShares', () => {
+    const validator0 = clusterLockV1X10.distributed_validators[0];
+    const threshold = clusterLockV1X10.cluster_definition.threshold;
+    const sharesBytes = validator0!.public_shares.map(s => fromHexString(s));
+    const dkBytes = fromHexString(validator0!.distributed_public_key);
 
-    if (!validator0) {
-      throw new Error('Fixture requires at least one distributed validator');
-    }
+    test('reconstructs the distributed public key from the first threshold shares', () => {
+      const recovered = blsRecoverDistributedPubkeyFromShares(
+        sharesBytes,
+        threshold,
+      );
+      expect(recovered).not.toBeNull();
+      expect(Buffer.from(recovered!).equals(Buffer.from(dkBytes))).toBe(true);
+    });
 
-    // Reverse share order — shares remain unique but map to wrong positional
-    // indices, so Lagrange interpolation at x=0 yields a different key.
-    validator0.public_shares = [...validator0.public_shares].reverse();
+    test('returns a different key when shares are reversed', () => {
+      // Wrong positional indices for the same shares => different polynomial.
+      const reversed = [...sharesBytes].reverse();
+      const recovered = blsRecoverDistributedPubkeyFromShares(
+        reversed,
+        threshold,
+      );
+      expect(recovered).not.toBeNull();
+      expect(Buffer.from(recovered!).equals(Buffer.from(dkBytes))).toBe(false);
+    });
 
-    const isValidLock: boolean = await validateClusterLock(tamperedLock);
-    expect(isValidLock).toEqual(false);
+    test('returns null when threshold > shares.length', () => {
+      expect(
+        blsRecoverDistributedPubkeyFromShares(sharesBytes, sharesBytes.length + 1),
+      ).toBeNull();
+    });
+
+    test('returns null when threshold <= 0', () => {
+      expect(blsRecoverDistributedPubkeyFromShares(sharesBytes, 0)).toBeNull();
+    });
   });
 
-  test('validateCluster should return false when an extra share does not lie on the polynomial', async () => {
-    const tamperedLock = structuredClone(clusterLockV1X10);
-    const validator0 = tamperedLock.distributed_validators[0];
+  describe('blsVerifyExtraShares', () => {
+    const validator0 = clusterLockV1X10.distributed_validators[0];
+    const threshold = clusterLockV1X10.cluster_definition.threshold;
+    const sharesBytes = validator0!.public_shares.map(s => fromHexString(s));
+    const dkBytes = fromHexString(validator0!.distributed_public_key);
 
-    if (!validator0) {
-      throw new Error('Fixture requires at least one distributed validator');
-    }
+    test('returns true when every extra share lies on the polynomial', () => {
+      expect(blsVerifyExtraShares(sharesBytes, threshold, dkBytes)).toBe(true);
+    });
 
-    // Keep first `threshold` shares intact so the main reconstruction passes;
-    // replace the extra share with a different valid G1 point (the DV key
-    // itself) which is not on the share polynomial. Read threshold from the
-    // fixture so the test doesn't silently pass for the wrong reason if the
-    // fixture's threshold changes.
-    const threshold = tamperedLock.cluster_definition.threshold;
-    validator0.public_shares = [
-      ...validator0.public_shares.slice(0, threshold),
-      validator0.distributed_public_key,
-    ];
+    test('returns false when an extra share is not on the polynomial', () => {
+      // Replace share at index `threshold` (first extra) with the DV key:
+      // a valid G1 point that does not lie on the share polynomial.
+      const tampered = [...sharesBytes.slice(0, threshold), dkBytes];
+      // Pad back up to the original length so the loop iterates the extra.
+      while (tampered.length < sharesBytes.length) tampered.push(dkBytes);
+      expect(blsVerifyExtraShares(tampered, threshold, dkBytes)).toBe(false);
+    });
 
-    const isValidLock: boolean = await validateClusterLock(tamperedLock);
-    expect(isValidLock).toEqual(false);
+    test('returns true vacuously when there are no extras (threshold == n)', () => {
+      expect(
+        blsVerifyExtraShares(sharesBytes, sharesBytes.length, dkBytes),
+      ).toBe(true);
+    });
+
+    test('returns false when shares.length < threshold (precondition guard)', () => {
+      expect(
+        blsVerifyExtraShares(sharesBytes, sharesBytes.length + 1, dkBytes),
+      ).toBe(false);
+    });
+
+    test('returns false when threshold <= 0 (precondition guard)', () => {
+      expect(blsVerifyExtraShares(sharesBytes, 0, dkBytes)).toBe(false);
+    });
   });
 });
 
