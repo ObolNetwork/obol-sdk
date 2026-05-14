@@ -502,6 +502,23 @@ const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
   return false;
 };
 
+/**
+ * Returns true iff every validator's distributed_public_key is unique across
+ * the lock. Normalizes hex case (charon emits lowercase today, but mixed-case
+ * copies shouldn't sneak through). Exported so it can be unit-tested
+ * independently of the rest of validateClusterLock — a tampered lock that
+ * trips a downstream check (signature_aggregate, node sigs) cannot isolate
+ * this branch.
+ */
+export const hasUniqueDistributedKeys = (
+  clusterLock: ClusterLock,
+): boolean => {
+  const dvKeys = clusterLock.distributed_validators.map(v =>
+    v.distributed_public_key.toLowerCase(),
+  );
+  return new Set(dvKeys).size === dvKeys.length;
+};
+
 export const isValidClusterLock = async (
   clusterLock: ClusterLock,
   safeRpcUrl?: SafeRpcUrl,
@@ -527,6 +544,10 @@ export const isValidClusterLock = async (
       return false;
     }
     if (clusterLockHash(clusterLock) !== clusterLock.lock_hash) {
+      return false;
+    }
+
+    if (!hasUniqueDistributedKeys(clusterLock)) {
       return false;
     }
 

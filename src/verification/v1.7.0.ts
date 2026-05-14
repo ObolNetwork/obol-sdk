@@ -32,11 +32,8 @@ import {
   verifyDepositData,
   verifyNodeSignatures,
 } from './common.js';
-import {
-  blsAggregateSignatures,
-  blsVerifyMultiple,
-  blsVerifyAggregate,
-} from '../blsUtils.js';
+import { blsVerifyAggregate } from '../blsUtils.js';
+import { verifyBatchParallel, verifySharesBinding } from './parallelPool.js';
 
 // cluster definition
 type DefinitionFieldsV1X7 = {
@@ -224,6 +221,27 @@ export const verifyDVV1X7 = async (
   clusterLock: ClusterLock,
 ): Promise<boolean> => {
   const validators = clusterLock.distributed_validators;
+  const operatorCount = clusterLock.cluster_definition.operators.length;
+  const threshold = clusterLock.cluster_definition.threshold;
+
+  // Phase 1: cheap structural pre-checks (count + uniqueness) — sync.
+  for (const validator of validators) {
+    if (validator.public_shares.length !== operatorCount) {
+      return false;
+    }
+    const uniqueShareCount = new Set(validator.public_shares).size;
+    if (uniqueShareCount !== validator.public_shares.length) {
+      return false;
+    }
+  }
+
+  // Phase 2: share-binding (Lagrange + extras) — parallel when worker_threads
+  // is available and validators.length is large enough; sync fallback otherwise.
+  const allShares = validators.map(v => v.public_shares);
+  const allDKs = validators.map(v => v.distributed_public_key);
+  if (!(await verifySharesBinding(allShares, allDKs, threshold))) {
+    return false;
+  }
 
   const pubShares = [];
 
@@ -235,10 +253,22 @@ export const verifyDVV1X7 = async (
     const validator = validators[i];
     const validatorPublicShares = validator.public_shares;
     const distributedPublicKey = validator.distributed_public_key;
+    if (validatorPublicShares.length !== operatorCount) {
+      return false;
+    }
+    // Lowercase before deduping — defensive against mixed-case hex.
+    const normalizedShares = validatorPublicShares.map(s => s.toLowerCase());
+    if (new Set(normalizedShares).size !== normalizedShares.length) {
+      return false;
+    }
+
+    const validatorPublicSharesBytes = validatorPublicShares.map(share =>
+      fromHexString(share),
+    );
 
     // Needed in signature_aggregate verification
-    for (const element of validatorPublicShares) {
-      pubShares.push(fromHexString(element));
+    for (const share of validatorPublicSharesBytes) {
+      pubShares.push(share);
     }
 
     // Deposit Data Verification
@@ -278,15 +308,13 @@ export const verifyDVV1X7 = async (
     );
   }
 
-  // BLS signatures verification
-  const aggregateBLSSignature = blsAggregateSignatures(blsSignatures);
-
+  // BLS signatures verification — chunked across workers when large enough.
   if (
-    !blsVerifyMultiple(
+    !(await verifyBatchParallel(
       pubKeys,
       builderRegistrationAndDepositDataMessages,
-      aggregateBLSSignature,
-    )
+      blsSignatures,
+    ))
   ) {
     return false;
   }

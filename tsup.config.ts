@@ -3,7 +3,12 @@ import { defineConfig } from 'tsup';
 export default defineConfig([
   // Node.js CJS build
   {
-    entry: ['src/index.ts'],
+    entry: [
+      'src/index.ts',
+      'src/blsUtils.ts',
+      'src/verification/lockWorker.ts',
+      'src/verification/parallelPool.ts',
+    ],
     format: ['cjs'],
     dts: false,
     outDir: 'dist/cjs/src',
@@ -23,7 +28,12 @@ export default defineConfig([
   },
   // Node.js ESM build
   {
-    entry: ['src/index.ts'],
+    entry: [
+      'src/index.ts',
+      'src/blsUtils.ts',
+      'src/verification/lockWorker.ts',
+      'src/verification/parallelPool.ts',
+    ],
     format: ['esm'],
     dts: false,
     outDir: 'dist/esm/src',
