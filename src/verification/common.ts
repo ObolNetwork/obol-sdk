@@ -530,8 +530,10 @@ export const isValidClusterLock = async (
       return false;
     }
 
-    const dvKeys = clusterLock.distributed_validators.map(
-      v => v.distributed_public_key,
+    // Normalize hex case before deduping — charon emits lowercase today
+    // but a copy-pasted lock with mixed case shouldn't sneak through.
+    const dvKeys = clusterLock.distributed_validators.map(v =>
+      v.distributed_public_key.toLowerCase(),
     );
     if (new Set(dvKeys).size !== dvKeys.length) {
       return false;

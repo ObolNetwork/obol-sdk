@@ -318,11 +318,14 @@ describe('Cluster Client without a signer', () => {
       throw new Error('Fixture requires at least one distributed validator');
     }
 
-    // Keep first threshold (3) shares intact so the main reconstruction passes;
-    // replace the extra share with a different valid G1 point (the DV key itself)
-    // which is not on the share polynomial.
+    // Keep first `threshold` shares intact so the main reconstruction passes;
+    // replace the extra share with a different valid G1 point (the DV key
+    // itself) which is not on the share polynomial. Read threshold from the
+    // fixture so the test doesn't silently pass for the wrong reason if the
+    // fixture's threshold changes.
+    const threshold = tamperedLock.cluster_definition.threshold;
     validator0.public_shares = [
-      ...validator0.public_shares.slice(0, 3),
+      ...validator0.public_shares.slice(0, threshold),
       validator0.distributed_public_key,
     ];
 

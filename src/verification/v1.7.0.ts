@@ -242,8 +242,9 @@ export const verifyDVV1X7 = async (
     if (validatorPublicShares.length !== operatorCount) {
       return false;
     }
-    const uniqueShareCount = new Set(validatorPublicShares).size;
-    if (uniqueShareCount !== validatorPublicShares.length) {
+    // Lowercase before deduping — defensive against mixed-case hex.
+    const normalizedShares = validatorPublicShares.map(s => s.toLowerCase());
+    if (new Set(normalizedShares).size !== normalizedShares.length) {
       return false;
     }
 
