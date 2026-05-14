@@ -105,6 +105,9 @@ export function blsVerifyExtraShares(
   threshold: number,
   distributedPubkey: Uint8Array,
 ): boolean {
+  // Don't trust the caller — refuse to vacuously pass when there aren't
+  // enough shares to even form a threshold-sized subset.
+  if (threshold <= 0 || pubshares.length < threshold) return false;
   try {
     const baseShares = pubshares.slice(0, threshold - 1);
     const baseIndices = baseShares.map((_, i) => BigInt(i + 1));
@@ -112,8 +115,12 @@ export function blsVerifyExtraShares(
       const shares = [...baseShares, pubshares[i]];
       const indices = [...baseIndices, BigInt(i + 1)];
       const recovered = blsRecoverWithIndices(shares, indices);
+      // Length guard before .every() — Uint8Array#every only iterates the
+      // shorter array's indices, so a shorter `recovered` would pass
+      // vacuously without this check.
       if (
         !recovered ||
+        recovered.length !== distributedPubkey.length ||
         !recovered.every((b, j) => b === distributedPubkey[j])
       ) {
         return false;

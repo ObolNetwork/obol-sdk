@@ -253,6 +253,14 @@ export const verifyDVV1X7 = async (
     const validator = validators[i];
     const validatorPublicShares = validator.public_shares;
     const distributedPublicKey = validator.distributed_public_key;
+    if (validatorPublicShares.length !== operatorCount) {
+      return false;
+    }
+    // Lowercase before deduping — defensive against mixed-case hex.
+    const normalizedShares = validatorPublicShares.map(s => s.toLowerCase());
+    if (new Set(normalizedShares).size !== normalizedShares.length) {
+      return false;
+    }
 
     const validatorPublicSharesBytes = validatorPublicShares.map(share =>
       fromHexString(share),
