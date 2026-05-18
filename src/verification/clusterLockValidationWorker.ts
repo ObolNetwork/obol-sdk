@@ -9,11 +9,12 @@ const input = workerData as {
 };
 
 if (parentPort) {
+  const port = parentPort;
   void isValidClusterLock(input.lock, input.safeRpcUrl)
     .then(ok => {
-      parentPort!.postMessage(ok);
+      port.postMessage(ok);
     })
     .catch(() => {
-      parentPort!.postMessage(false);
+      port.postMessage(false);
     });
 }
