@@ -17,6 +17,11 @@ export function blsVerify(
   }
 }
 
+export function blsAggregatePublicKeys(pubkeys: Uint8Array[]): Uint8Array {
+  if (pubkeys.length === 0) throw new Error('cannot aggregate empty pubkey set');
+  return ls.aggregatePublicKeys(pubkeys).toBytes() as Uint8Array;
+}
+
 export function blsVerifyAggregate(
   pubkeys: Uint8Array[],
   message: Uint8Array,
@@ -27,6 +32,23 @@ export function blsVerifyAggregate(
       signature,
       ls.hash(message, ETH2_DST),
       ls.aggregatePublicKeys(pubkeys),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Verify when the pubkey set is already aggregated to a single G1 key. */
+export function blsVerifyWithAggregatedPubkey(
+  aggregatedPubkey: Uint8Array,
+  message: Uint8Array,
+  signature: Uint8Array,
+): boolean {
+  try {
+    return ls.verify(
+      signature,
+      ls.hash(message, ETH2_DST),
+      aggregatedPubkey,
     );
   } catch {
     return false;

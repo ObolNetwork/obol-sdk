@@ -76,7 +76,7 @@ src/
 ├── types.ts          # All TypeScript types and interfaces
 ├── errors.ts         # Custom errors: ConflictError, SignerRequiredError, UnsupportedChainError
 ├── constants.ts      # Chain configs, contract addresses, fork mappings
-├── services.ts       # Standalone exports (validateClusterLock)
+├── services.ts       # Standalone exports (validateClusterLock → worker or sync)
 ├── utils.ts          # Utility functions
 ├── schema.ts         # AJV JSON schemas for payload validation
 ├── ajv.ts            # AJV setup with custom validation keywords
@@ -87,10 +87,16 @@ src/
 ├── incentives/       # Incentive claims from Merkle Distributors
 ├── splits/           # Contract deployment: OVM, SplitV2, SplitMain
 └── verification/     # Cluster lock verification (SSZ, ECDSA, BLS)
+    ├── common.ts     # isValidClusterLock, depositBlsCheck, builderBlsCheck
+    ├── parallelPool.ts           # Chunk workers + validateClusterLockInWorker
+    ├── lockWorker.ts             # worker_threads chunk entry (CJS/ESM dist only)
+    └── clusterLockValidationWorker.ts  # Whole-lock validation off main thread
 
 test/
 ├── fixtures.ts       # Shared test data (addresses, cluster locks, validators)
 ├── client/           # Client method and validation tests
+├── verification/     # parallelPool.spec.ts (sync fallback in jest)
+├── perf/             # parallelBench.mjs, blsBench.mjs (run after yarn build)
 ├── eoa/              # EOA functionality tests
 ├── exit/             # Exit signature and verification tests
 ├── incentives/       # Incentive claim tests
@@ -113,6 +119,9 @@ Key build notes:
 - `ethers` is kept external (~2MB, consumers already have it)
 - `@chainsafe/enr` is bundled (ESM-only package)
 - Browser build defines `process.env` as empty and `global` as `globalThis`
+- **CJS/ESM Node** also emit separate bundles for `lockWorker.js` and
+  `clusterLockValidationWorker.js` (see `tsup.config.ts`). **Browser** build does
+  not — `validateClusterLock` falls back to sync there.
 
 ## Architecture
 
@@ -183,7 +192,7 @@ client.exit.*         // Verify/recombine exit signatures
 
 **`validateClusterLock`** (`import { validateClusterLock } from '@obolnetwork/obol-sdk'`)
 
-Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs.
+Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules.
 
 ```typescript
 import { validateClusterLock } from '@obolnetwork/obol-sdk';
@@ -191,13 +200,48 @@ import { validateClusterLock } from '@obolnetwork/obol-sdk';
 const isValid = await validateClusterLock(lockObject, safeRpcUrl?);
 ```
 
-**Performance note**: For large cluster locks (many validators or operators), `validateClusterLock` can be slow due to BLS aggregation being CPU-bound. If performance is a concern with large files, consider running it off the main thread (Web Worker in browser, worker_threads in Node.js). This is a known limitation worth improving — if you find a faster aggregation path, it belongs in `src/verification/`.
+**Performance (large locks, Node CJS — e.g. obol-api):**
+
+Validation is CPU-bound on `@noble/curves` (pure JS BLS; no native `blst`). A
+1k-validator lock can take **~60s** of crypto. The SDK already handles this in
+two ways — **do not tell consumers to add their own workers** unless they use a
+non-CJS bundle:
+
+| Layer | When | Purpose |
+|-------|------|---------|
+| **Validation worker** | ≥50 validators, CJS, worker file found | Runs entire `isValidClusterLock` off the API main thread → avoids **502** when obol-api validates during `POST /lock` |
+| **Chunk workers** (`lockWorker.js`) | Large share-binding / batch BLS / pubkey aggregation | Uses multiple cores *inside* validation (~57s vs ~103s on 1k lock vs 2.12.0) |
+
+Entry: `src/services.ts` → `validateClusterLockInWorker` in `parallelPool.ts`,
+else sync `isValidClusterLock` in `common.ts`.
+
+**Build behavior:**
+
+- **CJS Node** (obol-api): full worker path ✅ — workers at
+  `dist/cjs/src/verification/*.js`; `getWorkerPath` checks both `__dirname` and
+  `__dirname/verification` because `parallelPool` is bundled into `index.js`
+  (`__dirname` = `dist/cjs/src`). **Publish only after `yarn build`.**
+- **ESM Node / Jest / source**: sync fallback (worker paths do not resolve)
+- **Browser**: sync only (no worker bundles)
+
+**Worker failure semantics:** timeout (120s) → invalid (`false`, no main-thread
+retry); worker crash / missing file → sync fallback (`null`). See plan doc.
+
+**When changing validation logic**, read **`PARALLEL_VALIDATION_PLAN.md`** first.
+Key types: `BlsSignatureCheck` in `src/types.ts`. Deposit/builder flow:
+`depositBlsCheck` / `builderBlsCheck` → `verifyBlsChecksParallel` (signatures
+verified once, not twice). Lock has **one** `signature_aggregate`; many operator
+pubkeys are aggregated in `verifyAggregateParallel` (~5% of wall time).
+
+**Do not** add `blst` or opt-in profiling without an explicit product decision.
+Bench chunk workers after build: `node test/perf/parallelBench.mjs`.
 
 ### Key Types (from `src/types.ts`)
 
 - **ClusterPayload**: Input for `createClusterDefinition` — `{ name, operators (min 4), validators (min 1), deposit_amounts?, compounding?, target_gas_limit? }`
 - **ClusterDefinition**: Full cluster config with `config_hash`, `threshold`, `fork_version`, `uuid`, etc.
 - **ClusterLock**: Post-DKG result with `distributed_validators`, `signature_aggregate`, `lock_hash`
+- **BlsSignatureCheck**: `{ pubkey, message, signature }` — one batch BLS verify unit
 - **RewardsSplitPayload / TotalSplitPayload**: V1 SplitMain payloads
 - **OVMRewardsSplitPayload / OVMTotalSplitPayload**: V2 OVM+SplitV2 payloads
 - **SplitRecipient**: `{ account, percentAllocation }` (V1)
@@ -464,6 +508,7 @@ const tx = await deployContract(...);
 
 ## Key docs
 
+- **Lock validation performance / workers**: `PARALLEL_VALIDATION_PLAN.md` (in this repo)
 - SDK TypeDoc reference: https://obolnetwork.github.io/obol-sdk
 - Obol SDK quickstart: https://docs.obol.org/docs/advanced/quickstart-sdk
 - Charon CLI reference: https://docs.obol.org/docs/charon/charon-cli-reference

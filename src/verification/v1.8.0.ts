@@ -24,17 +24,23 @@ import {
 } from '@chainsafe/ssz';
 import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container.js';
 import {
+  type BlsSignatureCheck,
   type ClusterDefinition,
   type ClusterLock,
   type DepositData,
 } from '../types.js';
 import {
-  verifyBuilderRegistration,
-  verifyDepositData,
+  builderBlsCheck,
+  builderDomainForFork,
+  depositBlsCheck,
+  depositDomainForFork,
   verifyNodeSignatures,
 } from './common.js';
-import { blsVerifyAggregate } from '../blsUtils.js';
-import { verifyBatchParallel, verifySharesBinding } from './parallelPool.js';
+import {
+  verifyAggregateParallel,
+  verifyBlsChecksParallel,
+  verifySharesBinding,
+} from './parallelPool.js';
 
 // cluster definition
 type DefinitionFieldsV1X8 = {
@@ -256,10 +262,11 @@ export const verifyDVV1X8 = async (
     return false;
   }
 
-  const pubShares = [];
-  const pubKeys = [];
-  const builderRegistrationAndDepositDataMessages = [];
-  const blsSignatures = [];
+  const pubShares: Uint8Array[] = [];
+  const blsChecks: BlsSignatureCheck[] = [];
+  const forkVersion = clusterLock.cluster_definition.fork_version;
+  const depositDomain = depositDomainForFork(forkVersion);
+  const builderDomain = builderDomainForFork(forkVersion);
 
   for (let i = 0; i < validators.length; i++) {
     const validator = validators[i];
@@ -300,53 +307,30 @@ export const verifyDVV1X8 = async (
         return false;
       }
     }
-    // Deposit Data Verification
-    for (const element of validator.partial_deposit_data as DepositData[]) {
-      const depositData = element;
-      const { isValidDepositData, depositDataMsg } = verifyDepositData(
+    for (const depositData of validator.partial_deposit_data as DepositData[]) {
+      const check = depositBlsCheck(
         distributedPublicKey,
         depositData as Partial<DepositData>,
         clusterLock.cluster_definition.validators[i].withdrawal_address,
-        clusterLock.cluster_definition.fork_version,
+        forkVersion,
         clusterLock.cluster_definition.compounding,
+        depositDomain,
       );
-
-      if (!isValidDepositData) {
-        return false;
-      }
-
-      pubKeys.push(fromHexString(distributedPublicKey));
-      builderRegistrationAndDepositDataMessages.push(depositDataMsg);
-      blsSignatures.push(fromHexString(depositData?.signature));
+      if (!check) return false;
+      blsChecks.push(check);
     }
 
-    // Builder Registration Verification
-    const { isValidBuilderRegistration, builderRegistrationMsg } =
-      verifyBuilderRegistration(
-        validator,
-        clusterLock.cluster_definition.validators[i].fee_recipient_address,
-        clusterLock.cluster_definition.fork_version,
-      );
-
-    if (!isValidBuilderRegistration) {
-      return false;
-    }
-
-    pubKeys.push(fromHexString(distributedPublicKey));
-    builderRegistrationAndDepositDataMessages.push(builderRegistrationMsg);
-    blsSignatures.push(
-      fromHexString(validator.builder_registration?.signature as string),
+    const builderCheck = builderBlsCheck(
+      validator,
+      clusterLock.cluster_definition.validators[i].fee_recipient_address,
+      forkVersion,
+      builderDomain,
     );
+    if (!builderCheck) return false;
+    blsChecks.push(builderCheck);
   }
 
-  // BLS signatures verification
-  if (
-    !(await verifyBatchParallel(
-      pubKeys,
-      builderRegistrationAndDepositDataMessages,
-      blsSignatures,
-    ))
-  ) {
+  if (!(await verifyBlsChecksParallel(blsChecks))) {
     return false;
   }
 
@@ -355,13 +339,12 @@ export const verifyDVV1X8 = async (
     return false;
   }
 
-  // signature_aggregate verification
   if (
-    !blsVerifyAggregate(
+    !(await verifyAggregateParallel(
       pubShares,
       fromHexString(clusterLock.lock_hash),
       fromHexString(clusterLock.signature_aggregate),
-    )
+    ))
   ) {
     return false;
   }

@@ -1,5 +1,6 @@
 import { type SafeRpcUrl, type ClusterLock } from './types.js';
 import { isValidClusterLock } from './verification/common.js';
+import { validateClusterLockInWorker } from './verification/parallelPool.js';
 
 /**
  * Verifies the cryptographic validity of a cluster lock.
@@ -35,8 +36,9 @@ export const validateClusterLock = async (
   safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
-    const isLockValid = await isValidClusterLock(lock, safeRpcUrl);
-    return isLockValid;
+    const inWorker = await validateClusterLockInWorker(lock, safeRpcUrl);
+    if (inWorker !== null) return inWorker;
+    return await isValidClusterLock(lock, safeRpcUrl);
   } catch (err: any) {
     throw err;
   }

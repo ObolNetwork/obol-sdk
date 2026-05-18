@@ -4,12 +4,15 @@
 //   'shareBinding' — Lagrange + extra-share verification for a validator chunk.
 //   'verifyBatch'  — blsVerifyMultiple on a (pubkeys, messages, aggregateSig)
 //                    chunk of the deposit+builder batch.
+//   'aggregatePubkeys' — partial G1 aggregate of a pubkey chunk (for lock sig).
 //
-// Both modes return a simple boolean; main thread combines results.
+// shareBinding / verifyBatch return boolean; aggregatePubkeys returns bytes.
 
 import { parentPort, workerData } from 'node:worker_threads';
 import { fromHexString } from '@chainsafe/ssz';
 import {
+  blsAggregatePublicKeys,
+  blsAggregateSignatures,
   blsRecoverDistributedPubkeyFromShares,
   blsVerifyExtraShares,
   blsVerifyMultiple,
@@ -26,10 +29,20 @@ export interface VerifyBatchInput {
   mode: 'verifyBatch';
   pubkeys: Uint8Array[];
   messages: Uint8Array[];
-  aggregateSignature: Uint8Array;
+  signatures: Uint8Array[];
 }
 
-export type WorkerInput = ShareBindingInput | VerifyBatchInput;
+export interface AggregatePubkeysInput {
+  mode: 'aggregatePubkeys';
+  pubkeys: Uint8Array[];
+}
+
+export type WorkerInput =
+  | ShareBindingInput
+  | VerifyBatchInput
+  | AggregatePubkeysInput;
+
+export type WorkerResult = boolean | Uint8Array;
 
 function verifyShareBindingChunk(input: ShareBindingInput): boolean {
   const { shares, distributedKeys, threshold } = input;
@@ -59,13 +72,16 @@ function verifyBatchChunk(input: VerifyBatchInput): boolean {
   return blsVerifyMultiple(
     input.pubkeys,
     input.messages,
-    input.aggregateSignature,
+    blsAggregateSignatures(input.signatures),
   );
 }
 
-function dispatch(input: WorkerInput): boolean {
+function dispatch(input: WorkerInput): WorkerResult {
   if (input.mode === 'shareBinding') return verifyShareBindingChunk(input);
   if (input.mode === 'verifyBatch') return verifyBatchChunk(input);
+  if (input.mode === 'aggregatePubkeys') {
+    return blsAggregatePublicKeys(input.pubkeys);
+  }
   return false;
 }
 

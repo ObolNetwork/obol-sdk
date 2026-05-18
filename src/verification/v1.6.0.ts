@@ -25,9 +25,13 @@ import {
   type ClusterLock,
   type DepositData,
 } from '../types.js';
-import { verifyDepositData } from './common.js';
-import { blsVerifyAggregate } from '../blsUtils.js';
-import { verifyBatchParallel, verifySharesBinding } from './parallelPool.js';
+import { depositBlsCheck } from './common.js';
+import type { BlsSignatureCheck } from '../types.js';
+import {
+  verifyAggregateParallel,
+  verifyBlsChecksParallel,
+  verifySharesBinding,
+} from './parallelPool.js';
 
 // cluster definition
 type DefinitionFieldsV1X6 = {
@@ -218,9 +222,7 @@ export const verifyDVV1X6 = async (
   }
 
   const pubShares = [];
-  const pubKeys = [];
-  const builderRegistrationAndDepositDataMessages = [];
-  const blsSignatures = [];
+  const blsChecks: BlsSignatureCheck[] = [];
 
   for (let i = 0; i < validators.length; i++) {
     const validator = validators[i];
@@ -244,40 +246,26 @@ export const verifyDVV1X6 = async (
       pubShares.push(share);
     }
 
-    const { isValidDepositData, depositDataMsg } = verifyDepositData(
+    const depositCheck = depositBlsCheck(
       distributedPublicKey,
       validator.deposit_data as Partial<DepositData>,
       clusterLock.cluster_definition.validators[i].withdrawal_address,
       clusterLock.cluster_definition.fork_version,
     );
-
-    if (!isValidDepositData) {
-      return false;
-    }
-
-    pubKeys.push(fromHexString(validator.distributed_public_key));
-    builderRegistrationAndDepositDataMessages.push(depositDataMsg);
-    blsSignatures.push(
-      fromHexString(validator.deposit_data?.signature as string),
-    );
+    if (!depositCheck) return false;
+    blsChecks.push(depositCheck);
   }
 
-  if (
-    !(await verifyBatchParallel(
-      pubKeys,
-      builderRegistrationAndDepositDataMessages,
-      blsSignatures,
-    ))
-  ) {
+  if (!(await verifyBlsChecksParallel(blsChecks))) {
     return false;
   }
 
   if (
-    !blsVerifyAggregate(
+    !(await verifyAggregateParallel(
       pubShares,
       fromHexString(clusterLock.lock_hash),
       fromHexString(clusterLock.signature_aggregate),
-    )
+    ))
   ) {
     return false;
   }
