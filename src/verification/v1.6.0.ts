@@ -24,9 +24,9 @@ import {
   type ClusterDefinition,
   type ClusterLock,
   type DepositData,
+ type BlsSignatureCheck
 } from '../types.js';
 import { depositBlsCheck } from './common.js';
-import type { BlsSignatureCheck } from '../types.js';
 import {
   verifyAggregateParallel,
   verifyBlsChecksParallel,
