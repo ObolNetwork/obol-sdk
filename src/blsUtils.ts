@@ -18,8 +18,9 @@ export function blsVerify(
 }
 
 export function blsAggregatePublicKeys(pubkeys: Uint8Array[]): Uint8Array {
-  if (pubkeys.length === 0)
+  if (pubkeys.length === 0) {
     throw new Error('cannot aggregate empty pubkey set');
+  }
   return ls.aggregatePublicKeys(pubkeys).toBytes() as Uint8Array;
 }
 
