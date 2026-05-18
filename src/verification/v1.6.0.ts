@@ -24,7 +24,7 @@ import {
   type ClusterDefinition,
   type ClusterLock,
   type DepositData,
- type BlsSignatureCheck
+  type BlsSignatureCheck,
 } from '../types.js';
 import { depositBlsCheck } from './common.js';
 import {

@@ -586,9 +586,7 @@ const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
  * trips a downstream check (signature_aggregate, node sigs) cannot isolate
  * this branch.
  */
-export const hasUniqueDistributedKeys = (
-  clusterLock: ClusterLock,
-): boolean => {
+export const hasUniqueDistributedKeys = (clusterLock: ClusterLock): boolean => {
   const dvKeys = clusterLock.distributed_validators.map(v =>
     v.distributed_public_key.toLowerCase(),
   );
