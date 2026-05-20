@@ -11,8 +11,7 @@ export const ALLOWED_OBOL_API_BASE_URLS = [
   'https://obol-api-nonprod-dev.dev.obol.tech',
 ] as const;
 
-export type AllowedObolApiBaseUrl =
-  (typeof ALLOWED_OBOL_API_BASE_URLS)[number];
+export type AllowedObolApiBaseUrl = (typeof ALLOWED_OBOL_API_BASE_URLS)[number];
 
 const ALLOWED_ORIGINS = new Set<string>(
   ALLOWED_OBOL_API_BASE_URLS.map(url => new URL(url).origin),
