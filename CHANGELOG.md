@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.12.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.0...v2.12.1)
+
+- perf: run lock validation off main thread, parallelize BLS operations [`#208`](https://github.com/ObolNetwork/obol-sdk/pull/208)
+
 #### [v2.12.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.13...v2.12.0)
 
+> 15 May 2026
+
+- chore(release): v2.12.0 [`#207`](https://github.com/ObolNetwork/obol-sdk/pull/207)
 - Fix/lock share binding validation [`#199`](https://github.com/ObolNetwork/obol-sdk/pull/199)
 
 #### [v2.11.13](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.12...v2.11.13)
