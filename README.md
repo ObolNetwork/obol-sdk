@@ -41,7 +41,7 @@ To use obol-sdk and in order to be able to create a cluster definition or accept
 
 ## Security
 
-**API host:** The SDK only sends HTTP requests (and EIP-712 `Authorization` signatures) to official Obol API hosts by default: `https://api.obol.tech`, `https://obol-api-nonprod-dev.dev.obol.tech`, and `https://obol-api-nonprod-qa.dev.obol.tech`. Passing a different `baseUrl` without `allowUnsafeBaseUrl: true` throws `InvalidBaseUrlError` so a typo or malicious config cannot redirect your signer to another server.
+**API host:** `baseUrl` must be one of `https://api.obol.tech`, `https://obol-api-nonprod-dev.dev.obol.tech`, or `https://obol-api-nonprod-qa.dev.obol.tech` (no path suffix). Endpoints are still called as `/v1/...` as before. Any other value throws `InvalidBaseUrlError`.
 
 **RPC URLs:** Set `RPC_MAINNET`, `RPC_HOODI`, etc. in your own app or pass an explicit provider/RPC to the client. The SDK does not load a `.env` file on import.
 

@@ -47,7 +47,7 @@ export class UnsupportedChainError extends Error {
  */
 /**
  * Thrown when {@link Client} is constructed with a baseUrl that is not an
- * official Obol API host (and {@link allowUnsafeBaseUrl} was not set).
+ * an allowed Obol API base URL (see {@link ALLOWED_OBOL_API_BASE_URLS}).
  */
 export class InvalidBaseUrlError extends Error {
   name = 'InvalidBaseUrlError';

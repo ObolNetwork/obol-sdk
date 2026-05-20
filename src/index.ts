@@ -67,10 +67,7 @@ export {
   SignerRequiredError,
   UnsupportedChainError,
 } from './errors.js';
-export {
-  ALLOWED_OBOL_API_BASE_URLS,
-  validateAndNormalizeBaseUrl,
-} from './base.js';
+export { ALLOWED_OBOL_API_BASE_URLS } from './base.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
 export { ObolSplits } from './splits/splits.js';
@@ -172,8 +169,7 @@ export class Client extends Base {
    *
    * @param config - Client configuration object.
    * @param config.baseUrl - Obol API base URL. Defaults to `https://api.obol.tech`.
-   *   Must be an official Obol API host (see {@link ALLOWED_OBOL_API_BASE_URLS}).
-   * @param config.allowUnsafeBaseUrl - Bypass the API host allowlist (tests only).
+   *   Must match one of {@link ALLOWED_OBOL_API_BASE_URLS} (API paths use `/v1/...` separately).
    * @param config.chainId - Target chain ID. Defaults to `560048` (Hoodi).
    *   Supported: 1 (Mainnet), 560048 (Hoodi), 100 (Gnosis), 11155111 (Sepolia).
    * @param signer - An ethers `Wallet` or `JsonRpcSigner`. Required for any
