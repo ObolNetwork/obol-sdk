@@ -39,3 +39,22 @@ export class UnsupportedChainError extends Error {
     Object.setPrototypeOf(this, UnsupportedChainError.prototype);
   }
 }
+
+/**
+ * Thrown when full lock validation (`validateClusterLock` worker path) exceeds
+ * the worker time limit (large clusters). HTTP gateways should respond with
+ * **504**; this is distinct from cryptographic failure (**false** → **400**).
+ */
+export class ClusterLockValidationTimeoutError extends Error {
+  name = 'ClusterLockValidationTimeoutError';
+
+  /**
+   * @param timeoutMs - Same value as SDK whole-lock validation worker timeout.
+   */
+  constructor(public readonly timeoutMs: number) {
+    super(
+      `Cluster lock validation exceeded worker time limit (${timeoutMs} ms). Retry later; this does not imply invalid lock data.`,
+    );
+    Object.setPrototypeOf(this, ClusterLockValidationTimeoutError.prototype);
+  }
+}

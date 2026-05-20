@@ -1,5 +1,6 @@
 import { type SafeRpcUrl, type ClusterLock } from './types.js';
 import { isValidClusterLock } from './verification/common.js';
+import { validateClusterLockInWorker } from './verification/parallelPool.js';
 
 /**
  * Verifies the cryptographic validity of a cluster lock.
@@ -18,7 +19,10 @@ import { isValidClusterLock } from './verification/common.js';
  * @param safeRpcUrl - Optional RPC URL for Safe Wallet signature verification.
  *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOODI` / etc. env vars.
  * @returns `true` if the lock is cryptographically valid; `false` if invalid
- *   (e.g. missing keys, invalid signatures, hash mismatches) or on any error.
+ *   (e.g. missing keys, invalid signatures, hash mismatches).
+ * @throws `ClusterLockValidationTimeoutError` when whole-lock validation
+ *   exceeds the SDK worker deadline (typically large clusters). HTTP APIs should map
+ *   this to **504 Gateway Timeout**.
  *
  * @example
  * ```typescript
@@ -35,8 +39,9 @@ export const validateClusterLock = async (
   safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
-    const isLockValid = await isValidClusterLock(lock, safeRpcUrl);
-    return isLockValid;
+    const inWorker = await validateClusterLockInWorker(lock, safeRpcUrl);
+    if (inWorker !== null) return inWorker;
+    return await isValidClusterLock(lock, safeRpcUrl);
   } catch (err: any) {
     throw err;
   }

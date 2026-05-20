@@ -14,10 +14,13 @@
 
 import { fromHexString } from '@chainsafe/ssz';
 import {
+  blsAggregatePublicKeys,
   blsAggregateSignatures,
   blsRecoverDistributedPubkeyFromShares,
+  blsVerifyAggregate,
   blsVerifyExtraShares,
   blsVerifyMultiple,
+  blsVerifyWithAggregatedPubkey,
 } from '../blsUtils.js';
 // Type-only imports — erased at compile time, so they don't pull node:*
 // modules into the browser bundle.
@@ -25,25 +28,37 @@ import type * as WTNs from 'node:worker_threads';
 import type * as OsNs from 'node:os';
 import type * as PathNs from 'node:path';
 import type * as FsNs from 'node:fs';
-import type { WorkerInput } from './lockWorker.js';
+import { ClusterLockValidationTimeoutError } from '../errors.js';
+import type { BlsSignatureCheck, ClusterLock, SafeRpcUrl } from '../types.js';
+import type { AggregatePubkeysInput, WorkerInput } from './lockWorker.js';
 
 const MIN_PARALLEL_VALIDATORS = 50;
 const MIN_PARALLEL_BATCH_PAIRS = 100;
 const MAX_WORKERS = 8;
 const MIN_VALIDATORS_PER_WORKER = 25;
 const MIN_PAIRS_PER_WORKER = 50;
+const MIN_PARALLEL_AGGREGATE_KEYS = 400;
+const MIN_KEYS_PER_WORKER_AGG = 100;
 // Hard ceiling so a stuck worker can't leak past obol-api's HTTP timeout.
 // Biggest legitimate batch (~1000 pairs) finishes in ~3s on the bench; 60s
 // is conservative enough to never false-trip on real input.
+const MIN_VALIDATORS_FOR_VALIDATION_WORKER = 50;
+const VALIDATION_WORKER_TIMEOUT_MS = 120_000;
 const WORKER_TIMEOUT_MS = 60_000;
+// Cap simultaneous workers (memory). Scales up for large jobs on multi-core hosts.
+const MAX_CONCURRENT_WORKERS_CAP = 8;
+
+function maxConcurrentWorkers(numWorkers: number): number {
+  return Math.min(numWorkers, MAX_CONCURRENT_WORKERS_CAP);
+}
 
 type WorkerThreads = typeof WTNs;
 type NodeOs = typeof OsNs;
 
 let workerThreadsCache: WorkerThreads | null | undefined;
 let osCache: NodeOs | null | undefined;
-// Tri-state: undefined = uncached, null = checked & unavailable, string = path.
-let workerPathCache: string | null | undefined;
+// Tri-state per worker file: undefined = uncached, null = unavailable, string = path.
+const workerPathByFile = new Map<string, string | null | undefined>();
 
 function loadWorkerThreads(): WorkerThreads | null {
   if (workerThreadsCache !== undefined) return workerThreadsCache;
@@ -67,26 +82,55 @@ function loadOs(): NodeOs | null {
   return osCache;
 }
 
-function getWorkerPath(): string | null {
-  if (workerPathCache !== undefined) return workerPathCache;
-  // CJS only. In ESM and browser builds __dirname is undefined, so this
-  // memoizes null and the caller falls back to sync. See plan for the
-  // full coverage matrix.
-  if (typeof __dirname === 'undefined') return (workerPathCache = null);
+function getWorkerPath(filename: string): string | null {
+  const cached = workerPathByFile.get(filename);
+  if (cached !== undefined) return cached;
+  if (typeof __dirname === 'undefined') {
+    workerPathByFile.set(filename, null);
+    return null;
+  }
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
   const path = require('node:path') as typeof PathNs;
-  const candidate = path.join(__dirname, 'lockWorker.js');
-  // Sanity check: running from source (tsx, ts-node, jest without a build)
-  // also hits the CJS branch but the .js file isn't there yet. Without
-  // memoizing null we'd re-run existsSync on every call.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+  const fs = require('node:fs') as typeof FsNs;
+  // Bundled index.js: __dirname is dist/cjs/src; workers live in verification/.
+  // Standalone parallelPool.js entry: __dirname is already verification/.
+  const candidates = [
+    path.join(__dirname, filename),
+    path.join(__dirname, 'verification', filename),
+  ];
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const fs = require('node:fs') as typeof FsNs;
-    if (!fs.existsSync(candidate)) return (workerPathCache = null);
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        workerPathByFile.set(filename, candidate);
+        return candidate;
+      }
+    }
   } catch {
-    return (workerPathCache = null);
+    // fall through
   }
-  return (workerPathCache = candidate);
+  workerPathByFile.set(filename, null);
+  return null;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await fn(items[i], i);
+      }
+    },
+  );
+  await Promise.all(runners);
+  return results;
 }
 
 function chunkArrays<T>(arr: T[], n: number): T[][] {
@@ -120,6 +164,37 @@ function verifySharesSync(
     }
   }
   return true;
+}
+
+async function runWorkerAggregatePubkeys(
+  wt: WorkerThreads,
+  workerFile: string,
+  data: AggregatePubkeysInput,
+): Promise<Uint8Array | null> {
+  return await new Promise(resolve => {
+    let settled = false;
+    const worker = new wt.Worker(workerFile, { workerData: data });
+    const finish = (result: Uint8Array | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      worker.terminate();
+      resolve(result);
+    };
+    const timer = setTimeout(() => {
+      finish(null);
+    }, WORKER_TIMEOUT_MS);
+    worker.once('message', (msg: unknown) => {
+      finish(msg instanceof Uint8Array ? msg : null);
+    });
+    worker.once('error', () => {
+      finish(null);
+    });
+    worker.once('exit', code => {
+      if (code !== 0) finish(null);
+    });
+  });
 }
 
 async function runWorker(
@@ -163,14 +238,27 @@ function poolSize(
 } {
   const wt = loadWorkerThreads();
   const os = loadOs();
-  const workerFile = getWorkerPath();
-  const numCpus = os ? os.cpus().length : 1;
+  const workerFile = getWorkerPath('lockWorker.js');
+  const numCpus = os ? Math.max(1, os.cpus().length) : 1;
   const numWorkers = Math.min(
     MAX_WORKERS,
     Math.max(1, Math.floor(itemCount / minPerWorker)),
     numCpus,
   );
   return { numWorkers, wt, workerFile };
+}
+
+async function runWorkerChunks(
+  wt: WorkerThreads,
+  workerFile: string,
+  chunks: WorkerInput[],
+): Promise<boolean> {
+  const results = await mapWithConcurrency(
+    chunks,
+    maxConcurrentWorkers(chunks.length),
+    async data => await runWorker(wt, workerFile, data),
+  );
+  return results.every(Boolean);
 }
 
 export async function verifySharesBinding(
@@ -200,18 +288,28 @@ export async function verifySharesBinding(
   const shareChunks = chunkArrays(shares, numWorkers);
   const keyChunks = chunkArrays(distributedKeys, numWorkers);
 
-  const results = await Promise.all(
-    shareChunks.map(
-      async (chunk, i) =>
-        await runWorker(wt, workerFile, {
-          mode: 'shareBinding',
-          shares: chunk,
-          distributedKeys: keyChunks[i],
-          threshold,
-        }),
-    ),
+  return await runWorkerChunks(
+    wt,
+    workerFile,
+    shareChunks.map((chunk, i) => ({
+      mode: 'shareBinding',
+      shares: chunk,
+      distributedKeys: keyChunks[i],
+      threshold,
+    })),
   );
-  return results.every(Boolean);
+}
+
+/** Verify deposit + builder BLS signatures collected from `depositBlsCheck` / `builderBlsCheck`. */
+export async function verifyBlsChecksParallel(
+  checks: BlsSignatureCheck[],
+): Promise<boolean> {
+  if (checks.length === 0) return true;
+  return await verifyBatchParallel(
+    checks.map(c => c.pubkey),
+    checks.map(c => c.message),
+    checks.map(c => c.signature),
+  );
 }
 
 // Verify a batch of (pubkey, message, individual signature) triples.
@@ -254,16 +352,107 @@ export async function verifyBatchParallel(
   const msgChunks = chunkArrays(messages, numWorkers);
   const sigChunks = chunkArrays(signatures, numWorkers);
 
-  const results = await Promise.all(
-    pkChunks.map(
-      async (pks, i) =>
-        await runWorker(wt, workerFile, {
-          mode: 'verifyBatch',
-          pubkeys: pks,
-          messages: msgChunks[i],
-          aggregateSignature: blsAggregateSignatures(sigChunks[i]),
-        }),
-    ),
+  return await runWorkerChunks(
+    wt,
+    workerFile,
+    pkChunks.map((pks, i) => ({
+      mode: 'verifyBatch',
+      pubkeys: pks,
+      messages: msgChunks[i],
+      signatures: sigChunks[i],
+    })),
   );
-  return results.every(Boolean);
+}
+
+// Lock signature_aggregate: aggregate many operator shares (validators × operators)
+// then verify one BLS signature over lock_hash. Parallel path aggregates pubkey
+// chunks in workers, combines partial aggregates on the main thread, then verifies.
+export async function verifyAggregateParallel(
+  pubkeys: Uint8Array[],
+  message: Uint8Array,
+  signature: Uint8Array,
+): Promise<boolean> {
+  if (pubkeys.length === 0) return false;
+
+  const { numWorkers, wt, workerFile } = poolSize(
+    pubkeys.length,
+    MIN_KEYS_PER_WORKER_AGG,
+  );
+
+  if (
+    wt === null ||
+    workerFile === null ||
+    pubkeys.length < MIN_PARALLEL_AGGREGATE_KEYS ||
+    numWorkers < 2
+  ) {
+    return blsVerifyAggregate(pubkeys, message, signature);
+  }
+
+  const pkChunks = chunkArrays(pubkeys, numWorkers);
+  const partials = await mapWithConcurrency(
+    pkChunks,
+    maxConcurrentWorkers(pkChunks.length),
+    async chunk =>
+      await runWorkerAggregatePubkeys(wt, workerFile, {
+        mode: 'aggregatePubkeys',
+        pubkeys: chunk,
+      }),
+  );
+  if (partials.some(p => p === null)) return false;
+
+  const aggregated = blsAggregatePublicKeys(partials as Uint8Array[]);
+  return blsVerifyWithAggregatedPubkey(aggregated, message, signature);
+}
+
+/**
+ * Large locks: run full validation off the main thread (obol-api stays responsive).
+ * Returns null when workers are unavailable — caller should use sync validation.
+ */
+export async function validateClusterLockInWorker(
+  lock: ClusterLock,
+  safeRpcUrl?: SafeRpcUrl,
+): Promise<boolean | null> {
+  const n = lock.distributed_validators?.length ?? 0;
+  if (n < MIN_VALIDATORS_FOR_VALIDATION_WORKER) return null;
+
+  const wt = loadWorkerThreads();
+  const workerFile = getWorkerPath('clusterLockValidationWorker.js');
+  if (wt === null || workerFile === null) return null;
+
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    const worker = new wt.Worker(workerFile, {
+      workerData: { lock, safeRpcUrl },
+    });
+    let timer: ReturnType<typeof setTimeout>;
+    const finish = (result: boolean | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      worker.terminate();
+      resolve(result);
+    };
+    // Timeout rejects (ClusterLockValidationTimeoutError) instead of resolving
+    // false: callers must distinguish **504** gateway timeout from **400** invalid
+    // crypto. Do not resolve null here — full sync fallback would block Node again.
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      reject(
+        new ClusterLockValidationTimeoutError(VALIDATION_WORKER_TIMEOUT_MS),
+      );
+    }, VALIDATION_WORKER_TIMEOUT_MS);
+    worker.once('message', (msg: unknown) => {
+      finish(msg === true);
+    });
+    worker.once('error', () => {
+      finish(null);
+    });
+    worker.once('exit', code => {
+      if (code !== 0) finish(null);
+    });
+  });
 }

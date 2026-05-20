@@ -26,14 +26,18 @@ import {
   type ClusterDefinition,
   type ClusterLock,
   type DepositData,
+  type BlsSignatureCheck,
 } from '../types.js';
 import {
-  verifyBuilderRegistration,
-  verifyDepositData,
+  builderBlsCheck,
+  depositBlsCheck,
   verifyNodeSignatures,
 } from './common.js';
-import { blsVerifyAggregate } from '../blsUtils.js';
-import { verifyBatchParallel, verifySharesBinding } from './parallelPool.js';
+import {
+  verifyAggregateParallel,
+  verifyBlsChecksParallel,
+  verifySharesBinding,
+} from './parallelPool.js';
 
 // cluster definition
 type DefinitionFieldsV1X7 = {
@@ -244,10 +248,7 @@ export const verifyDVV1X7 = async (
   }
 
   const pubShares = [];
-
-  const pubKeys = [];
-  const builderRegistrationAndDepositDataMessages = [];
-  const blsSignatures = [];
+  const blsChecks: BlsSignatureCheck[] = [];
 
   for (let i = 0; i < validators.length; i++) {
     const validator = validators[i];
@@ -271,51 +272,25 @@ export const verifyDVV1X7 = async (
       pubShares.push(share);
     }
 
-    // Deposit Data Verification
-    const { isValidDepositData, depositDataMsg } = verifyDepositData(
+    const depositCheck = depositBlsCheck(
       distributedPublicKey,
       validator.deposit_data as Partial<DepositData>,
       clusterLock.cluster_definition.validators[i].withdrawal_address,
       clusterLock.cluster_definition.fork_version,
     );
+    if (!depositCheck) return false;
+    blsChecks.push(depositCheck);
 
-    if (!isValidDepositData) {
-      return false;
-    }
-
-    pubKeys.push(fromHexString(distributedPublicKey));
-    builderRegistrationAndDepositDataMessages.push(depositDataMsg);
-    blsSignatures.push(
-      fromHexString(validator.deposit_data?.signature as string),
+    const builderCheck = builderBlsCheck(
+      validator,
+      clusterLock.cluster_definition.validators[i].fee_recipient_address,
+      clusterLock.cluster_definition.fork_version,
     );
-
-    // Builder Registration Verification
-    const { isValidBuilderRegistration, builderRegistrationMsg } =
-      verifyBuilderRegistration(
-        validator,
-        clusterLock.cluster_definition.validators[i].fee_recipient_address,
-        clusterLock.cluster_definition.fork_version,
-      );
-
-    if (!isValidBuilderRegistration) {
-      return false;
-    }
-
-    pubKeys.push(fromHexString(distributedPublicKey));
-    builderRegistrationAndDepositDataMessages.push(builderRegistrationMsg);
-    blsSignatures.push(
-      fromHexString(validator.builder_registration?.signature as string),
-    );
+    if (!builderCheck) return false;
+    blsChecks.push(builderCheck);
   }
 
-  // BLS signatures verification — chunked across workers when large enough.
-  if (
-    !(await verifyBatchParallel(
-      pubKeys,
-      builderRegistrationAndDepositDataMessages,
-      blsSignatures,
-    ))
-  ) {
+  if (!(await verifyBlsChecksParallel(blsChecks))) {
     return false;
   }
 
@@ -324,13 +299,12 @@ export const verifyDVV1X7 = async (
     return false;
   }
 
-  // signature_aggregate verification
   if (
-    !blsVerifyAggregate(
+    !(await verifyAggregateParallel(
       pubShares,
       fromHexString(clusterLock.lock_hash),
       fromHexString(clusterLock.signature_aggregate),
-    )
+    ))
   ) {
     return false;
   }

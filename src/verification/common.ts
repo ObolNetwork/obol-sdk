@@ -2,6 +2,7 @@ import { fromHexString } from '@chainsafe/ssz';
 import elliptic from 'elliptic';
 import {
   FORK_MAPPING,
+  type BlsSignatureCheck,
   type ClusterDefinition,
   type ClusterLock,
   type DepositData,
@@ -346,12 +347,77 @@ const computeDomain = (
   return domain;
 };
 
+export const depositDomainForFork = (forkVersion: string): Uint8Array =>
+  computeDomain(fromHexString(DOMAIN_DEPOSIT), forkVersion);
+
+export const builderDomainForFork = (forkVersion: string): Uint8Array =>
+  computeDomain(fromHexString(DOMAIN_APPLICATION_BUILDER), forkVersion);
+
 /**
- * Verify deposit data withdrawal credintials and signature
- * @param {string} forkVersion - fork version in definition file.
- * @param {DistributedValidatorDto} validator - distributed validator.
- * @param {string} withdrawalAddress - withdrawal address in definition file.
- * @returns {boolean} - return if deposit data is valid.
+ * Structural deposit checks + signing root (no BLS). Used before batch BLS verify.
+ */
+export const validateDepositDataStructure = (
+  distributedPublicKey: string,
+  depositData: Partial<DepositData>,
+  withdrawalAddress: string,
+  forkVersion: string,
+  compounding?: boolean,
+  precomputedDepositDomain?: Uint8Array,
+): { valid: boolean; message: Uint8Array } => {
+  const depositDomain =
+    precomputedDepositDomain ??
+    computeDomain(fromHexString(DOMAIN_DEPOSIT), forkVersion);
+  const withdrawalPrefix = compounding ? '0x02' : '0x01';
+  const expectedWithdrawalCredentials =
+    withdrawalPrefix +
+    '0'.repeat(22) +
+    withdrawalAddress.toLowerCase().slice(2);
+
+  if (expectedWithdrawalCredentials !== depositData.withdrawal_credentials) {
+    return { valid: false, message: new Uint8Array(0) };
+  }
+
+  if (distributedPublicKey !== depositData.pubkey) {
+    return { valid: false, message: new Uint8Array(0) };
+  }
+
+  const depositMessageBuffer = computeDepositMsgRoot(depositData);
+  const message = signingRoot(depositDomain, depositMessageBuffer);
+  if (!depositData.signature) {
+    return { valid: false, message };
+  }
+
+  return { valid: true, message };
+};
+
+/** Deposit fields + BLS triple for batch verification. Returns null if structure is invalid. */
+export const depositBlsCheck = (
+  distributedPublicKey: string,
+  depositData: Partial<DepositData>,
+  withdrawalAddress: string,
+  forkVersion: string,
+  compounding?: boolean,
+  precomputedDepositDomain?: Uint8Array,
+): BlsSignatureCheck | null => {
+  const { valid, message } = validateDepositDataStructure(
+    distributedPublicKey,
+    depositData,
+    withdrawalAddress,
+    forkVersion,
+    compounding,
+    precomputedDepositDomain,
+  );
+  if (!valid || !depositData.signature || !depositData.pubkey) return null;
+  return {
+    pubkey: fromHexString(depositData.pubkey),
+    message,
+    signature: fromHexString(depositData.signature),
+  };
+};
+
+/**
+ * Verify deposit data withdrawal credintials and signature (structure + BLS in one call).
+ * Prefer `depositBlsCheck` + batch verify in lock validation for large locks.
  */
 export const verifyDepositData = (
   distributedPublicKey: string,
@@ -360,51 +426,38 @@ export const verifyDepositData = (
   forkVersion: string,
   compounding?: boolean,
 ): { isValidDepositData: boolean; depositDataMsg: Uint8Array } => {
-  const depositDomain = computeDomain(
-    fromHexString(DOMAIN_DEPOSIT),
+  const { valid, message } = validateDepositDataStructure(
+    distributedPublicKey,
+    depositData,
+    withdrawalAddress,
     forkVersion,
+    compounding,
   );
-  const withdrawalPrefix = compounding ? '0x02' : '0x01';
-  const expectedWithdrawalCredentials =
-    withdrawalPrefix +
-    '0'.repeat(22) +
-    withdrawalAddress.toLowerCase().slice(2);
-
-  if (expectedWithdrawalCredentials !== depositData.withdrawal_credentials) {
-    return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
-  }
-
-  if (distributedPublicKey !== depositData.pubkey) {
-    return { isValidDepositData: false, depositDataMsg: new Uint8Array(0) };
-  }
-
-  const depositMessageBuffer = computeDepositMsgRoot(depositData);
-  const depositDataRoot = signingRoot(depositDomain, depositMessageBuffer);
-  if (!depositData.signature) {
-    return { isValidDepositData: false, depositDataMsg: depositDataRoot };
+  if (!valid || !depositData.signature || !depositData.pubkey) {
+    return { isValidDepositData: false, depositDataMsg: message };
   }
 
   const isValidDepositData = blsVerify(
     fromHexString(depositData.pubkey),
-    depositDataRoot,
+    message,
     fromHexString(depositData.signature),
   );
 
-  return { isValidDepositData, depositDataMsg: depositDataRoot };
+  return { isValidDepositData, depositDataMsg: message };
 };
 
 export const verifyBuilderRegistration = (
   validator: DistributedValidator,
   feeRecipientAddress: string,
   forkVersion: string,
+  precomputedBuilderDomain?: Uint8Array,
 ): {
   isValidBuilderRegistration: boolean;
   builderRegistrationMsg: Uint8Array;
 } => {
-  const builderDomain = computeDomain(
-    fromHexString(DOMAIN_APPLICATION_BUILDER),
-    forkVersion,
-  );
+  const builderDomain =
+    precomputedBuilderDomain ??
+    computeDomain(fromHexString(DOMAIN_APPLICATION_BUILDER), forkVersion);
 
   if (
     validator.distributed_public_key !==
@@ -437,6 +490,29 @@ export const verifyBuilderRegistration = (
   return {
     isValidBuilderRegistration: true,
     builderRegistrationMsg: builderRegistrationMessage,
+  };
+};
+
+/** Builder registration BLS triple for batch verification. Returns null if structure is invalid. */
+export const builderBlsCheck = (
+  validator: DistributedValidator,
+  feeRecipientAddress: string,
+  forkVersion: string,
+  precomputedBuilderDomain?: Uint8Array,
+): BlsSignatureCheck | null => {
+  const { isValidBuilderRegistration, builderRegistrationMsg } =
+    verifyBuilderRegistration(
+      validator,
+      feeRecipientAddress,
+      forkVersion,
+      precomputedBuilderDomain,
+    );
+  const sig = validator.builder_registration?.signature;
+  if (!isValidBuilderRegistration || !sig) return null;
+  return {
+    pubkey: fromHexString(validator.distributed_public_key),
+    message: builderRegistrationMsg,
+    signature: fromHexString(sig),
   };
 };
 
@@ -510,9 +586,7 @@ const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
  * trips a downstream check (signature_aggregate, node sigs) cannot isolate
  * this branch.
  */
-export const hasUniqueDistributedKeys = (
-  clusterLock: ClusterLock,
-): boolean => {
+export const hasUniqueDistributedKeys = (clusterLock: ClusterLock): boolean => {
   const dvKeys = clusterLock.distributed_validators.map(v =>
     v.distributed_public_key.toLowerCase(),
   );

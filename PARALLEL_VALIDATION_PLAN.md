@@ -1,203 +1,333 @@
 # Parallel Lock Validation Plan
 
+**Branch goal:** fix obol-api **502s** on large locks and cut validation time vs
+published **2.12.0**, without native BLS (`blst`).
+
+**Status:** implementation on `fix/lock-validation-event-loop` — profiling helpers
+and extra perf scripts removed; core worker + batch-BLS path kept.
+
+---
+
 ## Problem
 
-`validateClusterLock` is CPU-bound and single-threaded on pure-JS BLS. Large
-locks (100+ validators) take 15-30s+ — long enough that obol-api's HTTP
-handler times out before validation completes. `Promise.all` does not help,
-because BLS in `@noble/curves` is synchronous CPU work; awaiting promises
-serializes them. Real parallelism requires worker threads.
+`validateClusterLock` is CPU-bound on pure-JS BLS (`@noble/curves`). Large locks
+(500–1000 validators, thousands of partial deposits) can take **~60s+** of CPU
+work. When that runs on the **obol-api main thread**, the Node event loop is
+starved → health checks fail → **502 for all users**.
 
-## Bottleneck (measured on 4 cores, see `test/perf/parallelBench.mjs`)
+`Promise.all` on the main thread does not help: BLS in noble is synchronous CPU
+work. Real fixes are **worker threads** and **batching**, not `setImmediate`
+yields.
 
-| Phase | N=500 sync | N=500 parallel | Speedup |
+**We use `@noble/curves` intentionally** (no `blst` / native addon): portable
+CJS+ESM+browser, no `node-gyp`, audited pure TS. Perf ceiling is lower than
+native BLS; parallelism is how we stay within HTTP timeouts.
+
+### Why 2.12.0 regressed (~103s on 1k lock)
+
+1. Per-deposit BLS verified **twice** (inside `verifyDepositData` and again in batch).
+2. No **whole-lock validation worker** — CPU work blocked the API process.
+3. Share-binding + batch paths added cost without the batch dedup fix.
+
+This branch: **~57s** on the same lock, non-blocking for HTTP when CJS workers load.
+
+---
+
+## Measured on real 1k lock (4 operators, 2000 partial deposits, v1.10.0)
+
+| Bottleneck (approx.) | Share of ~57s |
+|---|---|
+| Batch BLS (deposits + builders) | ~60% |
+| Share-binding (Lagrange + extras) | ~33% |
+| Lock `signature_aggregate` (pubkey aggregation + one verify) | ~5% |
+| Definition signatures, hashes, rest | ~2% |
+
+Synthetic chunk benchmarks (`test/perf/parallelBench.mjs`, N=500):
+
+| Phase | Sync | Parallel workers | Speedup |
 |---|---|---|---|
-| Share-binding (Lagrange + extras) | ~9.0s | ~2.2s | **4.0×** |
-| Batch BLS verify (deposit+builder) | ~11.3s | ~3.7s | **3.0×** |
-| Aggregate sig + node sigs | <200ms | (not parallelized) | — |
+| Share-binding | ~9s | ~2s | **~4×** |
+| Batch BLS verify | ~11s | ~4s | **~3×** |
 
-End-to-end on a 500-validator lock: **~20s sync → ~6s parallel**, well clear
-of any reasonable HTTP timeout.
+---
 
-## Where it actually runs (build x outcome matrix)
+## Two layers of workers (do not confuse them)
 
-| Build target | Worker path | Outcome | Why |
+| Layer | File | What moves off-thread | Primary win |
 |---|---|---|---|
-| **CJS Node** (obol-api / NestJS) | `dist/cjs/src/verification/lockWorker.js` | **Parallel** ✅ | `__dirname` resolves; `worker_threads` available; everything wires up |
-| ESM Node | none | Sync fallback | See "Why ESM is sync" below. |
-| Browser (dv-launchpad / Next.js) | none (worker not emitted) | Sync fallback | Browser has no `worker_threads`; would need Web Workers + Next.js bundler config. Out of scope. |
-| Source-mode (jest, tsx, ts-node) | resolves but file missing | Sync fallback | The `.js` file isn't there pre-build; `fs.existsSync` check returns false. |
-| Small lock (`< MIN_PARALLEL_VALIDATORS`) | available | Sync fallback | Worker spin-up dominates for small inputs (~30-100ms each). |
+| **1. Validation worker** | `clusterLockValidationWorker.js` | Entire `isValidClusterLock()` | **502 fix** — obol-api main thread stays responsive |
+| **2. Chunk workers** | `lockWorker.js` | Share-binding, batch BLS, pubkey aggregation chunks | **Speed** — uses multiple cores *inside* validation |
 
-**Bottom line:** the **canonical DKG publish flow is fully covered**:
+- Layer 1 alone would still take ~60–90s on a 1k lock but would not 502 the API.
+- Layer 2 alone on the main thread would still 502.
+- **We ship both** for obol-api (CJS): responsive API + ~57s validation.
+
+Optional future simplification (not implemented): drop layer 2, keep layer 1 +
+`depositBlsCheck` / `verifyBlsChecksParallel` sync fallback — smaller diff,
+slower on huge locks, 502 still fixed.
+
+---
+
+## Architecture (current)
 
 ```
-charon (dkg) -> obol-api (NestJS / CJS / Node 24) -> obol-sdk validateClusterLock (CJS dist)
-                                                       └─> parallel ✅
+POST /lock/verify or /lock (obol-api main thread)
+    └── validateClusterLock()                    [src/services.ts]
+            ├── [≥50 validators, CJS] validateClusterLockInWorker()
+            │       └── clusterLockValidationWorker.js
+            │               └── isValidClusterLock()   ← layer 1
+            └── [<50 or no worker file] isValidClusterLock() on main thread
+
+isValidClusterLock()                             [src/verification/common.ts]
+    ├── definition_signatures (ECDSA / Safe RPC)
+    ├── definition_hash + lock_hash (SSZ)
+    ├── unique DV keys
+    └── verifyLockData() → verifyDVV1X6 | v1.7 | v1.8 | v1.10 (v1.10 = v1.8 alias)
+            ├── phase1: structure (share count, uniqueness)
+            ├── verifySharesBinding()     → lockWorker chunks (layer 2)
+            ├── depositBlsCheck + builderBlsCheck → collect BlsSignatureCheck[]
+            ├── verifyBlsChecksParallel() → lockWorker chunks (layer 2)
+            ├── verifyNodeSignatures()    (ECDSA, sync)
+            └── verifyAggregateParallel() → lockWorker chunks (layer 2)
 ```
 
-Every other path (browser SDK consumers, jest tests, small fixture locks) is
-sync, and that's both fast enough and intentional.
+### Deposit / builder BLS (readable flow)
 
-## Thresholds
+1. `depositBlsCheck` / `builderBlsCheck` — structural checks + signing root; return
+   `BlsSignatureCheck | null` (type in `src/types.ts`).
+2. `verifyBlsChecksParallel(checks)` — verify all deposit/builder signatures **once**
+   in batch (not twice like 2.12.0).
 
-- `MIN_PARALLEL_VALIDATORS = 50` — share-binding needs at least this many
-  validators before workers are worth spinning up.
-- `MIN_PARALLEL_BATCH_PAIRS = 100` — batch BLS verify threshold.
-- `MIN_VALIDATORS_PER_WORKER = 25`, `MIN_PAIRS_PER_WORKER = 50` — minimum
-  chunk size to keep workers busy enough to amortize startup.
-- `MAX_WORKERS = 8` — soft cap; effective parallelism also bounded by
-  `os.cpus().length`.
+Fork domains (`depositDomainForFork`, `builderDomainForFork`) are computed once
+per lock in `verifyDVV1X*`, not per deposit.
+
+### `signature_aggregate` — one signature, many pubkeys
+
+Each lock has **one** `signature_aggregate` over `lock_hash`. Verification must
+**aggregate all operator public shares** (validators × operators) into one group
+key, then verify that single signature.
+
+`verifyAggregateParallel` parallelizes **pubkey aggregation** across chunks when
+there are ≥400 keys and CJS workers are available; it does **not** verify multiple
+lock signatures. Below the threshold it calls sync `blsVerifyAggregate`. This
+step is a small fraction of total time on 1k locks (~5%).
+
+---
+
+## CJS worker path resolution (required for obol-api)
+
+Consumers `require('@obolnetwork/obol-sdk')` → bundled **`dist/cjs/src/index.js`**.
+`parallelPool` is inlined there, so runtime `__dirname` is **`dist/cjs/src`**, not
+`dist/cjs/src/verification`.
+
+Worker bundles are emitted beside it:
+
+```text
+dist/cjs/src/index.js                              ← main entry (bundled)
+dist/cjs/src/verification/clusterLockValidationWorker.js
+dist/cjs/src/verification/lockWorker.js
+```
+
+`getWorkerPath()` in `parallelPool.ts` tries both:
+
+1. `path.join(__dirname, filename)` — standalone `parallelPool.js` entry
+2. `path.join(__dirname, 'verification', filename)` — **bundled index (obol-api)**
+
+Without (2), workers are never found → sync validation on the main thread → frozen
+API (`/docs` hangs for ~60s). **Always run `yarn build` before publish**; npm
+package `files` includes all of `dist/`.
+
+---
+
+## Where it runs (build × outcome)
+
+| Build target | Validation worker (layer 1) | Chunk workers (layer 2) | Outcome |
+|---|---|---|---|
+| **CJS Node** (obol-api) | ✅ if `verification/*.js` resolves | ✅ same | Full parallel + main thread free |
+| ESM Node | ❌ sync fallback | ❌ sync fallback | See "Why ESM is sync" |
+| Browser | not emitted | not emitted | Sync only (acceptable) |
+| Jest / source | worker file missing | worker file missing | Sync fallback in tests |
+| Small lock (`<50` validators) | skipped | may still parallelize inner chunks | Sync whole-lock path |
+
+**Canonical DKG publish flow:**
+
+```
+charon --publish --publish-address http://localhost:3001/v1
+    → obol-api POST /lock (NestJS CJS, Node 24)
+        → @obolnetwork/obol-sdk validateClusterLock (CJS)
+            → clusterLockValidationWorker + lockWorker ✅
+```
+
+---
+
+## Thresholds (`src/verification/parallelPool.ts`)
+
+| Constant | Value | Purpose |
+|---|---|---|
+| `MIN_VALIDATORS_FOR_VALIDATION_WORKER` | 50 | Whole-lock validation in dedicated worker (layer 1) |
+| `MIN_PARALLEL_VALIDATORS` | 50 | Share-binding uses chunk workers |
+| `MIN_PARALLEL_BATCH_PAIRS` | 100 | Batch BLS uses chunk workers |
+| `MIN_PARALLEL_AGGREGATE_KEYS` | 400 | Parallel pubkey aggregation for lock aggregate |
+| `MIN_KEYS_PER_WORKER_AGG` | 100 | Keys per worker when aggregating pubkeys |
+| `MAX_WORKERS` | 8 | Chunk count cap |
+| `MAX_CONCURRENT_WORKERS_CAP` | 8 | In-flight worker cap (memory) |
+| `VALIDATION_WORKER_TIMEOUT_MS` | 120_000 | Whole-lock worker timeout |
+| `WORKER_TIMEOUT_MS` | 60_000 | Per chunk worker timeout |
+
+---
 
 ## Files
 
-- `src/verification/lockWorker.ts` — worker entry. One file, two modes
-  (`shareBinding`, `verifyBatch`) dispatched on `workerData.mode`.
-- `src/verification/parallelPool.ts` — pool abstraction. Exposes
-  `verifySharesBinding` and `verifyBatchParallel`. Each has a sync fallback
-  identical in shape to the parallel path.
-- `src/verification/v1.6.0.ts` / `v1.7.0.ts` / `v1.8.0.ts` — `verifyDV` is
-  structured as Phase 1 (cheap structural pre-checks: count, uniqueness)
-  then Phase 2 (parallel share-binding) then existing per-validator data
-  collection then parallel batch verify.
-- `tsup.config.ts` — three Node entries (`blsUtils`, `parallelPool`,
-  `lockWorker`) so they stay separate dist files. Browser build does not
-  include the worker entry.
+| File | Role |
+|---|---|
+| `src/services.ts` | Public `validateClusterLock` — worker first, else sync |
+| `src/types.ts` | `BlsSignatureCheck` |
+| `src/verification/common.ts` | `depositBlsCheck`, `builderBlsCheck`, `isValidClusterLock` |
+| `src/verification/parallelPool.ts` | Chunk pool API + `validateClusterLockInWorker` |
+| `src/verification/lockWorker.ts` | Chunk worker: `shareBinding`, `verifyBatch`, `aggregatePubkeys` |
+| `src/verification/clusterLockValidationWorker.ts` | Layer-1 worker entry (~20 lines) |
+| `src/verification/v1.6.0.ts` … `v1.8.0.ts` | DV verify; v1.10 aliases v1.8 |
+| `src/blsUtils.ts` | Noble BLS primitives |
+| `tsup.config.ts` | Separate CJS/ESM entries for workers (not in browser bundle) |
+
+**Removed in simplification pass (do not re-add without reason):**
+
+| Removed | Was |
+|---|---|
+| `lockProfiler.ts` | Opt-in `OBOL_SDK_LOCK_PROFILE=1` phase timings |
+| `blsTypes.ts` | Type moved to `src/types.ts` |
+| `validationWorker.ts` | Merged into `parallelPool.ts` as `validateClusterLockInWorker` |
+| `test/perf/validateLockFile.mjs` | Redundant with `parallelBench.mjs` + `POST /lock/verify` |
+
+Browser build: only `src/index.ts` — no worker entries.
+
+---
 
 ## Public API
 
-No new public surface. `validateClusterLock(lock, safeRpcUrl?)` keeps the
-same signature; parallelization is transparent.
+No breaking changes. `validateClusterLock(lock, safeRpcUrl?)` signature unchanged.
 
-## Why ESM is sync (and not "just shim `__dirname` in tsup")
+---
 
-The obvious-looking fix — adding a tsup `banner` that defines `__dirname`
-via `import.meta.url` for the ESM build — was tried and **does not work**.
-Two compounding problems:
+## Event loop / 502
 
-1. `parallelPool.ts` uses `require('node:path')` / `require('node:fs')`
-   inside `getWorkerPath()` to keep these imports out of the browser
-   bundle. tsup polyfills `require()` in ESM output to throw
-   `"Dynamic require of "path" is not supported"`. So even with the
-   `__dirname` shim, the function crashes on the first `require()`.
-2. tsup splits `parallelPool.ts`'s implementation into a shared chunk
-   (`dist/esm/src/chunk-XXXX.js`); the entry `parallelPool.js` is just a
-   re-export. The chunk's `__dirname` resolves to `dist/esm/src/`, not
-   `dist/esm/src/verification/`, so the worker file lookup misses and
-   falls back to sync.
+`validateClusterLock` calls `validateClusterLockInWorker` when the lock has ≥
+50 validators and `getWorkerPath('clusterLockValidationWorker.js')` resolves
+(see **CJS worker path resolution** above). That runs all crypto on a
+**background thread** so obol-api can still accept health checks and other
+requests.
 
-A real ESM fix needs either:
-- Refactoring `parallelPool.ts` to use top-level `import` for `node:path`
-  and friends (which then either breaks browser builds or needs
-  per-build entry shimming),
-- Disabling tsup `splitting` for the ESM build (loses code-sharing,
-  bigger output),
-- Or using `import.meta.url` directly in source, which is ESM-only
-  syntax that breaks the CJS build unless gated behind a runtime trick.
+Invalid locks still return **400** from the API; 502 was from **blocking**, not
+from validation throwing.
 
-None of these are "small". The CJS path covers obol-api (the only known
-heavy consumer), so this is left as a documented limitation rather than
-a multi-day refactor.
+### `validateClusterLockInWorker` outcomes
 
-## Caveats / fragility
-
-1. **Noble's `getPublicKey()` returns a Point object, not `Uint8Array`,**
-   even though the type declarations claim otherwise. We rely on this
-   internally; if a future noble version changes the return shape, the
-   `as any` cast in the bench (and any future callers) needs review.
-   `Point` instances do **not** survive `workerData` structured clone
-   (their class prototype is stripped). Always serialize via `.toBytes()`
-   before sending across the worker boundary.
-2. **No persistent worker pool.** Each `validateClusterLock` call spawns
-   workers fresh and pays ~30-100ms per worker startup. For a single
-   call processing hundreds of validators, this is amortized; for
-   high-frequency repeated calls on small locks, sync is still chosen by
-   the threshold.
-3. **No automated test for the actual worker path.** `test/verification/
-   parallelPool.spec.ts` exercises the public `verifySharesBinding` and
-   `verifyBatchParallel` API with 50-100 input batches — enough to trip
-   the parallel threshold — but jest runs from source so the built
-   `lockWorker.js` doesn't exist; `getWorkerPath()` returns `null` and
-   the tests transparently run the **sync fallback**. They catch:
-   - sync-fallback correctness regressions
-   - `WorkerInput` shape mismatches at compile time (now typed)
-   - API signature drift
-
-   They do **not** catch worker-thread-specific breakage (path
-   resolution, structured-clone issues, the worker entry crashing).
-   For that, run `node test/perf/parallelBench.mjs` after `yarn build` —
-   that is the only thing that exercises the real worker code today.
-
-## Decision record: `require()` in `parallelPool.ts`
-
-`parallelPool.ts` intentionally uses guarded `require('node:*')` calls
-inside `try/catch` (with narrow eslint disables) instead of top-level
-`import` for `worker_threads`, `os`, `path`, and `fs`.
-
-### Why this works
-
-The current pattern preserves three required behaviors:
-
-1. **Lazy runtime load** - Node-only modules are resolved only when needed.
-2. **No static Node import pull-in for browser bundles** - avoids bundler
-   statically binding `node:*` in browser output.
-3. **Synchronous probing** - callsites stay sync/cheap for environment checks.
-
-Observed runtime behavior:
-
-| Build target | `require('node:worker_threads')` result | Outcome |
+| Event | Result | `validateClusterLock` behavior |
 |---|---|---|
-| CJS Node | Loads real module | Parallel path enabled ✅ |
-| ESM Node | tsup dynamic-require shim throws; caught | Sync fallback |
-| Browser | shim/unsupported require throws; caught | Sync fallback |
+| Worker message valid / invalid | `true` / `false` resolve | Returned to caller (`true` / `false`) |
+| Worker **timeout** (120s) | **rejects** `ClusterLockValidationTimeoutError` | Propagates; HTTP APIs → **504** |
+| Worker **error** or non-zero **exit** | `null` | Sync fallback on main thread |
+| Worker file not found | `null` | Sync fallback |
 
-So the runtime behavior is correct across supported targets.
+Timeout rejects (does not resolve `false`) so gateways distinguish overload/slow crypto from bad signatures (**400**).
 
-### Why this is not ideal stylistically
+---
 
-- `require()` in modern TS source is less idiomatic than `import()`.
-- Each call needs local eslint disables (`no-require-imports` /
-  `no-var-requires`), which adds review noise.
-- It depends on current tsup ESM dynamic-require behavior (throw + catch).
+## Charon local testing (no ngrok)
 
-### Preferred cleanup path (future)
+Ngrok is only needed when Charon (or remote operators) must reach an API that
+is not reachable from where Charon runs (e.g. API on laptop, Charon in cloud).
 
-Refactor lazy loaders to dynamic import:
+**Same machine, API on host:**
 
-```ts
-async function loadWorkerThreads(): Promise<WorkerThreads | null> {
-  try {
-    return await import('node:worker_threads');
-  } catch {
-    return null;
-  }
-}
+```bash
+# obol-api on PORT from .env (e.g. 3001)
+charon dkg --publish \
+  --publish-address http://127.0.0.1:3001/v1 \
+  --publish-timeout 3m
 ```
 
-Trade-offs of this refactor:
+**Charon in Docker, API on host:**
 
-- **Pros:** idiomatic ESM/CJS-compatible runtime loading; no eslint disables.
-- **Cons:** loader/cache flow becomes async (`Promise<Module>` cache), so
-  callers need small plumbing changes.
-- **Build note:** browser output still needs `node:*` treated as external in
-  bundling config so runtime `import()` can fail safely and be caught.
+```bash
+--publish-address http://host.docker.internal:3001/v1
+```
 
-Status today: keep `require()` because it is functionally correct, CI/bench are
-green, and it keeps the current sync fallback behavior simple.
+**Requirements:**
 
-## Out of scope (explicit followups)
+- MongoDB reachable from obol-api (your `.env` already points at Atlas for dev).
+- Cluster **definition** must exist in DB for Launchpad/group flow, or use
+  Charon-command solo flow (API creates definition from lock).
+- Increase **`--publish-timeout`** for large locks (Charon default **30s** is
+  too low for ~60s validation even after these optimizations).
 
-- Web Workers for browser parallelization (requires Next.js bundler work)
-- ESM Node parallelization (would need tsup banner injecting
-  `import.meta.url` into the pool)
-- Persistent worker pool with idle-timeout reuse
-- Parallelizing the aggregate-sig and node-sig checks (not bottlenecks)
+Verify without publishing:
+
+```bash
+curl -X POST http://127.0.0.1:3001/lock/verify \
+  -H "Content-Type: application/json" \
+  -d @cluster-lock.json
+```
+
+Link local SDK in obol-api: `"@obolnetwork/obol-sdk": "file:../obol-sdk"`.
+
+---
+
+## Verification coverage
+
+| What | Catches |
+|---|---|
+| `yarn test` (151 tests) | Crypto correctness, fixtures v1.6–v1.10, helper unit tests |
+| `test/verification/parallelPool.spec.ts` | API shape; runs **sync fallback** (no built worker in jest) |
+| `node test/perf/parallelBench.mjs` | Real `lockWorker` chunk speedup (after `yarn build`) |
+| Manual `POST /lock/verify` on obol-api with linked SDK | HTTP path + layer-1 worker + non-blocking |
+
+**Gap:** no CI job yet that runs `parallelBench.mjs` or a large-lock perf gate.
+
+---
+
+## Why ESM Node is sync
+
+**CJS (obol-api):** fixed via `getWorkerPath` checking `verification/` under
+bundled `index.js` `__dirname` (see above).
+
+**ESM Node:** `import` resolves `dist/esm/src/index.js`; worker path resolution
+still does not line up with emitted worker files, so both layers fall back to
+sync. **obol-api uses CJS `require`** — no action required unless a new ESM-only
+consumer needs parallel validation.
+
+---
+
+## Out of scope
+
+- `blst` / native BLS (rejected; noble chosen for portability)
+- Web Workers for browser Launchpad
+- ESM Node parallelization without tsup / path refactor
+- Persistent worker pool reuse (workers spawned per validation)
+- Opt-in lock profiling (`OBOL_SDK_LOCK_PROFILE`) — removed
+- Sub-20s validation for 1k validators on pure JS BLS without hardware scale-out
+
+---
 
 ## How to verify locally
 
 ```bash
 yarn install
-yarn build           # emits the three dist entries the pool needs
-yarn test            # 141 unit tests, all sync (pool tests hit fallback)
-node test/perf/parallelBench.mjs   # confirms parallel speedup on dist
+yarn build
+yarn test
+
+# Chunk worker speedup (synthetic; needs dist/cjs workers)
+node test/perf/parallelBench.mjs
+
+# Optional: noble micro-benchmarks
+node test/perf/blsBench.mjs
+
+# obol-api (link local SDK)
+# In obol-api package.json: "@obolnetwork/obol-sdk": "file:../obol-sdk"
+npm install && npm run start:dev
+curl -X POST http://127.0.0.1:3001/lock/verify \
+  -H "Content-Type: application/json" \
+  -d @/path/to/cluster-lock.json
 ```
+
+**test/perf:** only `parallelBench.mjs` and `blsBench.mjs` — no `validateLockFile.mjs`.
