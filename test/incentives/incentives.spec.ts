@@ -11,7 +11,7 @@ const provider = new JsonRpcProvider(
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider);
-const baseUrl = 'https://obol-api-dev.gcp.obol.tech';
+const baseUrl = 'https://obol-api-nonprod-dev.dev.obol.tech';
 
 // Fix the type error by properly typing the mock function
 global.fetch = jest.fn() as any;

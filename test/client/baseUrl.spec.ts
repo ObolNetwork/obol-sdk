@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { Client } from '../../src/index.js';
-import { ALLOWED_OBOL_API_BASE_URLS } from '../../src/baseUrl.js';
+import { ALLOWED_OBOL_API_BASE_URLS } from '../../src/base.js';
 import { InvalidBaseUrlError } from '../../src/errors.js';
 
 describe('baseUrl validation', () => {

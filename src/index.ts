@@ -70,7 +70,7 @@ export {
 export {
   ALLOWED_OBOL_API_BASE_URLS,
   validateAndNormalizeBaseUrl,
-} from './baseUrl.js';
+} from './base.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
 export { ObolSplits } from './splits/splits.js';

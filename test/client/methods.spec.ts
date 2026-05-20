@@ -37,7 +37,7 @@ describe('Cluster Client', () => {
     '0x1f6c94e6c070393a68c1aa6073a21cb1fd57f0e14d2a475a2958990ab728c2fd';
 
   const clientInstance = new Client(
-    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 560048 },
+    { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 560048 },
     mockSigner,
   );
 
@@ -160,7 +160,7 @@ describe('Cluster Client', () => {
 
 describe('Cluster Client without a signer', () => {
   const clientInstance = new Client({
-    baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 560048,
   });
 
