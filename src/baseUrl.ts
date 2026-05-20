@@ -25,6 +25,15 @@ export type ValidateBaseUrlOptions = {
   allowUnsafeBaseUrl?: boolean;
 };
 
+/** Strip trailing slashes in O(n) time (no regex — avoids ReDoS on long inputs). */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charAt(end - 1) === '/') {
+    end--;
+  }
+  return value.slice(0, end);
+}
+
 /**
  * Normalizes and validates the Obol API base URL used by {@link Base.request}.
  */
@@ -57,7 +66,7 @@ export function validateAndNormalizeBaseUrl(
   }
 
   if (options?.allowUnsafeBaseUrl) {
-    return trimmed.replace(/\/+$/, '');
+    return stripTrailingSlashes(trimmed);
   }
 
   throw new InvalidBaseUrlError(

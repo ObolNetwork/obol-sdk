@@ -37,4 +37,13 @@ describe('baseUrl validation', () => {
     });
     expect(client.baseUrl).toBe('http://localhost:9999');
   });
+
+  it('strips trailing slashes on unsafe custom hosts', () => {
+    const client = new Client({
+      baseUrl: 'http://localhost:9999///',
+      chainId: 560048,
+      allowUnsafeBaseUrl: true,
+    });
+    expect(client.baseUrl).toBe('http://localhost:9999');
+  });
 });
