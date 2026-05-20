@@ -49,6 +49,32 @@ export const app = client.baseUrl;
 
 export const DEL_AUTH = process.env.DEL_AUTH;
 
+/**
+ * Waits until pending txs are mined so the next on-chain send does not hit
+ * REPLACEMENT_UNDERPRICED after a long deploy-heavy describe block.
+ */
+export const waitForWalletNonceToSettle = async (
+  wallet: ethers.Wallet,
+  rpcProvider: JsonRpcProvider,
+  maxWaitMs = 120_000,
+): Promise<void> => {
+  const address = await wallet.getAddress();
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    const latest = await rpcProvider.getTransactionCount(address, 'latest');
+    const pending = await rpcProvider.getTransactionCount(address, 'pending');
+    if (pending === latest) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+  }
+
+  throw new Error(
+    `Timed out waiting for wallet ${address} nonce to settle (${maxWaitMs}ms)`,
+  );
+};
+
 export const postClusterDef = async (
   clusterWithoutDefHash: ClusterDefinition,
 ): Promise<any> => {

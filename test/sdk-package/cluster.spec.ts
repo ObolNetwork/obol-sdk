@@ -20,6 +20,7 @@ import {
   signer,
   secondRandomSigner,
   DEL_AUTH,
+  waitForWalletNonceToSettle,
 } from './utils';
 import {
   type ClusterDefinition,
@@ -514,6 +515,10 @@ describe('OVM Tests', () => {
     },
     hoodiSigner as any,
   );
+
+  beforeAll(async () => {
+    await waitForWalletNonceToSettle(wallet, provider);
+  });
 
   it('should deploy OVM and Rewards Split with defaul splitOwnerAddress (createValidatorManagerAndRewardsSplit)', async () => {
     const secondRandomSignerAddress = await secondRandomSigner.getAddress();
