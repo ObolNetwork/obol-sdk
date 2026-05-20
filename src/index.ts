@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Base } from './base.js';
+import { Base, type BaseConfig } from './base.js';
 import {
   CONFLICT_ERROR_MSG,
   CreatorConfigHashSigningTypes,
@@ -63,9 +63,14 @@ export * from './constants.js';
 export {
   ConflictError,
   ClusterLockValidationTimeoutError,
+  InvalidBaseUrlError,
   SignerRequiredError,
   UnsupportedChainError,
 } from './errors.js';
+export {
+  ALLOWED_OBOL_API_BASE_URLS,
+  validateAndNormalizeBaseUrl,
+} from './baseUrl.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
 export { ObolSplits } from './splits/splits.js';
@@ -167,6 +172,8 @@ export class Client extends Base {
    *
    * @param config - Client configuration object.
    * @param config.baseUrl - Obol API base URL. Defaults to `https://api.obol.tech`.
+   *   Must be an official Obol API host (see {@link ALLOWED_OBOL_API_BASE_URLS}).
+   * @param config.allowUnsafeBaseUrl - Bypass the API host allowlist (tests only).
    * @param config.chainId - Target chain ID. Defaults to `560048` (Hoodi).
    *   Supported: 1 (Mainnet), 560048 (Hoodi), 100 (Gnosis), 11155111 (Sepolia).
    * @param signer - An ethers `Wallet` or `JsonRpcSigner`. Required for any
@@ -185,7 +192,7 @@ export class Client extends Base {
    * ```
    */
   constructor(
-    config: { baseUrl?: string; chainId?: number },
+    config: BaseConfig,
     signer?: SignerType,
     provider?: ProviderType,
   ) {

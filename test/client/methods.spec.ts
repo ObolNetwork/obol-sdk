@@ -146,6 +146,7 @@ describe('Cluster Client', () => {
     }
     const testBaseInstance = new TestBase({
       baseUrl: 'http://testExample.com',
+      allowUnsafeBaseUrl: true,
     });
 
     const result: { message: string } =

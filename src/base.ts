@@ -4,11 +4,17 @@ import {
   DEFAULT_CHAIN_ID,
   SDK_VERSION,
 } from './constants.js';
+import { validateAndNormalizeBaseUrl } from './baseUrl.js';
 import { FORK_MAPPING } from './types.js';
 
-interface Config {
+export interface BaseConfig {
   baseUrl?: string;
   chainId?: FORK_MAPPING;
+  /**
+   * Skip the Obol API host allowlist. For local tests and mocks only — never
+   * use in production with a real signer.
+   */
+  allowUnsafeBaseUrl?: boolean;
 }
 
 export abstract class Base {
@@ -19,8 +25,9 @@ export abstract class Base {
   constructor({
     baseUrl = DEFAULT_BASE_URL,
     chainId = DEFAULT_CHAIN_ID,
-  }: Config) {
-    this.baseUrl = baseUrl;
+    allowUnsafeBaseUrl = false,
+  }: BaseConfig) {
+    this.baseUrl = validateAndNormalizeBaseUrl(baseUrl, { allowUnsafeBaseUrl });
     this.chainId = chainId;
     this.fork_version = FORK_MAPPING[this.chainId];
   }
