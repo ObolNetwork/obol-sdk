@@ -28,6 +28,7 @@ import type * as WTNs from 'node:worker_threads';
 import type * as OsNs from 'node:os';
 import type * as PathNs from 'node:path';
 import type * as FsNs from 'node:fs';
+import { ClusterLockValidationTimeoutError } from '../errors.js';
 import type { BlsSignatureCheck, ClusterLock, SafeRpcUrl } from '../types.js';
 import type { AggregatePubkeysInput, WorkerInput } from './lockWorker.js';
 
@@ -418,11 +419,12 @@ export async function validateClusterLockInWorker(
   const workerFile = getWorkerPath('clusterLockValidationWorker.js');
   if (wt === null || workerFile === null) return null;
 
-  return await new Promise(resolve => {
+  return await new Promise((resolve, reject) => {
     let settled = false;
     const worker = new wt.Worker(workerFile, {
       workerData: { lock, safeRpcUrl },
     });
+    let timer: ReturnType<typeof setTimeout>;
     const finish = (result: boolean | null): void => {
       if (settled) return;
       settled = true;
@@ -431,10 +433,17 @@ export async function validateClusterLockInWorker(
       worker.terminate();
       resolve(result);
     };
-    // Timeout → false (not null): null would re-run full validation on the main
-    // thread and block the API (~60s) after the worker already ran too long.
-    const timer = setTimeout(() => {
-      finish(false);
+    // Timeout rejects (ClusterLockValidationTimeoutError) instead of resolving
+    // false: callers must distinguish **504** gateway timeout from **400** invalid
+    // crypto. Do not resolve null here — full sync fallback would block Node again.
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      reject(
+        new ClusterLockValidationTimeoutError(VALIDATION_WORKER_TIMEOUT_MS),
+      );
     }, VALIDATION_WORKER_TIMEOUT_MS);
     worker.once('message', (msg: unknown) => {
       finish(msg === true);

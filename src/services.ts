@@ -19,7 +19,10 @@ import { validateClusterLockInWorker } from './verification/parallelPool.js';
  * @param safeRpcUrl - Optional RPC URL for Safe Wallet signature verification.
  *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOODI` / etc. env vars.
  * @returns `true` if the lock is cryptographically valid; `false` if invalid
- *   (e.g. missing keys, invalid signatures, hash mismatches) or on any error.
+ *   (e.g. missing keys, invalid signatures, hash mismatches).
+ * @throws `ClusterLockValidationTimeoutError` when whole-lock validation
+ *   exceeds the SDK worker deadline (typically large clusters). HTTP APIs should map
+ *   this to **504 Gateway Timeout**.
  *
  * @example
  * ```typescript

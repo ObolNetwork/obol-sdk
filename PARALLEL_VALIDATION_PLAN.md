@@ -222,15 +222,14 @@ from validation throwing.
 
 ### `validateClusterLockInWorker` outcomes
 
-| Event | Returns | `validateClusterLock` behavior |
+| Event | Result | `validateClusterLock` behavior |
 |---|---|---|
-| Worker message `true` / `false` | `true` / `false` | Done |
-| Worker **timeout** (120s) | `false` | Lock treated invalid; **no** main-thread retry |
+| Worker message valid / invalid | `true` / `false` resolve | Returned to caller (`true` / `false`) |
+| Worker **timeout** (120s) | **rejects** `ClusterLockValidationTimeoutError` | Propagates; HTTP APIs → **504** |
 | Worker **error** or non-zero **exit** | `null` | Sync fallback on main thread |
 | Worker file not found | `null` | Sync fallback |
 
-Timeout → `false` (not `null`) avoids running a second full validation on the
-main thread after the worker already ran.
+Timeout rejects (does not resolve `false`) so gateways distinguish overload/slow crypto from bad signatures (**400**).
 
 ---
 

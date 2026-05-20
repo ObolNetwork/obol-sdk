@@ -224,8 +224,7 @@ else sync `isValidClusterLock` in `common.ts`.
 - **ESM Node / Jest / source**: sync fallback (worker paths do not resolve)
 - **Browser**: sync only (no worker bundles)
 
-**Worker failure semantics:** timeout (120s) → invalid (`false`, no main-thread
-retry); worker crash / missing file → sync fallback (`null`). See plan doc.
+**Worker failure semantics:** timeout (120s) → **`ClusterLockValidationTimeoutError`** (HTTP **504** in obol-api); worker crash / missing file → sync fallback (`null`). See plan doc.
 
 **When changing validation logic**, read **`PARALLEL_VALIDATION_PLAN.md`** first.
 Key types: `BlsSignatureCheck` in `src/types.ts`. Deposit/builder flow:
