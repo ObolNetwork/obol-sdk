@@ -239,6 +239,14 @@ Per-chunk timeouts (`runWorker` / `runWorkerAggregatePubkeys` in `parallelPool.t
 
 **HTTP consumers (e.g. obol-api):** catch `ClusterLockValidationTimeoutError` by `name` and respond with **504**, not **400**.
 
+### Concurrent validation cap (DoS mitigation)
+
+| Constant / env | Default | Purpose |
+|---|---|---|
+| `OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS` | `2` | Max in-flight `validateClusterLock` calls per Node process (`0` = unlimited) |
+
+When at capacity, `validateClusterLock` throws `ClusterLockValidationBusyError` immediately (no queue). obol-api should map to **503**.
+
 ---
 
 ## Charon local testing (no ngrok)

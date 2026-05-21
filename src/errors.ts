@@ -72,3 +72,18 @@ export class ClusterLockValidationTimeoutError extends Error {
     Object.setPrototypeOf(this, ClusterLockValidationTimeoutError.prototype);
   }
 }
+
+/**
+ * Thrown when too many `validateClusterLock` calls are already in flight.
+ * HTTP gateways should respond with **503**; clients should retry with backoff.
+ */
+export class ClusterLockValidationBusyError extends Error {
+  name = 'ClusterLockValidationBusyError';
+
+  constructor(public readonly maxConcurrent: number) {
+    super(
+      `Too many cluster lock validations in progress (limit: ${maxConcurrent}). Retry later.`,
+    );
+    Object.setPrototypeOf(this, ClusterLockValidationBusyError.prototype);
+  }
+}

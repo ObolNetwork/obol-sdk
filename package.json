@@ -15,7 +15,7 @@
     "build:clean": "rm -rf ./dist",
     "build": "npm-run-all build:clean build:tsup",
     "build:tsup": "tsup && tsc -b ./tsconfig.types.json",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest test/**/**.spec.ts --testPathIgnorePatterns=test/sdk-package/",
+    "test": "NODE_OPTIONS=--experimental-vm-modules OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS=0 jest test/**/**.spec.ts --testPathIgnorePatterns=test/sdk-package/",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "npm:publish:next": "npm publish --tag next",
