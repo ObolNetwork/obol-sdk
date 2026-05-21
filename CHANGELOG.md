@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.12.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.1...v2.12.2)
+
+- fix(security): stop auto-loading .env and allowlist Obol API baseUrl [`#210`](https://github.com/ObolNetwork/obol-sdk/pull/210)
+
 #### [v2.12.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.0...v2.12.1)
 
+> 20 May 2026
+
+- chore(release): v2.12.1 [`#209`](https://github.com/ObolNetwork/obol-sdk/pull/209)
 - perf: run lock validation off main thread, parallelize BLS operations [`#208`](https://github.com/ObolNetwork/obol-sdk/pull/208)
 
 #### [v2.12.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.13...v2.12.0)
