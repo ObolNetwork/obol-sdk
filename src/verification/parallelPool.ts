@@ -478,9 +478,7 @@ export async function validateClusterLockInWorker(
         clearTimeout(timer);
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
         worker.terminate();
-        reject(
-          new ClusterLockValidationTimeoutError(msg.validationTimeoutMs),
-        );
+        reject(new ClusterLockValidationTimeoutError(msg.validationTimeoutMs));
         return;
       }
       finish(msg === true);
