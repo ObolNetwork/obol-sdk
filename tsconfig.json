@@ -13,5 +13,5 @@
       "@safe-global/types-kit/types": ["node_modules/@safe-global/types-kit/dist/src/types.d.ts"]
     }
   },
-  "exclude": ["node_modules", "dist", "test/sdk-package", "test/nextjs-test-app"]
+  "exclude": ["node_modules", "dist", "test", "test/sdk-package", "test/nextjs-test-app"]
 }
