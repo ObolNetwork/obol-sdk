@@ -54,6 +54,7 @@ import {
   verifyDVV1X10,
 } from './v1.10.0.js';
 import { blsVerify } from '../blsUtils.js';
+import { ClusterLockValidationTimeoutError } from '../errors.js';
 
 // cluster-definition hash
 
@@ -631,6 +632,9 @@ export const isValidClusterLock = async (
     }
     return true;
   } catch (err) {
+    if (err instanceof ClusterLockValidationTimeoutError) {
+      throw err;
+    }
     return false;
   }
 };

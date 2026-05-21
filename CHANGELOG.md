@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix: propagate per-chunk BLS worker timeouts as `ClusterLockValidationTimeoutError` (504) instead of invalid-lock `false` (400)
+
 #### [v2.12.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.1...v2.12.2)
 
 - fix(security): stop auto-loading .env and allowlist Obol API baseUrl [`#210`](https://github.com/ObolNetwork/obol-sdk/pull/210)

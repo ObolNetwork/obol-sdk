@@ -20,9 +20,9 @@ import { validateClusterLockInWorker } from './verification/parallelPool.js';
  *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOODI` / etc. env vars.
  * @returns `true` if the lock is cryptographically valid; `false` if invalid
  *   (e.g. missing keys, invalid signatures, hash mismatches).
- * @throws `ClusterLockValidationTimeoutError` when whole-lock validation
- *   exceeds the SDK worker deadline (typically large clusters). HTTP APIs should map
- *   this to **504 Gateway Timeout**.
+ * @throws {@link ClusterLockValidationTimeoutError} when validation exceeds a
+ *   worker deadline (whole-lock or per-chunk BLS workers on large clusters).
+ *   HTTP APIs should map this to **504 Gateway Timeout**, not **400**.
  *
  * @example
  * ```typescript
@@ -38,11 +38,7 @@ export const validateClusterLock = async (
   lock: ClusterLock,
   safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
-  try {
-    const inWorker = await validateClusterLockInWorker(lock, safeRpcUrl);
-    if (inWorker !== null) return inWorker;
-    return await isValidClusterLock(lock, safeRpcUrl);
-  } catch (err: any) {
-    throw err;
-  }
+  const inWorker = await validateClusterLockInWorker(lock, safeRpcUrl);
+  if (inWorker !== null) return inWorker;
+  return await isValidClusterLock(lock, safeRpcUrl);
 };
