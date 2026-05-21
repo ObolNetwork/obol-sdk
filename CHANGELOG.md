@@ -2,13 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v2.12.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.2...v2.12.3)
 
-- fix: propagate per-chunk BLS worker timeouts as `ClusterLockValidationTimeoutError` (504) instead of invalid-lock `false` (400)
-- feat: cap concurrent `validateClusterLock` calls (`OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS`, default 2) with `ClusterLockValidationBusyError` (503)
+- Hanan/timeoutError+ConcurrentRequests [`#212`](https://github.com/ObolNetwork/obol-sdk/pull/212)
 
 #### [v2.12.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.1...v2.12.2)
 
+> 21 May 2026
+
+- chore(release): v2.12.2 [`#211`](https://github.com/ObolNetwork/obol-sdk/pull/211)
 - fix(security): stop auto-loading .env and allowlist Obol API baseUrl [`#210`](https://github.com/ObolNetwork/obol-sdk/pull/210)
 
 #### [v2.12.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.0...v2.12.1)
