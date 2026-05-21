@@ -62,6 +62,7 @@ export * from './verification/common.js';
 export * from './constants.js';
 export {
   ConflictError,
+  ClusterLockValidationBusyError,
   ClusterLockValidationTimeoutError,
   InvalidBaseUrlError,
   SignerRequiredError,

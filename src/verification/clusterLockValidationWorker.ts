@@ -1,5 +1,6 @@
 // Runs isValidClusterLock in a worker thread so obol-api's main thread stays responsive.
 import { parentPort, workerData } from 'node:worker_threads';
+import { ClusterLockValidationTimeoutError } from '../errors.js';
 import type { ClusterLock, SafeRpcUrl } from '../types.js';
 import { isValidClusterLock } from './common.js';
 
@@ -14,7 +15,11 @@ if (parentPort) {
     .then(ok => {
       port.postMessage(ok);
     })
-    .catch(() => {
+    .catch(err => {
+      if (err instanceof ClusterLockValidationTimeoutError) {
+        port.postMessage({ validationTimeoutMs: err.timeoutMs });
+        return;
+      }
       port.postMessage(false);
     });
 }

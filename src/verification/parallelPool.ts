@@ -45,6 +45,23 @@ const MIN_KEYS_PER_WORKER_AGG = 100;
 const MIN_VALIDATORS_FOR_VALIDATION_WORKER = 50;
 const VALIDATION_WORKER_TIMEOUT_MS = 120_000;
 const WORKER_TIMEOUT_MS = 60_000;
+
+/** Posted from clusterLockValidationWorker when a nested BLS worker times out. */
+export type LockValidationWorkerTimeoutReply = {
+  validationTimeoutMs: number;
+};
+
+function isValidationTimeoutReply(
+  msg: unknown,
+): msg is LockValidationWorkerTimeoutReply {
+  return (
+    typeof msg === 'object' &&
+    msg !== null &&
+    'validationTimeoutMs' in msg &&
+    typeof (msg as LockValidationWorkerTimeoutReply).validationTimeoutMs ===
+      'number'
+  );
+}
 // Cap simultaneous workers (memory). Scales up for large jobs on multi-core hosts.
 const MAX_CONCURRENT_WORKERS_CAP = 8;
 
@@ -171,7 +188,7 @@ async function runWorkerAggregatePubkeys(
   workerFile: string,
   data: AggregatePubkeysInput,
 ): Promise<Uint8Array | null> {
-  return await new Promise(resolve => {
+  return await new Promise((resolve, reject) => {
     let settled = false;
     const worker = new wt.Worker(workerFile, { workerData: data });
     const finish = (result: Uint8Array | null): void => {
@@ -183,7 +200,12 @@ async function runWorkerAggregatePubkeys(
       resolve(result);
     };
     const timer = setTimeout(() => {
-      finish(null);
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      worker.terminate();
+      reject(new ClusterLockValidationTimeoutError(WORKER_TIMEOUT_MS));
     }, WORKER_TIMEOUT_MS);
     worker.once('message', (msg: unknown) => {
       finish(msg instanceof Uint8Array ? msg : null);
@@ -202,7 +224,7 @@ async function runWorker(
   workerFile: string,
   data: WorkerInput,
 ): Promise<boolean> {
-  return await new Promise(resolve => {
+  return await new Promise((resolve, reject) => {
     let settled = false;
     const worker = new wt.Worker(workerFile, { workerData: data });
     const finish = (result: boolean): void => {
@@ -214,7 +236,12 @@ async function runWorker(
       resolve(result);
     };
     const timer = setTimeout(() => {
-      finish(false);
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      worker.terminate();
+      reject(new ClusterLockValidationTimeoutError(WORKER_TIMEOUT_MS));
     }, WORKER_TIMEOUT_MS);
     worker.once('message', (msg: unknown) => {
       finish(msg === true);
@@ -445,6 +472,15 @@ export async function validateClusterLockInWorker(
       resolve(result);
     };
     worker.once('message', (msg: unknown) => {
+      if (isValidationTimeoutReply(msg)) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        worker.terminate();
+        reject(new ClusterLockValidationTimeoutError(msg.validationTimeoutMs));
+        return;
+      }
       finish(msg === true);
     });
     worker.once('error', () => {

@@ -41,13 +41,8 @@ export class UnsupportedChainError extends Error {
 }
 
 /**
- * Thrown when full lock validation (`validateClusterLock` worker path) exceeds
- * the worker time limit (large clusters). HTTP gateways should respond with
- * **504**; this is distinct from cryptographic failure (**false** → **400**).
- */
-/**
  * Thrown when {@link Client} is constructed with a baseUrl that is not an
- * an allowed Obol API base URL (see {@link ALLOWED_OBOL_API_BASE_URLS}).
+ * allowed Obol API base URL (see {@link ALLOWED_OBOL_API_BASE_URLS}).
  */
 export class InvalidBaseUrlError extends Error {
   name = 'InvalidBaseUrlError';
@@ -58,16 +53,37 @@ export class InvalidBaseUrlError extends Error {
   }
 }
 
+/**
+ * Thrown when lock validation exceeds a worker time limit (large clusters).
+ * HTTP gateways should respond with **504**; distinct from crypto failure
+ * (`validateClusterLock` returning **false** → **400**).
+ */
 export class ClusterLockValidationTimeoutError extends Error {
   name = 'ClusterLockValidationTimeoutError';
 
   /**
-   * @param timeoutMs - Same value as SDK whole-lock validation worker timeout.
+   * @param timeoutMs - Worker deadline that was exceeded (`VALIDATION_WORKER_TIMEOUT_MS`
+   *   for the whole-lock worker, `WORKER_TIMEOUT_MS` for per-chunk BLS workers).
    */
   constructor(public readonly timeoutMs: number) {
     super(
       `Cluster lock validation exceeded worker time limit (${timeoutMs} ms). Retry later; this does not imply invalid lock data.`,
     );
     Object.setPrototypeOf(this, ClusterLockValidationTimeoutError.prototype);
+  }
+}
+
+/**
+ * Thrown when too many `validateClusterLock` calls are already in flight.
+ * HTTP gateways should respond with **503**; clients should retry with backoff.
+ */
+export class ClusterLockValidationBusyError extends Error {
+  name = 'ClusterLockValidationBusyError';
+
+  constructor(public readonly maxConcurrent: number) {
+    super(
+      `Too many cluster lock validations in progress (limit: ${maxConcurrent}). Retry later.`,
+    );
+    Object.setPrototypeOf(this, ClusterLockValidationBusyError.prototype);
   }
 }

@@ -235,6 +235,9 @@ describe('Cluster Client without a signer', () => {
    *
    * Therefore, when these tests return true, it's a REAL validation result!
    */
+  const mainnetSafeRpcUrl =
+    process.env.RPC_MAINNET || 'https://ethereum-rpc.publicnode.com';
+
   test.each([
     { version: 'v1.10.0 solo', clusterLock: clusterLockSoloV1X10 },
     {
@@ -249,11 +252,16 @@ describe('Cluster Client without a signer', () => {
     {
       version: 'Cluster with safe address v1.10.0',
       clusterLock: clusterLockWithSafe,
+      // Mainnet Safe operator needs a live RPC; Jest does not load .env by default.
+      safeRpcUrl: mainnetSafeRpcUrl,
     },
   ])(
     "$version: 'should return true on verified cluster lock'",
-    async ({ clusterLock }) => {
-      const isValidLock: boolean = await validateClusterLock(clusterLock);
+    async ({ clusterLock, safeRpcUrl }) => {
+      const isValidLock: boolean = await validateClusterLock(
+        clusterLock,
+        safeRpcUrl,
+      );
       expect(isValidLock).toEqual(true);
     },
   );
@@ -262,11 +270,9 @@ describe('Cluster Client without a signer', () => {
     process.env.RPC_HOODI = undefined;
 
     // Mainnet cluster - fourth operator 0x4d6c432b7E2F326B4DDf524ea9E56649e5A7C298 is the Safe wallet
-    const safeRpcUrl =
-      process.env.RPC_MAINNET || 'https://ethereum-rpc.publicnode.com';
     const isValidLock: boolean = await validateClusterLock(
       clusterLockWithSafe,
-      safeRpcUrl,
+      mainnetSafeRpcUrl,
     );
     expect(isValidLock).toEqual(true);
   });

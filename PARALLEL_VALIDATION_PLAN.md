@@ -226,10 +226,26 @@ from validation throwing.
 |---|---|---|
 | Worker message valid / invalid | `true` / `false` resolve | Returned to caller (`true` / `false`) |
 | Worker **timeout** (120s) | **rejects** `ClusterLockValidationTimeoutError` | Propagates; HTTP APIs → **504** |
+| Nested **chunk worker timeout** (60s) inside validation worker | Posts `{ validationTimeoutMs: 60000 }` → parent **rejects** same error | Propagates; HTTP APIs → **504** |
 | Worker **error** or non-zero **exit** | `null` | Sync fallback on main thread |
 | Worker file not found | `null` | Sync fallback |
 
 Timeout rejects (does not resolve `false`) so gateways distinguish overload/slow crypto from bad signatures (**400**).
+
+Per-chunk timeouts (`runWorker` / `runWorkerAggregatePubkeys` in `parallelPool.ts`) throw
+`ClusterLockValidationTimeoutError(WORKER_TIMEOUT_MS)` instead of resolving `false`/`null`.
+`clusterLockValidationWorker.ts` forwards that to the main thread via `validationTimeoutMs`;
+`isValidClusterLock` re-throws rather than returning `false`.
+
+**HTTP consumers (e.g. obol-api):** catch `ClusterLockValidationTimeoutError` by `name` and respond with **504**, not **400**.
+
+### Concurrent validation cap (DoS mitigation)
+
+| Constant / env | Default | Purpose |
+|---|---|---|
+| `OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS` | `2` | Max in-flight `validateClusterLock` calls per Node process (`0` = unlimited) |
+
+When at capacity, `validateClusterLock` throws `ClusterLockValidationBusyError` immediately (no queue). obol-api should map to **503**.
 
 ---
 
