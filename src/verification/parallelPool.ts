@@ -424,19 +424,10 @@ export async function validateClusterLockInWorker(
     const worker = new wt.Worker(workerFile, {
       workerData: { lock, safeRpcUrl },
     });
-    let timer: ReturnType<typeof setTimeout>;
-    const finish = (result: boolean | null): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      worker.terminate();
-      resolve(result);
-    };
     // Timeout rejects (ClusterLockValidationTimeoutError) instead of resolving
     // false: callers must distinguish **504** gateway timeout from **400** invalid
     // crypto. Do not resolve null here — full sync fallback would block Node again.
-    timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -445,6 +436,14 @@ export async function validateClusterLockInWorker(
         new ClusterLockValidationTimeoutError(VALIDATION_WORKER_TIMEOUT_MS),
       );
     }, VALIDATION_WORKER_TIMEOUT_MS);
+    const finish = (result: boolean | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      worker.terminate();
+      resolve(result);
+    };
     worker.once('message', (msg: unknown) => {
       finish(msg === true);
     });

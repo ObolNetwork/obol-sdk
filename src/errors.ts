@@ -45,6 +45,19 @@ export class UnsupportedChainError extends Error {
  * the worker time limit (large clusters). HTTP gateways should respond with
  * **504**; this is distinct from cryptographic failure (**false** → **400**).
  */
+/**
+ * Thrown when {@link Client} is constructed with a baseUrl that is not an
+ * an allowed Obol API base URL (see {@link ALLOWED_OBOL_API_BASE_URLS}).
+ */
+export class InvalidBaseUrlError extends Error {
+  name = 'InvalidBaseUrlError';
+
+  constructor(message: string) {
+    super(message);
+    Object.setPrototypeOf(this, InvalidBaseUrlError.prototype);
+  }
+}
+
 export class ClusterLockValidationTimeoutError extends Error {
   name = 'ClusterLockValidationTimeoutError';
 

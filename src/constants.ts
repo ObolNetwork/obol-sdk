@@ -17,9 +17,6 @@ import {
   MAINNET_WAREHOUSE_BYTECODE,
 } from './bytecodes.js';
 
-import * as dotenv from 'dotenv';
-dotenv.config();
-
 export const CONFLICT_ERROR_MSG = 'Conflict';
 
 export const EIP712_DOMAIN_NAME = 'Obol';

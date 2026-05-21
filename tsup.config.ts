@@ -73,7 +73,6 @@ export default defineConfig([
       'elliptic',
       'semver',
       'uuid',
-      'dotenv',
       '@chainsafe/ssz',
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',

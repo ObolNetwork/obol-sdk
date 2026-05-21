@@ -18,8 +18,6 @@ import {
   blsVerifyExtraShares,
 } from '../../src/blsUtils.js';
 import { fromHexString } from '@chainsafe/ssz';
-import { HttpResponse, http } from 'msw';
-import { setupServer } from 'msw/node';
 
 jest.setTimeout(20000);
 
@@ -37,7 +35,7 @@ describe('Cluster Client', () => {
     '0x1f6c94e6c070393a68c1aa6073a21cb1fd57f0e14d2a475a2958990ab728c2fd';
 
   const clientInstance = new Client(
-    { baseUrl: 'https://obol-api-dev.gcp.obol.tech', chainId: 560048 },
+    { baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech', chainId: 560048 },
     mockSigner,
   );
 
@@ -127,15 +125,11 @@ describe('Cluster Client', () => {
   });
 
   test('request method should set user agent header', async () => {
-    const server = setupServer(
-      http.get('http://testexample.com/test', ({ request }) => {
-        // Check if the request contains specific headers
-        if (request.headers.get('User-Agent') === `Obol-SDK/${SDK_VERSION}`) {
-          return HttpResponse.json({ message: 'user-agent header exist' });
-        }
-      }),
-    );
-    server.listen();
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: 'user-agent header exist' }),
+    } as Response);
+
     class TestBase extends Base {
       async callProtectedRequest<T>(
         endpoint: string,
@@ -145,21 +139,29 @@ describe('Cluster Client', () => {
       }
     }
     const testBaseInstance = new TestBase({
-      baseUrl: 'http://testExample.com',
+      baseUrl: 'https://api.obol.tech',
     });
 
     const result: { message: string } =
-      await testBaseInstance.callProtectedRequest('/test', {
+      await testBaseInstance.callProtectedRequest('/v1/test', {
         method: 'GET',
       });
     expect(result?.message).toEqual('user-agent header exist');
-    server.close();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.obol.tech/v1/test',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'User-Agent': `Obol-SDK/${SDK_VERSION}`,
+        }),
+      }),
+    );
+    fetchSpy.mockRestore();
   });
 });
 
 describe('Cluster Client without a signer', () => {
   const clientInstance = new Client({
-    baseUrl: 'https://obol-api-dev.gcp.obol.tech',
+    baseUrl: 'https://obol-api-nonprod-dev.dev.obol.tech',
     chainId: 560048,
   });
 

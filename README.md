@@ -39,11 +39,13 @@ Checkout our [docs](https://docs.obol.org/docs/advanced/quickstart-sdk), [exampl
 ## Terms and Conditions
 To use obol-sdk and in order to be able to create a cluster definition or accept an invite to join a cluster, you must accept the [latest Obol terms and conditions](https://obol.org/terms.pdf) by calling acceptObolLatestTermsAndConditions.
 
-## ⚠️ Important Security Notice:
-If you're integrating this SDK with a **backend** (e.g., in Node.js), and you store a private key for executing splitter transactions, handle it with extreme caution. Ensure that:
+## Security
 
-- The private key is securely stored (e.g., in an `.env` file).
-- Never commit or push your `.env` file containing the private key to version control.
+**API host:** `baseUrl` must be one of `https://api.obol.tech`, `https://obol-api-nonprod-dev.dev.obol.tech`, or `https://obol-api-nonprod-qa.dev.obol.tech` (no path suffix). Endpoints are still called as `/v1/...` as before. Any other value throws `InvalidBaseUrlError`.
+
+**RPC URLs:** Set `RPC_MAINNET`, `RPC_HOODI`, etc. in your own app or pass an explicit provider/RPC to the client. The SDK does not load a `.env` file on import.
+
+**Private keys:** If you use a backend signer, store keys securely (KMS, HSM, or env vars your app loads explicitly). Never commit secrets to version control.
 
 ## ⚡️ Integration with Safe Wallet
 
