@@ -1,5 +1,7 @@
-import { jest, describe, it, expect } from '@jest/globals';
+import { jest, describe, it, expect, afterEach } from '@jest/globals';
 import { ClusterLockValidationTimeoutError } from '../../src/errors.js';
+import { validateClusterLock } from '../../src/services.js';
+import * as parallelPool from '../../src/verification/parallelPool.js';
 
 describe('ClusterLockValidationTimeoutError', () => {
   it('carries timeoutMs for gateway mapping (504)', () => {
@@ -11,21 +13,16 @@ describe('ClusterLockValidationTimeoutError', () => {
 });
 
 describe('validateClusterLock timeout propagation', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('re-throws ClusterLockValidationTimeoutError from the worker path', async () => {
     const timeoutErr = new ClusterLockValidationTimeoutError(120_000);
-    await jest.unstable_mockModule(
-      '../../src/verification/parallelPool.js',
-      () => ({
-        validateClusterLockInWorker: jest
-          .fn<() => Promise<boolean | null>>()
-          .mockRejectedValue(timeoutErr),
-        verifySharesBinding: jest.fn(),
-        verifyBlsChecksParallel: jest.fn(),
-        verifyBatchParallel: jest.fn(),
-        verifyAggregateParallel: jest.fn(),
-      }),
-    );
-    const { validateClusterLock } = await import('../../src/services.js');
+    jest
+      .spyOn(parallelPool, 'validateClusterLockInWorker')
+      .mockRejectedValue(timeoutErr);
+
     await expect(
       validateClusterLock({ distributed_validators: [] } as never),
     ).rejects.toBe(timeoutErr);
