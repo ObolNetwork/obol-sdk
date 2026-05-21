@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.12.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.3...v2.12.4)
+
+- Hanan/worker timeout [`#214`](https://github.com/ObolNetwork/obol-sdk/pull/214)
+
 #### [v2.12.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.2...v2.12.3)
 
+> 21 May 2026
+
+- chore(release): v2.12.3 [`#213`](https://github.com/ObolNetwork/obol-sdk/pull/213)
 - Hanan/timeoutError+ConcurrentRequests [`#212`](https://github.com/ObolNetwork/obol-sdk/pull/212)
 
 #### [v2.12.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.1...v2.12.2)
