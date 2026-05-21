@@ -1,17 +1,12 @@
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, afterEach } from '@jest/globals';
 import { ClusterLockValidationBusyError } from '../../src/errors.js';
 import {
   getMaxConcurrentLockValidations,
-  resetLockValidationConcurrencyForTests,
   withLockValidationConcurrency,
 } from '../../src/verification/validationConcurrency.js';
 
 describe('validationConcurrency', () => {
   const prevEnv = process.env.OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS;
-
-  beforeEach(() => {
-    resetLockValidationConcurrencyForTests();
-  });
 
   afterEach(() => {
     if (prevEnv === undefined) {
@@ -19,7 +14,6 @@ describe('validationConcurrency', () => {
     } else {
       process.env.OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS = prevEnv;
     }
-    resetLockValidationConcurrencyForTests();
   });
 
   it('defaults to 2 concurrent validations', () => {
@@ -49,13 +43,15 @@ describe('validationConcurrency', () => {
       return 'a';
     });
 
-    await slotHeld;
+    try {
+      await slotHeld;
 
-    await expect(
-      withLockValidationConcurrency(async () => 'b'),
-    ).rejects.toBeInstanceOf(ClusterLockValidationBusyError);
-
-    releaseFirst();
-    await expect(first).resolves.toBe('a');
+      await expect(
+        withLockValidationConcurrency(async () => 'b'),
+      ).rejects.toBeInstanceOf(ClusterLockValidationBusyError);
+    } finally {
+      releaseFirst?.();
+      await first;
+    }
   });
 });

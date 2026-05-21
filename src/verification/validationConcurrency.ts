@@ -38,8 +38,3 @@ export async function withLockValidationConcurrency<T>(
     activeValidations--;
   }
 }
-
-/** @internal Test helper */
-export function resetLockValidationConcurrencyForTests(): void {
-  activeValidations = 0;
-}
