@@ -171,8 +171,8 @@ charon --publish --publish-address http://localhost:3001/v1
 | `MIN_KEYS_PER_WORKER_AGG` | 100 | Keys per worker when aggregating pubkeys |
 | `MAX_WORKERS` | 8 | Chunk count cap |
 | `MAX_CONCURRENT_WORKERS_CAP` | 8 | In-flight worker cap (memory) |
-| `VALIDATION_WORKER_TIMEOUT_MS` | 120_000 | Whole-lock worker timeout |
-| `WORKER_TIMEOUT_MS` | 60_000 | Per chunk worker timeout |
+| `VALIDATION_WORKER_TIMEOUT_MS` | 300_000 | Whole-lock worker timeout |
+| `WORKER_TIMEOUT_MS` | 180_000 | Per chunk worker timeout |
 
 ---
 
@@ -225,8 +225,8 @@ from validation throwing.
 | Event | Result | `validateClusterLock` behavior |
 |---|---|---|
 | Worker message valid / invalid | `true` / `false` resolve | Returned to caller (`true` / `false`) |
-| Worker **timeout** (120s) | **rejects** `ClusterLockValidationTimeoutError` | Propagates; HTTP APIs → **504** |
-| Nested **chunk worker timeout** (60s) inside validation worker | Posts `{ validationTimeoutMs: 60000 }` → parent **rejects** same error | Propagates; HTTP APIs → **504** |
+| Worker **timeout** (300s) | **rejects** `ClusterLockValidationTimeoutError` | Propagates; HTTP APIs → **504** |
+| Nested **chunk worker timeout** (180s) inside validation worker | Posts `{ validationTimeoutMs: 180000 }` → parent **rejects** same error | Propagates; HTTP APIs → **504** |
 | Worker **error** or non-zero **exit** | `null` | Sync fallback on main thread |
 | Worker file not found | `null` | Sync fallback |
 
