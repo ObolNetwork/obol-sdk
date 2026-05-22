@@ -39,12 +39,11 @@ const MIN_VALIDATORS_PER_WORKER = 25;
 const MIN_PAIRS_PER_WORKER = 50;
 const MIN_PARALLEL_AGGREGATE_KEYS = 400;
 const MIN_KEYS_PER_WORKER_AGG = 100;
-// Hard ceiling so a stuck worker can't leak past obol-api's HTTP timeout.
-// Biggest legitimate batch (~1000 pairs) finishes in ~3s on the bench; 60s
-// is conservative enough to never false-trip on real input.
+// Hard ceiling so a stuck worker can't leak past obol-api / ingress timeouts.
+// Bench ~3s per chunk on fast CPU; dev pods (~500m) need more headroom for ~1k DVs.
 const MIN_VALIDATORS_FOR_VALIDATION_WORKER = 50;
-const VALIDATION_WORKER_TIMEOUT_MS = 120_000;
-const WORKER_TIMEOUT_MS = 60_000;
+const VALIDATION_WORKER_TIMEOUT_MS = 300_000;
+const WORKER_TIMEOUT_MS = 180_000;
 
 /** Posted from clusterLockValidationWorker when a nested BLS worker times out. */
 export type LockValidationWorkerTimeoutReply = {

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix: raise lock validation worker timeouts for large clusters on slow CPUs (per-chunk 180s, whole-lock 300s)
+
 #### [v2.12.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.3...v2.12.4)
 
 - Hanan/worker timeout [`#214`](https://github.com/ObolNetwork/obol-sdk/pull/214)
