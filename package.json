@@ -61,7 +61,8 @@
     "@typescript-eslint/* stays at ^6.x — eslint-config-standard-with-typescript@43 requires plugin ^6; v8 causes peer conflict.",
     "uuid stays at ^9.x — v11+ sets type:module (ESM-only).",
     "viem override pins a single resolved version to prevent duplicates across @safe-global/protocol-kit.",
-    "@noble/curves replaces @chainsafe/bls — pure-JS CJS+ESM, no native addon, same ETH2 BLS12-381 spec. See CHAINSAFE_MIGRATION_PLAN.md."
+    "@noble/curves replaces @chainsafe/bls — pure-JS CJS+ESM, no native addon, same ETH2 BLS12-381 spec. See CHAINSAFE_MIGRATION_PLAN.md.",
+    "@noble/curves is in devDependencies (not dependencies) because tsup bundles it inline via noExternal. Keeping it in dependencies caused consumers to install @noble/hashes@2.2.0 (major-version 2) which shadowed @noble/hashes@1.x used by ethereum-cryptography, @coinbase/wallet-sdk, etc., breaking their @noble/curves initialisation with 'anumber is not a function'."
   ],
   "resolutions": {},
   "overrides": {
@@ -69,7 +70,6 @@
   },
   "dependencies": {
     "@chainsafe/enr": "6.0.1",
-    "@noble/curves": "2.2.0",
     "@chainsafe/ssz": "0.14.3",
     "@metamask/eth-sig-util": "8.2.0",
     "@safe-global/protocol-kit": "7.1.0",
@@ -84,6 +84,7 @@
     "uuid": "9.0.1"
   },
   "devDependencies": {
+    "@noble/curves": "2.2.0",
     "@release-it/conventional-changelog": "11.0.0",
     "@types/elliptic": "6.4.18",
     "@types/jest": "29.5.14",
