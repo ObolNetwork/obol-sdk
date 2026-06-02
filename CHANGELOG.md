@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.12.6](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.5...v2.12.6)
+
+- fix: move @noble/curves to devDependencies to prevent consumer dep conflicts [`#218`](https://github.com/ObolNetwork/obol-sdk/pull/218)
+
 #### [v2.12.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.4...v2.12.5)
 
+> 22 May 2026
+
+- chore(release): v2.12.5 [`#217`](https://github.com/ObolNetwork/obol-sdk/pull/217)
 - fix: raise lock validation worker timeouts for large clusters [`#216`](https://github.com/ObolNetwork/obol-sdk/pull/216)
 
 #### [v2.12.4](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.3...v2.12.4)
