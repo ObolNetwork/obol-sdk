@@ -53,6 +53,12 @@ import {
   hashClusterLockV1X10,
   verifyDVV1X10,
 } from './v1.10.0.js';
+import {
+  clusterDefinitionContainerTypeV1X11,
+  hashClusterDefinitionV1X11,
+  hashClusterLockV1X11,
+  verifyDVV1X11,
+} from './v1.11.0.js';
 import { blsVerify } from '../blsUtils.js';
 import { ClusterLockValidationTimeoutError } from '../errors.js';
 
@@ -105,6 +111,15 @@ export const clusterConfigOrDefinitionHash = (
     return x;
   }
 
+  if (semver.eq(cluster.version, 'v1.11.0')) {
+    definitionType = clusterDefinitionContainerTypeV1X11(configOnly);
+    val = hashClusterDefinitionV1X11(cluster, configOnly);
+    return (
+      '0x' +
+      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
+    );
+  }
+
   throw new Error('unsupported version');
 };
 
@@ -148,6 +163,10 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
     // 16+16 ETH) and multiple `partial_deposit_data` entries per validator; do not
     // apply the v1.8.0 guard here.
     return hashClusterLockV1X10(clusterLock);
+  }
+
+  if (semver.eq(clusterLock.cluster_definition.version, 'v1.11.0')) {
+    return hashClusterLockV1X11(clusterLock);
   }
 
   // other versions
@@ -575,6 +594,10 @@ const verifyLockData = async (clusterLock: ClusterLock): Promise<boolean> => {
 
   if (semver.eq(clusterLock.cluster_definition.version, 'v1.10.0')) {
     return await verifyDVV1X10(clusterLock);
+  }
+
+  if (semver.eq(clusterLock.cluster_definition.version, 'v1.11.0')) {
+    return await verifyDVV1X11(clusterLock);
   }
   return false;
 };

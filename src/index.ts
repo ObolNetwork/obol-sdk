@@ -669,7 +669,7 @@ export class Client extends Base {
    * @example
    * ```typescript
    * const updatedDef = await client.acceptClusterDefinition(
-   *   { enr: "enr:-LK4Q...", version: "v1.10.0" },
+   *   { enr: "enr:-LK4Q...", version: "v1.11.0" },
    *   configHash,
    * );
    * ```

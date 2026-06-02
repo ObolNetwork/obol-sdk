@@ -122,7 +122,7 @@ export const signEnrPayload = (
 
 export const DKG_ALGORITHM = 'default';
 
-export const CONFIG_VERSION = 'v1.10.0';
+export const CONFIG_VERSION = 'v1.11.0';
 
 export const SDK_VERSION = pjson.version;
 

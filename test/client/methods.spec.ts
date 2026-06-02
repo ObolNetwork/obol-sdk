@@ -13,6 +13,7 @@ import {
 import { SDK_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
 import { hasUniqueDistributedKeys } from '../../src/verification/common.js';
+import { clusterConfigOrDefinitionHash } from '../../src/verification/common.js';
 import {
   blsRecoverDistributedPubkeyFromShares,
   blsVerifyExtraShares,
@@ -291,6 +292,23 @@ describe('Cluster Client without a signer', () => {
       ],
     });
     expect(isValidLock).toEqual(false);
+  });
+
+  test('clusterConfigOrDefinitionHash supports v1.11.0 signature lists', () => {
+    const v1x11Definition = {
+      ...clusterLockV1X10.cluster_definition,
+      version: 'v1.11.0',
+    };
+
+    const configHash = clusterConfigOrDefinitionHash(v1x11Definition, true);
+    const definitionHash = clusterConfigOrDefinitionHash(v1x11Definition, false);
+
+    expect(configHash.startsWith('0x')).toBe(true);
+    expect(definitionHash.startsWith('0x')).toBe(true);
+    expect(configHash).not.toEqual(clusterLockV1X10.cluster_definition.config_hash);
+    expect(definitionHash).not.toEqual(
+      clusterLockV1X10.cluster_definition.definition_hash,
+    );
   });
 
   // Unit tests of the new lock-binding validators. These target the pure
