@@ -214,7 +214,7 @@ export const ovmTotalSplitPayloadSchema = {
         properties: {
           address: {
             type: 'string',
-            pattern: '^(|0x[a-fA-F0-9]{40})$',
+            pattern: '^0x[a-fA-F0-9]{40}$',
           },
           percentAllocation: { type: 'number' },
         },
