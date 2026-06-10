@@ -82,6 +82,9 @@ export const validateSmartContractSignature = async ({
 }): Promise<boolean> => {
   try {
     const safeProvider = safeRpcUrl ?? PROVIDER_MAP[chainId];
+    if (!safeProvider || safeProvider === 'undefined') {
+      throw new Error(`No RPC provider configured for chain ${chainId}`);
+    }
 
     const protocolKit = await Safe.init({
       provider: safeProvider,
