@@ -39,7 +39,10 @@ export const validateAddressSignature = async ({
       }
     }
     return validateEOASignature({ token, data, address });
-  } catch (error) {
+  } catch (error: any) {
+    console.warn(
+      `Smart contract signature validation failed, falling back to EOA: ${error.message}`,
+    );
     return validateEOASignature({ token, data, address });
   }
 };
