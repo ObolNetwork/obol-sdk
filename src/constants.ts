@@ -124,6 +124,9 @@ export const DKG_ALGORITHM = 'default';
 
 export const CONFIG_VERSION = 'v1.10.0';
 
+/** Minimum cluster definition / lock schema version accepted when posting to the API. */
+export const MIN_SUPPORTED_CLUSTER_VERSION = 'v1.10.0';
+
 export const SDK_VERSION = pjson.version;
 
 export const DOMAIN_APPLICATION_BUILDER = '00000001';

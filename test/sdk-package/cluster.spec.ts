@@ -472,10 +472,6 @@ describe('Poll Cluster Lock', () => {
       version: 'Cluster with safe address v1.10.0',
       clusterLock: clusterLockWithSafe,
     },
-    {
-      version: 'null deposit_amounts v1.8.0',
-      clusterLock: nullDepositAmountsClusterLockV1X8,
-    },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
   ])(
     "$version: 'should return true on verified cluster lock'",

@@ -240,10 +240,6 @@ describe('Cluster Client without a signer', () => {
 
   test.each([
     { version: 'v1.10.0 solo', clusterLock: clusterLockSoloV1X10 },
-    {
-      version: 'null deposit_amounts v1.8.0',
-      clusterLock: nullDepositAmountsClusterLockV1X8,
-    },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
     {
       version: 'v1.10.0 with compounding withdrawals',
@@ -275,6 +271,13 @@ describe('Cluster Client without a signer', () => {
       mainnetSafeRpcUrl,
     );
     expect(isValidLock).toEqual(true);
+  });
+
+  test('validateClusterLock returns false for cluster lock versions below v1.10.0', async () => {
+    const isValidLock: boolean = await validateClusterLock(
+      nullDepositAmountsClusterLockV1X8,
+    );
+    expect(isValidLock).toEqual(false);
   });
 
   test('validateCluster should return false for cluster with null deposit_amounts and incorrect partial_deposits', async () => {

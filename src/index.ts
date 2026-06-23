@@ -6,6 +6,7 @@ import {
   Domain,
   DKG_ALGORITHM,
   CONFIG_VERSION,
+  MIN_SUPPORTED_CLUSTER_VERSION,
   OperatorConfigHashSigningTypes,
   EnrSigningTypes,
   TERMS_AND_CONDITIONS_VERSION,
@@ -35,7 +36,10 @@ import {
   type ProviderType,
   type SignerType,
 } from './types.js';
-import { clusterConfigOrDefinitionHash } from './verification/common.js';
+import {
+  clusterConfigOrDefinitionHash,
+  isSupportedClusterVersion,
+} from './verification/common.js';
 import { validatePayload } from './ajv.js';
 import {
   definitionSchema,
@@ -686,6 +690,12 @@ export class Client extends Base {
       operatorPayload,
       operatorPayloadSchema,
     );
+
+    if (!isSupportedClusterVersion(validatedPayload.version)) {
+      throw new Error(
+        `Unsupported version ${validatedPayload.version}. Minimum supported version is ${MIN_SUPPORTED_CLUSTER_VERSION}.`,
+      );
+    }
 
     try {
       const address = await this.signer.getAddress();
