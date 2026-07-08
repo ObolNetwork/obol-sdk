@@ -5,6 +5,7 @@ import { Client, validateClusterLock, type SignerType } from '../../src/index';
 import {
   clusterConfigV1X10,
   clusterLockV1X10,
+  clusterLockV1X11,
   clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
@@ -295,17 +296,19 @@ describe('Cluster Client without a signer', () => {
   });
 
   test('clusterConfigOrDefinitionHash supports v1.11.0 signature lists', () => {
-    const v1x11Definition = {
-      ...clusterLockV1X10.cluster_definition,
-      version: 'v1.11.0',
-    };
+    // Real v1.11 cluster whose creator config_signature is a 2-of-N Safe multisig
+    // (130 bytes = two 65-byte chunks), so this exercises the List[Bytes65,32]
+    // splitting logic rather than a single-chunk Bytes65 value.
+    const def = clusterLockV1X11.cluster_definition;
 
-    const configHash = clusterConfigOrDefinitionHash(v1x11Definition, true);
-    const definitionHash = clusterConfigOrDefinitionHash(v1x11Definition, false);
+    const configHash = clusterConfigOrDefinitionHash(def, true);
+    const definitionHash = clusterConfigOrDefinitionHash(def, false);
 
-    expect(configHash.startsWith('0x')).toBe(true);
-    expect(definitionHash.startsWith('0x')).toBe(true);
-    expect(configHash).not.toEqual(clusterLockV1X10.cluster_definition.config_hash);
+    // Golden values produced by charon + the dev API for this exact cluster.
+    expect(configHash).toEqual(def.config_hash);
+    expect(definitionHash).toEqual(def.definition_hash);
+
+    // The v1.11 root must differ from the v1.10 hashing of the same-shaped data.
     expect(definitionHash).not.toEqual(
       clusterLockV1X10.cluster_definition.definition_hash,
     );
