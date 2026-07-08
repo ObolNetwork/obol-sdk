@@ -81,7 +81,10 @@ export const clusterDefinitionContainerTypeV1X11 = (
     threshold: new UintNumberType(8 as UintNumberByteLen),
     dkg_algorithm: new ByteListType(32),
     fork_version: new ByteVectorType(4),
-    operators: new ListCompositeType(newOperatorContainerTypeV1X11(configOnly), 256),
+    operators: new ListCompositeType(
+      newOperatorContainerTypeV1X11(configOnly),
+      256,
+    ),
     creator: newCreatorContainerTypeV1X11(configOnly),
     validators: new ListCompositeType(validatorsContainerType, 65536),
     deposit_amounts: new ListBasicType(

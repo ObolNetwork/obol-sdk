@@ -9,7 +9,7 @@ import {
   clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
-  clusterLockSoloV1X10
+  clusterLockSoloV1X10,
 } from '../fixtures.js';
 import { SDK_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
@@ -324,7 +324,7 @@ describe('Cluster Client without a signer', () => {
     const mkLock = (keys: string[]) =>
       ({
         distributed_validators: keys.map(k => ({ distributed_public_key: k })),
-      } as any);
+      }) as any;
 
     test('returns true for unique distributed public keys', () => {
       expect(hasUniqueDistributedKeys(mkLock(['0xaa', '0xbb']))).toBe(true);
@@ -371,7 +371,10 @@ describe('Cluster Client without a signer', () => {
 
     test('returns null when threshold > shares.length', () => {
       expect(
-        blsRecoverDistributedPubkeyFromShares(sharesBytes, sharesBytes.length + 1),
+        blsRecoverDistributedPubkeyFromShares(
+          sharesBytes,
+          sharesBytes.length + 1,
+        ),
       ).toBeNull();
     });
 
