@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.13.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.6...v2.13.0)
+
+- Add v1.11.0 cluster definition hashing with List[Bytes65,32] signatures. [`#220`](https://github.com/ObolNetwork/obol-sdk/pull/220)
+
 #### [v2.12.6](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.5...v2.12.6)
 
+> 2 June 2026
+
+- chore(release): v2.12.6 [`#219`](https://github.com/ObolNetwork/obol-sdk/pull/219)
 - fix: move @noble/curves to devDependencies to prevent consumer dep conflicts [`#218`](https://github.com/ObolNetwork/obol-sdk/pull/218)
 
 #### [v2.12.5](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.4...v2.12.5)
