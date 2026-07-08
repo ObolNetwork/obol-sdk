@@ -717,3 +717,118 @@ export const clusterLockWithCompoundingWithdrawalss = {
     '0x992ab5c73d30d10cc5c8f6d462ba387fd5a698e206b0dfdd0224d17117f85a2077fcaa62fd6d5170ff678249288fcd82877e2987ed5564df5dbd9d51370871c800',
   ],
 };
+
+// Real v1.11.0 group cluster (Hoodi, dev API). The creator config_signature is a
+// 2-of-N Safe multisig => 130 bytes spanning two 65-byte chunks, exercising the
+// new List[Bytes65,32] signature-list hashing. config_hash/definition_hash/lock_hash
+// are golden values produced by charon + the dev API.
+export const clusterLockV1X11 = {
+  cluster_definition: {
+    name: 'mmmm',
+    creator: {
+      address: '0x0c89A5ba7FcEfA6e7A67f3F3eC3e2EA9B38924bA',
+      config_signature:
+        '0xbfab70fcedb46b81bc082dd77ee1f0977f213628a75fea6b6fe21181209b3635665a9ea0765d755a5d9a8260a701c7df08713f55dc8cc97c14c921196475d31f1c1cbe6bd00b772330e6ef71e47947abbb36aa829fc0e983ce2861abe56b941a4638231a343e8d95e70b0f56f5330f12d6a50d0997f82157ff81eaedd60a6f944b1b',
+    },
+    operators: [
+      {
+        address: '',
+        enr: 'enr:-HW4QATmT-Scb72Oj55zUTgP_Y4uDkhqO9w3XuZcUT8ArokjCS51cfUTnbKtm15QtmrAVe6UqnqS63bt-l4bEe6DtX2AgmlkgnY0iXNlY3AyNTZrMaECluxfYvSncUr6LKPA3QY5frGPKyMwpj-CcO6gnhOh2Js',
+        config_signature: '',
+        enr_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QBHNTCZtx3eNM861l6u1-LFhg6Tc20KW6a-9SjE8Lya_MXzOiUpgsva1AjxOHawhqgSucBH0aSOM_DSyt-9mICeAgmlkgnY0iXNlY3AyNTZrMaEC9n1e2YMrtazLItw3vV8_YeDsDR-dJqLLN-DFHYenGYo',
+        config_signature: '',
+        enr_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QHH4fJXiToQGscl26jRUiZ9hPSWr-K6N_Yu5Up0uAwOfdHWRlj79lOubJT7Fu1cAy8sJFisxubOj8_9Hi4yswpWAgmlkgnY0iXNlY3AyNTZrMaECOb21lG1ncK1klFhJSvgQVdKorJd0sP5EpzvKv8iAlb8',
+        config_signature: '',
+        enr_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QLqAOz3cHegNJ_ras5K7vjlQQ62n5dAfUF-WPMdU0gdBYITKlCBST4XcFPu7xxej89-8xjGeDYkyBsEKgWYifWmAgmlkgnY0iXNlY3AyNTZrMaECZp64s75vJwlfDFAo1bun4JuWgBn3JCmzZtXPqpnW50o',
+        config_signature: '',
+        enr_signature: '',
+      },
+    ],
+    uuid: 'aaf7f23b-2cdf-4197-8178-a4e279394d0c',
+    version: 'v1.11.0',
+    timestamp: '2026-06-02T18:16:54.948Z',
+    num_validators: 1,
+    threshold: 3,
+    validators: [
+      {
+        fee_recipient_address: '0x0c89A5ba7FcEfA6e7A67f3F3eC3e2EA9B38924bA',
+        withdrawal_address: '0x0c89A5ba7FcEfA6e7A67f3F3eC3e2EA9B38924bA',
+      },
+    ],
+    dkg_algorithm: 'default',
+    fork_version: '0x10000910',
+    deposit_amounts: null,
+    consensus_protocol: '',
+    target_gas_limit: 36000000,
+    compounding: true,
+    config_hash:
+      '0x5e98a27968874b6398c1deadf37d5d16efc64ad1ca940d2e8431e2b877928d2b',
+    definition_hash:
+      '0x261074a0022501bdfbba0390531c8065542cc53f02062a3218df22caccfee4f5',
+  },
+  distributed_validators: [
+    {
+      distributed_public_key:
+        '0xa41ad0243ce62c780cc0db88423180803d0d3abdec48d9db3d5dded249cf2f9fe3bb9b011927ac52f6c02cdf3441266f',
+      public_shares: [
+        '0xaa48507c79ea90158e1f4126da3d3f75816ec464d917993cf7b244925471041d16a90b2b02f138bdddba064106398290',
+        '0xb9e61c87a3ea4a686a7343947056bc32976032c83324bf593d2af8640b817821fd2300513a912f7b2ba8ab9613a198db',
+        '0x9034cb425582cf8a0f4a14bde10cc4dfe7643bbf2343a18e3f9f8924ff1cc564929af03608b6d04954f5331e210d2d38',
+        '0x955cb36033dafcf53a70ee8cf4a50f22c812aa1e438d1f9aa54e801154f22171f181b9a732598b11aa678dd2b158b44b',
+      ],
+      builder_registration: {
+        message: {
+          fee_recipient: '0x0c89a5ba7fcefa6e7a67f3f3ec3e2ea9b38924ba',
+          gas_limit: 60000000,
+          timestamp: 1742213400,
+          pubkey:
+            '0xa41ad0243ce62c780cc0db88423180803d0d3abdec48d9db3d5dded249cf2f9fe3bb9b011927ac52f6c02cdf3441266f',
+        },
+        signature:
+          '0xab078a2ad4f28e6089eac817ba190567a4c577e564190278ebf423e1f2593f3c5a2c8e5df6bda8cf2c0432c70db60cf7002793eb41b4f495209a36dd8e650bdf210c53ce07bda7c987c58c2a52a74c9570b8919f931bd7057de5b43b3447e65a',
+      },
+      partial_deposit_data: [
+        {
+          pubkey:
+            '0xa41ad0243ce62c780cc0db88423180803d0d3abdec48d9db3d5dded249cf2f9fe3bb9b011927ac52f6c02cdf3441266f',
+          withdrawal_credentials:
+            '0x0200000000000000000000000c89a5ba7fcefa6e7a67f3f3ec3e2ea9b38924ba',
+          amount: '1000000000',
+          signature:
+            '0xaf22e51060e346c58fc5c9ee08bcdae24aff0e2472c7c0fbc1d070b1a5ff9d31fa4142a508574822a05dd7d1b330c81c1336af1557928b1498b0c05f4078e79dfe481030d30d9d9b46f120fe4befc1a98b9d578fac741756edbf731212a08543',
+        },
+        {
+          pubkey:
+            '0xa41ad0243ce62c780cc0db88423180803d0d3abdec48d9db3d5dded249cf2f9fe3bb9b011927ac52f6c02cdf3441266f',
+          withdrawal_credentials:
+            '0x0200000000000000000000000c89a5ba7fcefa6e7a67f3f3ec3e2ea9b38924ba',
+          amount: '32000000000',
+          signature:
+            '0xa54d646c8d69ec17f2a5855505a055a911359e4099b05fd38b0ded23bb0f286101f9f0d414484e21416660ab257bbef60010c3b8ccc595c5495a10da40d94d64d340fed419ff1c7557679fe3a854f54c47135334da328b425a20b30280596885',
+        },
+      ],
+    },
+  ],
+  signature_aggregate:
+    '0x823a10f465abb41018be3f09ea288f77be66f5d4563cd696ef740820db0a07f9713cc81a22745c12ee83773b48a2c31e0e7509f04431ded70cd081a795d5dbd4f613a1028af3809407f49acc8679f69e1a9ab610eac8713140230155ac43b5dd',
+  lock_hash:
+    '0xec831d119e6a4ff448d29475277807caced5981fe57c87c8d145d74cdcbab959',
+  node_signatures: [
+    '0x847958b2e9882e9a4b21f5b2552dbf438fa975bf9c6809af17fd4c8f976f3149488a0f1ec531c20f6765d42ff7a37f5e3ea729483188e154daaf8f318941193200',
+    '0x5f3b2e8aabf889d9d8ccbd5312d0b6fe496f05b222023566c347d6b6b908e2dc7f4f0650ba85686c2541ade4e28378ddea5a2c6615973a5573095c0587fdf39001',
+    '0x5aed990fba70b593029d31f3313753f1e7d997e80071c9da7b4c6c97f46ec1623f73b4d68fe1c38f7d399f7b84aa205a657cccb0c73e2cede77ba9a94166e54f01',
+    '0xdc6bc7b8f4181ffd8667bd3b27c66b5f45540e93a4e980ca39527a261640fc8d57dfe3dd0c3cb4cce4f95b15d434c5c0cfe4fb73389cb10afa0fd9e34fb96e5301',
+  ],
+};

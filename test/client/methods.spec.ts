@@ -5,14 +5,16 @@ import { Client, validateClusterLock, type SignerType } from '../../src/index';
 import {
   clusterConfigV1X10,
   clusterLockV1X10,
+  clusterLockV1X11,
   clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
-  clusterLockSoloV1X10
+  clusterLockSoloV1X10,
 } from '../fixtures.js';
 import { SDK_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
 import { hasUniqueDistributedKeys } from '../../src/verification/common.js';
+import { clusterConfigOrDefinitionHash } from '../../src/verification/common.js';
 import {
   blsRecoverDistributedPubkeyFromShares,
   blsVerifyExtraShares,
@@ -293,6 +295,25 @@ describe('Cluster Client without a signer', () => {
     expect(isValidLock).toEqual(false);
   });
 
+  test('clusterConfigOrDefinitionHash supports v1.11.0 signature lists', () => {
+    // Real v1.11 cluster whose creator config_signature is a 2-of-N Safe multisig
+    // (130 bytes = two 65-byte chunks), so this exercises the List[Bytes65,32]
+    // splitting logic rather than a single-chunk Bytes65 value.
+    const def = clusterLockV1X11.cluster_definition;
+
+    const configHash = clusterConfigOrDefinitionHash(def, true);
+    const definitionHash = clusterConfigOrDefinitionHash(def, false);
+
+    // Golden values produced by charon + the dev API for this exact cluster.
+    expect(configHash).toEqual(def.config_hash);
+    expect(definitionHash).toEqual(def.definition_hash);
+
+    // The v1.11 root must differ from the v1.10 hashing of the same-shaped data.
+    expect(definitionHash).not.toEqual(
+      clusterLockV1X10.cluster_definition.definition_hash,
+    );
+  });
+
   // Unit tests of the new lock-binding validators. These target the pure
   // helpers directly rather than driving through validateClusterLock —
   // tampered locks short-circuit at either the lock_hash integrity check or
@@ -303,7 +324,7 @@ describe('Cluster Client without a signer', () => {
     const mkLock = (keys: string[]) =>
       ({
         distributed_validators: keys.map(k => ({ distributed_public_key: k })),
-      } as any);
+      }) as any;
 
     test('returns true for unique distributed public keys', () => {
       expect(hasUniqueDistributedKeys(mkLock(['0xaa', '0xbb']))).toBe(true);
@@ -350,7 +371,10 @@ describe('Cluster Client without a signer', () => {
 
     test('returns null when threshold > shares.length', () => {
       expect(
-        blsRecoverDistributedPubkeyFromShares(sharesBytes, sharesBytes.length + 1),
+        blsRecoverDistributedPubkeyFromShares(
+          sharesBytes,
+          sharesBytes.length + 1,
+        ),
       ).toBeNull();
     });
 
