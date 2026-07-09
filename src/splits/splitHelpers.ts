@@ -10,10 +10,15 @@ import {
 } from '../types.js';
 import {
   Contract,
+  dataSlice,
+  type EventLog,
+  id,
   Interface,
   parseEther,
   ZeroAddress,
   getAddress as toChecksumAddress,
+  type JsonRpcSigner,
+  type TransactionReceipt,
 } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR.js';
 import { OVMFactoryContract, OVMContract } from '../abi/OVM.js';
@@ -21,11 +26,184 @@ import { splitMainEthereumAbi } from '../abi/SplitMain.js';
 import { CHAIN_CONFIGURATION, ETHER_TO_GWEI } from '../constants.js';
 import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi.js';
 import { MultiCall3Contract } from '../abi/Multicall3.js';
+import { isContractAvailable } from '../utils.js';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
 const ovmFactoryContractInterface = new Interface(OVMFactoryContract.abi);
 const splitV2FactoryInterface = new Interface(splitV2FactoryAbi);
+const multicall3ContractInterface = new Interface(MultiCall3Contract.abi);
+
+// Safe multisig execution needs co-signers, so allow a long collection window.
+const SAFE_EXECUTION_TIMEOUT_MS = 30 * 60_000;
+
+// Finds the OVM factory's CreateObolValidatorManager event in a receipt by
+// event signature. Position-based log indexing breaks when extra events are
+// interleaved, so match by topic instead.
+export const extractOvmAddressFromReceipt = (
+  receipt: TransactionReceipt,
+): string => {
+  for (const log of receipt?.logs ?? []) {
+    try {
+      const parsed = ovmFactoryContractInterface.parseLog({
+        topics: [...log.topics],
+        data: log.data,
+      });
+      if (parsed?.name === 'CreateObolValidatorManager') {
+        return toChecksumAddress(parsed.args.ovm as string);
+      }
+    } catch {
+      // Not an OVM factory event; keep scanning.
+    }
+  }
+  throw new Error(
+    'CreateObolValidatorManager event not found in transaction logs',
+  );
+};
+
+// True when the signer is a smart-contract wallet (e.g. a Safe) going through
+// a JSON-RPC connection. Local Wallet signers are always EOAs.
+const isContractWalletSigner = async (signer: SignerType): Promise<boolean> => {
+  if (!signer.provider || !('sendUncheckedTransaction' in signer)) {
+    return false;
+  }
+  return await isContractAvailable(await signer.getAddress(), signer.provider);
+};
+
+const SAFE_EXECUTION_SUCCESS_TOPIC = id('ExecutionSuccess(bytes32,uint256)');
+
+// True when the receipt contains the Safe's ExecutionSuccess log for the
+// safeTxHash the wallet returned at submission — the txHash is indexed on
+// Safe v1.4.1+ and the leading data word on v1.3.0. This binds an on-chain
+// transaction to OUR submission, so a concurrent OVM creation for the same
+// owner (even by a third party, since the factory is permissionless) can
+// never be mistaken for ours.
+export const receiptMatchesSafeTx = (
+  receipt: TransactionReceipt | null,
+  safeAddress: string,
+  safeTxHash: string,
+): boolean =>
+  receipt?.logs?.some(log => {
+    if (
+      log.address?.toLowerCase() !== safeAddress.toLowerCase() ||
+      log.topics[0] !== SAFE_EXECUTION_SUCCESS_TOPIC
+    ) {
+      return false;
+    }
+    const loggedHash =
+      log.topics.length > 1 ? log.topics[1] : dataSlice(log.data, 0, 32);
+    return loggedHash?.toLowerCase() === safeTxHash.toLowerCase();
+  }) ?? false;
+
+// Submits a deployment from a contract wallet (e.g. a Safe) and resolves the
+// created OVM address. Safe wallets return an internal safeTxHash that never
+// appears on-chain, so tx.wait() would hang forever; instead ethers watches
+// the factory's CreateObolValidatorManager events for `owner`, and each
+// candidate is accepted only when its transaction is provably ours: either
+// its hash equals the wallet-returned hash, or its receipt carries our
+// Safe's ExecutionSuccess(safeTxHash).
+const submitViaContractWalletAndResolveOvm = async ({
+  signer,
+  to,
+  data,
+  factoryAddress,
+  owner,
+  timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
+}: {
+  signer: JsonRpcSigner;
+  to: string;
+  data: string;
+  factoryAddress: string;
+  owner: string;
+  timeoutMs?: number;
+}): Promise<string> => {
+  const provider = signer.provider;
+  const safeAddress = await signer.getAddress();
+  const factory = new Contract(
+    factoryAddress,
+    OVMFactoryContract.abi,
+    provider,
+  );
+  const filter = factory.filters.CreateObolValidatorManager(null, owner);
+  // Captured before submission so the backfill below cannot miss an
+  // execution mined before the wallet call returned (e.g. a 1-of-1 Safe).
+  const startBlock = await provider.getBlockNumber();
+
+  const isOurs = async (
+    candidateTxHash: string,
+    submittedHash: string,
+  ): Promise<boolean> => {
+    if (candidateTxHash.toLowerCase() === submittedHash.toLowerCase()) {
+      return true; // the wallet returned a real transaction hash
+    }
+    const receipt = await provider
+      .getTransactionReceipt(candidateTxHash)
+      .catch(() => null);
+    return receiptMatchesSafeTx(receipt, safeAddress, submittedHash);
+  };
+
+  return await new Promise<string>((resolve, reject) => {
+    let submittedHash: string | null = null;
+    let settled = false;
+
+    const settle = (finish: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void factory.off(filter, listener);
+      finish();
+    };
+
+    const consider = (ovm: string, candidateTxHash: string): void => {
+      // Before submission returns we cannot match; the backfill re-checks.
+      if (!submittedHash || settled) return;
+      void isOurs(candidateTxHash, submittedHash).then(ours => {
+        if (ours) {
+          settle(() => {
+            resolve(toChecksumAddress(ovm));
+          });
+        }
+        // Not ours (someone else's OVM for this owner): keep listening.
+      });
+    };
+
+    const listener = (...args: unknown[]): void => {
+      const payload = args[args.length - 1] as
+        | { log?: { transactionHash?: string } }
+        | undefined;
+      const txHash = payload?.log?.transactionHash;
+      if (txHash) consider(String(args[0]), txHash);
+    };
+
+    const timer = setTimeout(() => {
+      settle(() => {
+        reject(
+          new Error(
+            'Timed out waiting for the Safe transaction to be executed. Once all owners have signed and it executes, retry to continue.',
+          ),
+        );
+      });
+    }, timeoutMs);
+
+    void factory.on(filter, listener);
+    signer
+      .sendUncheckedTransaction({ to, data })
+      .then(async hash => {
+        submittedHash = hash;
+        // Backfill events mined between startBlock and now.
+        const past = await factory.queryFilter(filter, startBlock);
+        for (const ev of past) {
+          const ovm = (ev as EventLog).args?.[0] as string | undefined;
+          if (ovm) consider(ovm, ev.transactionHash);
+        }
+      })
+      .catch((err: Error) => {
+        settle(() => {
+          reject(err);
+        });
+      });
+  });
+};
 
 type Call = {
   target: ETH_ADDRESS;
@@ -744,23 +922,34 @@ export const deployOVMContract = async ({
       signer,
     );
 
-    const tx = await ovmFactoryContract.createObolValidatorManager(
+    const createArgs = [
       OVMOwnerAddress,
       principalRecipient,
       rewardRecipient,
       principalThreshold * ETHER_TO_GWEI,
-    );
+    ];
 
-    const receipt = await tx.wait();
-
-    // Extract OVM address from logs
-    const ovmAddressLog = receipt?.logs[1]?.topics[1];
-    if (!ovmAddressLog) {
-      throw new Error('Failed to extract OVM address from transaction logs');
+    if (
+      'sendUncheckedTransaction' in signer &&
+      (await isContractWalletSigner(signer))
+    ) {
+      return await submitViaContractWalletAndResolveOvm({
+        signer,
+        to: chainConfig.OVM_FACTORY_CONTRACT.address,
+        data: ovmFactoryContractInterface.encodeFunctionData(
+          'createObolValidatorManager',
+          createArgs,
+        ),
+        factoryAddress: chainConfig.OVM_FACTORY_CONTRACT.address,
+        owner: OVMOwnerAddress,
+      });
     }
 
-    const ovmAddress = '0x' + ovmAddressLog.slice(26, 66);
-    return toChecksumAddress(ovmAddress);
+    const tx = await ovmFactoryContract.createObolValidatorManager(
+      ...createArgs,
+    );
+    const receipt = (await tx.wait()) as TransactionReceipt;
+    return extractOvmAddressFromReceipt(receipt);
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM contract: ${error.message ?? 'OVM deployment failed'}`,
@@ -851,27 +1040,31 @@ export const deployOVMAndSplitV2 = async ({
       callData: ovmTxData,
     });
 
+    if (
+      'sendUncheckedTransaction' in signer &&
+      (await isContractWalletSigner(signer))
+    ) {
+      return await submitViaContractWalletAndResolveOvm({
+        signer,
+        to: chainConfig.MULTICALL3_CONTRACT.address,
+        data: multicall3ContractInterface.encodeFunctionData('aggregate', [
+          executeCalls,
+        ]),
+        factoryAddress: chainConfig.OVM_FACTORY_CONTRACT.address,
+        owner: ovmArgs.OVMOwnerAddress,
+      });
+    }
+
     // Execute multicall3
-    const executeMultiCalls = await multicall3(executeCalls, signer, chainId);
+    const executeMultiCalls = (await multicall3(
+      executeCalls,
+      signer,
+      chainId,
+    )) as TransactionReceipt;
 
-    // Extract addresses from events
-    let ovmAddress: string | undefined;
-    const logsCount = executeMultiCalls?.logs?.length || 0;
-
-    if (logsCount === 2) {
-      ovmAddress = '0x' + executeMultiCalls?.logs[1]?.topics[1]?.slice(26, 66);
-    } else if (logsCount === 5) {
-      ovmAddress = '0x' + executeMultiCalls?.logs[4]?.topics[1]?.slice(26, 66);
-    } else {
-      ovmAddress = '0x' + executeMultiCalls?.logs[7]?.topics[1]?.slice(26, 66);
-    }
-    if (!ovmAddress) {
-      throw new Error(
-        'Failed to extract contract addresses from multicall3 events',
-      );
-    }
-
-    return ovmAddress;
+    // Extract the OVM address from the factory event by signature, robust to
+    // interleaved events.
+    return extractOvmAddressFromReceipt(executeMultiCalls);
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM and SplitV2: ${error.message ?? 'Deployment failed'}`,
