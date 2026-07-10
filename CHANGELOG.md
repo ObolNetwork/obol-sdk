@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.13.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.0...v2.13.1)
+
+- fix: support Safe wallets in OVM/splitter deployment flows [`#226`](https://github.com/ObolNetwork/obol-sdk/pull/226)
+
 #### [v2.13.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.6...v2.13.0)
 
+> 8 July 2026
+
+- chore(release): v2.13.0 [`#225`](https://github.com/ObolNetwork/obol-sdk/pull/225)
 - Add v1.11.0 cluster definition hashing with List[Bytes65,32] signatures. [`#220`](https://github.com/ObolNetwork/obol-sdk/pull/220)
 
 #### [v2.12.6](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.5...v2.12.6)
