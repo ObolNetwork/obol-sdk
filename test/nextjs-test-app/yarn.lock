@@ -1079,9 +1079,9 @@ balanced-match@^4.0.2:
   integrity sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==
 
 bn.js@^4.11.9:
-  version "4.12.4"
-  resolved "https://registry.yarnpkg.com/bn.js/-/bn.js-4.12.4.tgz#72627bb262f2385c51d313cd5e9596ca7cda77d6"
-  integrity sha512-njR1b+ixG2ufvL9Zn9JGneW+b5GV6jqpYyPPpg4QVt723b5kJPGUczkUyWEH9BwEA74UakJZ43I4FDLBF7ci0g==
+  version "4.12.5"
+  resolved "https://registry.yarnpkg.com/bn.js/-/bn.js-4.12.5.tgz#74f119ffecd823168d188eae06d97ea40835c489"
+  integrity sha512-3aRg6/JxfffFD+OlOjOFR3Vo79l39ooBTFucxx+MT3dhCtzn3EmiUPQo+6/OZuI2jbXi3YKgmiTFBgChQMwIRQ==
 
 brace-expansion@^1.1.7:
   version "1.1.16"
@@ -3377,9 +3377,9 @@ uuid@9.0.1, uuid@^9.0.1:
   integrity sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==
 
 viem@^2.21.8:
-  version "2.54.6"
-  resolved "https://registry.yarnpkg.com/viem/-/viem-2.54.6.tgz#df97b26ebf4ca67cc1f9ebf49c07076d6edb9b87"
-  integrity sha512-OfybECKJYVmhiNqz+SHhed+O2h6niQ+0Wjg9J0b4bV+/QrvLgjxhfKO7hZqsuK1YtZ/0BErBKy708Zp+cU5T0Q==
+  version "2.55.0"
+  resolved "https://registry.yarnpkg.com/viem/-/viem-2.55.0.tgz#96e19092dc0ab8c7b1843696ad6c625a30490b1d"
+  integrity sha512-5XWSTCTmNvHCeT38Fsp31uofmOZFJdj4nOUH+H2Vh/hzsx9M7r+KgL3fSYUZeVn4H0UyQxjwPFqEaV4M0CI1tA==
   dependencies:
     "@noble/curves" "1.9.1"
     "@noble/hashes" "1.8.0"
