@@ -27,6 +27,8 @@ await jest.unstable_mockModule('../../src/splits/splitHelpers.js', () => ({
   deployOVMAndSplitV2: jest.fn(),
   requestWithdrawalFromOVM: jest.fn(),
   depositOVM: jest.fn(),
+  isContractWalletSigner: jest.fn(async () => false),
+  submitViaContractWalletAndWait: jest.fn(),
 }));
 
 // Mock utils using unstable_mockModule

@@ -63,7 +63,9 @@ export const extractOvmAddressFromReceipt = (
 
 // True when the signer is a smart-contract wallet (e.g. a Safe) going through
 // a JSON-RPC connection. Local Wallet signers are always EOAs.
-const isContractWalletSigner = async (signer: SignerType): Promise<boolean> => {
+export const isContractWalletSigner = async (
+  signer: SignerType,
+): Promise<boolean> => {
   if (!signer.provider || !('sendUncheckedTransaction' in signer)) {
     return false;
   }
@@ -195,6 +197,120 @@ const submitViaContractWalletAndResolveOvm = async ({
         for (const ev of past) {
           const ovm = (ev as EventLog).args?.[0] as string | undefined;
           if (ovm) consider(ovm, ev.transactionHash);
+        }
+      })
+      .catch((err: Error) => {
+        settle(() => {
+          reject(err);
+        });
+      });
+  });
+};
+
+/**
+ * Submits an arbitrary transaction from a contract wallet (e.g. a Safe) and
+ * resolves the EXECUTED on-chain transaction hash. Safe wallets return an
+ * internal safeTxHash that never appears on-chain, so tx.wait() would hang
+ * forever; instead ethers watches the Safe's own ExecutionSuccess logs and
+ * resolves when one carries the wallet-returned hash (or when the wallet
+ * returned a real transaction hash, e.g. a 1-of-1 Safe).
+ *
+ * Used by flows that need no data out of the receipt (EOA withdrawal
+ * requests, batch deposits) — unlike OVM deployment, which additionally
+ * resolves the created contract address.
+ */
+export const submitViaContractWalletAndWait = async ({
+  signer,
+  to,
+  data,
+  value,
+  timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
+}: {
+  signer: JsonRpcSigner;
+  to: string;
+  data: string;
+  value?: bigint;
+  timeoutMs?: number;
+}): Promise<string> => {
+  const provider = signer.provider;
+  const safeAddress = await signer.getAddress();
+  const filter = {
+    address: safeAddress,
+    topics: [SAFE_EXECUTION_SUCCESS_TOPIC],
+  };
+  // Captured before submission so the backfill below cannot miss an
+  // execution mined before the wallet call returned (e.g. a 1-of-1 Safe).
+  const startBlock = await provider.getBlockNumber();
+
+  const matchesSubmission = (
+    log: { transactionHash?: string; topics: readonly string[]; data: string },
+    submittedHash: string,
+  ): boolean => {
+    if (log.transactionHash?.toLowerCase() === submittedHash.toLowerCase()) {
+      return true; // the wallet returned a real transaction hash
+    }
+    const loggedHash =
+      log.topics.length > 1 ? log.topics[1] : dataSlice(log.data, 0, 32);
+    return loggedHash?.toLowerCase() === submittedHash.toLowerCase();
+  };
+
+  return await new Promise<string>((resolve, reject) => {
+    let submittedHash: string | null = null;
+    let settled = false;
+
+    const settle = (finish: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void provider.off(filter, listener);
+      finish();
+    };
+
+    const consider = (log: {
+      transactionHash?: string;
+      topics: readonly string[];
+      data: string;
+    }): void => {
+      // Before submission returns we cannot match; the backfill re-checks.
+      if (!submittedHash || settled) return;
+      if (matchesSubmission(log, submittedHash) && log.transactionHash) {
+        const executedHash = log.transactionHash;
+        settle(() => {
+          resolve(executedHash);
+        });
+      }
+    };
+
+    const listener = (log: {
+      transactionHash?: string;
+      topics: readonly string[];
+      data: string;
+    }): void => {
+      consider(log);
+    };
+
+    const timer = setTimeout(() => {
+      settle(() => {
+        reject(
+          new Error(
+            'Timed out waiting for the Safe transaction to be executed. Once all owners have signed and it executes, retry to continue.',
+          ),
+        );
+      });
+    }, timeoutMs);
+
+    void provider.on(filter, listener);
+    signer
+      .sendUncheckedTransaction({ to, data, ...(value ? { value } : {}) })
+      .then(async hash => {
+        submittedHash = hash;
+        // Backfill logs mined between startBlock and now.
+        const past = await provider.getLogs({
+          ...filter,
+          fromBlock: startBlock,
+        });
+        for (const log of past) {
+          consider(log);
         }
       })
       .catch((err: Error) => {
