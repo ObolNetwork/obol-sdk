@@ -2,6 +2,7 @@ import { ETHER_TO_GWEI } from '../constants.js';
 import { type SignerType } from '../types.js';
 import { Contract, type JsonRpcSigner } from 'ethers';
 import { BatchDepositContract } from '../abi/BatchDeposit.js';
+import { SignerRequiredError } from '../errors.js';
 import {
   isContractWalletSigner,
   submitViaContractWalletAndWait,
@@ -10,9 +11,16 @@ import {
 // Safe wallets return an internal safeTxHash from sendTransaction, so
 // tx.wait() hangs forever (the hash never appears on-chain). Contract-wallet
 // signers submit unchecked and resolve via the Safe's ExecutionSuccess log.
-const isSafeLikeSigner = async (signer: SignerType): Promise<boolean> =>
-  'sendUncheckedTransaction' in signer &&
-  (await isContractWalletSigner(signer));
+// This is the first dereference on both write flows, so it guards the signer.
+const isSafeLikeSigner = async (signer: SignerType): Promise<boolean> => {
+  if (!signer) {
+    throw new SignerRequiredError('submitEOATransaction');
+  }
+  return (
+    'sendUncheckedTransaction' in signer &&
+    (await isContractWalletSigner(signer))
+  );
+};
 
 /**
  * Helper function to submit withdrawal request for EOA

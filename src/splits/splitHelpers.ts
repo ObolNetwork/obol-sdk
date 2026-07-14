@@ -27,6 +27,7 @@ import { CHAIN_CONFIGURATION, ETHER_TO_GWEI } from '../constants.js';
 import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi.js';
 import { MultiCall3Contract } from '../abi/Multicall3.js';
 import { isContractAvailable } from '../utils.js';
+import { SignerRequiredError } from '../errors.js';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
@@ -66,6 +67,9 @@ export const extractOvmAddressFromReceipt = (
 export const isContractWalletSigner = async (
   signer: SignerType,
 ): Promise<boolean> => {
+  if (!signer) {
+    throw new SignerRequiredError('isContractWalletSigner');
+  }
   if (!signer.provider || !('sendUncheckedTransaction' in signer)) {
     return false;
   }
@@ -232,6 +236,9 @@ export const submitViaContractWalletAndWait = async ({
   value?: bigint;
   timeoutMs?: number;
 }): Promise<string> => {
+  if (!signer) {
+    throw new SignerRequiredError('submitViaContractWalletAndWait');
+  }
   const provider = signer.provider;
   const safeAddress = await signer.getAddress();
   const filter = {

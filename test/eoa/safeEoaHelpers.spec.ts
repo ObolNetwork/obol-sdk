@@ -3,6 +3,8 @@ import { jest } from '@jest/globals';
 import { AbiCoder, id } from 'ethers';
 import { submitViaContractWalletAndWait } from '../../src/splits/splitHelpers';
 import { submitEOAWithdrawalRequest } from '../../src/eoa/eoaHelpers';
+import { isContractWalletSigner } from '../../src/splits/splitHelpers';
+import { SignerRequiredError } from '../../src/errors';
 
 const SAFE_ADDRESS = '0xAbCdEf0123456789012345678901234567890AbC';
 const SAFE_TX_HASH = '0x' + 'aa'.repeat(32);
@@ -172,5 +174,27 @@ describe('submitEOAWithdrawalRequest signer branching', () => {
     expect(txHash).toBe(EXECUTED_TX_HASH);
     expect(signer.sendTransaction).toHaveBeenCalledTimes(1);
     expect(wait).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('signer guards (SignerRequiredError, not raw TypeError)', () => {
+  it('isContractWalletSigner throws SignerRequiredError on a nullish signer', async () => {
+    await expect(
+      isContractWalletSigner(null as unknown as never),
+    ).rejects.toBeInstanceOf(SignerRequiredError);
+  });
+
+  it('submitEOAWithdrawalRequest throws SignerRequiredError on a nullish signer', async () => {
+    await expect(
+      submitEOAWithdrawalRequest({
+        pubkey: '0x' + '11'.repeat(48),
+        allocation: 0,
+        withdrawalAddress: SAFE_ADDRESS,
+        withdrawalContractAddress: TARGET,
+        requiredFee: '1',
+        chainId: 560048,
+        signer: null as unknown as never,
+      }),
+    ).rejects.toBeInstanceOf(SignerRequiredError);
   });
 });
