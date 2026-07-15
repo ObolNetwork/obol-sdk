@@ -11,7 +11,7 @@ import {
   nullDepositAmountsClusterLockV1X8,
   clusterLockSoloV1X10,
 } from '../fixtures.js';
-import { SDK_VERSION } from '../../src/constants.js';
+import { SDK_VERSION, CONFIG_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
 import { hasUniqueDistributedKeys } from '../../src/verification/common.js';
 import { clusterConfigOrDefinitionHash } from '../../src/verification/common.js';
@@ -61,6 +61,27 @@ describe('Cluster Client', () => {
     const configHash =
       await clientInstance.createClusterDefinition(clusterConfigV1X10);
     expect(configHash).toEqual(mockConfigHash);
+  });
+
+  test('createClusterDefinition stamps the requested version (default CONFIG_VERSION)', async () => {
+    const requestMock = jest
+      .fn()
+      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
+    clientInstance['request'] = requestMock as never;
+
+    // Explicit older version (e.g. while charon prod is pre-v1.11).
+    await clientInstance.createClusterDefinition(clusterConfigV1X10, 'v1.10.0');
+    const explicitBody = JSON.parse(
+      (requestMock.mock.calls[0][1] as { body: string }).body,
+    );
+    expect(explicitBody.version).toEqual('v1.10.0');
+
+    // Omitting the arg defaults to the SDK's CONFIG_VERSION.
+    await clientInstance.createClusterDefinition(clusterConfigV1X10);
+    const defaultBody = JSON.parse(
+      (requestMock.mock.calls[1][1] as { body: string }).body,
+    );
+    expect(defaultBody.version).toEqual(CONFIG_VERSION);
   });
 
   test('acceptClusterDefinition should return cluster definition', async () => {

@@ -578,6 +578,12 @@ export class Client extends Base {
    * - Creating a duplicate cluster throws a {@link ConflictError}.
    *
    * @param newCluster - The cluster configuration payload.
+   * @param version - Cluster definition version to create. Defaults to
+   *   {@link CONFIG_VERSION} (the latest). Pass an earlier version (e.g.
+   *   `'v1.10.0'`) to create clusters compatible with a charon version that
+   *   does not yet support the latest schema — the DKG nodes must run a charon
+   *   release that supports the chosen version. Must be a charon-supported
+   *   version string.
    * @returns The `config_hash` string that uniquely identifies this cluster definition.
    * @throws {SignerRequiredError} If no signer was provided.
    * @throws {ConflictError} If an identical cluster definition already exists.
@@ -595,7 +601,10 @@ export class Client extends Base {
    * console.log("Cluster created:", configHash);
    * ```
    */
-  async createClusterDefinition(newCluster: ClusterPayload): Promise<string> {
+  async createClusterDefinition(
+    newCluster: ClusterPayload,
+    version: string = CONFIG_VERSION,
+  ): Promise<string> {
     if (!this.signer) {
       throw new SignerRequiredError('createClusterDefinition');
     }
@@ -609,7 +618,7 @@ export class Client extends Base {
       ...validatedCluster,
       fork_version: this.fork_version,
       dkg_algorithm: DKG_ALGORITHM,
-      version: CONFIG_VERSION,
+      version,
       uuid: uuidv4(),
       timestamp: new Date().toISOString(),
       threshold: Math.ceil((2 * validatedCluster.operators.length) / 3),
