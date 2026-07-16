@@ -1,7 +1,26 @@
 import { ETHER_TO_GWEI } from '../constants.js';
 import { type SignerType } from '../types.js';
-import { Contract } from 'ethers';
+import { Contract, type JsonRpcSigner } from 'ethers';
 import { BatchDepositContract } from '../abi/BatchDeposit.js';
+import { SignerRequiredError } from '../errors.js';
+import {
+  isContractWalletSigner,
+  submitViaContractWalletAndWait,
+} from '../splits/splitHelpers.js';
+
+// Safe wallets return an internal safeTxHash from sendTransaction, so
+// tx.wait() hangs forever (the hash never appears on-chain). Contract-wallet
+// signers submit unchecked and resolve via the Safe's ExecutionSuccess log.
+// This is the first dereference on both write flows, so it guards the signer.
+const isSafeLikeSigner = async (signer: SignerType): Promise<boolean> => {
+  if (!signer) {
+    throw new SignerRequiredError('submitEOATransaction');
+  }
+  return (
+    'sendUncheckedTransaction' in signer &&
+    (await isContractWalletSigner(signer))
+  );
+};
 
 /**
  * Helper function to submit withdrawal request for EOA
@@ -32,6 +51,16 @@ export async function submitEOAWithdrawalRequest({
 
   const amountInGwei = BigInt(Math.floor(Number(allocation) * ETHER_TO_GWEI));
   const data = `0x${pubkey.slice(2)}${amountInGwei.toString(16).padStart(16, '0')}`;
+
+  if (await isSafeLikeSigner(signer)) {
+    const txHash = await submitViaContractWalletAndWait({
+      signer: signer as JsonRpcSigner,
+      to: withdrawalContractAddress,
+      data,
+      value: BigInt(requiredFee),
+    });
+    return { txHash };
+  }
 
   const tx = await signer.sendTransaction({
     to: withdrawalContractAddress,
@@ -74,6 +103,8 @@ export async function submitEOABatchDeposit({
     signer,
   );
 
+  const useContractWallet = await isSafeLikeSigner(signer);
+
   const BATCH_SIZE = 500;
   const txHashes: string[] = [];
 
@@ -97,6 +128,20 @@ export async function submitEOABatchDeposit({
         amount: BigInt(deposit.amount),
       }));
 
+      if (useContractWallet) {
+        const txHash = await submitViaContractWalletAndWait({
+          signer: signer as JsonRpcSigner,
+          to: batchDepositContractAddress,
+          data: batchDepositContract.interface.encodeFunctionData(
+            'batchDeposit',
+            [depositData],
+          ),
+          value: totalValue,
+        });
+        txHashes.push(txHash);
+        continue;
+      }
+
       // Execute batch deposit for this batch
       const tx = await batchDepositContract.batchDeposit(depositData, {
         value: totalValue,
@@ -109,6 +154,10 @@ export async function submitEOABatchDeposit({
     }
     return { txHashes };
   } catch (error: any) {
+    // Keep the actionable Safe timeout message ("retry to continue").
+    if (error instanceof Error && error.message.includes('Safe transaction')) {
+      throw error;
+    }
     throw new Error("Failed to submit batch deposit'}");
   }
 }
