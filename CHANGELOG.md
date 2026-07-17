@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.13.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.1...v2.13.2)
+
+- fix: support Safe wallets in EOA withdrawal/exit and batch deposit [`#228`](https://github.com/ObolNetwork/obol-sdk/pull/228)
+
 #### [v2.13.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.0...v2.13.1)
 
+> 10 July 2026
+
+- chore(release): v2.13.1 [`#227`](https://github.com/ObolNetwork/obol-sdk/pull/227)
 - fix: support Safe wallets in OVM/splitter deployment flows [`#226`](https://github.com/ObolNetwork/obol-sdk/pull/226)
 
 #### [v2.13.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.12.6...v2.13.0)
