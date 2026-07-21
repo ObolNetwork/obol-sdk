@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v2.14.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.2...v2.14.0)
+
+- fix(safe): use Client provider for reads and Safe gas estimation [`#231`](https://github.com/ObolNetwork/obol-sdk/pull/231)
+
 #### [v2.13.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.1...v2.13.2)
 
+> 17 July 2026
+
+- chore(release): v2.13.2 [`#230`](https://github.com/ObolNetwork/obol-sdk/pull/230)
 - fix: support Safe wallets in EOA withdrawal/exit and batch deposit [`#228`](https://github.com/ObolNetwork/obol-sdk/pull/228)
 
 #### [v2.13.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.0...v2.13.1)
