@@ -4,6 +4,7 @@ import { OVMFactoryContract } from '../../src/abi/OVM';
 import {
   extractOvmAddressFromReceipt,
   receiptMatchesSafeTx,
+  resolveOvmAddressFromListenerArgs,
 } from '../../src/splits/splitHelpers';
 
 const OVM_ADDRESS = '0x1234567890123456789012345678901234567890';
@@ -40,6 +41,42 @@ describe('extractOvmAddressFromReceipt', () => {
         logs: [{ topics: ['0x' + 'ab'.repeat(32)], data: '0x' }],
       }),
     ).toThrow('CreateObolValidatorManager event not found');
+  });
+});
+
+describe('resolveOvmAddressFromListenerArgs', () => {
+  const TX_HASH = '0x' + 'bb'.repeat(32);
+
+  it('reads ovm from payload.args when deferred filter only passes payload', () => {
+    // ethers deferred filters invoke the listener with ONLY ContractEventPayload
+    const payload = {
+      log: { transactionHash: TX_HASH },
+      args: { ovm: OVM_ADDRESS, 0: OVM_ADDRESS },
+    };
+    expect(resolveOvmAddressFromListenerArgs([payload])).toEqual({
+      ovm: OVM_ADDRESS,
+      txHash: TX_HASH,
+    });
+  });
+
+  it('does not stringify the payload into "[object Object]"', () => {
+    const payload = {
+      log: { transactionHash: TX_HASH },
+      args: { ovm: OVM_ADDRESS },
+    };
+    const resolved = resolveOvmAddressFromListenerArgs([payload]);
+    expect(resolved?.ovm).not.toBe('[object Object]');
+    expect(resolved?.ovm).toBe(OVM_ADDRESS);
+  });
+
+  it('prefers a leading address string when present', () => {
+    const payload = {
+      log: { transactionHash: TX_HASH },
+      args: { ovm: OVM_ADDRESS },
+    };
+    expect(
+      resolveOvmAddressFromListenerArgs([OVM_ADDRESS, OWNER, payload]),
+    ).toEqual({ ovm: OVM_ADDRESS, txHash: TX_HASH });
   });
 });
 

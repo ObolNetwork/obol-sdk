@@ -15,9 +15,8 @@ await jest.unstable_mockModule('../../src/eoa/eoaHelpers.js', () => ({
 // @ts-expect-error - ESM dynamic import returns promise
 const { EOA } = await import('../../src/eoa/eoa.js');
 // @ts-expect-error - ESM dynamic import returns promise
-const { submitEOAWithdrawalRequest, submitEOABatchDeposit } = await import(
-  '../../src/eoa/eoaHelpers.js'
-);
+const { submitEOAWithdrawalRequest, submitEOABatchDeposit } =
+  await import('../../src/eoa/eoaHelpers.js');
 
 // helpers are mocked via unstable_mockModule above
 
@@ -80,6 +79,7 @@ describe('EOA', () => {
         requiredFee: mockPayload.requiredFee,
         chainId: 1,
         signer: mockSigner,
+        provider: mockProvider,
       });
 
       expect(result).toEqual(mockResult);
@@ -124,9 +124,7 @@ describe('EOA', () => {
 
       await expect(
         eoaUnsupportedChain.requestWithdrawal(mockPayload),
-      ).rejects.toThrow(
-        'EOA requestWithdrawal is not supported on chain 999',
-      );
+      ).rejects.toThrow('EOA requestWithdrawal is not supported on chain 999');
     });
 
     it('should return null txHash when transaction receipt is null', async () => {
@@ -201,6 +199,7 @@ describe('EOA', () => {
         batchDepositContractAddress:
           '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
         signer: mockSigner,
+        provider: mockProvider,
       });
 
       expect(result).toEqual(mockResult);
@@ -284,6 +283,7 @@ describe('EOA', () => {
         batchDepositContractAddress:
           '0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756',
         signer: mockSigner,
+        provider: mockProvider,
       });
 
       expect(result).toEqual(mockResult);
