@@ -43,6 +43,7 @@ const makeSafeSigner = ({
   const provider = {
     getBlockNumber: jest.fn(async () => 100),
     getCode: jest.fn(async () => '0xabcdef'), // contract wallet
+    estimateGas: jest.fn(async () => 21000n),
     getLogs: jest.fn(async () => pastLogs),
     on: jest.fn(async (_filter, listener) => {
       capturedListener = listener;
@@ -79,6 +80,7 @@ describe('submitViaContractWalletAndWait', () => {
     expect(signer.sendUncheckedTransaction).toHaveBeenCalledWith({
       to: TARGET,
       data: '0x1234',
+      gasLimit: 21000n,
       value: 1n,
     });
   });
@@ -156,7 +158,9 @@ describe('submitEOAWithdrawalRequest signer branching', () => {
     const wait = jest.fn(async () => ({ hash: EXECUTED_TX_HASH }));
     const signer = {
       provider: { getCode: jest.fn(async () => '0x') },
-      getAddress: jest.fn(async () => '0x1111111111111111111111111111111111111111'),
+      getAddress: jest.fn(
+        async () => '0x1111111111111111111111111111111111111111',
+      ),
       // No sendUncheckedTransaction => plain EOA signer.
       sendTransaction: jest.fn(async () => ({ wait })),
     };

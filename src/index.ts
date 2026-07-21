@@ -343,19 +343,19 @@ export class Client extends Base {
 
     const checkSplitMainAddress = await isContractAvailable(
       chainConfig.SPLITMAIN_CONTRACT.address,
-      this.signer.provider as ProviderType,
+      this.provider as ProviderType,
       chainConfig.SPLITMAIN_CONTRACT.bytecode,
     );
 
     const checkMulticall3Address = await isContractAvailable(
       chainConfig.MULTICALL3_CONTRACT.address,
-      this.signer.provider as ProviderType,
+      this.provider as ProviderType,
       chainConfig.MULTICALL3_CONTRACT.bytecode,
     );
 
     const checkOWRFactoryAddress = await isContractAvailable(
       chainConfig.OWR_FACTORY_CONTRACT.address,
-      this.signer.provider as ProviderType,
+      this.provider as ProviderType,
       chainConfig.OWR_FACTORY_CONTRACT.bytecode,
     );
 
@@ -388,11 +388,12 @@ export class Client extends Base {
       chainId: this.chainId,
       distributorFee: validatedPayload.distributorFee,
       controllerAddress: validatedPayload.controllerAddress,
+      provider: this.provider,
     });
 
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
-      this.signer.provider as ProviderType,
+      this.provider as ProviderType,
     );
 
     const { withdrawal_address, fee_recipient_address } =
@@ -478,7 +479,7 @@ export class Client extends Base {
 
     const checkSplitMainAddress = await isContractAvailable(
       chainConfig.SPLITMAIN_CONTRACT.address,
-      this.signer.provider as ProviderType,
+      this.provider as ProviderType,
       chainConfig.SPLITMAIN_CONTRACT.bytecode,
     );
 
@@ -507,11 +508,12 @@ export class Client extends Base {
       chainId: this.chainId,
       distributorFee: validatedPayload.distributorFee,
       controllerAddress: validatedPayload.controllerAddress,
+      provider: this.provider,
     });
 
     const isSplitterDeployed = await isContractAvailable(
       predictedSplitterAddress,
-      this.signer.provider as ProviderType,
+      this.provider as ProviderType,
     );
 
     if (!isSplitterDeployed) {
@@ -561,7 +563,11 @@ export class Client extends Base {
     }
 
     const signer = this.signer;
-    return await getOWRTranches({ owrAddress, signer });
+    return await getOWRTranches({
+      owrAddress,
+      signer,
+      provider: this.provider,
+    });
   }
 
   /**

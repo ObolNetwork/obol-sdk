@@ -204,6 +204,7 @@ export class ObolSplits {
       salt,
       signer: this.signer,
       chainId: this.chainId,
+      provider: this.provider,
     });
 
     const isRewardSplitterDeployed = await isSplitV2Deployed({
@@ -213,6 +214,7 @@ export class ObolSplits {
       salt,
       signer: this.signer,
       chainId: this.chainId,
+      provider: this.provider,
     });
 
     if (isRewardSplitterDeployed) {
@@ -223,6 +225,7 @@ export class ObolSplits {
         principalThreshold: validatedPayload.principalThreshold,
         signer: this.signer,
         chainId: this.chainId,
+        provider: this.provider,
       });
 
       return {
@@ -244,6 +247,7 @@ export class ObolSplits {
         signer: this.signer,
         chainId: this.chainId,
         splitOwnerAddress: validatedPayload.splitOwnerAddress,
+        provider: this.provider,
       });
 
       return {
@@ -388,6 +392,7 @@ export class ObolSplits {
       salt,
       signer: this.signer,
       chainId: this.chainId,
+      provider: this.provider,
     });
 
     const predictedPrincipalSplitAddress = await predictSplitV2Address({
@@ -397,6 +402,7 @@ export class ObolSplits {
       salt,
       signer: this.signer,
       chainId: this.chainId,
+      provider: this.provider,
     });
 
     const isRewardsSplitterDeployed = await isSplitV2Deployed({
@@ -406,6 +412,7 @@ export class ObolSplits {
       salt,
       signer: this.signer,
       chainId: this.chainId,
+      provider: this.provider,
     });
 
     const isPrincipalSplitterDeployed = await isSplitV2Deployed({
@@ -415,6 +422,7 @@ export class ObolSplits {
       salt,
       signer: this.signer,
       chainId: this.chainId,
+      provider: this.provider,
     });
 
     if (isRewardsSplitterDeployed && isPrincipalSplitterDeployed) {
@@ -425,6 +433,7 @@ export class ObolSplits {
         principalThreshold: validatedPayload.principalThreshold,
         signer: this.signer,
         chainId: this.chainId,
+        provider: this.provider,
       });
 
       return {
@@ -448,6 +457,7 @@ export class ObolSplits {
         principalSplitRecipients,
         isPrincipalSplitDeployed: isPrincipalSplitterDeployed,
         splitOwnerAddress: validatedPayload.splitOwnerAddress,
+        provider: this.provider,
       });
 
       return {

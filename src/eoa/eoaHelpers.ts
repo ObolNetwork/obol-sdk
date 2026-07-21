@@ -1,5 +1,5 @@
 import { ETHER_TO_GWEI } from '../constants.js';
-import { type SignerType } from '../types.js';
+import { type SignerType, type ProviderType } from '../types.js';
 import { Contract, type JsonRpcSigner } from 'ethers';
 import { BatchDepositContract } from '../abi/BatchDeposit.js';
 import { SignerRequiredError } from '../errors.js';
@@ -12,13 +12,16 @@ import {
 // tx.wait() hangs forever (the hash never appears on-chain). Contract-wallet
 // signers submit unchecked and resolve via the Safe's ExecutionSuccess log.
 // This is the first dereference on both write flows, so it guards the signer.
-const isSafeLikeSigner = async (signer: SignerType): Promise<boolean> => {
+const isSafeLikeSigner = async (
+  signer: SignerType,
+  provider?: ProviderType | null,
+): Promise<boolean> => {
   if (!signer) {
     throw new SignerRequiredError('submitEOATransaction');
   }
   return (
     'sendUncheckedTransaction' in signer &&
-    (await isContractWalletSigner(signer))
+    (await isContractWalletSigner(signer, provider))
   );
 };
 
@@ -33,6 +36,7 @@ export async function submitEOAWithdrawalRequest({
   requiredFee,
   chainId,
   signer,
+  provider,
 }: {
   pubkey: string;
   allocation: number;
@@ -41,6 +45,7 @@ export async function submitEOAWithdrawalRequest({
   requiredFee: string;
   chainId: number;
   signer: SignerType;
+  provider?: ProviderType | null;
 }): Promise<{ txHash: string | null }> {
   if (!withdrawalAddress) {
     throw new Error('No withdrawal address provided');
@@ -52,12 +57,13 @@ export async function submitEOAWithdrawalRequest({
   const amountInGwei = BigInt(Math.floor(Number(allocation) * ETHER_TO_GWEI));
   const data = `0x${pubkey.slice(2)}${amountInGwei.toString(16).padStart(16, '0')}`;
 
-  if (await isSafeLikeSigner(signer)) {
+  if (await isSafeLikeSigner(signer, provider)) {
     const txHash = await submitViaContractWalletAndWait({
       signer: signer as JsonRpcSigner,
       to: withdrawalContractAddress,
       data,
       value: BigInt(requiredFee),
+      provider,
     });
     return { txHash };
   }
@@ -81,6 +87,7 @@ export async function submitEOABatchDeposit({
   deposits,
   batchDepositContractAddress,
   signer,
+  provider,
 }: {
   deposits: Array<{
     pubkey: string;
@@ -91,6 +98,7 @@ export async function submitEOABatchDeposit({
   }>;
   batchDepositContractAddress: string;
   signer: SignerType;
+  provider?: ProviderType | null;
 }): Promise<{ txHashes: string[] }> {
   if (!deposits || deposits.length === 0) {
     throw new Error('No deposits provided');
@@ -103,7 +111,7 @@ export async function submitEOABatchDeposit({
     signer,
   );
 
-  const useContractWallet = await isSafeLikeSigner(signer);
+  const useContractWallet = await isSafeLikeSigner(signer, provider);
 
   const BATCH_SIZE = 500;
   const txHashes: string[] = [];
@@ -137,6 +145,7 @@ export async function submitEOABatchDeposit({
             [depositData],
           ),
           value: totalValue,
+          provider,
         });
         txHashes.push(txHash);
         continue;

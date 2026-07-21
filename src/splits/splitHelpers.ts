@@ -7,6 +7,7 @@ import {
   type SplitV2Recipient,
   type OVMArgs,
   type ChainConfig,
+  type ProviderType,
 } from '../types.js';
 import {
   Contract,
@@ -62,18 +63,53 @@ export const extractOvmAddressFromReceipt = (
   );
 };
 
+/**
+ * ethers deferred filters (`contract.filters.Foo(arg)`) leave subscription
+ * `fragment` null, so the listener is invoked with ONLY a ContractEventPayload
+ * — `args[0]` is that object, not the address. Decoded fields live on
+ * `payload.args`. Never `String(args[0])` (becomes "[object Object]").
+ */
+export const resolveOvmAddressFromListenerArgs = (
+  args: unknown[],
+): { ovm: string; txHash: string } | null => {
+  const payload = args[args.length - 1] as
+    | {
+        log?: { transactionHash?: string };
+        args?: { ovm?: unknown; [index: number]: unknown };
+      }
+    | undefined;
+
+  const txHash = payload?.log?.transactionHash;
+  if (!txHash) return null;
+
+  const candidates: unknown[] = [
+    args[0],
+    payload?.args?.ovm,
+    payload?.args?.[0],
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.startsWith('0x')) {
+      return { ovm: candidate, txHash };
+    }
+  }
+  return null;
+};
+
 // True when the signer is a smart-contract wallet (e.g. a Safe) going through
 // a JSON-RPC connection. Local Wallet signers are always EOAs.
 export const isContractWalletSigner = async (
   signer: SignerType,
+  provider?: ProviderType | null,
 ): Promise<boolean> => {
   if (!signer) {
     throw new SignerRequiredError('isContractWalletSigner');
   }
-  if (!signer.provider || !('sendUncheckedTransaction' in signer)) {
+  const readProvider = provider ?? signer.provider;
+  if (!readProvider || !('sendUncheckedTransaction' in signer)) {
     return false;
   }
-  return await isContractAvailable(await signer.getAddress(), signer.provider);
+  return await isContractAvailable(await signer.getAddress(), readProvider);
 };
 
 const SAFE_EXECUTION_SUCCESS_TOPIC = id('ExecutionSuccess(bytes32,uint256)');
@@ -115,6 +151,7 @@ const submitViaContractWalletAndResolveOvm = async ({
   factoryAddress,
   owner,
   timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
+  provider: readProvider,
 }: {
   signer: JsonRpcSigner;
   to: string;
@@ -122,8 +159,9 @@ const submitViaContractWalletAndResolveOvm = async ({
   factoryAddress: string;
   owner: string;
   timeoutMs?: number;
+  provider?: ProviderType | null;
 }): Promise<string> => {
-  const provider = signer.provider;
+  const provider = readProvider ?? signer.provider;
   const safeAddress = await signer.getAddress();
   const factory = new Contract(
     factoryAddress,
@@ -134,6 +172,10 @@ const submitViaContractWalletAndResolveOvm = async ({
   // Captured before submission so the backfill below cannot miss an
   // execution mined before the wallet call returned (e.g. a 1-of-1 Safe).
   const startBlock = await provider.getBlockNumber();
+  // Pre-populate gasLimit via the caller's provider — sendUncheckedTransaction
+  // otherwise estimates gas via signer.provider, which for a wallet-connected
+  // signer may not be able to reach an authenticated RPC.
+  const gasLimit = await provider.estimateGas({ to, data, from: safeAddress });
 
   const isOurs = async (
     candidateTxHash: string,
@@ -174,11 +216,8 @@ const submitViaContractWalletAndResolveOvm = async ({
     };
 
     const listener = (...args: unknown[]): void => {
-      const payload = args[args.length - 1] as
-        | { log?: { transactionHash?: string } }
-        | undefined;
-      const txHash = payload?.log?.transactionHash;
-      if (txHash) consider(String(args[0]), txHash);
+      const resolved = resolveOvmAddressFromListenerArgs(args);
+      if (resolved) consider(resolved.ovm, resolved.txHash);
     };
 
     const timer = setTimeout(() => {
@@ -193,14 +232,19 @@ const submitViaContractWalletAndResolveOvm = async ({
 
     void factory.on(filter, listener);
     signer
-      .sendUncheckedTransaction({ to, data })
+      .sendUncheckedTransaction({ to, data, gasLimit })
       .then(async hash => {
         submittedHash = hash;
         // Backfill events mined between startBlock and now.
         const past = await factory.queryFilter(filter, startBlock);
         for (const ev of past) {
-          const ovm = (ev as EventLog).args?.[0] as string | undefined;
-          if (ovm) consider(ovm, ev.transactionHash);
+          const eventLog = ev as EventLog;
+          const ovm = (eventLog.args?.ovm ?? eventLog.args?.[0]) as
+            | string
+            | undefined;
+          if (typeof ovm === 'string' && ovm.startsWith('0x')) {
+            consider(ovm, ev.transactionHash);
+          }
         }
       })
       .catch((err: Error) => {
@@ -229,17 +273,19 @@ export const submitViaContractWalletAndWait = async ({
   data,
   value,
   timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
+  provider: readProvider,
 }: {
   signer: JsonRpcSigner;
   to: string;
   data: string;
   value?: bigint;
   timeoutMs?: number;
+  provider?: ProviderType | null;
 }): Promise<string> => {
   if (!signer) {
     throw new SignerRequiredError('submitViaContractWalletAndWait');
   }
-  const provider = signer.provider;
+  const provider = readProvider ?? signer.provider;
   const safeAddress = await signer.getAddress();
   const filter = {
     address: safeAddress,
@@ -248,6 +294,15 @@ export const submitViaContractWalletAndWait = async ({
   // Captured before submission so the backfill below cannot miss an
   // execution mined before the wallet call returned (e.g. a 1-of-1 Safe).
   const startBlock = await provider.getBlockNumber();
+  // Pre-populate gasLimit via the caller's provider — sendUncheckedTransaction
+  // otherwise estimates gas via signer.provider, which for a wallet-connected
+  // signer may not be able to reach an authenticated RPC.
+  const gasLimit = await provider.estimateGas({
+    to,
+    data,
+    from: safeAddress,
+    ...(value ? { value } : {}),
+  });
 
   const matchesSubmission = (
     log: { transactionHash?: string; topics: readonly string[]; data: string },
@@ -308,7 +363,12 @@ export const submitViaContractWalletAndWait = async ({
 
     void provider.on(filter, listener);
     signer
-      .sendUncheckedTransaction({ to, data, ...(value ? { value } : {}) })
+      .sendUncheckedTransaction({
+        to,
+        data,
+        gasLimit,
+        ...(value ? { value } : {}),
+      })
       .then(async hash => {
         submittedHash = hash;
         // Backfill logs mined between startBlock and now.
@@ -392,6 +452,7 @@ export const predictSplitterAddress = async ({
   chainId,
   distributorFee,
   controllerAddress,
+  provider,
 }: {
   signer: SignerType;
   accounts: ETH_ADDRESS[];
@@ -399,12 +460,16 @@ export const predictSplitterAddress = async ({
   chainId: number;
   distributorFee: number;
   controllerAddress: ETH_ADDRESS;
+  provider?: ProviderType | null;
 }): Promise<ETH_ADDRESS> => {
   try {
+    // Read-only call: prefer the caller's provider over the signer, whose
+    // own .provider may be routed through a wallet connector (e.g.
+    // WalletConnect) rather than an authenticated RPC.
     const splitMainContractInstance = new Contract(
       getChainConfig(chainId).SPLITMAIN_CONTRACT.address,
       splitMainEthereumAbi,
-      signer,
+      provider ?? signer,
     );
 
     let predictedSplitterAddress: string;
@@ -767,12 +832,21 @@ export const deploySplitterAndOWRContracts = async ({
 export const getOWRTranches = async ({
   owrAddress,
   signer,
+  provider,
 }: {
   owrAddress: ETH_ADDRESS;
   signer: SignerType;
+  provider?: ProviderType | null;
 }): Promise<OWRTranches> => {
   try {
-    const owrContract = new Contract(owrAddress, OWRContract.abi, signer);
+    // Read-only call: prefer the caller's provider over the signer, whose
+    // own .provider may be routed through a wallet connector (e.g.
+    // WalletConnect) rather than an authenticated RPC.
+    const owrContract = new Contract(
+      owrAddress,
+      OWRContract.abi,
+      provider ?? signer,
+    );
 
     let res;
     try {
@@ -942,6 +1016,7 @@ export const predictSplitV2Address = async ({
   salt,
   signer,
   chainId,
+  provider,
 }: {
   splitOwnerAddress: string;
   recipients: SplitV2Recipient[];
@@ -949,6 +1024,7 @@ export const predictSplitV2Address = async ({
   salt: `0x${string}`;
   signer: SignerType;
   chainId: number;
+  provider?: ProviderType | null;
 }): Promise<string> => {
   try {
     const chainConfig = getChainConfig(chainId);
@@ -956,10 +1032,13 @@ export const predictSplitV2Address = async ({
       throw new Error(`SplitV2 Factory not configured for chain ${chainId}`);
     }
 
+    // Read-only call: prefer the caller's provider over the signer, whose
+    // own .provider may be routed through a wallet connector (e.g.
+    // WalletConnect) rather than an authenticated RPC.
     const splitV2FactoryContract = new Contract(
       chainConfig.SPLIT_V2_FACTORY_CONTRACT.address,
       splitV2FactoryAbi,
-      signer,
+      provider ?? signer,
     );
 
     const splitParams = createSplitV2Params(recipients, distributorFeePercent);
@@ -983,6 +1062,7 @@ export const isSplitV2Deployed = async ({
   salt,
   signer,
   chainId,
+  provider,
 }: {
   splitOwnerAddress: string;
   recipients: SplitV2Recipient[];
@@ -990,6 +1070,7 @@ export const isSplitV2Deployed = async ({
   salt: `0x${string}`;
   signer: SignerType;
   chainId: number;
+  provider?: ProviderType | null;
 }): Promise<boolean> => {
   try {
     const chainConfig = getChainConfig(chainId);
@@ -997,10 +1078,13 @@ export const isSplitV2Deployed = async ({
       throw new Error(`SplitV2 Factory not configured for chain ${chainId}`);
     }
 
+    // Read-only call: prefer the caller's provider over the signer, whose
+    // own .provider may be routed through a wallet connector (e.g.
+    // WalletConnect) rather than an authenticated RPC.
     const splitV2FactoryContract = new Contract(
       chainConfig.SPLIT_V2_FACTORY_CONTRACT.address,
       splitV2FactoryAbi,
-      signer,
+      provider ?? signer,
     );
 
     const splitParams = createSplitV2Params(recipients, distributorFeePercent);
@@ -1025,6 +1109,7 @@ export const deployOVMContract = async ({
   principalThreshold,
   signer,
   chainId,
+  provider,
 }: {
   OVMOwnerAddress: string;
   principalRecipient: string;
@@ -1032,6 +1117,7 @@ export const deployOVMContract = async ({
   principalThreshold: number;
   signer: SignerType;
   chainId: number;
+  provider?: ProviderType | null;
 }): Promise<string> => {
   try {
     const chainConfig = getChainConfig(chainId);
@@ -1054,7 +1140,7 @@ export const deployOVMContract = async ({
 
     if (
       'sendUncheckedTransaction' in signer &&
-      (await isContractWalletSigner(signer))
+      (await isContractWalletSigner(signer, provider))
     ) {
       return await submitViaContractWalletAndResolveOvm({
         signer,
@@ -1065,6 +1151,7 @@ export const deployOVMContract = async ({
         ),
         factoryAddress: chainConfig.OVM_FACTORY_CONTRACT.address,
         owner: OVMOwnerAddress,
+        provider,
       });
     }
 
@@ -1091,6 +1178,7 @@ export const deployOVMAndSplitV2 = async ({
   principalSplitRecipients,
   isPrincipalSplitDeployed,
   splitOwnerAddress,
+  provider,
 }: {
   ovmArgs: OVMArgs;
   rewardRecipients: SplitV2Recipient[];
@@ -1102,6 +1190,7 @@ export const deployOVMAndSplitV2 = async ({
   principalSplitRecipients?: SplitV2Recipient[];
   isPrincipalSplitDeployed?: boolean;
   splitOwnerAddress: string;
+  provider?: ProviderType | null;
 }): Promise<string> => {
   try {
     const chainConfig = getChainConfig(chainId);
@@ -1165,7 +1254,7 @@ export const deployOVMAndSplitV2 = async ({
 
     if (
       'sendUncheckedTransaction' in signer &&
-      (await isContractWalletSigner(signer))
+      (await isContractWalletSigner(signer, provider))
     ) {
       return await submitViaContractWalletAndResolveOvm({
         signer,
@@ -1175,6 +1264,7 @@ export const deployOVMAndSplitV2 = async ({
         ]),
         factoryAddress: chainConfig.OVM_FACTORY_CONTRACT.address,
         owner: ovmArgs.OVMOwnerAddress,
+        provider,
       });
     }
 

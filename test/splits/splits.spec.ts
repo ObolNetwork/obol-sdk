@@ -213,7 +213,9 @@ describe('ObolSplits', () => {
         clientUnsupportedChain.splits.createValidatorManagerAndRewardsSplit(
           mockRewardsSplitPayload,
         ),
-      ).rejects.toThrow('createValidatorManagerAndRewardsSplit is not supported on chain 999');
+      ).rejects.toThrow(
+        'createValidatorManagerAndRewardsSplit is not supported on chain 999',
+      );
     });
   });
 
@@ -324,6 +326,7 @@ describe('ObolSplits', () => {
         principalThreshold: mockTotalSplitPayload.principalThreshold,
         signer: mockSigner,
         chainId: 1,
+        provider: mockProvider,
       });
     });
   });

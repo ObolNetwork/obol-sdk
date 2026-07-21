@@ -111,6 +111,7 @@ export class EOA {
       requiredFee: validatedPayload.requiredFee,
       chainId: this.chainId,
       signer: this.signer,
+      provider: this.provider,
     });
   }
 
@@ -158,6 +159,7 @@ export class EOA {
       deposits: validatedPayload.deposits,
       batchDepositContractAddress: chainConfig.BATCH_DEPOSIT_CONTRACT.address,
       signer: this.signer,
+      provider: this.provider,
     });
   }
 }
