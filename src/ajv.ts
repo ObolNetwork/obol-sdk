@@ -83,7 +83,7 @@ const validateUniqueAddresses = (
     return false;
   }
 
-  const addresses = operators.map(op => op.address);
+  const addresses = operators.map(op => op.address.toLowerCase());
   const uniqueAddresses = new Set(addresses);
   const isUnique = uniqueAddresses.size === addresses.length;
   return isUnique;
