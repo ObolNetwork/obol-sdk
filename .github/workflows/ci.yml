@@ -2,6 +2,7 @@ name: 'Lint, Unit and E2E Tests'
 
 on:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
