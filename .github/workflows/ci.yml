@@ -7,6 +7,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Dependabot and fork PRs get no repo secrets; skip e2e instead of failing on an empty key.
+      HAS_E2E_SECRETS: ${{ secrets.PRIVATE_KEY != '' }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -50,6 +53,7 @@ jobs:
         run: yarn jest --clearCache || true
 
       - name: Run e2e tests
+        if: env.HAS_E2E_SECRETS == 'true'
         working-directory: ./test/sdk-package
         run: yarn run test:e2e
         env:

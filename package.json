@@ -64,7 +64,11 @@
     "@noble/curves replaces @chainsafe/bls — pure-JS CJS+ESM, no native addon, same ETH2 BLS12-381 spec. See CHAINSAFE_MIGRATION_PLAN.md.",
     "@noble/curves is in devDependencies (not dependencies) because tsup bundles it inline via noExternal. Keeping it in dependencies caused consumers to install @noble/hashes@2.2.0 (major-version 2) which shadowed @noble/hashes@1.x used by ethereum-cryptography, @coinbase/wallet-sdk, etc., breaking their @noble/curves initialisation with 'anumber is not a function'."
   ],
-  "resolutions": {},
+  "resolutions": {
+    "ws": "^8.21.0",
+    "undici": "^6.24.0",
+    "**/@typescript-eslint/typescript-estree/minimatch": "^9.0.7"
+  },
   "overrides": {
     "viem": "2.48.7"
   },
@@ -79,7 +83,7 @@
     "ajv-keywords": "5.1.0",
     "cross-fetch": "4.1.0",
     "elliptic": "6.6.1",
-    "ethers": "6.16.0",
+    "ethers": "6.17.0",
     "semver": "7.7.4",
     "uuid": "9.0.1"
   },

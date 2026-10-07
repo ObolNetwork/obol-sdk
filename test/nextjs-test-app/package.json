@@ -11,7 +11,7 @@
   "dependencies": {
     "@obolnetwork/obol-sdk": "link:../..",
     "ethers": "^6.15.0",
-    "next": "14.2.35",
+    "next": "15.5.27",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -20,7 +20,10 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "eslint": "^8.0.0",
-    "eslint-config-next": "14.2.35",
+    "eslint-config-next": "15.5.27",
     "typescript": "^5.0.0"
+  },
+  "resolutions": {
+    "postcss": "^8.5.18"
   }
 }
