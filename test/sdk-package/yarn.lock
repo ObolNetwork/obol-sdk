@@ -773,8 +773,21 @@
   integrity sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==
 
 "@obolnetwork/obol-sdk@link:../..":
-  version "0.0.0"
-  uid ""
+  version "2.14.0"
+  dependencies:
+    "@chainsafe/enr" "6.0.1"
+    "@chainsafe/ssz" "0.14.3"
+    "@metamask/eth-sig-util" "8.2.0"
+    "@safe-global/protocol-kit" "7.1.0"
+    "@safe-global/types-kit" "3.1.0"
+    ajv "8.20.0"
+    ajv-formats "3.0.1"
+    ajv-keywords "5.1.0"
+    cross-fetch "4.1.0"
+    elliptic "6.6.1"
+    ethers "6.16.0"
+    semver "7.7.4"
+    uuid "9.0.1"
 
 "@paralleldrive/cuid2@^2.2.2":
   version "2.3.1"
@@ -1664,9 +1677,9 @@ fast-safe-stringify@^2.1.1:
   integrity sha512-W+KJc2dmILlPplD/H4K9l9LcAHAfPtP6BY84uVLXQ6Evcz9Lcg33Y2z1IVblT6xdY54PXYVHEv+0Wpq8Io6zkA==
 
 fast-uri@^3.0.1:
-  version "3.1.4"
-  resolved "https://registry.yarnpkg.com/fast-uri/-/fast-uri-3.1.4.tgz#3b3daf9ce68f41f956df0b505132c0cfce9ec7af"
-  integrity sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw==
+  version "3.1.8"
+  resolved "https://registry.yarnpkg.com/fast-uri/-/fast-uri-3.1.8.tgz#f7db8d942e20eead3cfe93b0beeb4eb0169e938b"
+  integrity sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==
 
 fb-watchman@^2.0.0:
   version "2.0.2"
