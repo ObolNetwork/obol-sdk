@@ -86,7 +86,7 @@
     "elliptic": "6.6.1",
     "ethers": "6.17.0",
     "semver": "7.7.4",
-    "uuid": "9.0.1"
+    "uuid": "14.0.0"
   },
   "devDependencies": {
     "@noble/curves": "2.2.0",
