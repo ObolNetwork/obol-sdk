@@ -67,7 +67,8 @@
   "resolutions": {
     "ws": "^8.21.0",
     "undici": "^6.24.0",
-    "**/@typescript-eslint/typescript-estree/minimatch": "^9.0.7"
+    "**/@typescript-eslint/typescript-estree/minimatch": "^9.0.7",
+    "basic-ftp": "6.2.2"
   },
   "overrides": {
     "viem": "2.48.7"
