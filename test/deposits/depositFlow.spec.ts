@@ -277,7 +277,7 @@ describe('deposit with beaconUrl', () => {
     expect(depositOVM).not.toHaveBeenCalled();
   });
 
-  it('refuses all-zero credentials without beaconUrl', async () => {
+  it('refuses all-zero credentials without beaconUrl or skipSignatureVerification', async () => {
     const [deposit] = await lockDeposits();
     const zero = withFields(deposit, { withdrawal_credentials: ZERO_CREDS });
 
@@ -285,7 +285,6 @@ describe('deposit with beaconUrl', () => {
       makeClient().splits.deposit({
         ovmAddress: withdrawalAddressOf(deposit),
         deposits: [zero],
-        skipSignatureVerification: true,
       }),
     ).rejects.toThrow('withdrawal credentials do not point at');
     expect(depositOVM).not.toHaveBeenCalled();
@@ -367,5 +366,198 @@ describe('verifyDepositPayloads topUps', () => {
         topUps: new Set([0]),
       }),
     ).rejects.toThrow('Invalid deposit at index 1: withdrawal credentials');
+  });
+});
+
+describe('top-up amount limit', () => {
+  const ETH = GWEI * GWEI;
+  const credentials = (prefix, deposit) =>
+    `${prefix}${'0'.repeat(22)}${withdrawalAddressOf(deposit).slice(2)}`;
+
+  /** A top-up with all-zero credentials (signature not checked). */
+  const zeroCredTopUp = (deposit, eth) =>
+    withWrongSignature(
+      withFields(deposit, {
+        withdrawal_credentials: ZERO_CREDS,
+        amount: (ETH * BigInt(eth)).toString(),
+      }),
+    );
+
+  it('follows the existing validator credentials (0x02 → 2048 ETH)', async () => {
+    const [deposit] = await lockDeposits();
+    const topUp = zeroCredTopUp(deposit, 64);
+
+    await expect(
+      verifyDepositPayloads([topUp], {
+        chainId: 560048,
+        topUps: new Map([[0, credentials('0x02', deposit)]]),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      verifyDepositPayloads([zeroCredTopUp(deposit, 2049)], {
+        chainId: 560048,
+        topUps: new Map([[0, credentials('0x02', deposit)]]),
+      }),
+    ).rejects.toThrow(
+      'amount exceeds 2048 ETH for a top-up to a validator with 0x02 withdrawal credentials',
+    );
+  });
+
+  it('caps a top-up to a 0x01 validator at 32 ETH even with 0x02 deposit credentials', async () => {
+    const [deposit] = await lockDeposits();
+    const topUp = withWrongSignature(
+      withFields(deposit, {
+        withdrawal_credentials: credentials('0x02', deposit),
+        amount: (ETH * BigInt(64)).toString(),
+      }),
+    );
+
+    await expect(
+      verifyDepositPayloads([topUp], {
+        chainId: 560048,
+        topUps: new Map([[0, credentials('0x01', deposit)]]),
+      }),
+    ).rejects.toThrow(
+      'amount exceeds 32 ETH for a top-up to a validator with 0x01 withdrawal credentials',
+    );
+  });
+
+  it('falls back to the deposit credentials for top-ups listed in a Set', async () => {
+    const [deposit] = await lockDeposits();
+    await expect(
+      verifyDepositPayloads([zeroCredTopUp(deposit, 64)], {
+        chainId: 560048,
+        topUps: new Set([0]),
+      }),
+    ).rejects.toThrow('amount exceeds 32 ETH for 0x00 withdrawal credentials');
+  });
+
+  it('uses the beacon node credentials with beaconUrl', async () => {
+    const [deposit] = await lockDeposits();
+    const ovmAddress = withdrawalAddressOf(deposit);
+    const topUp = zeroCredTopUp(deposit, 64);
+
+    mockBeacon({ registry: [[deposit.pubkey, credentials('0x02', deposit)]] });
+    await makeClient().splits.deposit({
+      ovmAddress,
+      deposits: [topUp],
+      beaconUrl: BEACON_URL,
+    });
+    expect(depositOVM).toHaveBeenCalledTimes(1);
+
+    mockBeacon({ registry: [[deposit.pubkey, credentials('0x01', deposit)]] });
+    await expect(
+      makeClient().splits.deposit({
+        ovmAddress,
+        deposits: [topUp],
+        beaconUrl: BEACON_URL,
+      }),
+    ).rejects.toThrow('amount exceeds 32 ETH for a top-up');
+    expect(depositOVM).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('top-ups without beaconUrl (Launchpad payload)', () => {
+  const ETH = GWEI * GWEI;
+  const ZERO_SIGNATURE = `0x${'00'.repeat(96)}`;
+
+  /** Same shape as dv-launchpad utils/deposit.ts prepareTopUpData. */
+  const launchpadTopUp = (pubkey, eth) =>
+    withFields(
+      {
+        pubkey,
+        withdrawal_credentials: ZERO_CREDS,
+        signature: ZERO_SIGNATURE,
+        amount: (ETH * BigInt(eth)).toString(),
+      },
+      {},
+    );
+
+  it('accepts them with skipSignatureVerification (eoa and splits, up to 2048 ETH)', async () => {
+    const [deposit] = await lockDeposits();
+    const ovmAddress = withdrawalAddressOf(deposit);
+    const fetchMock = mockBeacon();
+
+    for (const eth of [1, 64, 2048]) {
+      const topUp = launchpadTopUp(deposit.pubkey, eth);
+      await makeClient().splits.deposit({
+        ovmAddress,
+        deposits: [topUp],
+        skipSignatureVerification: true,
+      });
+      await makeClient().eoa.deposit({
+        deposits: [topUp],
+        expectedWithdrawalAddress: ovmAddress,
+        skipSignatureVerification: true,
+      });
+    }
+    expect(depositOVM).toHaveBeenCalledTimes(3);
+    expect(submitEOABatchDeposit).toHaveBeenCalledTimes(3);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await expect(
+      makeClient().eoa.deposit({
+        deposits: [launchpadTopUp(deposit.pubkey, 2049)],
+        skipSignatureVerification: true,
+      }),
+    ).rejects.toThrow('amount exceeds 2048 ETH, the maximum for a top-up');
+  });
+
+  it('still checks credentials other than all-zero with skipSignatureVerification', async () => {
+    const [deposit] = await lockDeposits();
+    await expect(
+      makeClient().splits.deposit({
+        ovmAddress: withdrawalAddressOf(deposit),
+        deposits: [
+          withFields(launchpadTopUp(deposit.pubkey, 1), {
+            withdrawal_credentials: OTHER_CREDS,
+          }),
+        ],
+        skipSignatureVerification: true,
+      }),
+    ).rejects.toThrow('withdrawal credentials do not point at');
+  });
+
+  it('refuses them without either flag, with a clear error', async () => {
+    const [deposit] = await lockDeposits();
+    const topUp = launchpadTopUp(deposit.pubkey, 1);
+
+    for (const send of [
+      async () => await makeClient().eoa.deposit({ deposits: [topUp] }),
+      async () =>
+        await makeClient().splits.deposit({
+          ovmAddress: withdrawalAddressOf(deposit),
+          deposits: [topUp],
+        }),
+    ]) {
+      const error = await send().catch(e => e);
+      expect(error).toBeInstanceOf(ObolSdkError);
+      expect(error.code).toBe('DEPOSIT_LOOKS_LIKE_TOP_UP');
+      expect(error.message).toContain('Invalid deposit at index 0');
+      expect(error.hint).toContain('skipSignatureVerification: true');
+    }
+    expect(submitEOABatchDeposit).not.toHaveBeenCalled();
+    expect(depositOVM).not.toHaveBeenCalled();
+  });
+
+  it('reports a zero signature on a new validator as an invalid signature with beaconUrl', async () => {
+    const [deposit] = await lockDeposits();
+    mockBeacon();
+    const zeroSig = withFields(deposit, { signature: ZERO_SIGNATURE });
+
+    await expect(
+      makeClient().eoa.deposit({ deposits: [zeroSig], beaconUrl: BEACON_URL }),
+    ).rejects.toThrow('Invalid deposit at index 0: invalid deposit signature');
+  });
+
+  it('reports a signature that is not a curve point as an invalid signature', async () => {
+    const [deposit] = await lockDeposits();
+    const notAPoint = withFields(deposit, {
+      signature: `0x${'ff'.repeat(96)}`,
+    });
+
+    await expect(
+      verifyDepositPayloads([deposit, notAPoint], { chainId: 560048 }),
+    ).rejects.toThrow('Invalid deposit at index 1: invalid deposit signature');
   });
 });

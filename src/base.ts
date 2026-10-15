@@ -46,7 +46,7 @@ function assertSupportedChainId(chainId: number): number {
     throw new UnsupportedChainError(
       chainId,
       'Obol SDK Client',
-      'Supported chain IDs: 1 (Mainnet), 560048 (Hoodi)',
+      'Supported chain IDs: 1 (Mainnet), 560048 (Hoodi), 100 (Gnosis), 11155111 (Sepolia)',
     );
   }
   return id;

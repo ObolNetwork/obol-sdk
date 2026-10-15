@@ -13,6 +13,81 @@ import {
 } from '../../src/types.js';
 import { TEST_ADDRESSES, clusterConfigV1X10 } from '../fixtures.js';
 
+/**
+ * Launchpad's "split everything" principal shares (confirm-configuration.tsx):
+ * each reward share plus 1% / n, the 1% RAF of the reward split spread over
+ * the n recipients.
+ */
+const launchpadPrincipalShares = (n: number): number[] => {
+  const base = Math.floor(9900 / n) / 100;
+  const shares = Array.from({ length: n }, () => base);
+  shares[0] = Number((99 - base * (n - 1)).toFixed(2));
+  return shares.map(share => share + 1 / n);
+};
+
+const recipientAddress = (i: number): string =>
+  `0x${(i + 1).toString(16).padStart(40, 'a')}`;
+
+describe('split percentage rounding (OVM / SplitV2)', () => {
+  it.each([3, 6, 7, 9])(
+    "accepts Launchpad's split-everything shares for %i recipients",
+    n => {
+      const principal = launchpadPrincipalShares(n);
+      const rewards = principal.map(share => share - 1 / n);
+      const payload = {
+        rewardSplitRecipients: rewards.map((percentAllocation, i) => ({
+          address: recipientAddress(i),
+          percentAllocation,
+        })),
+        principalSplitRecipients: principal.map((percentAllocation, i) => ({
+          address: recipientAddress(i),
+          percentAllocation,
+        })),
+        OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+        splitOwnerAddress: TEST_ADDRESSES.SPLIT_OWNER,
+        distributorFeePercent: 0,
+      };
+      expect(() =>
+        validatePayload(payload, ovmTotalSplitPayloadSchema),
+      ).not.toThrow();
+    },
+  );
+
+  it('still rejects totals off by more than one unit per recipient', () => {
+    const payload = {
+      rewardSplitRecipients: [
+        { address: recipientAddress(0), percentAllocation: 99 },
+      ],
+      principalSplitRecipients: [
+        { address: recipientAddress(0), percentAllocation: 50 },
+        { address: recipientAddress(1), percentAllocation: 49.9997 },
+      ],
+      OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+      splitOwnerAddress: TEST_ADDRESSES.SPLIT_OWNER,
+      distributorFeePercent: 0,
+    };
+    expect(() => validatePayload(payload, ovmTotalSplitPayloadSchema)).toThrow(
+      'validateOVMTotalSplitRecipients',
+    );
+    // Two units off with two recipients is within rounding.
+    payload.principalSplitRecipients[1].percentAllocation = 49.9998;
+    expect(() =>
+      validatePayload(payload, ovmTotalSplitPayloadSchema),
+    ).not.toThrow();
+  });
+
+  it('keeps V1 SplitMain totals exact', () => {
+    const shares = launchpadPrincipalShares(3).map(s => s - 1 / 3);
+    const splitRecipients = shares.map((percentAllocation, i) => ({
+      account: recipientAddress(i),
+      percentAllocation: percentAllocation + 0.0001,
+    }));
+    expect(() =>
+      validatePayload({ splitRecipients }, totalSplitterPayloadSchema),
+    ).toThrow('Validation failed');
+  });
+});
+
 describe('validatePayload - OVM Schemas', () => {
   describe('ovmRewardsSplitPayloadSchema', () => {
     const validRewardsSplitPayload: OVMRewardsSplitPayload = {

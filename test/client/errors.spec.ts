@@ -10,6 +10,12 @@ import {
   UnauthorizedError,
   ValidationError,
   TERMS_ACCEPTED_MSG,
+  InvalidArgumentError,
+  ObolSdkError,
+  PayloadValidationError,
+  getWithdrawalRequestFee,
+  resolveWithdrawalFee,
+  WITHDRAWAL_REQUEST_CONTRACT_ADDRESS,
 } from '../../src/index.js';
 import {
   clusterConfigV1X10,
@@ -167,7 +173,10 @@ describe('Obol API errors', () => {
       .createClusterDefinition(clusterConfigV1X10)
       .catch(e => e as ConflictError);
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // A terms lookup (pre-flight) and the POST.
+    expect(
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST'),
+    ).toHaveLength(1);
     expect(error).toBeInstanceOf(ConflictError);
     expect(error.message).toBe('Duplicate entry');
     expect(error.method).toBe('POST');
@@ -435,5 +444,77 @@ describe('ObolSdkError', () => {
     expect(mismatch.message).toBe(
       'deposit: signer is connected to chain 560048 but the client is configured for chain 1',
     );
+  });
+});
+
+describe('local validation errors', () => {
+  it('payload validation throws PayloadValidationError with the same message', async () => {
+    const client = new Client(
+      { baseUrl: BASE_URL, chainId: 560048 },
+      makeSigner(),
+    );
+    const error = await client.splits
+      .createValidatorManagerAndRewardsSplit({
+        rewardSplitRecipients: [],
+        OVMOwnerAddress: 'not-an-address',
+        principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+      })
+      .catch(e => e);
+    expect(error).toBeInstanceOf(PayloadValidationError);
+    expect(error).toBeInstanceOf(ObolSdkError);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.code).toBe('PAYLOAD_INVALID');
+    expect(error.message).toMatch(/^Validation failed: /);
+    expect(error.errors.length).toBeGreaterThan(0);
+  });
+
+  it('malformed hashes and addresses throw InvalidArgumentError', async () => {
+    const client = new Client({ baseUrl: BASE_URL, chainId: 560048 });
+    const hashError = await client.getClusterLock('0x12').catch(e => e);
+    expect(hashError).toBeInstanceOf(InvalidArgumentError);
+    expect(hashError.code).toBe('INVALID_ARGUMENT');
+    expect(hashError.argument).toBe('configHash');
+    expect(hashError.message).toBe(
+      'Invalid configHash: expected a 0x-prefixed 32-byte hex string',
+    );
+    await expect(client.hasAcceptedTerms('0x12')).rejects.toThrow(
+      'Invalid address: expected a 0x-prefixed 20-byte address',
+    );
+  });
+});
+
+describe('provider-only reads', () => {
+  it('getOWRTranches needs a provider or a signer', async () => {
+    const client = new Client({ baseUrl: BASE_URL, chainId: 560048 });
+    await expect(
+      client.getOWRTranches(TEST_ADDRESSES.PRINCIPAL_RECIPIENT),
+    ).rejects.toThrow('Signer is required in getOWRTranches');
+  });
+
+  it('getOWRTranches reads through the provider without a signer', async () => {
+    const provider = {
+      call: jest.fn(async () => {
+        throw new Error('rpc called');
+      }),
+    };
+    const client = new Client(
+      { baseUrl: BASE_URL, chainId: 560048 },
+      undefined,
+      provider,
+    );
+    await expect(
+      client.getOWRTranches(TEST_ADDRESSES.PRINCIPAL_RECIPIENT),
+    ).rejects.toThrow('rpc called');
+    expect(provider.call).toHaveBeenCalled();
+  });
+
+  it('exports the EIP-7002 withdrawal fee helpers', async () => {
+    const provider = { call: jest.fn(async () => '0x01') };
+    await expect(getWithdrawalRequestFee(provider)).resolves.toBe(BigInt(1));
+    expect(provider.call).toHaveBeenCalledWith({
+      to: WITHDRAWAL_REQUEST_CONTRACT_ADDRESS,
+      data: '0x',
+    });
+    expect(resolveWithdrawalFee({ currentFee: BigInt(1) })).toBe(BigInt(2));
   });
 });

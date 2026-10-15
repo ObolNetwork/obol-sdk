@@ -864,7 +864,7 @@ export const getOWRTranches = async ({
   provider,
 }: {
   owrAddress: ETH_ADDRESS;
-  signer: SignerType;
+  signer?: SignerType;
   provider?: ProviderType | null;
 }): Promise<OWRTranches> => {
   try {

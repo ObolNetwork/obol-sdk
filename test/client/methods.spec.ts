@@ -73,19 +73,25 @@ describe('Cluster Client', () => {
       .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
     clientInstance['request'] = requestMock as never;
 
+    // The pre-flight terms lookup is a GET; the definition is the POST body.
+    const postBodies = () =>
+      requestMock.mock.calls
+        .filter(([, init]) => init?.method === 'POST')
+        .map(([, init]) => JSON.parse((init as { body: string }).body));
+
     // Explicit older version (e.g. while charon prod is pre-v1.11).
     await clientInstance.createClusterDefinition(clusterConfigV1X10, 'v1.10.0');
-    const explicitBody = JSON.parse(
-      (requestMock.mock.calls[0][1] as { body: string }).body,
-    );
-    expect(explicitBody.version).toEqual('v1.10.0');
+    expect(postBodies()[0].version).toEqual('v1.10.0');
+
+    // Also as an option.
+    await clientInstance.createClusterDefinition(clusterConfigV1X10, {
+      version: 'v1.10.0',
+    });
+    expect(postBodies()[1].version).toEqual('v1.10.0');
 
     // Omitting the arg defaults to the SDK's CONFIG_VERSION.
     await clientInstance.createClusterDefinition(clusterConfigV1X10);
-    const defaultBody = JSON.parse(
-      (requestMock.mock.calls[1][1] as { body: string }).body,
-    );
-    expect(defaultBody.version).toEqual(CONFIG_VERSION);
+    expect(postBodies()[2].version).toEqual(CONFIG_VERSION);
   });
 
   test('acceptClusterDefinition should return cluster definition', async () => {

@@ -466,13 +466,81 @@ describe('Client.incentives', () => {
       ]);
     });
 
-    test('reports incentives that cannot be fetched', async () => {
+    test('reports a 404 as INCENTIVES_NOT_FOUND', async () => {
+      const { NotFoundError } = await import('../../src/index.js');
       const client = await makeClient(makeDistributorProvider());
       jest
         .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockRejectedValue(new Error('Not Found'));
+        .mockRejectedValue(
+          new NotFoundError({ status: 404, endpoint: '/v1/address' }),
+        );
       const result = await client.incentives.preflightClaim(operatorAddress);
       expect(codes(result)).toEqual(['INCENTIVES_NOT_FOUND']);
+    });
+
+    test('reports other API errors as INCENTIVES_FETCH_FAILED', async () => {
+      const client = await makeClient(makeDistributorProvider());
+      global.fetch = jest.fn(async () => ({
+        ok: false,
+        status: 503,
+        json: async () => ({ message: 'unavailable' }),
+        text: async () => '{"message":"unavailable"}',
+      }));
+      const result = await client.incentives.preflightClaim(operatorAddress);
+      expect(codes(result)).toEqual(['INCENTIVES_FETCH_FAILED']);
+      expect(result.issues[0].message).toContain('unavailable');
+    });
+
+    describe('address without incentives', () => {
+      // What the API returns (HTTP 200) for an address with no incentives.
+      const noIncentives = {
+        operator_address: operatorAddress,
+        amount: '0',
+        index: -1,
+        merkle_proof: [],
+        contract_address: '',
+      };
+
+      test('preflightClaim reports NO_INCENTIVES without touching the chain', async () => {
+        const { result, distributorProvider } = await preflight(
+          {},
+          noIncentives,
+        );
+        expect(codes(result)).toEqual(['NO_INCENTIVES']);
+        expect(result.ok).toBe(false);
+        expect(distributorProvider.getCode).not.toHaveBeenCalled();
+      });
+
+      test('claimIncentives throws IncentivesPreflightError and does not claim', async () => {
+        const consoleSpy = jest.spyOn(console, 'log');
+        const client = await makeClient(makeDistributorProvider());
+        jest
+          .spyOn(client.incentives, 'getIncentivesByAddress')
+          .mockResolvedValue(noIncentives);
+
+        const error = await client.incentives
+          .claimIncentives(operatorAddress)
+          .catch(e => e);
+        const { IncentivesPreflightError } = await import('../../src/index.js');
+        expect(error).toBeInstanceOf(IncentivesPreflightError);
+        expect(error.issues.map(i => i.code)).toEqual(['NO_INCENTIVES']);
+        expect(error.message).toContain('No incentives found');
+        expect(mockClaimIncentivesFromMerkleDistributor).not.toHaveBeenCalled();
+        expect(consoleSpy).not.toHaveBeenCalled();
+        consoleSpy.mockRestore();
+      });
+
+      test('isClaimed rejects the empty contract address and a negative index', async () => {
+        const { InvalidArgumentError } = await import('../../src/index.js');
+        const client = await makeClient(makeDistributorProvider());
+        await expect(client.incentives.isClaimed('', -1)).rejects.toThrow(
+          InvalidArgumentError,
+        );
+        await expect(
+          client.incentives.isClaimed(TEST_ADDRESSES.MERKLE_DISTRIBUTOR, -1),
+        ).rejects.toThrow('Invalid index');
+        expect(mockIsClaimedFromMerkleDistributor).not.toHaveBeenCalled();
+      });
     });
 
     test('claimIncentives claims for an account other than the signer', async () => {

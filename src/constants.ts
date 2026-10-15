@@ -162,14 +162,18 @@ export const DEFAULT_BASE_VERSION = 'v1';
 export const DEFAULT_CHAIN_ID = 560048;
 
 /**
- * Chain IDs accepted by the {@link Client} constructor: Mainnet (1) and Hoodi (560048).
+ * Chain IDs accepted by the {@link Client} constructor: Mainnet (1), Hoodi
+ * (560048), Gnosis (100) and Sepolia (11155111).
  *
- * Other fork versions in {@link FORK_MAPPING} are kept only so that existing
- * cluster locks on those networks can still be validated.
+ * Mainnet and Hoodi are the recommended networks. Gnosis and Sepolia are
+ * supported for cluster definitions and locks only; splitter and other
+ * contract operations stay limited to the chains that have the contracts.
  */
 export const SUPPORTED_CHAIN_IDS: readonly number[] = [
   FORK_MAPPING['0x00000000'],
   FORK_MAPPING['0x10000910'],
+  FORK_MAPPING['0x00000064'],
+  FORK_MAPPING['0x90000069'],
 ];
 
 export const ETHER_TO_GWEI = 10 ** 9;

@@ -9,6 +9,7 @@ import {
   type OVMRequestWithdrawalPayload,
 } from './types.js';
 import Ajv from 'ajv';
+import { PayloadValidationError } from './errors.js';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
@@ -53,10 +54,6 @@ const calculateTotalPercentage = (
     const scaled = toScaledPercent(percent);
     return scaled < 1 ? NaN : acc + scaled;
   }, 0);
-};
-
-const validateTotalPercentage = (totalPercentage: number): boolean => {
-  return totalPercentage === TOTAL_SCALED_PERCENT;
 };
 
 const validateTotalPercentageWithRAF = (
@@ -133,13 +130,28 @@ const validateUniqueAddresses = (
   return isUnique;
 };
 
+/**
+ * SplitV2 (used with the OVM) takes the sum of the allocations as its total,
+ * so shares that do not add up to exactly 100% at contract precision are
+ * still split proportionally. Allow up to one unit (1e-4 %) of rounding per
+ * recipient, e.g. three shares of 33.3333...% after spreading 1% over them.
+ */
+const isTotalWithinRoundingOfFull = (
+  totalPercentage: number,
+  recipientCount: number,
+): boolean =>
+  Math.abs(totalPercentage - TOTAL_SCALED_PERCENT) <= recipientCount;
+
 const validateOVMRewardsSplitRecipients = (
   _: boolean,
   data: OVMRewardsSplitPayload,
 ): boolean => {
   const obolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
   const splitPercentage = calculateTotalPercentage(data.rewardSplitRecipients);
-  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
+  return isTotalWithinRoundingOfFull(
+    splitPercentage + toScaledPercent(obolRAFSplit),
+    (data.rewardSplitRecipients?.length ?? 0) + 1,
+  );
 };
 
 const validateOVMTotalSplitRecipients = (
@@ -149,7 +161,10 @@ const validateOVMTotalSplitRecipients = (
   const splitPercentage = calculateTotalPercentage(
     data.principalSplitRecipients,
   );
-  return validateTotalPercentage(splitPercentage);
+  return isTotalWithinRoundingOfFull(
+    splitPercentage,
+    data.principalSplitRecipients?.length ?? 0,
+  );
 };
 
 const validateOVMRequestWithdrawalPayload = (
@@ -236,7 +251,10 @@ export function validatePayload<T>(data: unknown, schema: object): T {
     const errors = validate.errors
       ?.map(e => `${e.instancePath} ${e.message}`)
       .join(', ');
-    throw new Error(`Validation failed: ${errors}`);
+    throw new PayloadValidationError(
+      `Validation failed: ${errors}`,
+      validate.errors ?? [],
+    );
   }
   return data;
 }

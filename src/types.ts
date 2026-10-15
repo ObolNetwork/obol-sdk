@@ -5,10 +5,10 @@ import { type Provider, type Signer } from 'ethers';
  *
  * - `0x00000000` → 1 (Mainnet)
  * - `0x10000910` → 560048 (Hoodi)
+ * - `0x00000064` → 100 (Gnosis; definitions and locks only, no splits)
+ * - `0x90000069` → 11155111 (Sepolia; definitions and locks only, no splits)
  *
- * The remaining entries exist only so that existing cluster locks created for
- * those networks can still be validated; the {@link Client} accepts only the
- * chain IDs in {@link SUPPORTED_CHAIN_IDS}.
+ * The {@link Client} accepts the chain IDs in {@link SUPPORTED_CHAIN_IDS}.
  */
 export enum FORK_MAPPING {
   /** Mainnet. */
@@ -495,14 +495,66 @@ export type PreflightIssue = {
 
   /** Short suggestion for what to do next. */
   hint: string;
+
+  /**
+   * How serious the issue is. `error` (the default when omitted) means the
+   * operation would fail or should not go ahead; `warning` and `info` are
+   * advisory and do not affect `ok`.
+   */
+  severity?: PreflightSeverity;
 };
 
+/** Severity of a {@link PreflightIssue}. */
+export type PreflightSeverity = 'error' | 'warning' | 'info';
+
 /**
- * Result of a read-only pre-flight check. `ok` is `true` when `issues` is empty.
+ * Result of a read-only pre-flight check. `ok` is `true` when no issue has
+ * `error` severity (issues without a `severity` count as errors).
  */
 export type PreflightResult = {
   ok: boolean;
   issues: PreflightIssue[];
+};
+
+/** Options for {@link Client.preflightCreate}. */
+export type PreflightCreateOptions = {
+  /**
+   * Cluster definition version to check against. Defaults to
+   * {@link CONFIG_VERSION}.
+   */
+  version?: string;
+};
+
+/** Options for {@link Client.preflightAccept}. */
+export type PreflightAcceptOptions = {
+  /** The operator's ENR (Ethereum Node Record). */
+  enr: string;
+
+  /** Operator address to check. Defaults to the signer's address. */
+  address?: string;
+
+  /**
+   * Version the operator payload will carry. When given, it must equal the
+   * definition's version.
+   */
+  version?: string;
+};
+
+/** Options for {@link Client.createClusterDefinition}. */
+export type CreateClusterDefinitionOptions = {
+  /**
+   * Cluster definition version to create. Defaults to {@link CONFIG_VERSION},
+   * or to the existing definition's version when `resumeFrom` is set.
+   */
+  version?: string;
+
+  /**
+   * `config_hash` of a definition this signer already created with the same
+   * payload (e.g. from an earlier attempt whose follow-up steps failed). When
+   * it matches, nothing is signed or submitted and this `config_hash` is
+   * returned.
+   */
+  resumeFrom?: string;
 };
 
 /**
@@ -785,9 +837,12 @@ export type OVMDepositPayload = {
   deposits: ValidatorDeposit[];
 
   /**
-   * Skip the BLS deposit signature check. Only for top-ups to a validator that
-   * already exists on the beacon chain, where the signature is not checked.
-   * Defaults to `false`.
+   * Set when every deposit is a top-up to a validator that already exists on
+   * the beacon chain (where the signature is not checked): skips the BLS
+   * signature check, accepts all-zero withdrawal credentials as well as the
+   * expected ones, and allows up to 2048 ETH per deposit. Ignored when
+   * `beaconUrl` is set (the beacon node decides). Without either, deposits
+   * with an all-zero signature are refused. Defaults to `false`.
    */
   skipSignatureVerification?: boolean;
 
@@ -819,9 +874,12 @@ export type EOADepositPayload = {
   expectedWithdrawalAddress?: string;
 
   /**
-   * Skip the BLS deposit signature check. Only for top-ups to a validator that
-   * already exists on the beacon chain, where the signature is not checked.
-   * Defaults to `false`.
+   * Set when every deposit is a top-up to a validator that already exists on
+   * the beacon chain (where the signature is not checked): skips the BLS
+   * signature check, accepts all-zero withdrawal credentials as well as the
+   * expected ones, and allows up to 2048 ETH per deposit. Ignored when
+   * `beaconUrl` is set (the beacon node decides). Without either, deposits
+   * with an all-zero signature are refused. Defaults to `false`.
    */
   skipSignatureVerification?: boolean;
 
@@ -890,6 +948,9 @@ export type WatchClusterOptions = {
 export type WaitForOptions = WatchClusterOptions & {
   /** Called with every state {@link Client.watchCluster} yields. */
   onProgress?: (progress: ClusterProgress) => void;
-  /** Rejects with `ClusterProgressTimeoutError` after this many ms. */
+  /**
+   * Rejects with `ClusterProgressTimeoutError` after this many ms. Omitted or
+   * `0` means no timeout (as for the Client's request `timeoutMs`).
+   */
   timeoutMs?: number;
 };

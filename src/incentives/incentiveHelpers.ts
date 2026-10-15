@@ -32,7 +32,6 @@ export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
 
     return { txHash: receipt.hash };
   } catch (error: any) {
-    console.log('Error claiming incentives:', error);
     throw new Error(`Failed to claim incentives: ${error.message}`);
   }
 };
@@ -53,7 +52,6 @@ export const isClaimedFromMerkleDistributor = async (
 
     return claimed;
   } catch (error: any) {
-    console.log('Error checking claim status:', error);
     throw new Error(`Failed to check claim status: ${error.message}`);
   }
 };

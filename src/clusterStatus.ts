@@ -213,8 +213,9 @@ export const waitForClusterProgress = async <
     controller.abort(abortReason(signal as AbortSignal));
   };
   signal?.addEventListener('abort', onAbort, { once: true });
+  // 0 means no timeout, as for the Client's request `timeoutMs`.
   const timer =
-    timeoutMs === undefined
+    timeoutMs === undefined || timeoutMs === 0
       ? undefined
       : setTimeout(() => {
           controller.abort(new ClusterProgressTimeoutError(target, timeoutMs));

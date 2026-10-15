@@ -439,6 +439,19 @@ describe('Client.waitFor', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it('treats timeoutMs: 0 as no timeout', async () => {
+    mockApi({ definition: [ok(definitionWithSigned(2))] });
+    const controller = new AbortController();
+    const promise = client.waitFor(configHash, 'lock_published', {
+      timeoutMs: 0,
+      signal: controller.signal,
+    });
+    const assertion = expect(promise).rejects.toThrow('stopped');
+    await jest.advanceTimersByTimeAsync(120_000);
+    controller.abort(new Error('stopped'));
+    await assertion;
+  });
+
   it('rejects with the abort reason when the caller aborts', async () => {
     mockApi({ definition: [ok(definitionWithSigned(2))] });
     const controller = new AbortController();

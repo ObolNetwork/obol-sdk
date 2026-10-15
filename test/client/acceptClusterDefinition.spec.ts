@@ -55,29 +55,51 @@ afterEach(() => {
 });
 
 describe('Client constructor chainId', () => {
-  test.each([1, 560048])('accepts supported chainId %s', chainId => {
-    expect(new Client({ baseUrl, chainId }).chainId).toBe(chainId);
-  });
+  test.each([1, 560048, 100, 11155111])(
+    'accepts supported chainId %s',
+    chainId => {
+      expect(new Client({ baseUrl, chainId }).chainId).toBe(chainId);
+    },
+  );
 
   test('defaults to Hoodi', () => {
     expect(new Client({ baseUrl }).chainId).toBe(560048);
   });
 
-  test.each([100, 11155111, 5, 17000, 999])(
-    'rejects unsupported chainId %s',
-    chainId => {
-      expect(() => new Client({ baseUrl, chainId })).toThrow(
-        UnsupportedChainError,
+  test.each([5, 17000, 999])('rejects unsupported chainId %s', chainId => {
+    expect(() => new Client({ baseUrl, chainId })).toThrow(
+      UnsupportedChainError,
+    );
+    expect(() => new Client({ baseUrl, chainId })).toThrow(
+      'Supported chain IDs: 1 (Mainnet), 560048 (Hoodi), 100 (Gnosis), 11155111 (Sepolia)',
+    );
+  });
+
+  test('SUPPORTED_CHAIN_IDS lists mainnet, hoodi, gnosis and sepolia', () => {
+    expect([...SUPPORTED_CHAIN_IDS].sort((a, b) => a - b)).toEqual([
+      1, 100, 560048, 11155111,
+    ]);
+  });
+
+  test.each([100, 11155111])(
+    'keeps splitter deployment unsupported on chain %s',
+    async chainId => {
+      const client = new Client(
+        { baseUrl, chainId },
+        mockSigner(SIGNER_ADDRESS, chainId),
       );
-      expect(() => new Client({ baseUrl, chainId })).toThrow(
-        'Supported chain IDs: 1 (Mainnet), 560048 (Hoodi)',
-      );
+      await expect(
+        client.createObolTotalSplit({
+          splitRecipients: [
+            {
+              account: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+              percentAllocation: 99.9,
+            },
+          ],
+        }),
+      ).rejects.toThrow(UnsupportedChainError);
     },
   );
-
-  test('SUPPORTED_CHAIN_IDS lists mainnet and hoodi', () => {
-    expect([...SUPPORTED_CHAIN_IDS].sort()).toEqual([1, 560048]);
-  });
 });
 
 describe('acceptClusterDefinition verification', () => {

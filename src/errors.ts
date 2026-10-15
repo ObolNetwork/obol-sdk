@@ -364,6 +364,97 @@ export class IncentivesPreflightError extends ObolSdkError {
 }
 
 /**
+ * Thrown when a payload fails JSON schema validation before an API call or
+ * transaction. The message lists the failing fields; `errors` holds the raw
+ * AJV errors.
+ */
+export class PayloadValidationError extends ObolSdkError {
+  name = 'PayloadValidationError';
+
+  constructor(
+    message: string,
+    public readonly errors: ReadonlyArray<{
+      instancePath: string;
+      message?: string;
+      keyword: string;
+      params: Record<string, unknown>;
+    }> = [],
+  ) {
+    super(
+      message,
+      'PAYLOAD_INVALID',
+      'Fix the listed fields of the payload and try again.',
+    );
+    Object.setPrototypeOf(this, PayloadValidationError.prototype);
+  }
+}
+
+/**
+ * Thrown when an argument (hash, address) is malformed, before it is used in
+ * an API path or a contract call.
+ */
+export class InvalidArgumentError extends ObolSdkError {
+  name = 'InvalidArgumentError';
+
+  constructor(
+    message: string,
+    /** Name of the invalid argument. */
+    public readonly argument: string,
+  ) {
+    super(message, 'INVALID_ARGUMENT', `Check the ${argument} argument.`);
+    Object.setPrototypeOf(this, InvalidArgumentError.prototype);
+  }
+}
+
+/**
+ * Thrown by {@link Client.createClusterDefinition} and
+ * {@link Client.acceptClusterDefinition} when a pre-flight check that the
+ * method enforces fails, before anything is signed. `issues` holds the failed
+ * checks (see {@link Client.preflightCreate} / {@link Client.preflightAccept});
+ * the message is the first issue's message.
+ *
+ * Failures that already had their own error class (e.g. {@link ChainMismatchError},
+ * {@link DefinitionVerificationError}, {@link NotAnOperatorError}, or an
+ * {@link ObolApiError} from fetching the definition) are still thrown as that
+ * class when they are the first failed check.
+ */
+export class PreflightFailedError extends ObolSdkError {
+  name = 'PreflightFailedError';
+
+  constructor(public readonly issues: PreflightIssue[]) {
+    super(
+      issues[0]?.message ?? 'Pre-flight check failed',
+      'PREFLIGHT_FAILED',
+      issues[0]?.hint,
+    );
+    Object.setPrototypeOf(this, PreflightFailedError.prototype);
+  }
+}
+
+/**
+ * Thrown by {@link Client.createClusterDefinition} with `resumeFrom` when the
+ * existing definition was not created by this signer, or its configuration
+ * does not match the payload. Nothing is signed or submitted.
+ */
+export class ResumeMismatchError extends ObolSdkError {
+  name = 'ResumeMismatchError';
+
+  constructor(
+    message: string,
+    public readonly configHash: string,
+    /** Configuration fields that differ, when the configuration does not match. */
+    public readonly fields: string[] = [],
+  ) {
+    super(
+      message,
+      'RESUME_MISMATCH',
+      'Pass the config_hash of a definition this signer created with the same payload, or omit resumeFrom to create a new definition.',
+    );
+    Object.setPrototypeOf(this, ResumeMismatchError.prototype);
+  }
+}
+
+/**
  * Thrown by `eoa.deposit` / `splits.deposit` (when `beaconUrl` is given) if
  * the beacon node already has a pending deposit with different withdrawal
  * credentials for one of the pubkeys. No deposit is sent.

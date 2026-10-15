@@ -7,11 +7,13 @@ import { checkExistingDeposits } from './existingDeposits.js';
  * Checks deposits before `eoa.deposit` / `splits.deposit` send them.
  *
  * Without `beaconUrl`, runs {@link verifyDepositPayloads} with the given
- * options. With `beaconUrl`, first runs {@link checkExistingDeposits}: any
+ * options (`skipSignatureVerification` treats every deposit as a top-up). With `beaconUrl`, first runs {@link checkExistingDeposits}: any
  * `conflict` verdict throws a {@link DepositConflictError}. For `top_up`
  * deposits the signature check is skipped and the withdrawal credentials must
- * be the expected ones or all zero; every other deposit must have a valid
- * signature (`skipSignatureVerification` is not applied).
+ * be the expected ones or all zero, and the maximum amount follows the
+ * existing validator's credentials (2048 ETH for 0x02, else 32 ETH); every
+ * other deposit must have a valid signature (`skipSignatureVerification` is
+ * not applied).
  *
  * @internal
  */
@@ -44,10 +46,11 @@ export const verifyDepositsBeforeSend = async (
     throw new DepositConflictError(conflicts);
   }
 
-  const topUps = new Set<number>();
+  // Top-up index → the existing validator's withdrawal credentials.
+  const topUps = new Map<number, string>();
   checks.forEach((check, index) => {
     if (check.status === 'top_up') {
-      topUps.add(index);
+      topUps.set(index, check.existing?.withdrawal_credentials ?? '');
     }
   });
 

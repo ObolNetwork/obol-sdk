@@ -1,3 +1,5 @@
+import { InvalidArgumentError } from './errors.js';
+
 const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
 const HASH_32_REGEX = /^0x[0-9a-fA-F]{64}$/;
 
@@ -7,8 +9,9 @@ const HASH_32_REGEX = /^0x[0-9a-fA-F]{64}$/;
  */
 export const assertHash32 = (value: unknown, name: string): string => {
   if (typeof value !== 'string' || !HASH_32_REGEX.test(value)) {
-    throw new Error(
+    throw new InvalidArgumentError(
       `Invalid ${name}: expected a 0x-prefixed 32-byte hex string`,
+      name,
     );
   }
   return value;
@@ -20,7 +23,10 @@ export const assertHash32 = (value: unknown, name: string): string => {
  */
 export const assertAddress = (value: unknown, name: string): string => {
   if (typeof value !== 'string' || !ADDRESS_REGEX.test(value)) {
-    throw new Error(`Invalid ${name}: expected a 0x-prefixed 20-byte address`);
+    throw new InvalidArgumentError(
+      `Invalid ${name}: expected a 0x-prefixed 20-byte address`,
+      name,
+    );
   }
   return value;
 };
