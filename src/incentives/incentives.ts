@@ -1,4 +1,5 @@
-import { isContractAvailable } from '../utils.js';
+import { assertSignerChain } from '../utils.js';
+import { assertAddress } from '../validation.js';
 import {
   type ClaimableIncentives,
   type ETH_ADDRESS,
@@ -6,13 +7,15 @@ import {
   type ProviderType,
   type SignerType,
   type ClaimIncentivesResponse,
+  type PreflightResult,
 } from '../types.js';
 import {
   claimIncentivesFromMerkleDistributor,
   isClaimedFromMerkleDistributor,
 } from './incentiveHelpers.js';
+import { preflightIncentivesClaim } from './incentivesPreflight.js';
 import { DEFAULT_BASE_VERSION } from '../constants.js';
-import { SignerRequiredError } from '../errors.js';
+import { IncentivesPreflightError, SignerRequiredError } from '../errors.js';
 
 /**
  * Manages Obol incentive rewards – querying eligibility and claiming from
@@ -29,6 +32,9 @@ import { SignerRequiredError } from '../errors.js';
  *
  * // Check if already claimed
  * const claimed = await client.incentives.isClaimed(data.contract_address, data.index);
+ *
+ * // Read-only checks before claiming (claimIncentives also runs them)
+ * const { ok, issues } = await client.incentives.preflightClaim("0xOperator...");
  *
  * // Claim (sends on-chain transaction)
  * const { txHash } = await client.incentives.claimIncentives("0xOperator...");
@@ -59,14 +65,20 @@ export class Incentives {
   /**
    * Claims Obol incentives from a Merkle Distributor contract for the given address.
    *
-   * Automatically fetches incentive data, checks if already claimed, and submits
-   * the on-chain claim transaction. Returns `{ txHash: null }` if incentives were
-   * already claimed (idempotent).
+   * Automatically fetches incentive data, runs {@link Incentives.preflightClaim}'s
+   * checks, and submits the on-chain claim transaction. Returns `{ txHash: null }`
+   * if incentives were already claimed (idempotent).
+   *
+   * The claim may be sent for any address: the signer pays gas and the tokens are
+   * transferred to `address`.
    *
    * @param address - The operator's Ethereum address to claim incentives for.
    * @returns The transaction hash, or `{ txHash: null }` if already claimed.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {Error} If no incentives are found for the address.
+   * @throws {IncentivesPreflightError} If a pre-flight check fails (the message
+   *   lists the issue codes; `issues` holds the details).
    *
    * @example
    * ```typescript
@@ -83,6 +95,8 @@ export class Incentives {
       throw new SignerRequiredError('claimIncentives');
     }
 
+    await assertSignerChain(this.signer, this.chainId, 'claimIncentives');
+
     try {
       const incentivesData = await this.getIncentivesByAddress(address);
 
@@ -90,23 +104,28 @@ export class Incentives {
         throw new Error(`No incentives found for address ${address}`);
       }
 
-      const isContractDeployed = await isContractAvailable(
-        incentivesData.contract_address,
-        this.provider as ProviderType,
+      const { issues } = await preflightIncentivesClaim({
+        requestedAddress: address,
+        incentivesData,
+        chainId: this.chainId,
+        provider: this.provider,
+      });
+
+      const alreadyClaimed = issues.some(i => i.code === 'ALREADY_CLAIMED');
+      const blocking = issues.filter(
+        i =>
+          i.code !== 'ALREADY_CLAIMED' &&
+          !(alreadyClaimed && i.code === 'CLAIM_WINDOW_CLOSED'),
       );
 
-      if (!isContractDeployed) {
-        throw new Error(
-          `Merkle Distributor contract is not available at address ${incentivesData.contract_address}`,
+      if (blocking.length > 0) {
+        throw new IncentivesPreflightError(
+          `Failed to claim incentives: ${blocking.map(i => `[${i.code}] ${i.message}`).join('; ')}`,
+          blocking,
         );
       }
 
-      const claimed = await this.isClaimed(
-        incentivesData.contract_address,
-        incentivesData.index,
-      );
-
-      if (claimed) {
+      if (alreadyClaimed) {
         return { txHash: null };
       }
 
@@ -121,9 +140,72 @@ export class Incentives {
 
       return { txHash };
     } catch (error: any) {
-      console.log('Error claiming incentives:', error);
+      if (error instanceof IncentivesPreflightError) {
+        throw error;
+      }
       throw new Error(`Failed to claim incentives: ${error.message}`);
     }
+  }
+
+  /**
+   * Runs read-only checks on the incentives for an address before claiming.
+   * No signer or transaction is needed, but a provider is.
+   *
+   * Checks that:
+   * - the API data is for `address`;
+   * - the contract is a known Obol `MerkleDistributorWithDeadline` and pays out
+   *   the OBOL token for this chain;
+   * - the Merkle proof matches the contract's `merkleRoot`;
+   * - the index is not already claimed and the claim window is open.
+   *
+   * Problems are returned as issues rather than thrown; errors reaching the
+   * provider are thrown.
+   *
+   * @param address - The Ethereum address the incentives are claimed for.
+   * @returns `{ ok, issues }`, where each issue has a `code`, `message` and `hint`.
+   *
+   * @example
+   * ```typescript
+   * const { ok, issues } = await client.incentives.preflightClaim("0xOperator...");
+   * if (!ok) console.log(issues.map(i => i.code));
+   * ```
+   */
+  async preflightClaim(address: string): Promise<PreflightResult> {
+    let incentivesData: ClaimableIncentives;
+    try {
+      incentivesData = await this.getIncentivesByAddress(address);
+    } catch (error: any) {
+      return {
+        ok: false,
+        issues: [
+          {
+            code: 'INCENTIVES_NOT_FOUND',
+            message: `Could not fetch incentives for ${address}: ${error?.message}`,
+            hint: 'Check the address and the client chainId.',
+          },
+        ],
+      };
+    }
+
+    if (!incentivesData?.contract_address) {
+      return {
+        ok: false,
+        issues: [
+          {
+            code: 'INCENTIVES_NOT_FOUND',
+            message: `No incentives found for address ${address}`,
+            hint: 'Check the address and the client chainId.',
+          },
+        ],
+      };
+    }
+
+    return await preflightIncentivesClaim({
+      requestedAddress: address,
+      incentivesData,
+      chainId: this.chainId,
+      provider: this.provider,
+    });
   }
 
   /**
@@ -163,6 +245,7 @@ export class Incentives {
    * @param address - The operator's Ethereum address.
    * @returns Claimable incentive data including amount, Merkle proof, and contract address.
    * @throws {Error} If no incentives are found for the given address (404).
+   * @throws {Error} If `address` is not a 0x-prefixed 20-byte address.
    *
    * @example
    * ```typescript
@@ -171,9 +254,10 @@ export class Incentives {
    * ```
    */
   async getIncentivesByAddress(address: string): Promise<ClaimableIncentives> {
+    assertAddress(address, 'address');
     const network = FORK_NAMES[this.chainId];
     const incentives: ClaimableIncentives = await this.request(
-      `/${DEFAULT_BASE_VERSION}/address/incentives/${network}/${address}`,
+      `/${DEFAULT_BASE_VERSION}/address/incentives/${network}/${encodeURIComponent(address)}`,
       {
         method: 'GET',
       },

@@ -7,7 +7,7 @@ import {
   type ProviderType,
 } from '../../src/types.js';
 // import { CHAIN_CONFIGURATION } from '../../src/constants.js';
-import { TEST_ADDRESSES } from '../fixtures.js';
+import { TEST_ADDRESSES, mainnetDepositPayload } from '../fixtures.js';
 
 // Mock splitHelpers using unstable_mockModule
 // @ts-expect-error - ESM mocking requires top-level await
@@ -41,6 +41,7 @@ await jest.unstable_mockModule('../../src/utils.js', () => ({
   findDeployedBytecode: jest.fn(),
   isContractAvailable: jest.fn(),
   getProvider: jest.fn(),
+  assertSignerChain: jest.fn(async () => undefined),
 }));
 
 // Mock ajv
@@ -52,7 +53,7 @@ await jest.unstable_mockModule('../../src/ajv.js', () => ({
   validatePayload: jest.fn(data => data),
 }));
 
-const { Client } = await import('../../src/index.js');
+const { Client, ObolSplits } = await import('../../src/index.js');
 const splitHelpers = await import('../../src/splits/splitHelpers.js');
 const utils = await import('../../src/utils.js');
 
@@ -101,6 +102,8 @@ const setupTestVariables = () => {
 
   mockProvider = {
     getCode: jest.fn().mockResolvedValue('0x123456'),
+    // EIP-7002 fee read: 1 wei
+    call: jest.fn().mockResolvedValue('0x' + '1'.padStart(64, '0')),
   } as unknown as ProviderType;
 
   client = new Client({ chainId: 1 }, mockSigner, mockProvider);
@@ -203,14 +206,16 @@ describe('ObolSplits', () => {
     });
 
     it('should throw error when unsupported chainId', async () => {
-      const clientUnsupportedChain = new Client(
-        { chainId: 999 },
+      // Client rejects unsupported chains in its constructor, so exercise the
+      // module directly.
+      const splitsUnsupportedChain = new ObolSplits(
         mockSigner,
+        999,
         mockProvider,
       );
 
       await expect(
-        clientUnsupportedChain.splits.createValidatorManagerAndRewardsSplit(
+        splitsUnsupportedChain.createValidatorManagerAndRewardsSplit(
           mockRewardsSplitPayload,
         ),
       ).rejects.toThrow(
@@ -384,6 +389,70 @@ describe('requestWithdrawal', () => {
       }),
     ).rejects.toThrow('Signer is required in requestWithdrawal');
   });
+
+  it('reads the fee and sends twice the current fee per request when omitted', async () => {
+    mockProvider.call.mockResolvedValue('0x' + '5'.padStart(64, '0'));
+    mockRequestWithdrawalFromOVM.mockResolvedValue({ txHash: '0xhash' });
+
+    await client.splits.requestWithdrawal({
+      ovmAddress: mockOVMAddress,
+      pubKeys: mockPubKeys,
+      amounts: mockAmounts,
+    });
+
+    expect(mockProvider.call).toHaveBeenCalledWith({
+      to: '0x00000961Ef480Eb55e80D19ad83579A64c007002',
+      data: '0x',
+    });
+    expect(mockRequestWithdrawalFromOVM).toHaveBeenCalledWith(
+      expect.objectContaining({ withdrawalFees: '20' }),
+    );
+  });
+
+  it('falls back to the signer provider for the fee read', async () => {
+    const clientWithoutProvider = new Client({ chainId: 1 }, {
+      ...mockSigner,
+      provider: {
+        call: jest.fn().mockResolvedValue('0x' + '1'.padStart(64, '0')),
+      },
+    } as unknown as SignerType);
+    mockRequestWithdrawalFromOVM.mockResolvedValue({ txHash: '0xhash' });
+
+    await clientWithoutProvider.splits.requestWithdrawal({
+      ovmAddress: mockOVMAddress,
+      pubKeys: mockPubKeys,
+      amounts: mockAmounts,
+    });
+    expect(mockRequestWithdrawalFromOVM).toHaveBeenCalledWith(
+      expect.objectContaining({ withdrawalFees: '4' }),
+    );
+  });
+
+  it('rejects withdrawal fees below the current fee', async () => {
+    mockProvider.call.mockResolvedValue('0x' + '64'.padStart(64, '0'));
+
+    await expect(
+      client.splits.requestWithdrawal({
+        ovmAddress: mockOVMAddress,
+        pubKeys: mockPubKeys,
+        amounts: mockAmounts,
+        withdrawalFees: '199',
+      }),
+    ).rejects.toThrow('below the current withdrawal request fee of 200 wei');
+    expect(mockRequestWithdrawalFromOVM).not.toHaveBeenCalled();
+  });
+
+  it('rejects withdrawal fees far above the current fee', async () => {
+    await expect(
+      client.splits.requestWithdrawal({
+        ovmAddress: mockOVMAddress,
+        pubKeys: mockPubKeys,
+        amounts: mockAmounts,
+        withdrawalFees: '1000000000000000000',
+      }),
+    ).rejects.toThrow('far above the current withdrawal request fee');
+    expect(mockRequestWithdrawalFromOVM).not.toHaveBeenCalled();
+  });
 });
 
 describe('deposit', () => {
@@ -392,20 +461,9 @@ describe('deposit', () => {
     setupTestVariables();
   });
 
-  const mockOVMAddress = '0xOVMAddress123';
-  const singleDeposit = [
-    {
-      pubkey:
-        '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-      signature:
-        '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      deposit_data_root:
-        '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-      amount: 32000000000,
-      withdrawal_credentials:
-        '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-    },
-  ];
+  // The OVM is the withdrawal address the deposit credentials point at.
+  const mockOVMAddress = mainnetDepositPayload.withdrawalAddress;
+  const singleDeposit = [mainnetDepositPayload.deposit];
 
   it('should deposit successfully', async () => {
     mockdepositOVM.mockResolvedValue({
@@ -471,6 +529,59 @@ describe('deposit', () => {
       deposits: multipleDeposits,
       signer: mockSigner,
     });
+  });
+
+  it.each([
+    [
+      'credentials that do not point at the OVM',
+      { ovmAddress: TEST_ADDRESSES.OVM_OWNER, deposits: singleDeposit },
+      `withdrawal credentials do not point at ${TEST_ADDRESSES.OVM_OWNER}`,
+    ],
+    [
+      'a bad deposit_data_root',
+      {
+        ovmAddress: mockOVMAddress,
+        deposits: [
+          { ...singleDeposit[0], deposit_data_root: '0x' + '33'.repeat(32) },
+        ],
+      },
+      'deposit_data_root does not match',
+    ],
+    [
+      'an amount in gwei instead of wei',
+      {
+        ovmAddress: mockOVMAddress,
+        deposits: [{ ...singleDeposit[0], amount: '32000000000' }],
+      },
+      'at least 1 ETH',
+    ],
+  ])('rejects %s before sending', async (_label, payload, message) => {
+    await expect(client.splits.deposit(payload)).rejects.toThrow(message);
+    expect(mockdepositOVM).not.toHaveBeenCalled();
+  });
+
+  it('rejects a signature for another chain unless skipped for a top-up', async () => {
+    const hoodiClient = new Client(
+      { chainId: 560048 },
+      mockSigner,
+      mockProvider,
+    );
+    mockdepositOVM.mockResolvedValue({ txHashes: ['0xhash'] });
+
+    await expect(
+      hoodiClient.splits.deposit({
+        ovmAddress: mockOVMAddress,
+        deposits: singleDeposit,
+      }),
+    ).rejects.toThrow('invalid deposit signature for chain 560048');
+    expect(mockdepositOVM).not.toHaveBeenCalled();
+
+    await hoodiClient.splits.deposit({
+      ovmAddress: mockOVMAddress,
+      deposits: singleDeposit,
+      skipSignatureVerification: true,
+    });
+    expect(mockdepositOVM).toHaveBeenCalledTimes(1);
   });
 });
 

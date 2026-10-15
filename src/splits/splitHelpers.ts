@@ -18,8 +18,8 @@ import {
   parseEther,
   ZeroAddress,
   getAddress as toChecksumAddress,
-  type JsonRpcSigner,
   type TransactionReceipt,
+  type TransactionRequest,
 } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR.js';
 import { OVMFactoryContract, OVMContract } from '../abi/OVM.js';
@@ -96,8 +96,37 @@ export const resolveOvmAddressFromListenerArgs = (
   return null;
 };
 
+// A signer that can submit a transaction and return its hash without waiting
+// for it to be mined: ethers' JsonRpcSigner, or the viem WalletClient adapter.
+export type UncheckedTransactionSigner = SignerType & {
+  sendUncheckedTransaction: (tx: TransactionRequest) => Promise<string>;
+};
+
+export const canSendUncheckedTransaction = (
+  signer: SignerType,
+): signer is UncheckedTransactionSigner =>
+  typeof (signer as Partial<UncheckedTransactionSigner>)
+    .sendUncheckedTransaction === 'function';
+
+// Read provider for the contract-wallet flows: the caller's provider, else the
+// signer's own. Every signer that reaches these flows has one (JsonRpcSigner
+// always does), so a missing provider is a configuration error.
+const requireReadProvider = (
+  signer: SignerType,
+  provider?: ProviderType | null,
+): ProviderType => {
+  const readProvider = provider ?? signer.provider;
+  if (!readProvider) {
+    throw new Error(
+      'A provider is required: pass one to the Client or use a signer connected to a provider',
+    );
+  }
+  return readProvider;
+};
+
 // True when the signer is a smart-contract wallet (e.g. a Safe) going through
-// a JSON-RPC connection. Local Wallet signers are always EOAs.
+// a wallet connection that submits transactions unchecked. Local Wallet
+// signers are always EOAs.
 export const isContractWalletSigner = async (
   signer: SignerType,
   provider?: ProviderType | null,
@@ -106,7 +135,7 @@ export const isContractWalletSigner = async (
     throw new SignerRequiredError('isContractWalletSigner');
   }
   const readProvider = provider ?? signer.provider;
-  if (!readProvider || !('sendUncheckedTransaction' in signer)) {
+  if (!readProvider || !canSendUncheckedTransaction(signer)) {
     return false;
   }
   return await isContractAvailable(await signer.getAddress(), readProvider);
@@ -153,7 +182,7 @@ const submitViaContractWalletAndResolveOvm = async ({
   timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
   provider: readProvider,
 }: {
-  signer: JsonRpcSigner;
+  signer: UncheckedTransactionSigner;
   to: string;
   data: string;
   factoryAddress: string;
@@ -161,7 +190,7 @@ const submitViaContractWalletAndResolveOvm = async ({
   timeoutMs?: number;
   provider?: ProviderType | null;
 }): Promise<string> => {
-  const provider = readProvider ?? signer.provider;
+  const provider = requireReadProvider(signer, readProvider);
   const safeAddress = await signer.getAddress();
   const factory = new Contract(
     factoryAddress,
@@ -275,7 +304,7 @@ export const submitViaContractWalletAndWait = async ({
   timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
   provider: readProvider,
 }: {
-  signer: JsonRpcSigner;
+  signer: UncheckedTransactionSigner;
   to: string;
   data: string;
   value?: bigint;
@@ -285,7 +314,7 @@ export const submitViaContractWalletAndWait = async ({
   if (!signer) {
     throw new SignerRequiredError('submitViaContractWalletAndWait');
   }
-  const provider = readProvider ?? signer.provider;
+  const provider = requireReadProvider(signer, readProvider);
   const safeAddress = await signer.getAddress();
   const filter = {
     address: safeAddress,
@@ -1139,7 +1168,7 @@ export const deployOVMContract = async ({
     ];
 
     if (
-      'sendUncheckedTransaction' in signer &&
+      canSendUncheckedTransaction(signer) &&
       (await isContractWalletSigner(signer, provider))
     ) {
       return await submitViaContractWalletAndResolveOvm({
@@ -1253,7 +1282,7 @@ export const deployOVMAndSplitV2 = async ({
     });
 
     if (
-      'sendUncheckedTransaction' in signer &&
+      canSendUncheckedTransaction(signer) &&
       (await isContractWalletSigner(signer, provider))
     ) {
       return await submitViaContractWalletAndResolveOvm({

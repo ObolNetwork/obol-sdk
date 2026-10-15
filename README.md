@@ -32,6 +32,21 @@ const definition = await client.getClusterDefinition(configHash);
 const lock = await client.getClusterLock(configHash);
 ```
 
+### Signers and viem
+
+The `signer` can be any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`, `NonceManager`, or a custom `AbstractSigner`). For a viem `WalletClient` (e.g. from wagmi), use the adapter subpath (requires `viem` to be installed):
+
+```typescript
+import { Client } from "@obolnetwork/obol-sdk";
+import { walletClientToSigner, publicClientToProvider } from "@obolnetwork/obol-sdk/viem";
+
+const client = new Client(
+  { chainId: 560048 },
+  walletClientToSigner(walletClient),
+  publicClientToProvider(publicClient), // optional
+);
+```
+
 ## Getting Started
 
 Checkout our [docs](https://docs.obol.org/docs/advanced/quickstart-sdk), [examples](https://github.com/ObolNetwork/obol-sdk-examples/), and SDK [reference](https://docs.obol.org/sdk). Further guides and walkthroughs coming soon.
@@ -49,7 +64,7 @@ To use obol-sdk and in order to be able to create a cluster definition or accept
 
 ## ⚡️ Integration with Safe Wallet
 
-When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_GNOSIS` or `RPC_SEPOLIA` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
+When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
 
 
 ## Contributing
@@ -88,7 +103,7 @@ Thank you for contributing to Obol-SDK!
 If you are an LLM, code-generation agent, or tool using this SDK programmatically, follow these guidelines to avoid common mistakes:
 
 - **Primary entrypoint:** `Client` from `@obolnetwork/obol-sdk`.
-- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi).
+- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi). `signer` is any ethers v6 `Signer`; no `as any` cast is needed. For viem, wrap the `WalletClient` with `walletClientToSigner` from `@obolnetwork/obol-sdk/viem`.
 - **All operations are namespaced** under the client instance. Do **not** construct HTTP requests manually.
 
 ### Client API Surface
@@ -97,7 +112,8 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 |-----------|--------|-------------|
 | *(root)* | `acceptObolLatestTermsAndConditions()` | Accept T&C (required once before writes) |
 | *(root)* | `createClusterDefinition(payload)` | Create a new cluster → returns `config_hash` |
-| *(root)* | `acceptClusterDefinition(operatorPayload, configHash)` | Join a cluster as an operator |
+| *(root)* | `getAcceptanceSummary(configHash)` | Verify a definition and return what an operator agrees to (show withdrawal / fee recipients before accepting) |
+| *(root)* | `acceptClusterDefinition(operatorPayload, configHash)` | Join a cluster as an operator (verifies the definition and operator membership first) |
 | *(root)* | `getClusterDefinition(configHash)` | Fetch cluster definition (read-only) |
 | *(root)* | `getClusterLock(configHash)` | Fetch cluster lock by config hash (read-only) |
 | *(root)* | `getClusterLockByHash(lockHash)` | Fetch cluster lock by lock hash (read-only) |

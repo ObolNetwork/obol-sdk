@@ -1,6 +1,6 @@
 import { ENR } from '@chainsafe/enr';
-import * as elliptic from 'elliptic';
 import { blsVerify, blsAggregateSignatures } from '../blsUtils.js';
+import { secp256k1VerifyDigest } from '../secp256k1Utils.js';
 import {
   ByteVectorType,
   ContainerType,
@@ -231,10 +231,10 @@ export class Exit {
    * @param exitsPayload - The exit validation payload containing partial exits and operator signature
    *
    * @returns Promise resolving to true if the payload signature is valid, false otherwise
+   *   (including high-s signatures and public keys that are not valid secp256k1 points)
    *
    * @throws {Error} When the ENR string is invalid or cannot be decoded
-   * @throws {Error} When the signature format is invalid (must be 130 hex characters)
-   * @throws {Error} When signature verification encounters an error
+   * @throws {Error} When the signature is not 64 or 65 bytes of hex (`r || s`, optionally followed by the recovery id)
    *
    * @example
    * ```typescript
@@ -253,11 +253,10 @@ export class Exit {
     exitsPayload: ExitValidationPayload,
   ): Promise<boolean> {
     const partialExitsDtoHashRoot = Exit.computeExitPayloadRoot(exitsPayload);
-    const ec = new elliptic.ec('secp256k1');
 
-    let pubKeyHex;
+    let publicKey: Uint8Array;
     try {
-      pubKeyHex = ENR.decodeTxt(enrString).publicKey.toString();
+      publicKey = ENR.decodeTxt(enrString).publicKey;
     } catch (e: any) {
       throw new Error(
         `Invalid ENR string: ${enrString}. Error: ${e.message ?? String(e)}`,
@@ -268,29 +267,21 @@ export class Exit {
       ? exitsPayload.signature.substring(2)
       : exitsPayload.signature;
 
-    if (sigHex.length !== 130) {
+    if (sigHex.length !== 128 && sigHex.length !== 130) {
       throw new Error(
-        `Invalid signature length. Expected 130 hex chars (r + s), got ${sigHex.length}`,
+        `Invalid signature length. Expected 128 or 130 hex chars (r + s, optionally + v), got ${sigHex.length}`,
       );
     }
 
-    const r = sigHex.slice(0, 64);
-    const s = sigHex.slice(64, 128);
-
-    const enrSignature = { r, s };
-
-    try {
-      return ec
-        .keyFromPublic(pubKeyHex, 'hex')
-        .verify(
-          partialExitsDtoHashRoot,
-          enrSignature as elliptic.ec.SignatureOptions,
-        );
-    } catch (e: any) {
-      throw new Error(
-        `Signature verification failed: ${e.message ?? String(e)}`,
-      );
+    if (!/^[0-9a-fA-F]*$/.test(sigHex)) {
+      throw new Error('Invalid signature. Expected a hex string');
     }
+
+    return secp256k1VerifyDigest(
+      publicKey,
+      fromHexString(partialExitsDtoHashRoot),
+      exitsPayload.signature,
+    );
   }
 
   private async validateOperatorAndPayload(

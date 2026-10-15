@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix(verification): `validateClusterLock` now recomputes the definition's `config_hash` and rejects locks where it does not match the config fields
+- feat: typed Obol API errors (`ObolApiError` with `NotFoundError`, `ValidationError`, `UnauthorizedError`, `ConflictError`, `RateLimitError`), carrying `status`, `endpoint`, `method`, `body` and a `hint`; error body fields stay readable on the error, and non-JSON error bodies no longer cause a parse error
+- feat: configurable request timeout (`timeoutMs`, default 30s) that throws `RequestTimeoutError`
+- feat: `hasAcceptedTerms(address?)` and `acceptObolLatestTermsAndConditions({ ifNotAccepted: true })`
+- fix: conflicts are detected by HTTP status 409, and `ConflictError` carries the API's message
+- fix(validation): tighten cluster definition and split payload validation. Split recipient allocations must be within (0, 100], are summed at contract precision (1e4 per percent) instead of as floats, and recipient addresses must be unique (case-insensitive) for V1 and OVM splits. Operator addresses are checked as hex addresses and for case-insensitive duplicates; zero withdrawal and fee recipient addresses are rejected. `createClusterDefinition` only accepts the definition versions in `SUPPORTED_DEFINITION_VERSIONS` and rejects unknown payload fields. `getClusterDefinition`, `getClusterLock`, `getClusterLockByHash`, `acceptClusterDefinition` and `incentives.getIncentivesByAddress` validate hash and address arguments and URL-encode them.
+- fix(eoa, splits): verify deposit data before sending ETH in `eoa.deposit` and `splits.deposit` (recomputed `deposit_data_root`, BLS signature for the chain, amount between 1 ETH and 32 ETH, or 2048 ETH for 0x02 credentials, withdrawal credentials pointing at the OVM / optional `expectedWithdrawalAddress`); add `skipSignatureVerification` for top-ups
+- fix(eoa, splits): check `requestWithdrawal` fees against the current EIP-7002 fee read from the withdrawal request contract; `requiredFee` / `withdrawalFees` are now optional, avoid float precision loss when converting `allocation` to gwei
+- fix(eoa): correct the batch deposit error message and keep the original error as `cause`
+- fix: `acceptClusterDefinition` fetches and verifies the definition (config hash recomputed locally, network matches, signer is an operator) before signing; fills `version` from the definition when omitted and returns the definition unchanged if this operator already accepted with the same ENR. New `getAcceptanceSummary(configHash)` returns the verified terms (operators, withdrawal / fee recipients) for display. New errors: `DefinitionVerificationError`, `NotAnOperatorError`.
+- fix: methods that send transactions or sign chain-bound EIP-712 data throw `ChainMismatchError` when the signer's provider is on a different chain than the client.
+- fix: `Client` constructor throws `UnsupportedChainError` for chain IDs other than Mainnet (1) and Hoodi (560048). Existing Gnosis / Sepolia locks still validate.
+- fix(verification): verify node (ENR) and exit payload secp256k1 signatures with `@noble/curves` instead of `elliptic`; signatures must be 64 or 65 bytes of hex with low-s, malformed signatures return `false` instead of throwing, and `verifyExitPayloadSignature` now decodes the ENR public key correctly
+- feat(deposits): `getDepositData(lockHash)` returns validated deposit payloads from a cluster lock, and `checkExistingDeposits(deposits, { beaconUrl })` checks a beacon node's validator registry and pending deposits before depositing
+- fix(incentives): add `incentives.preflightClaim(address)` and run it in `claimIncentives`; checks the API data is for the requested address, the Merkle proof matches the distributor's on-chain root, the distributor matches the reference `MerkleDistributorWithDeadline` build and pays out OBOL for the chain, and the claim window is open
+- feat(deposits): `eoa.deposit` and `splits.deposit` take an optional `beaconUrl`; when set, deposits are checked with `checkExistingDeposits` first, deposits with a conflicting pending deposit are refused with `DepositConflictError`, and the signature check is skipped only for top-ups to existing validators. `getDepositData` output can be passed to both as `deposits` (shared `ValidatorDeposit` type)
+- feat(errors): `ObolSdkError` base class (with `code` and `hint`) for local check errors (`ChainMismatchError`, `DefinitionVerificationError`, `NotAnOperatorError`, `IncentivesPreflightError`, `DepositConflictError`); `claimIncentives` throws `IncentivesPreflightError` (with `issues`) when a pre-flight check fails
+- fix: `hasAcceptedTerms(address)` checks the address format before calling the API
+- feat: add `Client.watchCluster` and `Client.waitFor` to follow a cluster from operator sign-off to lock publication, polling with backoff and `AbortSignal` support
+- feat: accept any ethers v6 `Signer` / `Provider` (`HDNodeWallet`, `NonceManager`, custom `AbstractSigner`) without casts; add a viem `WalletClient` adapter at `@obolnetwork/obol-sdk/viem` (`walletClientToSigner`, `publicClientToProvider`; `viem` is an optional peer dependency); remove the unused `cross-fetch` dependency; relax `engines.node` to `>= 20`
+- note: `SignerType` is now the ethers `Signer` interface. TypeScript callers that read members specific to `Wallet` / `JsonRpcSigner` from `client.signer` (e.g. `client.signer.address`) need a narrowing check such as `instanceof Wallet`; this is a type-only change with no runtime effect
+- fix(deposits): with `beaconUrl`, a top-up to an existing validator may use the expected or all-zero withdrawal credentials; other credentials on a top-up are refused
+
 #### [v2.14.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.2...v2.14.0)
 
 - fix(safe): use Client provider for reads and Safe gas estimation [`#231`](https://github.com/ObolNetwork/obol-sdk/pull/231)

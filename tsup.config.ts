@@ -5,6 +5,7 @@ export default defineConfig([
   {
     entry: [
       'src/index.ts',
+      'src/viem.ts',
       'src/blsUtils.ts',
       'src/verification/lockWorker.ts',
       'src/verification/parallelPool.ts',
@@ -22,6 +23,7 @@ export default defineConfig([
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'ethers',                      // ← Very large (~2MB), consumers always have it
+      'viem',                        // optional peer, only used by the /viem subpath
     ],
     esbuildOptions(options) {
       options.platform = 'node';
@@ -31,6 +33,7 @@ export default defineConfig([
   {
     entry: [
       'src/index.ts',
+      'src/viem.ts',
       'src/blsUtils.ts',
       'src/verification/lockWorker.ts',
       'src/verification/parallelPool.ts',
@@ -49,6 +52,7 @@ export default defineConfig([
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'ethers',                      // ← Very large (~2MB), consumers always have it
+      'viem',                        // optional peer, only used by the /viem subpath
     ],
     esbuildOptions(options) {
       options.platform = 'node';
@@ -56,7 +60,7 @@ export default defineConfig([
   },
   // Browser ESM build
   {
-    entry: ['src/index.ts'],
+    entry: ['src/index.ts', 'src/viem.ts'],
     format: ['esm'],
     dts: false,
     outDir: 'dist/browser/src',
@@ -69,15 +73,14 @@ export default defineConfig([
       'ajv',
       'ajv-formats',
       'ajv-keywords',
-      'cross-fetch',
-      'elliptic',
       'semver',
       'uuid',
       '@chainsafe/ssz',
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
-      'ethers'
+      'ethers',
+      'viem'
     ],
     esbuildOptions(options) {
       options.platform = 'browser';

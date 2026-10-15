@@ -8,6 +8,12 @@ import {
   eoaDepositPayloadSchema,
 } from '../schema.js';
 import { CHAIN_CONFIGURATION } from '../constants.js';
+import { assertSignerChain } from '../utils.js';
+import {
+  getWithdrawalRequestFee,
+  resolveWithdrawalFee,
+} from '../withdrawalFee.js';
+import { verifyDepositsBeforeSend } from '../deposits/depositGuard.js';
 import { SignerRequiredError, UnsupportedChainError } from '../errors.js';
 import {
   type ProviderType,
@@ -36,7 +42,6 @@ import {
  * const { txHash } = await client.eoa.requestWithdrawal({
  *   pubkey: "0xValidatorPubkey...",
  *   allocation: 32,
- *   requiredFee: "1",
  * });
  *
  * // Batch deposit
@@ -65,18 +70,24 @@ export class EOA {
    *
    * Sends an on-chain transaction. Requires both a signer and a provider.
    *
+   * The fee is checked against the current fee read from the EIP-7002
+   * withdrawal request contract. If `requiredFee` is omitted, twice the
+   * current fee is sent. If it is given, it must cover the current fee and
+   * be at most max(10x the current fee, 1 gwei); otherwise the call throws.
+   *
    * @param payload - Withdrawal data including validator `pubkey`, `allocation`
-   *   (in ETH), and `requiredFee` (in wei).
+   *   (in ETH), and optional `requiredFee` (in wei).
    * @returns The transaction hash, or `null` if no transaction was needed.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain has no EOA withdrawal contract.
+   * @throws If `requiredFee` is below the current fee or far above it.
    *
    * @example
    * ```typescript
    * const { txHash } = await client.eoa.requestWithdrawal({
    *   pubkey: "0xValidatorPubkey...",
    *   allocation: 32,
-   *   requiredFee: "1",
    * });
    * ```
    */
@@ -101,14 +112,25 @@ export class EOA {
       eoaWithdrawalPayloadSchema,
     );
 
+    await assertSignerChain(this.signer, this.chainId, 'requestWithdrawal');
+
     const withdrawalAddress = await this.signer.getAddress();
+
+    const currentFee = await getWithdrawalRequestFee(
+      this.provider,
+      chainConfig.EOA_WITHDRAWAL_CONTRACT.address,
+    );
+    const requiredFee = resolveWithdrawalFee({
+      currentFee,
+      requestedFee: validatedPayload.requiredFee,
+    });
 
     return await submitEOAWithdrawalRequest({
       pubkey: validatedPayload.pubkey,
       allocation: validatedPayload.allocation,
       withdrawalAddress,
       withdrawalContractAddress: chainConfig.EOA_WITHDRAWAL_CONTRACT.address,
-      requiredFee: validatedPayload.requiredFee,
+      requiredFee: requiredFee.toString(),
       chainId: this.chainId,
       signer: this.signer,
       provider: this.provider,
@@ -122,10 +144,28 @@ export class EOA {
    * Due to EVM gas limits, it is recommended to deposit at most 500
    * validators per call.
    *
+   * Before sending, each deposit is checked: `amount` (wei) is a whole number
+   * of gwei between 1 ETH and 32 ETH (2048 ETH for 0x02 credentials),
+   * `deposit_data_root` matches the deposit fields, the BLS signature is valid
+   * for this chain, and, if `expectedWithdrawalAddress` is given, the
+   * withdrawal credentials point at it. Set `skipSignatureVerification` only
+   * for top-ups to a validator that already exists on the beacon chain.
+   *
+   * If `beaconUrl` is given, the deposits are first checked against that
+   * beacon node (see {@link checkExistingDeposits}): pubkeys with a pending
+   * deposit to different withdrawal credentials are refused. For top-ups to
+   * existing validators the signature is not checked and the withdrawal
+   * credentials may be all zero instead of the expected ones.
+   * The output of {@link Client.getDepositData} can be passed as `deposits`.
+   *
    * @param payload - Deposit data including an array of validator deposit objects.
    * @returns An array of transaction hashes, one per batch.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain has no batch deposit contract.
+   * @throws {DepositConflictError} If `beaconUrl` is given and a pubkey has a
+   *   pending deposit with different withdrawal credentials.
+   * @throws If any deposit fails the checks above, or the beacon node check fails.
    *
    * @example
    * ```typescript
@@ -137,6 +177,7 @@ export class EOA {
    *     signature: "0x...",
    *     amount: "32000000000000000000",
    *   }],
+   *   expectedWithdrawalAddress: "0xWithdrawalAddress...",
    * });
    * ```
    */
@@ -154,6 +195,15 @@ export class EOA {
       payload,
       eoaDepositPayloadSchema,
     );
+
+    await assertSignerChain(this.signer, this.chainId, 'deposit');
+
+    await verifyDepositsBeforeSend(validatedPayload.deposits, {
+      chainId: this.chainId,
+      expectedWithdrawalAddress: validatedPayload.expectedWithdrawalAddress,
+      skipSignatureVerification: validatedPayload.skipSignatureVerification,
+      beaconUrl: validatedPayload.beaconUrl,
+    });
 
     return await submitEOABatchDeposit({
       deposits: validatedPayload.deposits,

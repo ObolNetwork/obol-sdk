@@ -1,6 +1,6 @@
 {
   "$schema": "https://typedoc-plugin-markdown.org/schema.json",
-  "entryPoints": ["./src/index.ts"],
+  "entryPoints": ["./src/index.ts", "./src/viem.ts"],
   "tsconfig": "./tsconfig.json",
   "mergeReadme": true,
   "parametersFormat": "table",

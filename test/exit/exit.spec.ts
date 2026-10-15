@@ -31,19 +31,13 @@ await jest.unstable_mockModule('../../src/blsUtils.js', () => ({
   blsAggregateSignatures: mockAggregateSignatures,
 }));
 
-// Mock elliptic with a proper EC constructor
+// Mock secp256k1 verification (real signatures are covered in
+// exitPayloadSignature.spec.ts)
 const mockEcVerify = jest.fn();
-const mockKeyFromPublic = jest.fn(() => ({
-  verify: mockEcVerify,
-}));
 // @ts-expect-error - ESM mocking requires top-level await
-await jest.unstable_mockModule('elliptic', () => ({
+await jest.unstable_mockModule('../../src/secp256k1Utils.js', () => ({
   __esModule: true,
-  ec: jest.fn(function (this: any, curve: string) {
-    this.curve = curve;
-    this.keyFromPublic = mockKeyFromPublic;
-    return this;
-  }),
+  secp256k1VerifyDigest: mockEcVerify,
 }));
 
 const ethUtils = await import('../../src/exits/ethUtils.js');
@@ -123,7 +117,6 @@ describe('exit', () => {
     // Set up mocks
     mockBlsVerify.mockReturnValue(true);
     mockEcVerify.mockReturnValue(true);
-    mockKeyFromPublic.mockReturnValue({ verify: mockEcVerify });
 
     mockedEthUtils.getCapellaFork.mockResolvedValue(
       MAINNET_CAPELLA_FORK_VERSION,

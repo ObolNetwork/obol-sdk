@@ -1,20 +1,14 @@
-import {
-  type Wallet,
-  type ethers,
-  type JsonRpcApiProvider,
-  type JsonRpcProvider,
-  type JsonRpcSigner,
-  type Provider,
-} from 'ethers';
+import { type Provider, type Signer } from 'ethers';
 
 /**
  * Maps Ethereum consensus-layer fork versions (hex) to execution-layer chain IDs.
  *
- * Supported networks:
  * - `0x00000000` → 1 (Mainnet)
- * - `0x00000064` → 100 (Gnosis Chain)
- * - `0x90000069` → 11155111 (Sepolia)
  * - `0x10000910` → 560048 (Hoodi)
+ *
+ * The remaining entries exist only so that existing cluster locks created for
+ * those networks can still be validated; the {@link Client} accepts only the
+ * chain IDs in {@link SUPPORTED_CHAIN_IDS}.
  */
 export enum FORK_MAPPING {
   /** Mainnet. */
@@ -68,11 +62,59 @@ export type ClusterOperator = {
  * Payload an operator provides when joining a cluster via
  * {@link Client.acceptClusterDefinition}.
  *
- * Requires at minimum `enr` (Ethereum Node Record) and `version`.
+ * Requires at minimum `enr` (Ethereum Node Record). `version` is optional:
+ * when omitted it is taken from the cluster definition; when given it must
+ * match the definition's version.
  * Other `ClusterOperator` fields are optional overrides.
  */
 export type OperatorPayload = Partial<ClusterOperator> &
-  Required<Pick<ClusterOperator, 'enr' | 'version'>>;
+  Required<Pick<ClusterOperator, 'enr'>>;
+
+/**
+ * What an operator agrees to when accepting a cluster definition, returned by
+ * {@link Client.getAcceptanceSummary} after the definition has been verified
+ * locally (config hash recomputed, network matches the client).
+ */
+export type AcceptanceSummary = {
+  /** The verified cluster configuration hash. */
+  config_hash: string;
+
+  /** The cluster name. */
+  name: string;
+
+  /** The cluster definition version. */
+  version: string;
+
+  /** The cluster fork version (network). */
+  fork_version: string;
+
+  /** The address that created the cluster definition. */
+  creator_address: string;
+
+  /** Operator addresses, in definition order. */
+  operators: string[];
+
+  /** Signing threshold. */
+  threshold: number;
+
+  /** Number of distributed validators the cluster will create. */
+  num_validators: number;
+
+  /** Per-validator withdrawal and fee recipient addresses, in definition order. */
+  validators: ClusterValidator[];
+
+  /** Distinct withdrawal addresses across all validators. */
+  withdrawal_addresses: string[];
+
+  /** Distinct fee recipient addresses across all validators. */
+  fee_recipient_addresses: string[];
+
+  /** Partial deposit amounts in gwei, if set. */
+  deposit_amounts?: string[] | null;
+
+  /** Whether validators use 0x02 (compounding) withdrawal credentials. */
+  compounding?: boolean;
+};
 
 /**
  * Cluster creator data
@@ -417,14 +459,11 @@ export type ClaimableIncentives = {
 export type ETH_ADDRESS = string;
 
 /**
- * Accepted ethers provider types for on-chain reads.
- * Pass any of these as the third argument to `new Client(config, signer, provider)`.
+ * Accepted ethers provider types for on-chain reads: any ethers v6 `Provider`
+ * (`JsonRpcProvider`, `BrowserProvider`, `FallbackProvider`, ...).
+ * Pass as the third argument to `new Client(config, signer, provider)`.
  */
-export type ProviderType =
-  | Provider
-  | JsonRpcProvider
-  | JsonRpcApiProvider
-  | ethers.BrowserProvider;
+export type ProviderType = Provider;
 
 /**
  * Safe Wallet Provider Types
@@ -432,15 +471,39 @@ export type ProviderType =
 export type SafeRpcUrl = string;
 
 /**
- * Accepted ethers signer types for signing transactions and EIP-712 messages.
+ * Accepted ethers signer types for signing transactions and EIP-712 messages:
+ * any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`,
+ * `NonceManager`, or a custom `AbstractSigner`).
  * Pass as the second argument to `new Client(config, signer)`.
  */
-export type SignerType = JsonRpcSigner | Wallet;
+export type SignerType = Signer;
 
 /**
  * claimIncentives Response
  */
 export type ClaimIncentivesResponse = { txHash: string | null };
+
+/**
+ * A single problem found by a pre-flight check.
+ */
+export type PreflightIssue = {
+  /** Stable, machine-readable issue code. */
+  code: string;
+
+  /** Human-readable description of the problem. */
+  message: string;
+
+  /** Short suggestion for what to do next. */
+  hint: string;
+};
+
+/**
+ * Result of a read-only pre-flight check. `ok` is `true` when `issues` is empty.
+ */
+export type PreflightResult = {
+  ok: boolean;
+  issues: PreflightIssue[];
+};
 
 /**
  * Represents the structure of an Ethereum operator for exit validation, primarily their ENR.
@@ -657,8 +720,13 @@ export type ChainConfig = {
  * Requests withdrawal of validator funds from an OVM contract.
  */
 export type OVMRequestWithdrawalPayload = {
-  /** request withdrawal fees in wei */
-  withdrawalFees: string;
+  /**
+   * Total withdrawal request fees in wei for all `pubKeys`. Optional: if
+   * omitted, twice the current EIP-7002 fee per request is sent. If given, it
+   * must cover the current fee and be at most max(10x the current fee, 1 gwei)
+   * per request. The OVM refunds any excess to the OVM contract.
+   */
+  withdrawalFees?: string;
 
   /** OVM contract address */
   ovmAddress: string;
@@ -680,8 +748,29 @@ export type EOAWithdrawalPayload = {
   /** Withdrawal amount in ETH */
   allocation: number;
 
-  /** Required fee in wei */
-  requiredFee: string;
+  /**
+   * Fee in wei. Optional: if omitted, twice the current EIP-7002 fee is sent.
+   * If given, it must cover the current fee and be at most
+   * max(10x the current fee, 1 gwei).
+   */
+  requiredFee?: string;
+};
+
+/**
+ * One deposit as taken by {@link EOA.deposit} and {@link ObolSplits.deposit},
+ * and as returned by {@link Client.getDepositData} (`amount` in wei).
+ */
+export type ValidatorDeposit = {
+  /** Validator public key in hex format (48 bytes) */
+  pubkey: string;
+  /** Withdrawal credentials in hex format */
+  withdrawal_credentials: string;
+  /** Deposit signature in hex format */
+  signature: string;
+  /** Deposit data root in hex format (32 bytes) */
+  deposit_data_root: string;
+  /** Deposit amount in wei as string */
+  amount: string;
 };
 
 /**
@@ -693,18 +782,26 @@ export type OVMDepositPayload = {
   ovmAddress: string;
 
   /** Array of deposit objects */
-  deposits: Array<{
-    /** Validator public key in hex format (48 bytes) */
-    pubkey: string;
-    /** Withdrawal credentials in hex format */
-    withdrawal_credentials: string;
-    /** Deposit signature in hex format */
-    signature: string;
-    /** Deposit data root in hex format (32 bytes) */
-    deposit_data_root: string;
-    /** Deposit amount in wei as string */
-    amount: string;
-  }>;
+  deposits: ValidatorDeposit[];
+
+  /**
+   * Skip the BLS deposit signature check. Only for top-ups to a validator that
+   * already exists on the beacon chain, where the signature is not checked.
+   * Defaults to `false`.
+   */
+  skipSignatureVerification?: boolean;
+
+  /**
+   * Beacon node REST API base URL for this chain. When set, the deposits are
+   * first checked with {@link checkExistingDeposits}: the call throws a
+   * {@link DepositConflictError} if any pubkey has a pending deposit with
+   * different withdrawal credentials. For deposits to validators that already
+   * exist (top-ups) the BLS signature is not checked and the withdrawal
+   * credentials may be all zero instead of the expected ones. All other
+   * deposits must have a valid signature, whatever `skipSignatureVerification`
+   * says.
+   */
+  beaconUrl?: string;
 };
 
 /**
@@ -713,16 +810,86 @@ export type OVMDepositPayload = {
  */
 export type EOADepositPayload = {
   /** Array of deposit objects */
-  deposits: Array<{
-    /** Validator public key in hex format (48 bytes) */
-    pubkey: string;
-    /** Withdrawal credentials in hex format */
-    withdrawal_credentials: string;
-    /** Deposit signature in hex format */
-    signature: string;
-    /** Deposit data root in hex format (32 bytes) */
-    deposit_data_root: string;
-    /** Deposit amount in wei as string */
-    amount: string;
-  }>;
+  deposits: ValidatorDeposit[];
+
+  /**
+   * If set, every deposit's withdrawal credentials must be 0x01 or 0x02
+   * credentials for this address.
+   */
+  expectedWithdrawalAddress?: string;
+
+  /**
+   * Skip the BLS deposit signature check. Only for top-ups to a validator that
+   * already exists on the beacon chain, where the signature is not checked.
+   * Defaults to `false`.
+   */
+  skipSignatureVerification?: boolean;
+
+  /**
+   * Beacon node REST API base URL for this chain. When set, the deposits are
+   * first checked with {@link checkExistingDeposits}: the call throws a
+   * {@link DepositConflictError} if any pubkey has a pending deposit with
+   * different withdrawal credentials. For deposits to validators that already
+   * exist (top-ups) the BLS signature is not checked and the withdrawal
+   * credentials may be all zero instead of the expected ones. All other
+   * deposits must have a valid signature, whatever `skipSignatureVerification`
+   * says.
+   */
+  beaconUrl?: string;
+};
+
+/**
+ * Progress of a cluster from definition to published lock, as yielded by
+ * {@link Client.watchCluster}.
+ *
+ * - `awaiting_signatures`: some operators have not yet accepted the definition
+ *   (submitted their ENR, ENR signature and config signature).
+ * - `definition_ready`: every operator has signed (or the definition has no
+ *   operator addresses, as in solo and Charon-created definitions), so the DKG
+ *   can run.
+ * - `lock_published`: the DKG completed and a cluster lock is available.
+ */
+export type ClusterProgress =
+  | {
+      step: 'awaiting_signatures';
+      /** Number of operators that have signed. */
+      signed: number;
+      /** Total number of operators. */
+      total: number;
+      /** Addresses of operators that have not signed yet. */
+      pending: string[];
+      definition: ClusterDefinition;
+    }
+  | {
+      step: 'definition_ready';
+      definition: ClusterDefinition;
+    }
+  | {
+      step: 'lock_published';
+      lockHash: string;
+      lock: ClusterLock;
+    };
+
+/** Steps of {@link ClusterProgress}. */
+export type ClusterProgressStep = ClusterProgress['step'];
+
+/** Options for {@link Client.watchCluster}. */
+export type WatchClusterOptions = {
+  /** Stops polling; the generator throws `signal.reason`. */
+  signal?: AbortSignal;
+  /** Initial polling interval in ms (default 2000). */
+  intervalMs?: number;
+  /**
+   * Upper bound for the polling interval in ms (default 30000). While nothing
+   * changes, the interval grows by 1.5x up to this value; it resets on change.
+   */
+  maxIntervalMs?: number;
+};
+
+/** Options for {@link Client.waitFor}. */
+export type WaitForOptions = WatchClusterOptions & {
+  /** Called with every state {@link Client.watchCluster} yields. */
+  onProgress?: (progress: ClusterProgress) => void;
+  /** Rejects with `ClusterProgressTimeoutError` after this many ms. */
+  timeoutMs?: number;
 };

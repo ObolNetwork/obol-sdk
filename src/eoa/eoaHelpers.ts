@@ -1,11 +1,11 @@
-import { ETHER_TO_GWEI } from '../constants.js';
 import { type SignerType, type ProviderType } from '../types.js';
-import { Contract, type JsonRpcSigner } from 'ethers';
+import { Contract, parseUnits } from 'ethers';
 import { BatchDepositContract } from '../abi/BatchDeposit.js';
 import { SignerRequiredError } from '../errors.js';
 import {
   isContractWalletSigner,
   submitViaContractWalletAndWait,
+  type UncheckedTransactionSigner,
 } from '../splits/splitHelpers.js';
 
 // Safe wallets return an internal safeTxHash from sendTransaction, so
@@ -19,11 +19,12 @@ const isSafeLikeSigner = async (
   if (!signer) {
     throw new SignerRequiredError('submitEOATransaction');
   }
-  return (
-    'sendUncheckedTransaction' in signer &&
-    (await isContractWalletSigner(signer, provider))
-  );
+  // isContractWalletSigner is false for signers without
+  // sendUncheckedTransaction (local Wallets), without a chain read.
+  return await isContractWalletSigner(signer, provider);
 };
+
+const MAX_UINT64 = BigInt('0xffffffffffffffff');
 
 /**
  * Helper function to submit withdrawal request for EOA
@@ -54,12 +55,16 @@ export async function submitEOAWithdrawalRequest({
     throw new Error('No allocation provided');
   }
 
-  const amountInGwei = BigInt(Math.floor(Number(allocation) * ETHER_TO_GWEI));
+  // allocation is in ETH; round to whole gwei without float multiplication.
+  const amountInGwei = parseUnits(Number(allocation).toFixed(9), 'gwei');
+  if (amountInGwei < BigInt(0) || amountInGwei > MAX_UINT64) {
+    throw new Error('Allocation out of range');
+  }
   const data = `0x${pubkey.slice(2)}${amountInGwei.toString(16).padStart(16, '0')}`;
 
   if (await isSafeLikeSigner(signer, provider)) {
     const txHash = await submitViaContractWalletAndWait({
-      signer: signer as JsonRpcSigner,
+      signer: signer as UncheckedTransactionSigner,
       to: withdrawalContractAddress,
       data,
       value: BigInt(requiredFee),
@@ -138,7 +143,7 @@ export async function submitEOABatchDeposit({
 
       if (useContractWallet) {
         const txHash = await submitViaContractWalletAndWait({
-          signer: signer as JsonRpcSigner,
+          signer: signer as UncheckedTransactionSigner,
           to: batchDepositContractAddress,
           data: batchDepositContract.interface.encodeFunctionData(
             'batchDeposit',
@@ -167,6 +172,9 @@ export async function submitEOABatchDeposit({
     if (error instanceof Error && error.message.includes('Safe transaction')) {
       throw error;
     }
-    throw new Error("Failed to submit batch deposit'}");
+    const message = error instanceof Error ? `: ${error.message}` : '';
+    throw Object.assign(new Error(`Failed to submit batch deposit${message}`), {
+      cause: error,
+    });
   }
 }

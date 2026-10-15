@@ -1,14 +1,17 @@
 import { validatePayload } from '../../src/ajv.js';
 import {
+  definitionSchema,
   ovmRewardsSplitPayloadSchema,
   ovmTotalSplitPayloadSchema,
   ovmRequestWithdrawalPayloadSchema,
+  rewardsSplitterPayloadSchema,
+  totalSplitterPayloadSchema,
 } from '../../src/schema.js';
 import {
   type OVMRewardsSplitPayload,
   type OVMTotalSplitPayload,
 } from '../../src/types.js';
-import { TEST_ADDRESSES } from '../fixtures.js';
+import { TEST_ADDRESSES, clusterConfigV1X10 } from '../fixtures.js';
 
 describe('validatePayload - OVM Schemas', () => {
   describe('ovmRewardsSplitPayloadSchema', () => {
@@ -478,7 +481,7 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     expect(() =>
       validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
     ).toThrow(
-      'Validation failed:  must have required property \'withdrawalFees\', /ovmAddress must match pattern "^0x[a-fA-F0-9]{40}$"',
+      'Validation failed: /ovmAddress must match pattern "^0x[a-fA-F0-9]{40}$"',
     );
   });
 
@@ -496,16 +499,14 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     );
   });
 
-  it('should throw error when withdrawalFees is missing', () => {
+  it('should accept a payload without withdrawalFees (read from chain)', () => {
     const payload = {
       ovmAddress: validPayload.ovmAddress,
       pubKeys: validPayload.pubKeys,
       amounts: validPayload.amounts,
     };
-    expect(() =>
-      validatePayload(payload, ovmRequestWithdrawalPayloadSchema),
-    ).toThrow(
-      "Validation failed:  must have required property 'withdrawalFees'",
+    expect(validatePayload(payload, ovmRequestWithdrawalPayloadSchema)).toEqual(
+      payload,
     );
   });
 
@@ -521,5 +522,238 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     ).toThrow(
       'Validation failed: /withdrawalFees must match pattern "^[0-9]+$"',
     );
+  });
+});
+
+describe('validatePayload - split recipient hardening', () => {
+  const totalSplit = (splitRecipients: unknown[]): unknown => ({
+    splitRecipients,
+  });
+
+  it('accepts allocations whose float sum is not exactly 100', () => {
+    // 33.3 * 3 + 0.1 (RAF) is 99.99999999999999 in floating point.
+    const payload = totalSplit([
+      { account: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 33.3 },
+      { account: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 33.3 },
+      {
+        account: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+        percentAllocation: 33.3,
+      },
+    ]);
+    expect(() =>
+      validatePayload(payload, totalSplitterPayloadSchema),
+    ).not.toThrow();
+  });
+
+  it('rejects allocations that do not sum to 100 at contract precision', () => {
+    // Each rounds to 333333 at 1e4 scale, so the total is 999999 + 1000.
+    const payload = totalSplit([
+      {
+        account: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+        percentAllocation: 33.33334,
+      },
+      {
+        account: TEST_ADDRESSES.REWARD_RECIPIENT_2,
+        percentAllocation: 33.28333,
+      },
+      {
+        account: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1,
+        percentAllocation: 33.28333,
+      },
+    ]);
+    expect(() => validatePayload(payload, totalSplitterPayloadSchema)).toThrow(
+      'must pass "validateTotalSplitRecipients" keyword validation',
+    );
+  });
+
+  it('rejects negative allocations', () => {
+    const payload = {
+      splitRecipients: [
+        { account: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 120 },
+        { account: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: -21 },
+      ],
+      principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+      etherAmount: 32,
+    };
+    expect(() =>
+      validatePayload(payload, rewardsSplitterPayloadSchema),
+    ).toThrow('/splitRecipients/1/percentAllocation must be > 0');
+    expect(() =>
+      validatePayload(payload, rewardsSplitterPayloadSchema),
+    ).toThrow('/splitRecipients/0/percentAllocation must be <= 100');
+  });
+
+  it('rejects zero allocations', () => {
+    const payload = totalSplit([
+      { account: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 99.9 },
+      { account: TEST_ADDRESSES.REWARD_RECIPIENT_2, percentAllocation: 0 },
+    ]);
+    expect(() => validatePayload(payload, totalSplitterPayloadSchema)).toThrow(
+      '/splitRecipients/1/percentAllocation must be > 0',
+    );
+  });
+
+  it('rejects allocations that round to zero at contract precision', () => {
+    const payload = totalSplit([
+      { account: TEST_ADDRESSES.REWARD_RECIPIENT_1, percentAllocation: 99.9 },
+      {
+        account: TEST_ADDRESSES.REWARD_RECIPIENT_2,
+        percentAllocation: 0.00001,
+      },
+    ]);
+    expect(() => validatePayload(payload, totalSplitterPayloadSchema)).toThrow(
+      'must pass "validateTotalSplitRecipients" keyword validation',
+    );
+  });
+
+  it('rejects duplicate V1 recipients regardless of case', () => {
+    const address = clusterConfigV1X10.operators[2].address;
+    const payload = totalSplit([
+      { account: address, percentAllocation: 50 },
+      { account: address.toLowerCase(), percentAllocation: 49.9 },
+    ]);
+    expect(() => validatePayload(payload, totalSplitterPayloadSchema)).toThrow(
+      '/splitRecipients must not contain duplicate recipient addresses',
+    );
+  });
+
+  it('rejects duplicate OVM reward and principal recipients', () => {
+    const address = clusterConfigV1X10.operators[2].address;
+    const duplicated = [
+      { address, percentAllocation: 50 },
+      {
+        address: address.toUpperCase().replace('0X', '0x'),
+        percentAllocation: 49,
+      },
+    ];
+    expect(() =>
+      validatePayload(
+        {
+          rewardSplitRecipients: duplicated,
+          OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+          principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+        },
+        ovmRewardsSplitPayloadSchema,
+      ),
+    ).toThrow(
+      '/rewardSplitRecipients must not contain duplicate recipient addresses',
+    );
+    expect(() =>
+      validatePayload(
+        {
+          rewardSplitRecipients: [
+            {
+              address: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+              percentAllocation: 99,
+            },
+          ],
+          principalSplitRecipients: [
+            { address, percentAllocation: 50 },
+            { address: address.toLowerCase(), percentAllocation: 50 },
+          ],
+          OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+        },
+        ovmTotalSplitPayloadSchema,
+      ),
+    ).toThrow(
+      '/principalSplitRecipients must not contain duplicate recipient addresses',
+    );
+  });
+
+  it('rejects out-of-range OVM allocations', () => {
+    expect(() =>
+      validatePayload(
+        {
+          rewardSplitRecipients: [
+            {
+              address: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+              percentAllocation: 109,
+            },
+            {
+              address: TEST_ADDRESSES.REWARD_RECIPIENT_2,
+              percentAllocation: -10,
+            },
+          ],
+          OVMOwnerAddress: TEST_ADDRESSES.OVM_OWNER,
+          principalRecipient: TEST_ADDRESSES.PRINCIPAL_RECIPIENT,
+        },
+        ovmRewardsSplitPayloadSchema,
+      ),
+    ).toThrow('/rewardSplitRecipients/1/percentAllocation must be > 0');
+  });
+});
+
+describe('validatePayload - definitionSchema hardening', () => {
+  const validDefinition = (): any => structuredClone(clusterConfigV1X10);
+
+  it('accepts a valid definition and a solo definition', () => {
+    expect(() =>
+      validatePayload(validDefinition(), definitionSchema),
+    ).not.toThrow();
+    expect(() =>
+      validatePayload(
+        {
+          ...validDefinition(),
+          operators: [
+            { address: '' },
+            { address: '' },
+            { address: '' },
+            { address: '' },
+          ],
+        },
+        definitionSchema,
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects operator addresses that differ only by case', () => {
+    const payload = validDefinition();
+    payload.operators[3].address = payload.operators[2].address.toLowerCase();
+    expect(() => validatePayload(payload, definitionSchema)).toThrow(
+      'must pass "validateUniqueAddresses" keyword validation',
+    );
+  });
+
+  it('rejects malformed operator addresses', () => {
+    const payload = validDefinition();
+    payload.operators[0].address = `0x${'z'.repeat(40)}`;
+    expect(() => validatePayload(payload, definitionSchema)).toThrow(
+      '/operators/0/address must match pattern',
+    );
+  });
+
+  it('rejects a mix of empty and set operator addresses', () => {
+    const payload = validDefinition();
+    payload.operators[0].address = '';
+    expect(() => validatePayload(payload, definitionSchema)).toThrow(
+      'must pass "validateUniqueAddresses" keyword validation',
+    );
+  });
+
+  it('rejects zero withdrawal and fee recipient addresses', () => {
+    const withdrawal = validDefinition();
+    withdrawal.validators[0].withdrawal_address = TEST_ADDRESSES.ZERO_ADDRESS;
+    expect(() => validatePayload(withdrawal, definitionSchema)).toThrow(
+      '/validators/0/withdrawal_address must NOT be valid',
+    );
+
+    const feeRecipient = validDefinition();
+    feeRecipient.validators[0].fee_recipient_address =
+      TEST_ADDRESSES.ZERO_ADDRESS;
+    expect(() => validatePayload(feeRecipient, definitionSchema)).toThrow(
+      '/validators/0/fee_recipient_address must NOT be valid',
+    );
+  });
+
+  it('rejects unknown top-level fields', () => {
+    expect(() =>
+      validatePayload(
+        {
+          ...validDefinition(),
+          creator: { address: TEST_ADDRESSES.OVM_OWNER },
+        },
+        definitionSchema,
+      ),
+    ).toThrow('must NOT have additional properties');
   });
 });

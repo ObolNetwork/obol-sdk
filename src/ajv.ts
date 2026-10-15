@@ -26,21 +26,59 @@ export const VALID_NON_COMPOUNDING_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
 ];
 
+// Split contracts take allocations as integers where 100% = 1e6 (four
+// decimals of a percent); formatSplitRecipients scales by the same factor.
+const PERCENT_SCALE = 1e4;
+const TOTAL_SCALED_PERCENT = 100 * PERCENT_SCALE;
+
+const toScaledPercent = (percent: number): number =>
+  Math.round(percent * PERCENT_SCALE);
+
+/**
+ * Sums the recipients' allocations as scaled integers, so the comparison
+ * against 100% is exact. Returns NaN if any allocation is not a number or
+ * rounds to zero at contract precision.
+ */
 const calculateTotalPercentage = (
-  recipients: Array<{ percentAllocation: number }>,
+  recipients: Array<{ percentAllocation: number }> | undefined,
 ): number => {
-  return recipients.reduce((acc, curr) => acc + curr.percentAllocation, 0);
+  if (!Array.isArray(recipients)) {
+    return NaN;
+  }
+  return recipients.reduce((acc, curr) => {
+    const percent = curr?.percentAllocation;
+    if (typeof percent !== 'number' || !Number.isFinite(percent)) {
+      return NaN;
+    }
+    const scaled = toScaledPercent(percent);
+    return scaled < 1 ? NaN : acc + scaled;
+  }, 0);
 };
 
 const validateTotalPercentage = (totalPercentage: number): boolean => {
-  return totalPercentage === 100;
+  return totalPercentage === TOTAL_SCALED_PERCENT;
 };
 
 const validateTotalPercentageWithRAF = (
   totalPercentage: number,
   rafPercentage: number,
 ): boolean => {
-  return totalPercentage + rafPercentage === 100;
+  return (
+    totalPercentage + toScaledPercent(rafPercentage) === TOTAL_SCALED_PERCENT
+  );
+};
+
+const validateUniqueRecipientAddresses = (
+  key: string,
+  recipients: Array<Record<string, unknown>>,
+): boolean => {
+  if (!Array.isArray(recipients)) {
+    return true;
+  }
+  const addresses = recipients.map(recipient =>
+    String(recipient?.[key]).toLowerCase(),
+  );
+  return new Set(addresses).size === addresses.length;
 };
 
 const validateRewardsSplitRecipients = (
@@ -75,15 +113,21 @@ const validateUniqueAddresses = (
     return false;
   }
 
-  if (operators.every(op => op.address === '')) {
+  if (operators.every(op => op?.address === '')) {
     return true;
   }
 
-  if (operators.some(op => op.address.length !== 42)) {
+  if (
+    operators.some(
+      op =>
+        typeof op?.address !== 'string' ||
+        !/^0x[0-9a-fA-F]{40}$/.test(op.address),
+    )
+  ) {
     return false;
   }
 
-  const addresses = operators.map(op => op.address);
+  const addresses = operators.map(op => op.address.toLowerCase());
   const uniqueAddresses = new Set(addresses);
   const isUnique = uniqueAddresses.size === addresses.length;
   return isUnique;
@@ -158,6 +202,13 @@ ajv.addKeyword({
   keyword: 'validateUniqueAddresses',
   validate: validateUniqueAddresses,
   schemaType: 'boolean',
+});
+
+ajv.addKeyword({
+  keyword: 'uniqueRecipientAddresses',
+  validate: validateUniqueRecipientAddresses,
+  schemaType: 'string',
+  error: { message: 'must not contain duplicate recipient addresses' },
 });
 
 ajv.addKeyword({

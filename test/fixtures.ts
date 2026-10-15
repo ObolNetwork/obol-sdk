@@ -10,6 +10,7 @@ export const TEST_ADDRESSES = {
   SPLIT_OWNER: '0x6789012345678901234567890123456789012345',
   PRINCIPAL_RECIPIENT: '0x7890123456789012345678901234567890123456',
   ZERO_ADDRESS: ZeroAddress,
+  MERKLE_DISTRIBUTOR: '0x8901234567890123456789012345678901234567',
 } as const;
 
 export const enr =
@@ -832,3 +833,366 @@ export const clusterLockV1X11 = {
     '0xdc6bc7b8f4181ffd8667bd3b27c66b5f45540e93a4e980ca39527a261640fc8d57dfe3dd0c3cb4cce4f95b15d434c5c0cfe4fb73389cb10afa0fd9e34fb96e5301',
   ],
 };
+
+// Real v1.10.0 Charon-flow lock (Hoodi) from `charon create cluster --publish`:
+// no creator, no operator addresses or signatures; keys generated locally.
+export const charonCreateClusterLockV1X10 = {
+  cluster_definition: {
+    name: 'Quickstart Guide Cluster',
+    uuid: '8ACD3F72-D980-53AC-84DB-A226F2458A67',
+    creator: { address: '', config_signature: '' },
+    version: 'v1.10.0',
+    num_validators: 1,
+    threshold: 4,
+    dkg_algorithm: 'default',
+    fork_version: '0x10000910',
+    config_hash:
+      '0x8bf713bf1e5fd1f45c534588aeb368d6ecebbfb171a32394d2cc900544ebd140',
+    timestamp: '2025-08-05T14:13:24Z',
+    operators: [
+      {
+        address: '',
+        enr: 'enr:-HW4QDNULsf1mcXXnBv3zk1_-j8EDJ3IlVo36BpyLhyzSYRMeheODhuTt6c6ns4Z0nTjh1nl7m5oylIxJ3e0v-9h0dSAgmlkgnY0iXNlY3AyNTZrMaED62leI9cmW2KfM3dxIYEeOc5ZlIzQ5bEpP1R4-cGeKHM',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QLmDhKxu724d-N4gPYvnZobOTJvXnIjGNZB31Z3PmQJTSVOAOqCUnNv2sYghy_NhdmZ42WnNaIntoVldvUMFfrmAgmlkgnY0iXNlY3AyNTZrMaEDSukRGdJh0z1hM-pwUTrFWWHrRFeGiZwlaN1QjCUixHo',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QBXa-S6_Vv2tcnOjICQGcvoQi_XMVjACTrV602xhiRPcVaZBHBJtBsE32V1tvKV6dPA3TMMXX3y2G-AVvB-LBliAgmlkgnY0iXNlY3AyNTZrMaECO6mjv-_L5pzb-BjFyCKB5khKeDl4LWUVhsqwKxWxlWE',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QBRXRYpIpEWMidB9N5cLehOIyERntGZ9Op3B4C4LJjIlNZlxd1es8lhw9nApfbuVfxuPdW029kJo8zoWZOUxdemAgmlkgnY0iXNlY3AyNTZrMaEDfipiLCUt36b5A9-HQQOtQ46TcxmkKKx2i0wD-oQvH5k',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QER09RWsmmxgcPymCOlF4pruloXNOvKfKI6gHzmTt48xE_LAqsR4T9OEJzpguIMuiQSzI_yLT9NSvV0rAt1y5y6AgmlkgnY0iXNlY3AyNTZrMaECnFdjK3HolKk1MrMr7t2QzG8G91uwuDhoP581HQHO2fw',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QKuT_6KPkjgRSExJ3KSC_8XPY0Ez9iSueDsu4oemwWZqYnSSgq4sK77zf_4Vzs0zr5RQYlLu9Ft0_72NOILV7CqAgmlkgnY0iXNlY3AyNTZrMaECtdYNkPvUSI7juWDwBXPa3J1nYz5uPQ9-E1sDsHjGZr0',
+        enr_signature: '',
+        config_signature: '',
+      },
+    ],
+    definition_hash:
+      '0x52129488cd02db381ca5b07dedd51b8a3cb8baba81c2ed7f21c268605eeb46da',
+    validators: [
+      {
+        fee_recipient_address: '0x000000000000000000000000000000000000dead',
+        withdrawal_address: '0x000000000000000000000000000000000000dead',
+      },
+    ],
+    deposit_amounts: null,
+    consensus_protocol: '',
+    target_gas_limit: 60000000,
+    compounding: false,
+  },
+  distributed_validators: [
+    {
+      distributed_public_key:
+        '0x8de32e022e2699f8b6cbd65ece3ab7d281f8f15d9f2e368147acb0fc618d3afdd104af3b926864aaadd5e8380edceddf',
+      public_shares: [
+        '0x976d16d47afebca26d6aa22a9844170a29dd314b0a40657285dc2285cd1bf7c23d5f74f50e14a72ef05f0ddb527f2ffd',
+        '0xb48118b0f88b928d436c742a3b88006bf541715aca7ea6ece128e0ef5a0ab3e30643e469d535237b5c18f580afd891ec',
+        '0xa48a32925f82a571ae3097eb5a65ff8353422eae08db940a019bf02ace2124e8689aa38ae78b7ec4fce750ae97aff066',
+        '0x866a53826a1514f0956d15ff9f51f5be06dbabe487cca1191346ec2e77bc6cb0778dc93dde43d975afa01f32bcdc05bb',
+        '0xa1af4815649aa4a199d255477c902219dad18618f8c20e1fd3510de32fa92405426aec5817341171416bb58593801ba0',
+        '0xade53b034b02786ba1017c31e23f45cfd062f2d67d91ad253514dedbad068beeffeac16f1ee6e11bb0f6e3e66626dca0',
+      ],
+      partial_deposit_data: [
+        {
+          pubkey:
+            '0x8de32e022e2699f8b6cbd65ece3ab7d281f8f15d9f2e368147acb0fc618d3afdd104af3b926864aaadd5e8380edceddf',
+          withdrawal_credentials:
+            '0x010000000000000000000000000000000000000000000000000000000000dead',
+          amount: '1000000000',
+          signature:
+            '0x94abdd9295453dfa533dce772f33d289038c49485f7d6558611c3aeedb98306e9606559a173c57f969e9b02d1ba146f118c19e2eda8ba9fdace7df7f8976d646e1b03c3c3b422612ccc7c3be1771a61a76113706ba1c3584ff9bb2272ad2c180',
+          deposit_data_root:
+            'eece3726ad4b5faa7071e990b9a350adfd82731e5b6d94508b789e99382387e8',
+        },
+        {
+          pubkey:
+            '0x8de32e022e2699f8b6cbd65ece3ab7d281f8f15d9f2e368147acb0fc618d3afdd104af3b926864aaadd5e8380edceddf',
+          withdrawal_credentials:
+            '0x010000000000000000000000000000000000000000000000000000000000dead',
+          amount: '32000000000',
+          signature:
+            '0xa4b4a2603224f3f3e7604e8008decfdc2284fc149421c03de827ed290dff8bebf2488bceedc031a4ae4e7f7b3d3d18ae17c21001a7b469b61da87b069a7772f55e4dc66455e89baee0640c14e333b63d52bc9c5759beec266278fa08b4f545c5',
+          deposit_data_root:
+            '1ea8947c2f53ff4ee04da0b00c9f1cd872c1bdcefc12f8637ccaa43d4dd10130',
+        },
+      ],
+      builder_registration: {
+        message: {
+          fee_recipient: '0x000000000000000000000000000000000000dEaD',
+          gas_limit: 60000000,
+          timestamp: 1742213400,
+          pubkey:
+            '0x8de32e022e2699f8b6cbd65ece3ab7d281f8f15d9f2e368147acb0fc618d3afdd104af3b926864aaadd5e8380edceddf',
+        },
+        signature:
+          '0xa78f284f047c6e1b83854b1c6ecaa00db31edea3ade8e313509ba6e8576db27ec408d46132c662491376afb193460dd60e4d1df790f038718f288de713ad0bfb330b172d6377b03a84025c63f12952810539f723314b8fde2d2fd6ad4d55278c',
+      },
+    },
+  ],
+  signature_aggregate:
+    '0xa578f0611fe71aedea9b710501e5f02980c4a188e5ee2a79840e243d547d596db1d2d6d3d06d500eac4aafeba75794600e9d96f1b0b33c08bb8d577a163167fbbd8aa8ccf158bd5a1fd802920d20664543a17b94219037441bd7cf989b5a379e',
+  lock_hash:
+    '0x7e2636a44ea307df43d72248d69b5254413c3f39c60eb423744f98268fb361c3',
+  node_signatures: [
+    '0x165d2401acdab3492fbd56aee49e24faf5d4d36cd5dea26f3b2bfebb8e07f9f54c8161bd54b6d9a8db86efcb73482061e664c0f78f9cbcf30a9e3ce5bfc303b100',
+    '0x5c6851831132b55f9e2f393c655aeaade5d9482f72cd32a1701ccfe08a94199f4320085ecff41f1a8d1b65c18c32b9d42a96102f554f0d4ab138298d9456e0af00',
+    '0x598d44eca4b71cf377b3e9a7e17d352ba489cdabad81f1e1d09c0fc9e30bb692503d0e54183eef23443aa99769abbb085e87eda1e94b81eec4c2fda17303a5df00',
+    '0x88ddcce2dcd7c13022e70b41f7c7d2e67572f1f898b24d4a3d4051bd404fc63b7f40e8b9a1bfe26b4ecc491d035e4667fc30b24ef96706a1b4e29aea72d2588101',
+    '0xda53ee90b2baa2978ae72fe783ab50f88b90da4f530543d44bc4f18e513f0c15290d5881234503005708d10afee0d32ecf544a9a9fd1a0c424df36421454cda500',
+    '0x457f940f134bdd989a559f66ba7176e2469b8b7f2bac1ff3ef7f6879cafd6ead7cc5d3e610cd301738d55253a964fa0b0eda0cedc96d53c8ff544052359e8acd00',
+  ],
+};
+
+// Real v1.10.0 Charon-flow lock (Hoodi) from `charon create dkg --operator-enrs`
+// followed by a DKG ceremony: no creator, no operator addresses or signatures.
+export const charonCreateDkgLockV1X10 = {
+  cluster_definition: {
+    name: 'Quickstart',
+    uuid: '4CD6490D-891D-424E-A41A-3A840B375067',
+    creator: { address: '', config_signature: '' },
+    version: 'v1.10.0',
+    num_validators: 1,
+    threshold: 3,
+    dkg_algorithm: 'default',
+    fork_version: '0x10000910',
+    config_hash:
+      '0x29ae978008f298726c6428bc9c2f801400426951194a7220e07d11e5d0bc707c',
+    timestamp: '2026-01-31T06:57:25Z',
+    operators: [
+      {
+        address: '',
+        enr: 'enr:-HW4QDmlkKirKk8CfSYtxOHK8g80tGI0uD9tF8ER84O4Ns8WIZcKIwcgKOejTwIjCHU8f2HU3onSmQltJAu8pFA5WimAgmlkgnY0iXNlY3AyNTZrMaEDgFYKjB_I9CHMNAQB4BGX41OGRGg2pldaaoR9DQNb0vs',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QF4H73C4irdKvvXonBrhIw55WuD6sNIu8EiB7KEPOt4ZY2Ebxw27IwKES687wKBgMXOitRy5Mv8tjcp4e54Rh5eAgmlkgnY0iXNlY3AyNTZrMaECIp-tTPS8oG-P4v_g-cpcfWiZx8yt8ub8w4jWT8QQn2Q',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QKBqj4Qz-sBbUBaJRA_s89Uon-43rsrZAMhb9EAk734YUfSophPnnrb3lflF4TgQTbIsoGman5Jkx6aefiJJJmOAgmlkgnY0iXNlY3AyNTZrMaECai5ia_KPtrObKeWHl22V1TolbUCOO2s8odh3G_3pHjE',
+        enr_signature: '',
+        config_signature: '',
+      },
+      {
+        address: '',
+        enr: 'enr:-HW4QCHnJNmKamnQzCj0cuSW_1TDBYitYRjo-loj2Ae1PlKfDd_RC9eglAORTuJsgHUjU_Ly-TwjIP6L_abax5WP6LCAgmlkgnY0iXNlY3AyNTZrMaECAVeOW8SPkFdHXfIR_sUsMlX8fMyVvFx2FOzJn9kfTCY',
+        enr_signature: '',
+        config_signature: '',
+      },
+    ],
+    definition_hash:
+      '0x4df7d71bba78e696b9e4bdd1045ef7ab10b44e4a80101c6a21000866f727c903',
+    validators: [
+      {
+        fee_recipient_address: '0x4EC7a00D26d392e1B29e6b7fA0199D5849A1459d',
+        withdrawal_address: '0x4EC7a00D26d392e1B29e6b7fA0199D5849A1459d',
+      },
+    ],
+    deposit_amounts: null,
+    consensus_protocol: '',
+    target_gas_limit: 60000000,
+    compounding: false,
+  },
+  distributed_validators: [
+    {
+      distributed_public_key:
+        '0xa8526f71e8a6e251b50cc0e2f5840c300dd9f9282a160b3ccfc94dc94774b272d4318a857492c9115a0b4e3644cfc637',
+      public_shares: [
+        '0xa26f8532a548033437f04068343e7ac1285d166031e4ef2e23ac9e54738ade5a28c0947e736a14acf26206f6741fc27d',
+        '0xb48752f669f0cd10b77bb71d4166eda543ae7d481b80525695318d4685b0091b23161402ae6b46d170b1c31643e8d1c4',
+        '0x912d74830545e873b4241c889268948f3be9c2fab197cfc88f3865ea3ec5217200d7d5f92e5045fd8816eb963133bb77',
+        '0x916faf745b12917d16be1dc3a377ca9c213004c9c23affecaa0fd9d726e53010ca6117dd5a3c0f3921f5ce4536281751',
+      ],
+      partial_deposit_data: [
+        {
+          pubkey:
+            '0xa8526f71e8a6e251b50cc0e2f5840c300dd9f9282a160b3ccfc94dc94774b272d4318a857492c9115a0b4e3644cfc637',
+          withdrawal_credentials:
+            '0x0100000000000000000000004ec7a00d26d392e1b29e6b7fa0199d5849a1459d',
+          amount: '1000000000',
+          signature:
+            '0x90b24ce06336defd725aa93e230e7f1ae67b003e8d7972f49af7ee3f9cad8d17c8ccd1c6cf34b29868c35deb6cfa140a02ad0ac2f782efaf37c65b7430c414b80aad0f3b740e52e17f241166dca06f0f18c3d63f65d762f0fee6bc1a7945cf82',
+          deposit_data_root:
+            'aa5d84602116e6d42ee5c6d5e682d95a00434dce5d316ee0434b22c8cced8672',
+        },
+        {
+          pubkey:
+            '0xa8526f71e8a6e251b50cc0e2f5840c300dd9f9282a160b3ccfc94dc94774b272d4318a857492c9115a0b4e3644cfc637',
+          withdrawal_credentials:
+            '0x0100000000000000000000004ec7a00d26d392e1b29e6b7fa0199d5849a1459d',
+          amount: '32000000000',
+          signature:
+            '0x8d29aa247ab5632611d4d0dc9b00ea0e8b284f0947f4cdef1fc7a67fb22b6510da2467932ccaf4c9ed3ebbc394b4e23a198889a293d68baa66a0525ac687b9464cd429e5c9d40071777872da130adb3736069bd21b4aa103ccc47be3ea457ccb',
+          deposit_data_root:
+            '3fdb6fae087ea4f856f63abfc863e490e49b9dd9f011ee08df3f7a299472106b',
+        },
+      ],
+      builder_registration: {
+        message: {
+          fee_recipient: '0x4EC7a00D26d392e1B29e6b7fA0199D5849A1459d',
+          gas_limit: 60000000,
+          timestamp: 1742213400,
+          pubkey:
+            '0xa8526f71e8a6e251b50cc0e2f5840c300dd9f9282a160b3ccfc94dc94774b272d4318a857492c9115a0b4e3644cfc637',
+        },
+        signature:
+          '0xa93abd2e3ccd98f9d118fb3efc7c245f85ce7403a4678e0bc09fe9af435a03c06225ded02f9039e5795540b619267976153a59e1dc90f7bf8e4ae6ce57423a26b8a1a044b3703659c36eb748cc2381ba7003982f43713b0a63e68cf63ee5d4c6',
+      },
+    },
+  ],
+  signature_aggregate:
+    '0x97a0599385efb3ceee9b010fa95503d8251f9bcc8c1cc7719ba346135890f81c3817582966c2eed31db2dd3b4bfd728a11998c740fdf3c8d42e8a037938ffe3f1a4fd286ee350f030a5fdc5cb6390caf9dce06bcfee5c387444e05a94c9c2747',
+  lock_hash:
+    '0x153eef033e55ef3bdf60fc9f004c6e154ead90b9e73aa623efce9155813cb55f',
+  node_signatures: [
+    '0xb5cfc4dc8330fd66a3b2ae0665483be71beb21e0c08b2bfbd2c0914e30d60cb82419dd438381c8903869889f152ae868a139b5f5ded973221d8961c9a645857000',
+    '0xd5b06c63234c03c988d3bd0b0fc8bbd157cf9fc9fb8e0db1ca8ed606dfccf28805a92e2d0bd9ecfaf0af55c16bb20b6ec58d1779727dca89ee9b3ced5162efeb00',
+    '0x3aa828596aee9408298279ac458337ae9585f7beef1c8cd6793329ea6b32f5087d46dfcd2b1ce97872301e66a7c8cd977e15a1b8900843f302d637fe75ee779201',
+    '0xc97d2819aff960381328c09ee6e7a50de7d74fc5075dd77056e22a05b29ea9c866abc4850ea543adc1c933439fe5ecb9a934e85722bceea0a8cd2d97f376460100',
+  ],
+};
+
+// Deposit payloads for eoa.deposit / splits.deposit (amount in wei), built from
+// the signed partial deposits in the lock fixtures above.
+const toDepositPayload = (
+  deposit: {
+    pubkey: string;
+    withdrawal_credentials: string;
+    amount: string;
+    signature: string;
+  },
+  depositDataRoot: string,
+): {
+  pubkey: string;
+  withdrawal_credentials: string;
+  signature: string;
+  deposit_data_root: string;
+  amount: string;
+} => ({
+  pubkey: deposit.pubkey,
+  withdrawal_credentials: deposit.withdrawal_credentials,
+  signature: deposit.signature,
+  deposit_data_root: depositDataRoot,
+  amount: (BigInt(deposit.amount) * BigInt(1_000_000_000)).toString(),
+});
+
+/** Mainnet, 0x01 credentials, 32 ETH. */
+export const mainnetDepositPayload = {
+  chainId: 1,
+  withdrawalAddress: '0x86B8145c98e5BD25BA722645b15eD65f024a87EC',
+  deposit: toDepositPayload(
+    nullDepositAmountsClusterLockV1X8.distributed_validators[0]
+      .partial_deposit_data[0],
+    '0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c',
+  ),
+};
+
+/** Hoodi, 0x02 credentials, 32 ETH (root as produced by charon). */
+export const hoodiCompoundingDepositPayload = {
+  chainId: 560048,
+  withdrawalAddress: '0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966',
+  deposit: toDepositPayload(
+    clusterLockSoloV1X10.distributed_validators[0].partial_deposit_data[0],
+    '0x' +
+      clusterLockSoloV1X10.distributed_validators[0].partial_deposit_data[0]
+        .deposit_data_root,
+  ),
+};
+
+// Runtime code of a mainnet MerkleDistributorWithDeadline deployment
+// (0xd24ee5D8D81749EF3394818EE644cbf7fb4F1749), used for incentives pre-flight tests.
+export const merkleDistributorRuntimeCode =
+  '0x608060408181526004918236101561001657600080fd5b600092833560e01c918263' +
+  '2e7ba6ef146103db575081632eb4a7ab146103a05781633197cbb6146103655781633c' +
+  'cfd60b14610273578163715018a6146102165781638da5cb5b146101ed5781639e3407' +
+  '0f146101a6578163f2fde38b146100ce575063fc0c546a1461008857600080fd5b3461' +
+  '00ca57816003193601126100ca57517f0000000000000000000000000b010000b7624e' +
+  'b9b3dfbc279673c76e9d29d5f76001600160a01b03168152602090f35b5080fd5b9190' +
+  '50346101a25760203660031901126101a2576001600160a01b03823581811693919290' +
+  '84900361019e576101026106a8565b831561014c575050600154826bffffffffffffff' +
+  'ffffffffff60a01b821617600155167f8be0079c531659141344cd1fd0a4f28419497f' +
+  '9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b83' +
+  '52820152602660248201527f4f776e61626c653a206e6577206f776e65722069732074' +
+  '6865207a65726f206160448201526564647265737360d01b6064820152fd5b8480fd5b' +
+  '8280fd5b8284346101ea5760203660031901126101ea57506101e1602092358060081c' +
+  '6000526000602052600160ff60406000205492161b8091161490565b90519015158152' +
+  'f35b80fd5b5050346100ca57816003193601126100ca5760015490516001600160a01b' +
+  '039091168152602090f35b83346101ea57806003193601126101ea5761022f6106a856' +
+  '5b600180546001600160a01b0319811690915581906001600160a01b03167f8be0079c' +
+  '531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b91' +
+  '9050346101a257826003193601126101a25761028e6106a8565b7f0000000000000000' +
+  '00000000000000000000000000000000000000006ad63e8042106103585780516370a0' +
+  '823160e01b815230928101929092527f0000000000000000000000000b010000b7624e' +
+  'b9b3dfbc279673c76e9d29d5f76001600160a01b0316602083602481845afa91821561' +
+  '034f5750839161031a575b61031792503390610700565b80f35b90506020823d821161' +
+  '0347575b8161033460209383610686565b810103126101a25761031791519061030b56' +
+  '5b3d9150610327565b513d85823e3d90fd5b51630ee56a2b60e41b8152fd5b50503461' +
+  '00ca57816003193601126100ca57602090517f00000000000000000000000000000000' +
+  '0000000000000000000000006ad63e808152f35b5050346100ca578160031936011261' +
+  '00ca57602090517fd530c061d59b109b93d104691c682992cc52d300381c196b5993e3' +
+  'c44c25df938152f35b939150346100ca5760803660031901126100ca57602493600160' +
+  '0160a01b0393908535908582168435818403610650576044356064359267ffffffffff' +
+  'ffffff9485851161064c573660238601121561064c578489013595861161064c576005' +
+  '9486861b968d8883010192368411610648577f00000000000000000000000000000000' +
+  '0000000000000000000000006ad63e80421161063a5750610499868060081c60005260' +
+  '00602052600160ff60406000205492161b8091161490565b61062a5791899189989796' +
+  '9594938f8451916104f26020809d8582809701918d83526bffffffffffffffffffffff' +
+  'ff199060601b168a8201528b6054820152605481526104e581610654565b5190209751' +
+  '9c018c610686565b8a52818a019201915b83831061061a5750505050968a975b865189' +
+  '101561055e5788861b87018801519081811015610551578c528752888b205b97600019' +
+  '811461053f576001019761050a565b634e487b7160e01b8c5260118b528d8cfd5b908c' +
+  '528752888b2061052c565b8b95508992918d8c8a937fd530c061d59b109b93d104691c' +
+  '682992cc52d300381c196b5993e3c44c25df930361060c5750916105fd866060979593' +
+  '8997957f4ec90e965519d92681267467f775ada5bd214aa92c0dc93d90a5e880ce9ed0' +
+  '269a60081c8c528b8552868c2054600160ff8b161b17878d20557f0000000000000000' +
+  '000000000b010000b7624eb9b3dfbc279673c76e9d29d5f716610700565b8251948552' +
+  '840152820152a180f35b85516309bde33960e01b8152fd5b82358152918101918a9101' +
+  '6104fb565b8951630c8d9eab60e31b81528b90fd5b63d365f61160e01b81528b90fd5b' +
+  '8c80fd5b8980fd5b8680fd5b6080810190811067ffffffffffffffff82111761067057' +
+  '604052565b634e487b7160e01b600052604160045260246000fd5b90601f8019910116' +
+  '810190811067ffffffffffffffff82111761067057604052565b6001546001600160a0' +
+  '1b031633036106bc57565b606460405162461bcd60e51b815260206004820152602060' +
+  '248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e' +
+  '65726044820152fd5b916040918251906020948583019363a9059cbb60e01b85526001' +
+  '8060a01b03809316602485015260448401526044835261073983610654565b16908351' +
+  '918483019167ffffffffffffffff92848110848211176106705786528684527f536166' +
+  '6545524332303a206c6f772d6c6576656c2063616c6c206661696c6564878501526000' +
+  '80958192519082855af1903d15610870573d92831161085c57906107c6939291865192' +
+  '6107b989601f19601f8401160185610686565b83523d868985013e61087b565b805191' +
+  '821591858315610838575b5050509050156107e2575050565b60849250519062461bcd' +
+  '60e51b82526004820152602a60248201527f5361666545524332303a20455243323020' +
+  '6f7065726174696f6e20646964206e6044820152691bdd081cdd58d8d9595960b21b60' +
+  '64820152fd5b9193818094500103126100ca578301519081151582036101ea57508038' +
+  '80856107d4565b634e487b7160e01b85526041600452602485fd5b906107c693925060' +
+  '60915b919290156108dd575081511561088f575090565b3b156108985790565b604051' +
+  '62461bcd60e51b815260206004820152601d60248201527f416464726573733a206361' +
+  '6c6c20746f206e6f6e2d636f6e74726163740000006044820152606490fd5b82519091' +
+  '50156108f05750805190602001fd5b6040519062461bcd60e51b825281602080600483' +
+  '01528251908160248401526000935b8285106109365750506044925060008382840101' +
+  '52601f80199101168101030190fd5b8481018201518686016044015293810193859350' +
+  '61091356fea26469706673582212205d74fa8535cda1eacada62f0ceb242f53473a823' +
+  '565fa2a5473a718238e44d3364736f6c63430008110033';
