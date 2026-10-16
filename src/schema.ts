@@ -254,6 +254,7 @@ export const ovmRequestWithdrawalPayloadSchema = {
       type: 'string',
       pattern: ADDRESS_PATTERN,
     },
+    excessFeeRecipient: nonZeroAddressSchema,
     pubKeys: {
       type: 'array',
       minItems: 1,

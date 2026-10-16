@@ -37,6 +37,10 @@ All notable changes to this project will be documented in this file. Dates are d
 - feat(errors): payload validation throws `PayloadValidationError` (code `PAYLOAD_INVALID`, with the AJV `errors`) and malformed hash / address arguments throw `InvalidArgumentError` (code `INVALID_ARGUMENT`); both extend `ObolSdkError` and keep their previous messages
 - feat: `getOWRTranches` works with a provider and no signer
 - feat: export the EIP-7002 withdrawal fee helpers `getWithdrawalRequestFee`, `resolveWithdrawalFee` and `WITHDRAWAL_REQUEST_CONTRACT_ADDRESS`
+- fix(splits): `splits.requestWithdrawal` refunds unused EIP-7002 fees to a new optional `excessFeeRecipient`, defaulting to the signer's address; refunds were previously sent to the OVM, where they were distributed as rewards
+- feat: `splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal` and `incentives.claimIncentives` take an optional second argument `{ onSent }`, called with each transaction hash as soon as it is broadcast (for a contract wallet, the wallet's own hash)
+- feat(errors): when one of these methods fails after a transaction was broadcast, it throws `TransactionSubmissionError` (code `TX_FAILED_AFTER_SEND`) with the mined `txHashes`, the unconfirmed `pendingTxHash` and the original `cause`; its message is unchanged. Failures before anything is sent throw as before
+- docs: `splits.requestWithdrawal` amounts are in gwei; `createObolRewardsSplit` and `createObolTotalSplit` are deprecated for new clusters in favour of the OVM methods (they have no EIP-7002 withdrawal path)
 
 #### [v2.14.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.2...v2.14.0)
 

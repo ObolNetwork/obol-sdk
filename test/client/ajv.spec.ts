@@ -537,6 +537,24 @@ describe('ovmRequestWithdrawalPayloadSchema', () => {
     withdrawalFees: '1',
   };
 
+  it('accepts an excessFeeRecipient and rejects the zero address', () => {
+    expect(() =>
+      validatePayload(
+        {
+          ...validPayload,
+          excessFeeRecipient: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+        },
+        ovmRequestWithdrawalPayloadSchema,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validatePayload(
+        { ...validPayload, excessFeeRecipient: '0x' + '0'.repeat(40) },
+        ovmRequestWithdrawalPayloadSchema,
+      ),
+    ).toThrow('Validation failed');
+  });
+
   it('should throw error when OVM address is missing', () => {
     const payload = {
       pubKeys: validPayload.pubKeys,

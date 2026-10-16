@@ -114,6 +114,7 @@ export {
   RequestTimeoutError,
   ResumeMismatchError,
   SignerRequiredError,
+  TransactionSubmissionError,
   UnauthorizedError,
   UnsupportedChainError,
   ValidationError,
@@ -447,6 +448,12 @@ export class Client extends Base {
    *     etherAmount: 32,
    *   });
    * ```
+   *
+   * @deprecated For new clusters use
+   *   {@link ObolSplits.createValidatorManagerAndRewardsSplit}. An OWR cannot
+   *   make EIP-7002 withdrawal requests, so getting the stake back depends on
+   *   pre-signed exits. Reading existing OWRs ({@link Client.getOWRTranches})
+   *   is unaffected.
    */
   async createObolRewardsSplit({
     splitRecipients,
@@ -596,6 +603,12 @@ export class Client extends Base {
    *   });
    * // withdrawal_address === fee_recipient_address (same splitter)
    * ```
+   *
+   * @deprecated For new clusters use
+   *   {@link ObolSplits.createValidatorManagerAndTotalSplit}. A splitter as
+   *   withdrawal address cannot make EIP-7002 withdrawal requests, so getting
+   *   the stake back depends on pre-signed exits. Existing splitters are
+   *   unaffected.
    */
   async createObolTotalSplit({
     splitRecipients,

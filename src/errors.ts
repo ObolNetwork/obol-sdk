@@ -539,3 +539,46 @@ export class ClusterProgressTimeoutError extends ObolSdkError {
     Object.setPrototypeOf(this, ClusterProgressTimeoutError.prototype);
   }
 }
+
+/**
+ * Thrown by a write method (`splits.deposit`, `splits.requestWithdrawal`,
+ * `eoa.deposit`, `eoa.requestWithdrawal`, `incentives.claimIncentives`) when
+ * it fails after at least one of its transactions was broadcast.
+ *
+ * `txHashes` holds the transactions of the call that were mined.
+ * `pendingTxHash` is the one that was broadcast but whose receipt could not be
+ * obtained or that reverted (for a contract wallet, the wallet's own
+ * transaction hash). The original error is in `cause`.
+ *
+ * To fix: look these transactions up before retrying, so nothing is sent twice.
+ */
+export class TransactionSubmissionError extends ObolSdkError {
+  name = 'TransactionSubmissionError';
+  /** Hashes of the transactions of this call that were mined. */
+  readonly txHashes: string[];
+  /** Hash of the broadcast transaction that was not confirmed, if any. */
+  readonly pendingTxHash?: string;
+  /** The error that stopped the call. */
+  readonly cause: unknown;
+
+  constructor(
+    message: string,
+    {
+      txHashes,
+      pendingTxHash,
+      cause,
+    }: { txHashes: string[]; pendingTxHash?: string; cause: unknown },
+  ) {
+    super(
+      message,
+      'TX_FAILED_AFTER_SEND',
+      'Look up pendingTxHash and txHashes on a block explorer before retrying, so nothing is sent twice.',
+    );
+    Object.setPrototypeOf(this, TransactionSubmissionError.prototype);
+    this.txHashes = txHashes;
+    if (pendingTxHash !== undefined) {
+      this.pendingTxHash = pendingTxHash;
+    }
+    this.cause = cause;
+  }
+}

@@ -484,6 +484,32 @@ export type SignerType = Signer;
 export type ClaimIncentivesResponse = { txHash: string | null };
 
 /**
+ * Passed to {@link WriteOptions.onSent} for each transaction a write method
+ * broadcasts, before its receipt is awaited.
+ */
+export type TransactionSentInfo = {
+  /**
+   * Hash returned by the wallet. For a contract wallet (e.g. a Safe) this is
+   * the wallet's own transaction hash, not the hash it executes under.
+   */
+  hash: string;
+  /** Position of this transaction among those sent by the call (from 0). */
+  index: number;
+  /** Whether the signer is a contract wallet (e.g. a Safe). */
+  contractWallet: boolean;
+};
+
+/** Options accepted by the SDK methods that send transactions. */
+export type WriteOptions = {
+  /**
+   * Called as soon as each transaction is broadcast, before waiting for it to
+   * be mined, so the hash can be shown or stored even if waiting fails.
+   * Errors thrown by the callback are ignored.
+   */
+  onSent?: (info: TransactionSentInfo) => void;
+};
+
+/**
  * A single problem found by a pre-flight check.
  */
 export type PreflightIssue = {
@@ -776,12 +802,19 @@ export type OVMRequestWithdrawalPayload = {
    * Total withdrawal request fees in wei for all `pubKeys`. Optional: if
    * omitted, twice the current EIP-7002 fee per request is sent. If given, it
    * must cover the current fee and be at most max(10x the current fee, 1 gwei)
-   * per request. The OVM refunds any excess to the OVM contract.
+   * per request. Any excess is refunded to `excessFeeRecipient`.
    */
   withdrawalFees?: string;
 
   /** OVM contract address */
   ovmAddress: string;
+
+  /**
+   * Address the OVM refunds unused withdrawal fees to. Defaults to the
+   * signer's address. A refund sent to the OVM itself would be distributed
+   * as rewards.
+   */
+  excessFeeRecipient?: string;
 
   /** Array of validator public keys in bytes format */
   pubKeys: string[];

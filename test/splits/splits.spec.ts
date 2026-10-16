@@ -369,8 +369,31 @@ describe('requestWithdrawal', () => {
       pubKeys: mockPubKeys,
       amounts: mockAmounts,
       withdrawalFees: mockWithdrawalFees,
+      excessFeeRecipient: '0x1234567890123456789012345678901234567890',
       signer: mockSigner,
     });
+  });
+
+  it('refunds excess fees to the signer by default and to excessFeeRecipient when set', async () => {
+    mockRequestWithdrawalFromOVM.mockResolvedValue({ txHash: '0xhash' });
+    const onSent = jest.fn();
+
+    await client.splits.requestWithdrawal(
+      {
+        ovmAddress: mockOVMAddress,
+        pubKeys: mockPubKeys,
+        amounts: mockAmounts,
+        excessFeeRecipient: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+      },
+      { onSent },
+    );
+
+    expect(mockRequestWithdrawalFromOVM).toHaveBeenCalledWith(
+      expect.objectContaining({
+        excessFeeRecipient: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+        options: { onSent },
+      }),
+    );
   });
 
   it('should throw error when signer is not provided', async () => {

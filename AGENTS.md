@@ -171,8 +171,8 @@ client.exit.*         // Verify/recombine exit signatures
 | `waitFor(configHash, target, { timeoutMs?, onProgress?, signal? })` | No | Resolve when `definition_ready` / `lock_published` is reached; throws `ClusterProgressTimeoutError` (`timeoutMs` omitted or `0`: no timeout) |
 | `getDepositData(lockHash, { verify?, amount? })` | No | Validated deposit payloads (wei) from a lock, for `eoa.deposit` / `splits.deposit` |
 | `checkExistingDeposits(deposits, { beaconUrl })` | No | Advisory beacon-node check: `new` / `top_up` / `conflict` per deposit |
-| `createObolRewardsSplit(payload)` | Yes | Deploy OWR + SplitMain (Mainnet/Hoodi only) |
-| `createObolTotalSplit(payload)` | Yes | Deploy SplitMain only (Mainnet/Hoodi only) |
+| `createObolRewardsSplit(payload)` | Yes | Deprecated for new clusters (use `splits.createValidatorManagerAndRewardsSplit`): deploy OWR + SplitMain (Mainnet/Hoodi only) |
+| `createObolTotalSplit(payload)` | Yes | Deprecated for new clusters (use `splits.createValidatorManagerAndTotalSplit`): deploy SplitMain only (Mainnet/Hoodi only) |
 | `getOWRTranches(owrAddress)` | No* | Read OWR contract state (*needs a provider, or a signer connected to one) |
 
 ### Sub-Module Methods
@@ -182,7 +182,7 @@ client.exit.*         // Verify/recombine exit signatures
 |--------|-------------|
 | `createValidatorManagerAndRewardsSplit(payload)` | Deploy OVM + SplitV2 for rewards splitting |
 | `createValidatorManagerAndTotalSplit(payload)` | Deploy OVM + SplitV2 for total splitting |
-| `requestWithdrawal(payload)` | Submit withdrawal to OVM contract |
+| `requestWithdrawal(payload)` | Submit withdrawal to OVM contract (`amounts` in gwei; unused fees refunded to `excessFeeRecipient`, default the signer) |
 | `deposit(payload)` | Deposit validators to OVM (checks root, amount, credentials, BLS; optional `beaconUrl`, see below) |
 
 **client.eoa**
@@ -214,6 +214,8 @@ client.exit.*         // Verify/recombine exit signatures
 - Without `beaconUrl`, `skipSignatureVerification: true` means the caller asserts every deposit is a top-up: no BLS check, expected or all-zero credentials, up to 2048 ETH. This is what Launchpad-style top-ups (all-zero credentials and signature) need.
 - Without either, a deposit with an all-zero signature is refused with `ObolSdkError` code `DEPOSIT_LOOKS_LIKE_TOP_UP` (it would be lost if the validator does not exist). Malformed signatures are reported as `Invalid deposit at index N: invalid deposit signature`.
 - `getWithdrawalRequestFee(provider)` / `resolveWithdrawalFee(...)` (exported) read and bound the EIP-7002 withdrawal request fee.
+
+**Sent transactions** (`splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal`, `incentives.claimIncentives`): an optional second argument `{ onSent }` (`WriteOptions`) is called with `{ hash, index, contractWallet }` as each transaction is broadcast, before its receipt. If the call fails after something was broadcast it throws `TransactionSubmissionError` with `txHashes` (mined), `pendingTxHash` (sent, not confirmed) and `cause`; failures before sending throw as before. Deploy methods are not covered: they are idempotent (predicted addresses), so re-running them is safe.
 
 ### Standalone Exports
 
@@ -291,6 +293,7 @@ Local checks extend **ObolSdkError** (`code`, `hint`):
 - **PayloadValidationError**: payload failed AJV schema validation (code `PAYLOAD_INVALID`, `errors` = AJV errors; message `Validation failed: ...`)
 - **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`)
 - **ClusterProgressTimeoutError**: `waitFor` hit `timeoutMs`
+- **TransactionSubmissionError**: a write failed after broadcasting (`txHashes`, `pendingTxHash`, `cause`; code `TX_FAILED_AFTER_SEND`)
 
 Other:
 - **SignerRequiredError**: Write method called without signer

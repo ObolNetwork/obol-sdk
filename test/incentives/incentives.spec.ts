@@ -646,5 +646,34 @@ describe('Client.incentives', () => {
         client.incentives.claimIncentives(operatorAddress),
       ).rejects.toThrow('Failed to claim incentives: Helper function error');
     });
+
+    test('claimIncentives passes onSent through and keeps TransactionSubmissionError', async () => {
+      const { TransactionSubmissionError } =
+        await import('../../src/errors.js');
+      const client = await makeClient(makeDistributorProvider());
+      jest
+        .spyOn(client.incentives, 'getIncentivesByAddress')
+        .mockResolvedValue(validIncentivesData);
+      const failure = new TransactionSubmissionError(
+        'Failed to claim incentives: timeout',
+        {
+          txHashes: [],
+          pendingTxHash: '0xpending',
+          cause: new Error('timeout'),
+        },
+      );
+      mockClaimIncentivesFromMerkleDistributor.mockRejectedValue(failure);
+      const onSent = jest.fn();
+
+      const error = await client.incentives
+        .claimIncentives(operatorAddress, { onSent })
+        .catch(e => e);
+
+      expect(error).toBe(failure);
+      expect(error.pendingTxHash).toBe('0xpending');
+      expect(mockClaimIncentivesFromMerkleDistributor).toHaveBeenCalledWith(
+        expect.objectContaining({ options: { onSent } }),
+      );
+    });
   });
 });

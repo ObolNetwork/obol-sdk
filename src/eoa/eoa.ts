@@ -20,6 +20,7 @@ import {
   type SignerType,
   type EOAWithdrawalPayload,
   type EOADepositPayload,
+  type WriteOptions,
 } from '../types.js';
 
 /**
@@ -77,11 +78,15 @@ export class EOA {
    *
    * @param payload - Withdrawal data including validator `pubkey`, `allocation`
    *   (in ETH), and optional `requiredFee` (in wei).
+   * @param options - Optional `onSent` callback, called with each transaction
+   *   hash as soon as it is broadcast.
    * @returns The transaction hash, or `null` if no transaction was needed.
    * @throws {SignerRequiredError} If no signer was provided.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain has no EOA withdrawal contract.
    * @throws If `requiredFee` is below the current fee or far above it.
+   * @throws {TransactionSubmissionError} If the call fails after a transaction
+   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
    * @example
    * ```typescript
@@ -93,6 +98,7 @@ export class EOA {
    */
   async requestWithdrawal(
     payload: EOAWithdrawalPayload,
+    options?: WriteOptions,
   ): Promise<{ txHash: string | null }> {
     if (!this.signer) {
       throw new SignerRequiredError('requestWithdrawal');
@@ -134,6 +140,7 @@ export class EOA {
       chainId: this.chainId,
       signer: this.signer,
       provider: this.provider,
+      options,
     });
   }
 
@@ -159,6 +166,8 @@ export class EOA {
    * The output of {@link Client.getDepositData} can be passed as `deposits`.
    *
    * @param payload - Deposit data including an array of validator deposit objects.
+   * @param options - Optional `onSent` callback, called with each transaction
+   *   hash as soon as it is broadcast.
    * @returns An array of transaction hashes, one per batch.
    * @throws {SignerRequiredError} If no signer was provided.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
@@ -166,6 +175,8 @@ export class EOA {
    * @throws {DepositConflictError} If `beaconUrl` is given and a pubkey has a
    *   pending deposit with different withdrawal credentials.
    * @throws If any deposit fails the checks above, or the beacon node check fails.
+   * @throws {TransactionSubmissionError} If the call fails after a transaction
+   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
    * @example
    * ```typescript
@@ -181,7 +192,10 @@ export class EOA {
    * });
    * ```
    */
-  async deposit(payload: EOADepositPayload): Promise<{ txHashes: string[] }> {
+  async deposit(
+    payload: EOADepositPayload,
+    options?: WriteOptions,
+  ): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
       throw new SignerRequiredError('deposit');
     }
@@ -210,6 +224,7 @@ export class EOA {
       batchDepositContractAddress: chainConfig.BATCH_DEPOSIT_CONTRACT.address,
       signer: this.signer,
       provider: this.provider,
+      options,
     });
   }
 }

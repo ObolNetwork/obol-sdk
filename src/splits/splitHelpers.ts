@@ -8,6 +8,7 @@ import {
   type OVMArgs,
   type ChainConfig,
   type ProviderType,
+  type WriteOptions,
 } from '../types.js';
 import {
   Contract,
@@ -29,6 +30,7 @@ import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi.js';
 import { MultiCall3Contract } from '../abi/Multicall3.js';
 import { isContractAvailable } from '../utils.js';
 import { SignerRequiredError } from '../errors.js';
+import { SentTransactions } from '../sentTransactions.js';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
@@ -303,6 +305,7 @@ export const submitViaContractWalletAndWait = async ({
   value,
   timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
   provider: readProvider,
+  onSubmitted,
 }: {
   signer: UncheckedTransactionSigner;
   to: string;
@@ -310,6 +313,8 @@ export const submitViaContractWalletAndWait = async ({
   value?: bigint;
   timeoutMs?: number;
   provider?: ProviderType | null;
+  /** Called with the wallet-returned hash once the wallet accepts the transaction. */
+  onSubmitted?: (hash: string) => void;
 }): Promise<string> => {
   if (!signer) {
     throw new SignerRequiredError('submitViaContractWalletAndWait');
@@ -400,6 +405,7 @@ export const submitViaContractWalletAndWait = async ({
       })
       .then(async hash => {
         submittedHash = hash;
+        onSubmitted?.(hash);
         // Backfill logs mined between startBlock and now.
         const past = await provider.getLogs({
           ...filter,
@@ -1356,9 +1362,11 @@ const getChainConfig = (chainId: number): ChainConfig => {
  * Requests withdrawal from an OVM contract
  * @param ovmAddress - The address of the OVM contract
  * @param pubKeys - Array of validator public keys in bytes format
- * @param amounts - Array of withdrawal amounts in wei (uint64)
+ * @param amounts - Array of withdrawal amounts in gwei (uint64)
  * @param withdrawalFees - Total withdrawal fees in wei
+ * @param excessFeeRecipient - Address refunded the unused part of the fees
  * @param signer - The signer to use for the transaction
+ * @param options - Optional `onSent` callback
  * @returns Promise that resolves to the transaction hash
  */
 export const requestWithdrawalFromOVM = async ({
@@ -1366,14 +1374,19 @@ export const requestWithdrawalFromOVM = async ({
   pubKeys,
   amounts,
   withdrawalFees,
+  excessFeeRecipient,
   signer,
+  options,
 }: {
   ovmAddress: string;
   pubKeys: string[];
   amounts: string[];
   withdrawalFees: string;
+  excessFeeRecipient: string;
   signer: SignerType;
+  options?: WriteOptions;
 }): Promise<{ txHash: string }> => {
+  const sent = new SentTransactions(options);
   try {
     if (pubKeys.length === 0) {
       throw new Error('pubKeys array cannot be empty');
@@ -1383,9 +1396,6 @@ export const requestWithdrawalFromOVM = async ({
 
     // Calculate maxFeePerWithdrawal as withdrawalFees / pubKeys.length
     const maxFeePerWithdrawal = BigInt(withdrawalFees) / BigInt(pubKeys.length);
-
-    // Use ovmAddress as excessFeeRecipient
-    const excessFeeRecipient = ovmAddress;
 
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
 
@@ -1398,13 +1408,15 @@ export const requestWithdrawalFromOVM = async ({
         value: BigInt(withdrawalFees),
       },
     );
+    sent.sent(tx.hash as string);
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : 'Request withdrawal failed';
-    throw new Error(`Failed to request withdrawal from OVM: ${errorMessage}`);
+    const message = `Failed to request withdrawal from OVM: ${errorMessage}`;
+    throw sent.failure(message, error, new Error(message));
   }
 };
 
@@ -1413,12 +1425,14 @@ export const requestWithdrawalFromOVM = async ({
  * @param ovmAddress - The address of the OVM contract
  * @param deposits - Array of deposit objects with all required parameters
  * @param signer - The signer to use for the transaction
+ * @param options - Optional `onSent` callback
  * @returns Promise that resolves to an array of transaction hashes
  */
 export const depositOVM = async ({
   ovmAddress,
   deposits,
   signer,
+  options,
 }: {
   ovmAddress: string;
   deposits: Array<{
@@ -1429,10 +1443,11 @@ export const depositOVM = async ({
     amount: string;
   }>;
   signer: SignerType;
+  options?: WriteOptions;
 }): Promise<{ txHashes: string[] }> => {
+  const sent = new SentTransactions(options);
   try {
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
-    const txHashes: string[] = [];
 
     // Process each deposit as a separate transaction
     // Multicall3 cannot be used because it doesn't have the DEPOSIT_ROLE
@@ -1446,17 +1461,19 @@ export const depositOVM = async ({
           value: BigInt(deposit.amount),
         },
       );
+      sent.sent(tx.hash as string);
 
       const receipt = await tx.wait();
       if (receipt?.hash) {
-        txHashes.push(receipt.hash as string);
+        sent.mined(receipt.hash as string);
       }
     }
 
-    return { txHashes };
+    return { txHashes: sent.hashes };
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : 'Deposit failed';
-    throw new Error(`Failed to deposit to OVM: ${errorMessage}`);
+    const message = `Failed to deposit to OVM: ${errorMessage}`;
+    throw sent.failure(message, error, new Error(message));
   }
 };

@@ -9,6 +9,7 @@ import {
   type ClaimIncentivesResponse,
   type PreflightIssue,
   type PreflightResult,
+  type WriteOptions,
 } from '../types.js';
 import {
   claimIncentivesFromMerkleDistributor,
@@ -18,6 +19,7 @@ import { preflightIncentivesClaim } from './incentivesPreflight.js';
 import { DEFAULT_BASE_VERSION } from '../constants.js';
 import {
   IncentivesPreflightError,
+  TransactionSubmissionError,
   InvalidArgumentError,
   NotFoundError,
   SignerRequiredError,
@@ -92,12 +94,16 @@ export class Incentives {
    * transferred to `address`.
    *
    * @param address - The operator's Ethereum address to claim incentives for.
+   * @param options - Optional `onSent` callback, called with each transaction
+   *   hash as soon as it is broadcast.
    * @returns The transaction hash, or `{ txHash: null }` if already claimed.
    * @throws {SignerRequiredError} If no signer was provided.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {IncentivesPreflightError} If the address has no incentives
    *   (`NO_INCENTIVES`) or a pre-flight check fails (the message lists the
    *   issue codes; `issues` holds the details).
+   * @throws {TransactionSubmissionError} If the call fails after a transaction
+   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
    * @example
    * ```typescript
@@ -109,7 +115,10 @@ export class Incentives {
    * }
    * ```
    */
-  async claimIncentives(address: string): Promise<ClaimIncentivesResponse> {
+  async claimIncentives(
+    address: string,
+    options?: WriteOptions,
+  ): Promise<ClaimIncentivesResponse> {
     if (!this.signer) {
       throw new SignerRequiredError('claimIncentives');
     }
@@ -159,11 +168,15 @@ export class Incentives {
         operatorAddress: incentivesData.operator_address,
         amount: incentivesData.amount,
         merkleProof: incentivesData.merkle_proof,
+        options,
       });
 
       return { txHash };
     } catch (error: any) {
-      if (error instanceof IncentivesPreflightError) {
+      if (
+        error instanceof IncentivesPreflightError ||
+        error instanceof TransactionSubmissionError
+      ) {
         throw error;
       }
       throw new Error(`Failed to claim incentives: ${error.message}`);

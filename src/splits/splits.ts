@@ -35,6 +35,7 @@ import {
   type OVMTotalSplitPayload,
   type OVMRequestWithdrawalPayload,
   type OVMDepositPayload,
+  type WriteOptions,
 } from '../types.js';
 
 /**
@@ -496,14 +497,23 @@ export class ObolSplits {
    * withdrawal request contract (using the client provider, or the signer's
    * provider). If `withdrawalFees` is omitted, twice the current fee per
    * request is sent. If it is given, it must cover the current fee and be at
-   * most max(10x the current fee, 1 gwei) per request.
+   * most max(10x the current fee, 1 gwei) per request. The OVM refunds the
+   * unused part of the fees to `excessFeeRecipient`, which defaults to the
+   * signer's address.
+   *
+   * `amounts` are in gwei, as the OVM contract takes them.
    *
    * @param payload - Withdrawal request data including OVM address, validator
-   *   public keys, amounts, and optional total fees.
+   *   public keys, amounts (gwei), and optional total fees (wei) and
+   *   `excessFeeRecipient`.
+   * @param options - Optional `onSent` callback, called with each transaction
+   *   hash as soon as it is broadcast.
    * @returns The transaction hash of the withdrawal request.
    * @throws {SignerRequiredError} If no signer was provided.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws If no provider is available or `withdrawalFees` is out of range.
+   * @throws {TransactionSubmissionError} If the call fails after a transaction
+   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
    * @example
    * ```typescript
@@ -516,6 +526,7 @@ export class ObolSplits {
    */
   async requestWithdrawal(
     payload: OVMRequestWithdrawalPayload,
+    options?: WriteOptions,
   ): Promise<{ txHash: string }> {
     if (!this.signer) {
       throw new SignerRequiredError('requestWithdrawal');
@@ -544,7 +555,10 @@ export class ObolSplits {
       pubKeys: validatedPayload.pubKeys,
       amounts: validatedPayload.amounts,
       withdrawalFees: withdrawalFees.toString(),
+      excessFeeRecipient:
+        validatedPayload.excessFeeRecipient ?? (await this.signer.getAddress()),
       signer: this.signer,
+      options,
     });
   }
 
@@ -569,12 +583,16 @@ export class ObolSplits {
    * @param payload - Deposit data including the OVM address and an array of
    *   validator deposit objects (pubkey, withdrawal_credentials, signature,
    *   deposit_data_root, amount).
+   * @param options - Optional `onSent` callback, called with each transaction
+   *   hash as soon as it is broadcast.
    * @returns An array of transaction hashes, one per deposit.
    * @throws {SignerRequiredError} If no signer was provided.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {DepositConflictError} If `beaconUrl` is given and a pubkey has a
    *   pending deposit with different withdrawal credentials.
    * @throws If any deposit fails the checks above, or the beacon node check fails.
+   * @throws {TransactionSubmissionError} If the call fails after a transaction
+   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
    * @example
    * ```typescript
@@ -590,7 +608,10 @@ export class ObolSplits {
    * });
    * ```
    */
-  async deposit(payload: OVMDepositPayload): Promise<{ txHashes: string[] }> {
+  async deposit(
+    payload: OVMDepositPayload,
+    options?: WriteOptions,
+  ): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
       throw new SignerRequiredError('deposit');
     }
@@ -613,6 +634,7 @@ export class ObolSplits {
       ovmAddress: validatedPayload.ovmAddress,
       deposits: validatedPayload.deposits,
       signer: this.signer,
+      options,
     });
   }
 }
