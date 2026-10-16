@@ -173,10 +173,7 @@ describe('Obol API errors', () => {
       .createClusterDefinition(clusterConfigV1X10)
       .catch(e => e as ConflictError);
 
-    // A terms lookup (pre-flight) and the POST.
-    expect(
-      fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST'),
-    ).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(error).toBeInstanceOf(ConflictError);
     expect(error.message).toBe('Duplicate entry');
     expect(error.method).toBe('POST');

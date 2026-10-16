@@ -73,7 +73,6 @@ describe('Cluster Client', () => {
       .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
     clientInstance['request'] = requestMock as never;
 
-    // The pre-flight terms lookup is a GET; the definition is the POST body.
     const postBodies = () =>
       requestMock.mock.calls
         .filter(([, init]) => init?.method === 'POST')
@@ -83,15 +82,9 @@ describe('Cluster Client', () => {
     await clientInstance.createClusterDefinition(clusterConfigV1X10, 'v1.10.0');
     expect(postBodies()[0].version).toEqual('v1.10.0');
 
-    // Also as an option.
-    await clientInstance.createClusterDefinition(clusterConfigV1X10, {
-      version: 'v1.10.0',
-    });
-    expect(postBodies()[1].version).toEqual('v1.10.0');
-
     // Omitting the arg defaults to the SDK's CONFIG_VERSION.
     await clientInstance.createClusterDefinition(clusterConfigV1X10);
-    expect(postBodies()[2].version).toEqual(CONFIG_VERSION);
+    expect(postBodies()[1].version).toEqual(CONFIG_VERSION);
   });
 
   test('acceptClusterDefinition should return cluster definition', async () => {

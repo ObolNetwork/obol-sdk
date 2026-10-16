@@ -109,6 +109,25 @@ describe('validatePayload - OVM Schemas', () => {
       expect(result).toEqual(validRewardsSplitPayload);
     });
 
+    it('accepts distributor fees up to the SplitV2 maximum of 6.5535%', () => {
+      for (const fee of [0, 2.5, 6.5535]) {
+        expect(() =>
+          validatePayload(
+            { ...validRewardsSplitPayload, distributorFeePercent: fee },
+            ovmRewardsSplitPayloadSchema,
+          ),
+        ).not.toThrow();
+      }
+      for (const fee of [6.5536, 10, -1]) {
+        expect(() =>
+          validatePayload(
+            { ...validRewardsSplitPayload, distributorFeePercent: fee },
+            ovmRewardsSplitPayloadSchema,
+          ),
+        ).toThrow('Validation failed');
+      }
+    });
+
     it('should validate rewards split payload with default values', () => {
       const payloadWithoutDefaults = {
         rewardSplitRecipients: [

@@ -196,10 +196,12 @@ export const ovmBaseSplitPayload = {
     minimum: 16,
     default: PRINCIPAL_THRESHOLD,
   },
+  // SplitV2 stores the incentive as a uint16 at 1e6 = 100%, so at most
+  // 6.5535%; values are rounded to the nearest 0.0001%.
   distributorFeePercent: {
     type: 'number',
     minimum: 0,
-    maximum: 10,
+    maximum: 6.5535,
     default: 0,
   },
 };
@@ -340,12 +342,9 @@ export const ovmDepositPayloadSchema = {
         ],
       },
     },
-    skipSignatureVerification: {
-      type: 'boolean',
-    },
-    beaconUrl: {
+    kind: {
       type: 'string',
-      minLength: 1,
+      enum: ['deposit', 'topUp'],
     },
   },
   required: ['ovmAddress', 'deposits'],
@@ -396,12 +395,9 @@ export const eoaDepositPayloadSchema = {
       type: 'string',
       pattern: '^0x[a-fA-F0-9]{40}$',
     },
-    skipSignatureVerification: {
-      type: 'boolean',
-    },
-    beaconUrl: {
+    kind: {
       type: 'string',
-      minLength: 1,
+      enum: ['deposit', 'topUp'],
     },
   },
   required: ['deposits'],

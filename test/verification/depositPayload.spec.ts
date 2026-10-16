@@ -69,18 +69,18 @@ describe('verifyDepositPayloads', () => {
     ).rejects.toThrow('Invalid deposit at index 0');
   });
 
-  it('skips only the signature check with skipSignatureVerification', async () => {
+  it("skips only the signature check with kind: 'topUp'", async () => {
     await expect(
       verifyDepositPayloads([mainnet.deposit], {
         chainId: 560048,
-        skipSignatureVerification: true,
+        kind: 'topUp',
       }),
     ).resolves.toBeUndefined();
 
     await expect(
       verifyDepositPayloads(
         [{ ...mainnet.deposit, deposit_data_root: '0x' + '00'.repeat(32) }],
-        { chainId: 560048, skipSignatureVerification: true },
+        { chainId: 560048, kind: 'topUp' },
       ),
     ).rejects.toThrow('deposit_data_root does not match');
   });

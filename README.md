@@ -32,20 +32,9 @@ const definition = await client.getClusterDefinition(configHash);
 const lock = await client.getClusterLock(configHash);
 ```
 
-### Signers and viem
+### Signers
 
-The `signer` can be any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`, `NonceManager`, or a custom `AbstractSigner`). For a viem `WalletClient` (e.g. from wagmi), use the adapter subpath (requires `viem` to be installed):
-
-```typescript
-import { Client } from "@obolnetwork/obol-sdk";
-import { walletClientToSigner, publicClientToProvider } from "@obolnetwork/obol-sdk/viem";
-
-const client = new Client(
-  { chainId: 560048 },
-  walletClientToSigner(walletClient),
-  publicClientToProvider(publicClient), // optional
-);
-```
+The `signer` can be any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`, `NonceManager`, or a custom `AbstractSigner`).
 
 ## Getting Started
 
@@ -103,7 +92,7 @@ Thank you for contributing to Obol-SDK!
 If you are an LLM, code-generation agent, or tool using this SDK programmatically, follow these guidelines to avoid common mistakes:
 
 - **Primary entrypoint:** `Client` from `@obolnetwork/obol-sdk`.
-- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi). `signer` is any ethers v6 `Signer`; no `as any` cast is needed. For viem, wrap the `WalletClient` with `walletClientToSigner` from `@obolnetwork/obol-sdk/viem`.
+- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi). `signer` is any ethers v6 `Signer`; no `as any` cast is needed.
 - **All operations are namespaced** under the client instance. Do **not** construct HTTP requests manually.
 
 ### Client API Surface
@@ -112,23 +101,23 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 |-----------|--------|-------------|
 | *(root)* | `acceptObolLatestTermsAndConditions()` | Accept T&C (required once before writes) |
 | *(root)* | `createClusterDefinition(payload)` | Create a new cluster → returns `config_hash` |
-| *(root)* | `getAcceptanceSummary(configHash)` | Verify a definition and return what an operator agrees to (show withdrawal / fee recipients before accepting) |
 | *(root)* | `acceptClusterDefinition(operatorPayload, configHash)` | Join a cluster as an operator (verifies the definition and operator membership first) |
 | *(root)* | `getClusterDefinition(configHash)` | Fetch cluster definition (read-only) |
 | *(root)* | `getClusterLock(configHash)` | Fetch cluster lock by config hash (read-only) |
 | *(root)* | `getClusterLockByHash(lockHash)` | Fetch cluster lock by lock hash (read-only) |
+| *(root)* | `getDepositData(lockHash)` | Validated deposit payloads (wei) from a lock, for `eoa.deposit` / `splits.deposit` (read-only) |
 | *(root)* | `createObolRewardsSplit(payload)` | Deploy OWR + splitter (rewards-only split) |
 | *(root)* | `createObolTotalSplit(payload)` | Deploy splitter (total split) |
 | *(root)* | `getOWRTranches(owrAddress)` | Read OWR tranche info (read-only on-chain) |
 | `client.splits` | `createValidatorManagerAndRewardsSplit(payload)` | Deploy OVM + SplitV2 (rewards-only) |
 | `client.splits` | `createValidatorManagerAndTotalSplit(payload)` | Deploy OVM + SplitV2 (total) |
 | `client.splits` | `requestWithdrawal(payload)` | Request withdrawal from OVM |
-| `client.splits` | `deposit(payload)` | Deposit to OVM contract |
+| `client.splits` | `deposit(payload)` | Deposit to OVM contract (verified first; `kind: 'topUp'` for top-ups) |
 | `client.incentives` | `getIncentivesByAddress(address)` | Fetch claimable incentives (read-only) |
 | `client.incentives` | `isClaimed(contractAddress, index)` | Check if incentives claimed (read-only) |
 | `client.incentives` | `claimIncentives(address)` | Claim incentives on-chain |
 | `client.eoa` | `requestWithdrawal(payload)` | Request EOA withdrawal |
-| `client.eoa` | `deposit(payload)` | Batch deposit validators |
+| `client.eoa` | `deposit(payload)` | Batch deposit validators (verified first; `kind: 'topUp'` for top-ups) |
 | `client.exit` | `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
 | `client.exit` | `verifyExitPayloadSignature(...)` | Verify ECDSA exit payload signature |
 | `client.exit` | `validateExitBlobs(...)` | Validate exit blobs against cluster config |

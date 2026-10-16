@@ -16,16 +16,17 @@ import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   OBOL_SDK_EMAIL,
   isChainSupportedForSplitters,
+  SUPPORTED_DEFINITION_VERSIONS,
 } from './constants.js';
 import {
   ConflictError,
   DefinitionVerificationError,
-  ResumeMismatchError,
+  InvalidArgumentError,
+  NotAnOperatorError,
   SignerRequiredError,
   UnsupportedChainError,
 } from './errors.js';
 import {
-  type AcceptanceSummary,
   type RewardsSplitPayload,
   type ClusterDefinition,
   type ClusterLock,
@@ -37,18 +38,12 @@ import {
   type OWRTranches,
   type ProviderType,
   type SignerType,
-  type ClusterProgress,
-  type WatchClusterOptions,
-  type WaitForOptions,
-  type CreateClusterDefinitionOptions,
-  type PreflightAcceptOptions,
-  type PreflightCreateOptions,
-  type PreflightResult,
 } from './types.js';
 import { clusterConfigOrDefinitionHash } from './verification/common.js';
 import { validatePayload } from './ajv.js';
 import {
   definitionSchema,
+  operatorPayloadSchema,
   rewardsSplitterPayloadSchema,
   totalSplitterPayloadSchema,
 } from './schema.js';
@@ -61,16 +56,6 @@ import {
 } from './splits/splitHelpers.js';
 import { assertSignerChain, isContractAvailable } from './utils.js';
 import { assertAddress, assertHash32 } from './validation.js';
-import {
-  runAcceptPreflight,
-  runCreatePreflight,
-  type PreflightContext,
-} from './clusterPreflight.js';
-import {
-  errorStatus,
-  waitForClusterProgress,
-  watchClusterProgress,
-} from './clusterStatus.js';
 import { Incentives } from './incentives/incentives.js';
 import { Exit } from './exits/exit.js';
 import { ObolSplits } from './splits/splits.js';
@@ -81,12 +66,6 @@ import {
   type GetDepositDataOptions,
   type LockDepositData,
 } from './deposits/lockDeposits.js';
-import {
-  checkExistingDeposits,
-  type CheckExistingDepositsOptions,
-  type DepositToCheck,
-  type ExistingDepositCheck,
-} from './deposits/existingDeposits.js';
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
@@ -97,9 +76,7 @@ export {
   ConflictError,
   ClusterLockValidationBusyError,
   ClusterLockValidationTimeoutError,
-  ClusterProgressTimeoutError,
   DefinitionVerificationError,
-  DepositConflictError,
   IncentivesPreflightError,
   InvalidArgumentError,
   InvalidBaseUrlError,
@@ -109,10 +86,8 @@ export {
   type ObolApiErrorInit,
   ObolSdkError,
   PayloadValidationError,
-  PreflightFailedError,
   RateLimitError,
   RequestTimeoutError,
-  ResumeMismatchError,
   SignerRequiredError,
   TransactionSubmissionError,
   UnauthorizedError,
@@ -138,15 +113,6 @@ export {
   type GetDepositDataOptions,
   type LockDepositData,
 } from './deposits/lockDeposits.js';
-export {
-  checkExistingDeposits,
-  BEACON_VALIDATORS_CHUNK_SIZE,
-  BEACON_VALIDATORS_CHUNK_CONCURRENCY,
-  type CheckExistingDepositsOptions,
-  type DepositCheckStatus,
-  type DepositToCheck,
-  type ExistingDepositCheck,
-} from './deposits/existingDeposits.js';
 export { ENR } from '@chainsafe/enr';
 
 /**
@@ -162,16 +128,12 @@ export { ENR } from '@chainsafe/enr';
  * Cluster lifecycle helpers live directly on the client:
  * - {@link Client.hasAcceptedTerms}
  * - {@link Client.acceptObolLatestTermsAndConditions}
- * - {@link Client.preflightCreate}
  * - {@link Client.createClusterDefinition}
- * - {@link Client.getAcceptanceSummary}
- * - {@link Client.preflightAccept}
  * - {@link Client.acceptClusterDefinition}
  * - {@link Client.getClusterDefinition}
  * - {@link Client.getClusterLock}
  * - {@link Client.getClusterLockByHash}
  * - {@link Client.getDepositData}
- * - {@link Client.checkExistingDeposits}
  * - {@link Client.createObolRewardsSplit}
  * - {@link Client.createObolTotalSplit}
  * - {@link Client.getOWRTranches}
@@ -258,8 +220,7 @@ export class Client extends Base {
    * @param config.timeoutMs - Obol API request timeout in milliseconds.
    *   Defaults to 30000; `0` disables it. Timeouts throw {@link RequestTimeoutError}.
    * @param signer - Any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`,
-   *   `NonceManager`, or a custom `AbstractSigner`); for a viem `WalletClient`, use
-   *   `walletClientToSigner` from `@obolnetwork/obol-sdk/viem`. Required for any
+   *   `NonceManager`, or a custom `AbstractSigner`). Required for any
    *   write operation (creating clusters, deploying splits, claiming incentives).
    *   Read-only operations (`getClusterDefinition`, `getClusterLock`) work without a signer.
    * @param provider - An ethers `Provider`. If omitted, falls back to `signer.provider`.
@@ -737,49 +698,6 @@ export class Client extends Base {
   }
 
   /**
-   * Runs the checks {@link Client.createClusterDefinition} depends on, without
-   * signing or submitting anything.
-   *
-   * Checks:
-   * - the definition version is supported and the payload passes schema
-   *   validation (reported as `INVALID_PAYLOAD` with the validation message),
-   * - operator addresses are well formed (`INVALID_OPERATOR_ADDRESS`), have a
-   *   valid EIP-55 checksum if mixed case (`OPERATOR_ADDRESS_CHECKSUM`,
-   *   warning) and are unique, case-insensitively (`DUPLICATE_OPERATOR`),
-   * - there are at least 4 operators (`TOO_FEW_OPERATORS`), and the resulting
-   *   threshold (`THRESHOLD`, info),
-   * - withdrawal and fee recipients are not the zero address, and, when the
-   *   client has a provider, whether each is a contract or not
-   *   (`RECIPIENT_IS_CONTRACT` / `RECIPIENT_IS_EOA`, info),
-   * - the signer is on the client's chain (`CHAIN_MISMATCH`),
-   * - the signer has accepted the terms and conditions
-   *   (`TERMS_NOT_ACCEPTED`; `TERMS_CHECK_FAILED` warning if unknown).
-   *
-   * Read-only: the only requests are the terms lookup and `getCode` calls.
-   *
-   * @param payload - The cluster payload to check.
-   * @param options.version - Definition version; defaults to {@link CONFIG_VERSION}.
-   * @returns `{ ok, issues }`; `ok` is `false` if any issue has `error` severity.
-   *
-   * @example
-   * ```typescript
-   * const { ok, issues } = await client.preflightCreate(payload);
-   * if (!ok) console.log(issues.filter(i => i.severity === 'error'));
-   * ```
-   */
-  async preflightCreate(
-    payload: ClusterPayload,
-    options: PreflightCreateOptions = {},
-  ): Promise<PreflightResult> {
-    const issues = await runCreatePreflight(
-      payload,
-      { version: options.version ?? CONFIG_VERSION },
-      this.preflightContext(),
-    );
-    return issues.result();
-  }
-
-  /**
    * Creates a new cluster definition and registers it with the Obol API.
    *
    * A cluster definition describes the operators, validators, and configuration
@@ -788,39 +706,22 @@ export class Client extends Base {
    *
    * - Requires {@link Client.acceptObolLatestTermsAndConditions} to have been called first.
    * - Requires a `signer`.
-   * - Runs {@link Client.preflightCreate} first and throws before signing if
-   *   the version, payload, signer chain or terms acceptance check fails.
    * - The `config_hash` returned is the unique identifier for this cluster.
    * - Threshold is automatically set to `ceil(2/3 * operators.length)`.
    * - Creating a duplicate cluster throws a {@link ConflictError}.
    *
-   * **Resuming.** If a create succeeded but a later step failed (e.g. the
-   * creator's own {@link Client.acceptClusterDefinition}), pass the
-   * `config_hash` as `resumeFrom` when retrying. The existing definition is
-   * fetched and verified, and must have been created by this signer with the
-   * same payload (its `config_hash` is recomputed from the payload with the
-   * existing `uuid` and `timestamp`). Nothing is signed or submitted and the
-   * same `config_hash` is returned; then call `acceptClusterDefinition` as
-   * usual, which returns early if the creator has already accepted.
-   *
    * @param newCluster - The cluster configuration payload.
-   * @param versionOrOptions - Definition version (string, for backwards
-   *   compatibility), or options: `version` (defaults to {@link CONFIG_VERSION},
-   *   or the existing definition's version with `resumeFrom`; must be one of
-   *   {@link SUPPORTED_DEFINITION_VERSIONS}; pass an earlier version such as
-   *   `'v1.10.0'` for DKG nodes running a charon release without the latest
-   *   schema) and `resumeFrom`.
+   * @param version - Definition version. Defaults to {@link CONFIG_VERSION};
+   *   must be one of {@link SUPPORTED_DEFINITION_VERSIONS}. Pass an earlier
+   *   version such as `'v1.10.0'` for DKG nodes running a charon release
+   *   without the latest schema.
    * @returns The `config_hash` string that uniquely identifies this cluster definition.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {InvalidArgumentError} If `version` is not supported.
+   * @throws {PayloadValidationError} If the payload fails validation (unknown
+   *   fields, fewer than 4 operators, invalid or duplicate addresses, zero
+   *   withdrawal or fee recipient address).
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
-   * @throws {PreflightFailedError} If `version` is not supported, the payload
-   *   fails validation (unknown fields, invalid or duplicate addresses, zero
-   *   withdrawal or fee recipient address), or the signer has not accepted
-   *   the terms and conditions. `issues` lists the failed checks.
-   * @throws {ResumeMismatchError} With `resumeFrom`, if the definition was
-   *   created by another address or does not match the payload.
-   * @throws {DefinitionVerificationError} With `resumeFrom`, if the existing
-   *   definition fails verification.
    * @throws {ConflictError} If an identical cluster definition already exists.
    *
    * @example
@@ -834,53 +735,53 @@ export class Client extends Base {
    *   }],
    * });
    * console.log("Cluster created:", configHash);
-   *
-   * // Retrying after a failure, without creating a second cluster:
-   * await client.createClusterDefinition(payload, { resumeFrom: configHash });
    * ```
    */
   async createClusterDefinition(
     newCluster: ClusterPayload,
-    versionOrOptions: string | CreateClusterDefinitionOptions = {},
+    version: string = CONFIG_VERSION,
   ): Promise<string> {
     if (!this.signer) {
       throw new SignerRequiredError('createClusterDefinition');
     }
-    const options: CreateClusterDefinitionOptions =
-      typeof versionOrOptions === 'string'
-        ? { version: versionOrOptions }
-        : (versionOrOptions ?? {});
 
-    if (options.resumeFrom !== undefined) {
-      return await this.resumeClusterDefinition(
-        newCluster,
-        options.resumeFrom,
-        options.version,
+    if (!SUPPORTED_DEFINITION_VERSIONS.includes(version)) {
+      throw new InvalidArgumentError(
+        `Unsupported cluster definition version ${String(version)}; expected one of ${SUPPORTED_DEFINITION_VERSIONS.join(', ')}`,
+        'version',
       );
     }
-    const version = options.version ?? CONFIG_VERSION;
-
-    const preflight = await runCreatePreflight(
-      newCluster,
-      { version, checkRecipients: false, failFast: true },
-      this.preflightContext(),
-    );
-    preflight.throwIfEnforced();
 
     const validatedCluster = validatePayload<ClusterPayload>(
       newCluster,
       definitionSchema,
     );
 
-    const address = await this.signer.getAddress();
-    const clusterConfig = this.buildClusterConfig(validatedCluster, {
+    const clusterConfig: Partial<ClusterDefinition> = {
+      ...validatedCluster,
+      fork_version: this.fork_version,
+      dkg_algorithm: DKG_ALGORITHM,
       version,
       uuid: uuidv4(),
       timestamp: new Date().toISOString(),
-      creatorAddress: address,
-    });
+      threshold: Math.ceil((2 * validatedCluster.operators.length) / 3),
+      num_validators: validatedCluster.validators.length,
+    };
+    await assertSignerChain(
+      this.signer,
+      this.chainId,
+      'createClusterDefinition',
+    );
 
     try {
+      const address = await this.signer.getAddress();
+
+      clusterConfig.creator = { address };
+      clusterConfig.config_hash = clusterConfigOrDefinitionHash(
+        clusterConfig as ClusterDefinition,
+        true,
+      );
+
       const creatorConfigSignature = await this.signer.signTypedData(
         Domain(this.chainId),
         CreatorConfigHashSigningTypes,
@@ -908,236 +809,23 @@ export class Client extends Base {
   }
 
   /**
-   * The cluster config signed by the creator, with its `config_hash`.
-   */
-  private buildClusterConfig(
-    validatedCluster: ClusterPayload,
-    {
-      version,
-      uuid,
-      timestamp,
-      creatorAddress,
-    }: {
-      version: string;
-      uuid: string;
-      timestamp: string;
-      creatorAddress: string;
-    },
-  ): Partial<ClusterDefinition> {
-    const clusterConfig: Partial<ClusterDefinition> = {
-      ...validatedCluster,
-      fork_version: this.fork_version,
-      dkg_algorithm: DKG_ALGORITHM,
-      version,
-      uuid,
-      timestamp,
-      threshold: Math.ceil((2 * validatedCluster.operators.length) / 3),
-      num_validators: validatedCluster.validators.length,
-      creator: { address: creatorAddress },
-    };
-    clusterConfig.config_hash = clusterConfigOrDefinitionHash(
-      clusterConfig as ClusterDefinition,
-      true,
-    );
-    return clusterConfig;
-  }
-
-  /**
-   * `createClusterDefinition` with `resumeFrom`: returns `configHash` if the
-   * existing definition was created by this signer from `newCluster`.
-   */
-  private async resumeClusterDefinition(
-    newCluster: ClusterPayload,
-    configHash: string,
-    requestedVersion: string | undefined,
-  ): Promise<string> {
-    const signer = this.signer as SignerType;
-    assertHash32(configHash, 'resumeFrom');
-    await assertSignerChain(signer, this.chainId, 'createClusterDefinition');
-
-    const definition = await this.getVerifiedClusterDefinition(configHash);
-    const version = requestedVersion ?? definition.version;
-
-    // Nothing is submitted, so terms acceptance is left to the next step.
-    const preflight = await runCreatePreflight(
-      newCluster,
-      { version, checkRecipients: false, checkTerms: false, failFast: true },
-      { ...this.preflightContext(), signer: undefined },
-    );
-    preflight.throwIfEnforced();
-
-    const address = await signer.getAddress();
-    const creator = definition.creator?.address;
-    if (
-      typeof creator !== 'string' ||
-      creator.toLowerCase() !== address.toLowerCase()
-    ) {
-      throw new ResumeMismatchError(
-        `Cluster definition ${configHash} was created by ${String(creator)}, not by the signer ${address}`,
-        configHash,
-      );
-    }
-
-    const validatedCluster = validatePayload<ClusterPayload>(
-      structuredClone(newCluster),
-      definitionSchema,
-    );
-    const expected = this.buildClusterConfig(validatedCluster, {
-      version,
-      uuid: definition.uuid,
-      timestamp: definition.timestamp,
-      creatorAddress: creator,
-    });
-    if (expected.config_hash?.toLowerCase() !== configHash.toLowerCase()) {
-      const fields = differingConfigFields(expected, definition);
-      throw new ResumeMismatchError(
-        `Cluster definition ${configHash} does not match the payload${fields.length > 0 ? ` (different: ${fields.join(', ')})` : ''}`,
-        configHash,
-        fields,
-      );
-    }
-
-    return definition.config_hash;
-  }
-
-  /**
-   * Fetches and verifies the cluster definition an operator is about to
-   * accept, and returns the terms in a form suitable for showing to the user.
-   *
-   * The definition is fetched from the Obol API and checked locally before
-   * anything is returned:
-   * - the returned `config_hash` equals `configHash`,
-   * - the `config_hash` recomputed from the definition's contents matches,
-   * - the definition's `fork_version` matches this client's chain.
-   *
-   * This is a read-only API call – no signer is required.
-   *
-   * **Integrators should show `withdrawal_addresses` and
-   * `fee_recipient_addresses` (and the operator set) to the user and get their
-   * confirmation before calling {@link Client.acceptClusterDefinition}.**
-   * Accepting a definition commits the operator to a DKG for validators whose
-   * principal and rewards go to these addresses.
-   *
-   * @param configHash - The `config_hash` of the cluster definition.
-   * @returns The verified definition's name, operators, threshold, validator
-   *   count and withdrawal / fee recipient addresses.
-   * @throws {DefinitionVerificationError} If the definition fails verification.
-   *
-   * @example
-   * ```typescript
-   * const summary = await client.getAcceptanceSummary(configHash);
-   * console.log(summary.name, summary.operators);
-   * console.log("Withdrawals go to:", summary.withdrawal_addresses);
-   * console.log("Fees go to:", summary.fee_recipient_addresses);
-   * // ...ask the user to confirm, then:
-   * await client.acceptClusterDefinition({ enr }, configHash);
-   * ```
-   */
-  async getAcceptanceSummary(configHash: string): Promise<AcceptanceSummary> {
-    const definition = await this.getVerifiedClusterDefinition(configHash);
-    const validators = (definition.validators ?? []).map(v => ({
-      fee_recipient_address: v.fee_recipient_address,
-      withdrawal_address: v.withdrawal_address,
-    }));
-    const distinct = (addresses: string[]): string[] => {
-      const seen = new Set<string>();
-      return addresses.filter(a => {
-        const key = a.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    };
-
-    return {
-      config_hash: definition.config_hash,
-      name: definition.name,
-      version: definition.version,
-      fork_version: definition.fork_version,
-      creator_address: definition.creator?.address,
-      operators: definition.operators.map(o => o.address),
-      threshold: definition.threshold,
-      num_validators: definition.num_validators,
-      validators,
-      withdrawal_addresses: distinct(validators.map(v => v.withdrawal_address)),
-      fee_recipient_addresses: distinct(
-        validators.map(v => v.fee_recipient_address),
-      ),
-      deposit_amounts: definition.deposit_amounts,
-      compounding: definition.compounding,
-    };
-  }
-
-  /**
-   * Runs the checks {@link Client.acceptClusterDefinition} depends on, without
-   * signing or submitting anything.
-   *
-   * Checks:
-   * - the definition fetches and verifies (config hash recomputed, fork
-   *   version matches this client's chain; `DEFINITION_VERIFICATION_FAILED`,
-   *   `DEFINITION_NOT_FOUND`, `DEFINITION_FETCH_FAILED`), and `version`, if
-   *   given, equals the definition's (`VERSION_MISMATCH`),
-   * - the signer is on the client's chain (`CHAIN_MISMATCH`),
-   * - the address is an operator of the definition (`NOT_AN_OPERATOR`),
-   * - the operator has not already accepted: with the same ENR this is
-   *   `ALREADY_ACCEPTED` (info, `ok` stays `true`), with another ENR
-   *   `ALREADY_ACCEPTED_DIFFERENT_ENR`,
-   * - the ENR decodes (`INVALID_ENR`) and no other operator in the cluster
-   *   uses it (`ENR_IN_USE`),
-   * - the address has accepted the terms and conditions
-   *   (`TERMS_NOT_ACCEPTED`; `TERMS_CHECK_FAILED` warning if unknown).
-   *
-   * Read-only: no signer is needed when `address` is given.
-   *
-   * @param configHash - The `config_hash` of the definition to accept.
-   * @param options.enr - The operator's ENR.
-   * @param options.address - Operator address; defaults to the signer's.
-   * @param options.version - Version the operator payload will carry.
-   * @returns `{ ok, issues }`; `ok` is `false` if any issue has `error` severity.
-   *
-   * @example
-   * ```typescript
-   * const { ok, issues } = await client.preflightAccept(configHash, { enr });
-   * if (ok) await client.acceptClusterDefinition({ enr }, configHash);
-   * ```
-   */
-  async preflightAccept(
-    configHash: string,
-    options: PreflightAcceptOptions,
-  ): Promise<PreflightResult> {
-    const { issues } = await runAcceptPreflight(
-      configHash,
-      {
-        enr: options?.enr,
-        address: options?.address,
-        version: options?.version,
-      },
-      {},
-      this.preflightContext(),
-    );
-    return issues.result();
-  }
-
-  /**
    * Accepts (joins) an existing cluster definition as an operator.
    *
    * Each operator in the cluster must call this method with their ENR and the
    * cluster's `config_hash` to signal readiness for the DKG ceremony.
    *
-   * Before signing, {@link Client.preflightAccept} runs: the definition is
-   * fetched and verified locally (see {@link Client.getAcceptanceSummary}),
-   * the signer's address must be one of the definition's operators, and the
-   * signer must have accepted the terms and conditions. Integrators should
-   * show the user the withdrawal and fee recipient addresses (from
-   * {@link Client.getAcceptanceSummary}) before calling this method.
+   * Before signing, the definition is fetched and verified locally: the
+   * returned `config_hash` equals `configHash`, the `config_hash` recomputed
+   * from the definition's contents matches, and the definition's
+   * `fork_version` matches this client's chain. The signer's address must be
+   * one of the definition's operators. Integrators should show the user the
+   * definition's withdrawal and fee recipient addresses before calling this
+   * method.
    *
    * - Requires a `signer` (the operator's address is derived from it).
    * - Signs two EIP-712 messages: one for the config hash, one for the ENR.
    * - If this operator has already accepted with the same ENR, the current
    *   definition is returned and nothing is signed.
-   * - ENR problems found by the pre-flight (not decodable, used by another
-   *   operator) and an earlier acceptance with a different ENR are left to
-   *   the API.
    *
    * @param operatorPayload - Operator data. Must include `enr` (Ethereum Node
    *   Record). `version` is optional and defaults to the definition's version;
@@ -1145,13 +833,13 @@ export class Client extends Base {
    * @param configHash - The `config_hash` returned by {@link Client.createClusterDefinition}.
    * @returns The updated cluster definition with the operator's acceptance recorded.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {InvalidArgumentError} If `configHash` is not a 0x-prefixed
+   *   32-byte hex string.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {DefinitionVerificationError} If the definition fails verification
    *   or `operatorPayload.version` differs from the definition's version.
+   * @throws {PayloadValidationError} If the operator payload is invalid.
    * @throws {NotAnOperatorError} If the signer is not an operator in the definition.
-   * @throws {PreflightFailedError} If `configHash` is not a 0x-prefixed
-   *   32-byte hex string, the payload is invalid, or the signer has not
-   *   accepted the terms and conditions.
    *
    * @example
    * ```typescript
@@ -1168,22 +856,39 @@ export class Client extends Base {
     if (!this.signer) {
       throw new SignerRequiredError('acceptClusterDefinition');
     }
+    assertHash32(configHash, 'configHash');
 
-    const { issues, definition, address, alreadyAccepted, validatedPayload } =
-      await runAcceptPreflight(
-        configHash,
-        { enr: operatorPayload?.enr, version: operatorPayload?.version },
-        { failFast: true },
-        this.preflightContext(),
-      );
-    issues.throwIfEnforced();
-    if (!definition || !address || !validatedPayload) {
-      // Not reached: each is set unless an enforced check failed.
+    await assertSignerChain(
+      this.signer,
+      this.chainId,
+      'acceptClusterDefinition',
+    );
+
+    const definition = await this.getVerifiedClusterDefinition(configHash);
+
+    if (
+      operatorPayload?.version !== undefined &&
+      operatorPayload.version !== definition.version
+    ) {
       throw new DefinitionVerificationError(
-        `Cannot accept cluster definition ${configHash}`,
+        `Operator payload version ${operatorPayload.version} does not match cluster definition version ${definition.version}`,
       );
     }
-    if (alreadyAccepted) {
+
+    const validatedPayload = validatePayload<OperatorPayload>(
+      { ...operatorPayload, version: definition.version },
+      operatorPayloadSchema,
+    );
+
+    const address = await this.signer.getAddress();
+    const operator = definition.operators.find(
+      o => o.address?.toLowerCase() === address.toLowerCase(),
+    );
+    if (!operator) {
+      throw new NotAnOperatorError(address, configHash);
+    }
+
+    if (operator.config_signature && operator.enr === validatedPayload.enr) {
       return definition;
     }
 
@@ -1199,7 +904,6 @@ export class Client extends Base {
     );
 
     const operatorData: OperatorPayload = {
-      ...operatorPayload,
       ...validatedPayload,
       address,
       enr_signature: operatorENRSignature,
@@ -1216,27 +920,6 @@ export class Client extends Base {
       },
     );
     return clusterDefinition;
-  }
-
-  /** What the pre-flight checks need from this client. */
-  private preflightContext(): PreflightContext {
-    return {
-      chainId: this.chainId,
-      signer: this.signer,
-      provider: this.provider,
-      termsStatus: async address => {
-        const response = await this.request<{
-          isTermsAndConditionsSigned?: unknown;
-        }>(
-          `/${DEFAULT_BASE_VERSION}/termsAndConditions/${encodeURIComponent(address)}`,
-          { method: 'GET' },
-        );
-        const signed = response?.isTermsAndConditionsSigned;
-        return typeof signed === 'boolean' ? signed : undefined;
-      },
-      getVerifiedDefinition: async hash =>
-        await this.getVerifiedClusterDefinition(hash),
-    };
   }
 
   /**
@@ -1404,12 +1087,7 @@ export class Client extends Base {
    * const { deposits } = await client.getDepositData(lockHash, {
    *   amount: "32000000000000000000",
    * });
-   * const checks = await client.checkExistingDeposits(deposits!, {
-   *   beaconUrl: "http://localhost:5052",
-   * });
-   * if (checks.every(c => c.status === "new")) {
-   *   await client.eoa.deposit({ deposits: deposits! });
-   * }
+   * await client.eoa.deposit({ deposits: deposits! });
    * ```
    */
   async getDepositData(
@@ -1432,153 +1110,4 @@ export class Client extends Base {
 
     return depositDataFromLock(lock, { amount });
   }
-
-  /**
-   * Checks deposits against a beacon node before they are sent. See the
-   * standalone {@link checkExistingDeposits} for the rules and limits; the
-   * result is advisory and cannot rule out deposits not yet on chain.
-   *
-   * @param deposits - Deposits to check (only `pubkey` and
-   *   `withdrawal_credentials` are used).
-   * @param options.beaconUrl - Beacon node REST API base URL for this chain.
-   * @returns One verdict per deposit: `new`, `top_up` or `conflict`.
-   * @throws {Error} On invalid input or any beacon node failure.
-   */
-  async checkExistingDeposits(
-    deposits: DepositToCheck[],
-    options: CheckExistingDepositsOptions,
-  ): Promise<ExistingDepositCheck[]> {
-    return await checkExistingDeposits(deposits, options);
-  }
-
-  /**
-   * Watches a cluster from operator sign-off to lock publication by polling the
-   * API. Yields the initial state, then each change (another operator signed,
-   * or the step advanced), and ends after `lock_published`.
-   *
-   * Definitions without operator addresses (solo and Charon-created) have
-   * nothing to sign and start at `definition_ready`.
-   *
-   * Polling starts at `intervalMs` and backs off by 1.5x up to `maxIntervalMs`
-   * while nothing changes. Network errors, 408, 429 and 5xx responses are
-   * retried; other 4xx responses (including 404 for an unknown config hash)
-   * are thrown. This is a read-only API call – no signer is required.
-   *
-   * @param configHash - The `config_hash` of the cluster definition.
-   * @param options - `signal` to stop watching, and polling intervals.
-   * @throws The abort reason when `signal` aborts.
-   *
-   * @example
-   * ```typescript
-   * for await (const s of client.watchCluster(configHash, { signal })) {
-   *   if (s.step === 'awaiting_signatures') console.log(`${s.signed}/${s.total}`);
-   *   if (s.step === 'lock_published') console.log(s.lockHash);
-   * }
-   * ```
-   */
-  watchCluster(
-    configHash: string,
-    options: WatchClusterOptions = {},
-  ): AsyncGenerator<ClusterProgress, void, undefined> {
-    assertHash32(configHash, 'configHash');
-    const endpoint = `/${DEFAULT_BASE_VERSION}`;
-    return watchClusterProgress(
-      {
-        getDefinition: async signal =>
-          await this.request<ClusterDefinition>(
-            `${endpoint}/definition/${encodeURIComponent(configHash)}`,
-            { method: 'GET', signal },
-          ),
-        getLock: async signal => {
-          try {
-            return await this.request<ClusterLock>(
-              `${endpoint}/lock/configHash/${encodeURIComponent(configHash)}`,
-              { method: 'GET', signal },
-            );
-          } catch (e) {
-            // No lock until the DKG completes.
-            if (errorStatus(e) === 404) return null;
-            throw e;
-          }
-        },
-      },
-      options,
-    );
-  }
-
-  /**
-   * Resolves once the cluster reaches `target`, using
-   * {@link Client.watchCluster}.
-   *
-   * This is a read-only API call – no signer is required.
-   *
-   * @param configHash - The `config_hash` of the cluster definition.
-   * @param target - `'definition_ready'` or `'lock_published'`.
-   * @param options - `onProgress` callback for every state, `timeoutMs` (omitted
-   *   or `0`: no timeout),
-   *   `signal`, and polling intervals.
-   * @returns The target state.
-   * @throws {ClusterProgressTimeoutError} If `timeoutMs` elapses first.
-   * @throws The abort reason when `signal` aborts.
-   *
-   * @example
-   * ```typescript
-   * const { lockHash } = await client.waitFor(configHash, 'lock_published', {
-   *   onProgress: s => console.log(s.step),
-   *   timeoutMs: 60 * 60 * 1000,
-   * });
-   * ```
-   */
-  async waitFor<T extends 'definition_ready' | 'lock_published'>(
-    configHash: string,
-    target: T,
-    options: WaitForOptions = {},
-  ): Promise<Extract<ClusterProgress, { step: T }>> {
-    const { onProgress, timeoutMs, signal, ...watchOptions } = options;
-    assertHash32(configHash, 'configHash');
-    return await waitForClusterProgress(
-      watchSignal =>
-        this.watchCluster(configHash, { ...watchOptions, signal: watchSignal }),
-      target,
-      { onProgress, timeoutMs, signal },
-    );
-  }
 }
-
-/** Config fields to compare when a `resumeFrom` definition does not match. */
-const RESUME_COMPARED_FIELDS = [
-  'name',
-  'version',
-  'operators',
-  'validators',
-  'num_validators',
-  'threshold',
-  'deposit_amounts',
-  'compounding',
-  'target_gas_limit',
-  'consensus_protocol',
-  'fork_version',
-] as const;
-
-const normalizeConfigField = (field: string, value: unknown): string => {
-  if (field === 'operators' && Array.isArray(value)) {
-    value = value.map(o => String(o?.address ?? '').toLowerCase());
-  } else if (field === 'validators' && Array.isArray(value)) {
-    value = value.map(v => [
-      String(v?.fee_recipient_address ?? '').toLowerCase(),
-      String(v?.withdrawal_address ?? '').toLowerCase(),
-    ]);
-  }
-  return JSON.stringify(value ?? null);
-};
-
-/** Names of the compared config fields that differ between `a` and `b`. */
-const differingConfigFields = (
-  a: Partial<ClusterDefinition>,
-  b: Partial<ClusterDefinition>,
-): string[] =>
-  RESUME_COMPARED_FIELDS.filter(
-    field =>
-      normalizeConfigField(field, a[field]) !==
-      normalizeConfigField(field, b[field]),
-  );

@@ -1,5 +1,4 @@
 import { type PreflightIssue } from './types.js';
-import { type ExistingDepositCheck } from './deposits/existingDeposits.js';
 
 /** Fields of an {@link ObolApiError} that body fields are not copied over. */
 const RESERVED_ERROR_FIELDS = new Set([
@@ -407,72 +406,6 @@ export class InvalidArgumentError extends ObolSdkError {
 }
 
 /**
- * Thrown by {@link Client.createClusterDefinition} and
- * {@link Client.acceptClusterDefinition} when a pre-flight check that the
- * method enforces fails, before anything is signed. `issues` holds the failed
- * checks (see {@link Client.preflightCreate} / {@link Client.preflightAccept});
- * the message is the first issue's message.
- *
- * Failures that already had their own error class (e.g. {@link ChainMismatchError},
- * {@link DefinitionVerificationError}, {@link NotAnOperatorError}, or an
- * {@link ObolApiError} from fetching the definition) are still thrown as that
- * class when they are the first failed check.
- */
-export class PreflightFailedError extends ObolSdkError {
-  name = 'PreflightFailedError';
-
-  constructor(public readonly issues: PreflightIssue[]) {
-    super(
-      issues[0]?.message ?? 'Pre-flight check failed',
-      'PREFLIGHT_FAILED',
-      issues[0]?.hint,
-    );
-    Object.setPrototypeOf(this, PreflightFailedError.prototype);
-  }
-}
-
-/**
- * Thrown by {@link Client.createClusterDefinition} with `resumeFrom` when the
- * existing definition was not created by this signer, or its configuration
- * does not match the payload. Nothing is signed or submitted.
- */
-export class ResumeMismatchError extends ObolSdkError {
-  name = 'ResumeMismatchError';
-
-  constructor(
-    message: string,
-    public readonly configHash: string,
-    /** Configuration fields that differ, when the configuration does not match. */
-    public readonly fields: string[] = [],
-  ) {
-    super(
-      message,
-      'RESUME_MISMATCH',
-      'Pass the config_hash of a definition this signer created with the same payload, or omit resumeFrom to create a new definition.',
-    );
-    Object.setPrototypeOf(this, ResumeMismatchError.prototype);
-  }
-}
-
-/**
- * Thrown by `eoa.deposit` / `splits.deposit` (when `beaconUrl` is given) if
- * the beacon node already has a pending deposit with different withdrawal
- * credentials for one of the pubkeys. No deposit is sent.
- */
-export class DepositConflictError extends ObolSdkError {
-  name = 'DepositConflictError';
-
-  constructor(public readonly conflicts: ExistingDepositCheck[]) {
-    super(
-      `Pending deposits with different withdrawal credentials exist for: ${conflicts.map(c => c.pubkey).join(', ')}`,
-      'DEPOSIT_CONFLICT',
-      'Do not send these deposits; check the withdrawal credentials of the pending deposits.',
-    );
-    Object.setPrototypeOf(this, DepositConflictError.prototype);
-  }
-}
-
-/**
  * Thrown when {@link Client} is constructed with a baseUrl that is not an
  * allowed Obol API base URL (see {@link ALLOWED_OBOL_API_BASE_URLS}).
  */
@@ -517,26 +450,6 @@ export class ClusterLockValidationBusyError extends Error {
       `Too many cluster lock validations in progress (limit: ${maxConcurrent}). Retry later.`,
     );
     Object.setPrototypeOf(this, ClusterLockValidationBusyError.prototype);
-  }
-}
-
-/**
- * Thrown by {@link Client.waitFor} when the cluster does not reach the target
- * step within `timeoutMs`.
- */
-export class ClusterProgressTimeoutError extends ObolSdkError {
-  name = 'ClusterProgressTimeoutError';
-
-  constructor(
-    public readonly target: string,
-    public readonly timeoutMs: number,
-  ) {
-    super(
-      `Cluster did not reach '${target}' within ${timeoutMs} ms`,
-      'CLUSTER_PROGRESS_TIMEOUT',
-      'Operators may still be signing or running the DKG; call waitFor or watchCluster again to keep waiting.',
-    );
-    Object.setPrototypeOf(this, ClusterProgressTimeoutError.prototype);
   }
 }
 

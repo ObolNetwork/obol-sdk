@@ -605,7 +605,7 @@ describe('deposit', () => {
     await hoodiClient.splits.deposit({
       ovmAddress: mockOVMAddress,
       deposits: singleDeposit,
-      skipSignatureVerification: true,
+      kind: 'topUp',
     });
     expect(mockdepositOVM).toHaveBeenCalledTimes(1);
   });

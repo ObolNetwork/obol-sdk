@@ -99,7 +99,7 @@ export const resolveOvmAddressFromListenerArgs = (
 };
 
 // A signer that can submit a transaction and return its hash without waiting
-// for it to be mined: ethers' JsonRpcSigner, or the viem WalletClient adapter.
+// for it to be mined, such as ethers' JsonRpcSigner.
 export type UncheckedTransactionSigner = SignerType & {
   sendUncheckedTransaction: (tx: TransactionRequest) => Promise<string>;
 };
@@ -1040,7 +1040,8 @@ const createSplitV2Params = (
     recipients: addresses,
     allocations,
     totalAllocation,
-    distributionIncentive: distributorFeePercent,
+    // SplitV2 reads distributionIncentive (uint16) at 1e6 = 100%.
+    distributionIncentive: Math.round(distributorFeePercent * 1e4),
   };
 };
 

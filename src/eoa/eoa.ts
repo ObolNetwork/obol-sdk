@@ -159,14 +159,11 @@ export class EOA {
    * of gwei between 1 ETH and 32 ETH (2048 ETH for 0x02 credentials),
    * `deposit_data_root` matches the deposit fields, the BLS signature is valid
    * for this chain, and, if `expectedWithdrawalAddress` is given, the
-   * withdrawal credentials point at it. Set `skipSignatureVerification` only
-   * for top-ups to a validator that already exists on the beacon chain.
-   *
-   * If `beaconUrl` is given, the deposits are first checked against that
-   * beacon node (see {@link checkExistingDeposits}): pubkeys with a pending
-   * deposit to different withdrawal credentials are refused. For top-ups to
-   * existing validators the signature is not checked and the withdrawal
-   * credentials may be all zero instead of the expected ones.
+   * withdrawal credentials point at it. For top-ups to validators that
+   * already exist on the beacon chain, pass `kind: 'topUp'`: the signature is
+   * not checked, the withdrawal credentials may be all zero instead of the
+   * expected ones, and up to 2048 ETH is allowed per deposit. Without it, a
+   * deposit with an all-zero signature is refused (`DEPOSIT_LOOKS_LIKE_TOP_UP`).
    * The output of {@link Client.getDepositData} can be passed as `deposits`.
    *
    * @param payload - Deposit data including an array of validator deposit objects.
@@ -176,9 +173,8 @@ export class EOA {
    * @throws {SignerRequiredError} If no signer was provided.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain has no batch deposit contract.
-   * @throws {DepositConflictError} If `beaconUrl` is given and a pubkey has a
-   *   pending deposit with different withdrawal credentials.
-   * @throws If any deposit fails the checks above, or the beacon node check fails.
+   * @throws {PayloadValidationError} If the payload is invalid.
+   * @throws If any deposit fails the checks above.
    * @throws {TransactionSubmissionError} If the call fails after a transaction
    *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
@@ -219,8 +215,7 @@ export class EOA {
     await verifyDepositsBeforeSend(validatedPayload.deposits, {
       chainId: this.chainId,
       expectedWithdrawalAddress: validatedPayload.expectedWithdrawalAddress,
-      skipSignatureVerification: validatedPayload.skipSignatureVerification,
-      beaconUrl: validatedPayload.beaconUrl,
+      kind: validatedPayload.kind,
     });
 
     return await submitEOABatchDeposit({

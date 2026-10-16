@@ -71,52 +71,6 @@ export type OperatorPayload = Partial<ClusterOperator> &
   Required<Pick<ClusterOperator, 'enr'>>;
 
 /**
- * What an operator agrees to when accepting a cluster definition, returned by
- * {@link Client.getAcceptanceSummary} after the definition has been verified
- * locally (config hash recomputed, network matches the client).
- */
-export type AcceptanceSummary = {
-  /** The verified cluster configuration hash. */
-  config_hash: string;
-
-  /** The cluster name. */
-  name: string;
-
-  /** The cluster definition version. */
-  version: string;
-
-  /** The cluster fork version (network). */
-  fork_version: string;
-
-  /** The address that created the cluster definition. */
-  creator_address: string;
-
-  /** Operator addresses, in definition order. */
-  operators: string[];
-
-  /** Signing threshold. */
-  threshold: number;
-
-  /** Number of distributed validators the cluster will create. */
-  num_validators: number;
-
-  /** Per-validator withdrawal and fee recipient addresses, in definition order. */
-  validators: ClusterValidator[];
-
-  /** Distinct withdrawal addresses across all validators. */
-  withdrawal_addresses: string[];
-
-  /** Distinct fee recipient addresses across all validators. */
-  fee_recipient_addresses: string[];
-
-  /** Partial deposit amounts in gwei, if set. */
-  deposit_amounts?: string[] | null;
-
-  /** Whether validators use 0x02 (compounding) withdrawal credentials. */
-  compounding?: boolean;
-};
-
-/**
  * Cluster creator data
  */
 export type ClusterCreator = {
@@ -278,7 +232,10 @@ export type OVMBaseSplitPayload = {
   /** Principal threshold in ETH for OVM contract. */
   principalThreshold?: number;
 
-  /** Distributor fee percentage (0-10). */
+  /**
+   * Share of each distribution paid to whoever calls `distribute`, in percent
+   * (0 to 6.5535, rounded to the nearest 0.0001). Defaults to 0.
+   */
   distributorFeePercent?: number;
 };
 
@@ -521,66 +478,14 @@ export type PreflightIssue = {
 
   /** Short suggestion for what to do next. */
   hint: string;
-
-  /**
-   * How serious the issue is. `error` (the default when omitted) means the
-   * operation would fail or should not go ahead; `warning` and `info` are
-   * advisory and do not affect `ok`.
-   */
-  severity?: PreflightSeverity;
 };
 
-/** Severity of a {@link PreflightIssue}. */
-export type PreflightSeverity = 'error' | 'warning' | 'info';
-
 /**
- * Result of a read-only pre-flight check. `ok` is `true` when no issue has
- * `error` severity (issues without a `severity` count as errors).
+ * Result of a read-only pre-flight check. `ok` is `true` when `issues` is empty.
  */
 export type PreflightResult = {
   ok: boolean;
   issues: PreflightIssue[];
-};
-
-/** Options for {@link Client.preflightCreate}. */
-export type PreflightCreateOptions = {
-  /**
-   * Cluster definition version to check against. Defaults to
-   * {@link CONFIG_VERSION}.
-   */
-  version?: string;
-};
-
-/** Options for {@link Client.preflightAccept}. */
-export type PreflightAcceptOptions = {
-  /** The operator's ENR (Ethereum Node Record). */
-  enr: string;
-
-  /** Operator address to check. Defaults to the signer's address. */
-  address?: string;
-
-  /**
-   * Version the operator payload will carry. When given, it must equal the
-   * definition's version.
-   */
-  version?: string;
-};
-
-/** Options for {@link Client.createClusterDefinition}. */
-export type CreateClusterDefinitionOptions = {
-  /**
-   * Cluster definition version to create. Defaults to {@link CONFIG_VERSION},
-   * or to the existing definition's version when `resumeFrom` is set.
-   */
-  version?: string;
-
-  /**
-   * `config_hash` of a definition this signer already created with the same
-   * payload (e.g. from an earlier attempt whose follow-up steps failed). When
-   * it matches, nothing is signed or submitted and this `config_hash` is
-   * returned.
-   */
-  resumeFrom?: string;
 };
 
 /**
@@ -859,6 +764,12 @@ export type ValidatorDeposit = {
 };
 
 /**
+ * What `eoa.deposit` / `splits.deposit` are sending: deposits to new
+ * validators (`'deposit'`) or top-ups to existing ones (`'topUp'`).
+ */
+export type DepositKind = 'deposit' | 'topUp';
+
+/**
  * Input payload for {@link ObolSplits.deposit}.
  * Deposits one or more validators to an OVM contract.
  */
@@ -870,26 +781,15 @@ export type OVMDepositPayload = {
   deposits: ValidatorDeposit[];
 
   /**
-   * Set when every deposit is a top-up to a validator that already exists on
-   * the beacon chain (where the signature is not checked): skips the BLS
-   * signature check, accepts all-zero withdrawal credentials as well as the
-   * expected ones, and allows up to 2048 ETH per deposit. Ignored when
-   * `beaconUrl` is set (the beacon node decides). Without either, deposits
-   * with an all-zero signature are refused. Defaults to `false`.
+   * What the deposits are. `'deposit'` (the default): deposits to new
+   * validators, which need a valid BLS signature for this chain and the
+   * expected withdrawal credentials; an all-zero signature is refused with
+   * `DEPOSIT_LOOKS_LIKE_TOP_UP`. `'topUp'`: every deposit tops up a validator
+   * that already exists on the beacon chain (where the signature is not
+   * checked): no BLS check, the expected or all-zero withdrawal credentials,
+   * and up to 2048 ETH per deposit.
    */
-  skipSignatureVerification?: boolean;
-
-  /**
-   * Beacon node REST API base URL for this chain. When set, the deposits are
-   * first checked with {@link checkExistingDeposits}: the call throws a
-   * {@link DepositConflictError} if any pubkey has a pending deposit with
-   * different withdrawal credentials. For deposits to validators that already
-   * exist (top-ups) the BLS signature is not checked and the withdrawal
-   * credentials may be all zero instead of the expected ones. All other
-   * deposits must have a valid signature, whatever `skipSignatureVerification`
-   * says.
-   */
-  beaconUrl?: string;
+  kind?: DepositKind;
 };
 
 /**
@@ -907,83 +807,13 @@ export type EOADepositPayload = {
   expectedWithdrawalAddress?: string;
 
   /**
-   * Set when every deposit is a top-up to a validator that already exists on
-   * the beacon chain (where the signature is not checked): skips the BLS
-   * signature check, accepts all-zero withdrawal credentials as well as the
-   * expected ones, and allows up to 2048 ETH per deposit. Ignored when
-   * `beaconUrl` is set (the beacon node decides). Without either, deposits
-   * with an all-zero signature are refused. Defaults to `false`.
+   * What the deposits are. `'deposit'` (the default): deposits to new
+   * validators, which need a valid BLS signature for this chain and the
+   * expected withdrawal credentials; an all-zero signature is refused with
+   * `DEPOSIT_LOOKS_LIKE_TOP_UP`. `'topUp'`: every deposit tops up a validator
+   * that already exists on the beacon chain (where the signature is not
+   * checked): no BLS check, the expected or all-zero withdrawal credentials,
+   * and up to 2048 ETH per deposit.
    */
-  skipSignatureVerification?: boolean;
-
-  /**
-   * Beacon node REST API base URL for this chain. When set, the deposits are
-   * first checked with {@link checkExistingDeposits}: the call throws a
-   * {@link DepositConflictError} if any pubkey has a pending deposit with
-   * different withdrawal credentials. For deposits to validators that already
-   * exist (top-ups) the BLS signature is not checked and the withdrawal
-   * credentials may be all zero instead of the expected ones. All other
-   * deposits must have a valid signature, whatever `skipSignatureVerification`
-   * says.
-   */
-  beaconUrl?: string;
-};
-
-/**
- * Progress of a cluster from definition to published lock, as yielded by
- * {@link Client.watchCluster}.
- *
- * - `awaiting_signatures`: some operators have not yet accepted the definition
- *   (submitted their ENR, ENR signature and config signature).
- * - `definition_ready`: every operator has signed (or the definition has no
- *   operator addresses, as in solo and Charon-created definitions), so the DKG
- *   can run.
- * - `lock_published`: the DKG completed and a cluster lock is available.
- */
-export type ClusterProgress =
-  | {
-      step: 'awaiting_signatures';
-      /** Number of operators that have signed. */
-      signed: number;
-      /** Total number of operators. */
-      total: number;
-      /** Addresses of operators that have not signed yet. */
-      pending: string[];
-      definition: ClusterDefinition;
-    }
-  | {
-      step: 'definition_ready';
-      definition: ClusterDefinition;
-    }
-  | {
-      step: 'lock_published';
-      lockHash: string;
-      lock: ClusterLock;
-    };
-
-/** Steps of {@link ClusterProgress}. */
-export type ClusterProgressStep = ClusterProgress['step'];
-
-/** Options for {@link Client.watchCluster}. */
-export type WatchClusterOptions = {
-  /** Stops polling; the generator throws `signal.reason`. */
-  signal?: AbortSignal;
-  /** Initial polling interval in ms (default 2000). */
-  intervalMs?: number;
-  /**
-   * Upper bound for the polling interval in ms (default 30000). While nothing
-   * changes, the interval grows by 1.5x up to this value; it resets on change.
-   */
-  maxIntervalMs?: number;
-};
-
-/** Options for {@link Client.waitFor}. */
-export type WaitForOptions = WatchClusterOptions & {
-  /** Called with every state {@link Client.watchCluster} yields. */
-  onProgress?: (progress: ClusterProgress) => void;
-  /**
-   * Rejects with `ClusterProgressTimeoutError` after this many ms. Omitted or
-   * `0` means no timeout (as for the Client's request `timeoutMs`).
-   */
-  timeoutMs?: number;
+  kind?: DepositKind;
 };

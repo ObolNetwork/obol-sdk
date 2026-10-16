@@ -21,7 +21,7 @@ Route *elsewhere* when:
 - User asks about **Lido Simple DVT operator flow** → the SDK + `lido-charon-distributed-validator-node` together; see the LCDVN repo's CLAUDE.md.
 - The user's task is a **one-shot cluster definition, DKG run, or lock inspection** and they're comfortable on the command line → the [`charon` CLI binary](https://docs.obol.org/docs/charon/charon-cli-reference) (or `obolnetwork/charon` Docker image) offers direct equivalents like `charon create cluster`, `charon create dkg`, `charon dkg`, and `charon alpha add-validators`. Often a single `docker run obolnetwork/charon:latest …` invocation is easier than bootstrapping a Node.js project around this SDK, especially for scripting / CI use. Reach for the SDK when the user needs programmatic control (invitations, splits, incentive claims, exit flows, custom payloads) or is integrating into an existing TypeScript/Node app.
 
-**Canonical consumer reference**: [`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples) ships full working TS/JS examples, one script per flow in `TS-Example/src/<flow>.ts` (`create-cluster.ts`, `accept-cluster.ts`, `watch-cluster.ts`, `validate-lock.ts`, `deposits.ts`, `withdrawal.ts`, `splits-rewards.ts`, `splits-total.ts`, `incentives.ts`, `exits.ts`, `errors.ts`, `viem-signer.ts`; shared client setup in `TS-Example/src/shared/config.ts`). Skim the script for the user's flow first.
+**Canonical consumer reference**: [`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples) ships full working TS/JS examples, one script per flow in `TS-Example/src/<flow>.ts` (`create-cluster.ts`, `accept-cluster.ts`, `validate-lock.ts`, `deposits.ts`, `withdrawal.ts`, `splits-rewards.ts`, `splits-total.ts`, `incentives.ts`, `exits.ts`, `errors.ts`; shared client setup in `TS-Example/src/shared/config.ts`). Skim the script for the user's flow first.
 
 ---
 
@@ -79,15 +79,12 @@ src/
 ├── services.ts       # Standalone exports (validateClusterLock → worker or sync)
 ├── utils.ts          # Utility functions (incl. assertSignerChain)
 ├── validation.ts     # assertHash32 / assertAddress for URL path arguments
-├── clusterStatus.ts  # watchCluster / waitFor polling (operator sign-off → lock)
-├── clusterPreflight.ts # preflightCreate / preflightAccept checks (shared with create / accept)
-├── viem.ts           # `@obolnetwork/obol-sdk/viem` subpath: viem WalletClient/PublicClient adapters
 ├── withdrawalFee.ts  # EIP-7002 withdrawal fee read + bounds
 ├── schema.ts         # AJV JSON schemas for payload validation
 ├── ajv.ts            # AJV setup with custom validation keywords
 ├── bytecodes.ts      # Contract bytecodes (large file, do not read unless needed)
 ├── abi/              # Smart contract ABIs
-├── deposits/         # getDepositData (lock → deposit payloads), checkExistingDeposits (beacon node), depositGuard
+├── deposits/         # getDepositData (lock → deposit payloads), depositGuard (`kind` → verifyDepositPayloads)
 ├── eoa/              # EOA module: withdrawals and batch deposits
 ├── exits/            # Exit validation: BLS signature verification
 ├── incentives/       # Incentive claims from Merkle Distributors (+ claim pre-flight checks)
@@ -102,8 +99,7 @@ src/
 test/
 ├── fixtures.ts       # Shared test data (addresses, cluster locks, validators)
 ├── client/           # Client method and validation tests
-├── deposits/         # getDepositData / checkExistingDeposits / deposit flow tests
-├── viem/             # viem adapter tests
+├── deposits/         # getDepositData / deposit flow (kind, top-ups) tests
 ├── verification/     # parallelPool.spec.ts (sync fallback in jest)
 ├── perf/             # parallelBench.mjs, blsBench.mjs (run after yarn build)
 ├── eoa/              # EOA functionality tests
@@ -128,7 +124,6 @@ Key build notes:
 - `ethers` is kept external (~2MB, consumers already have it)
 - `@chainsafe/enr` is bundled (ESM-only package)
 - Browser build defines `process.env` as empty and `global` as `globalThis`
-- `src/viem.ts` is a separate entry (`./viem` export); `viem` is an optional peer dependency, so never import it from the main entry
 - **CJS/ESM Node** also emit separate bundles for `lockWorker.js` and
   `clusterLockValidationWorker.js` (see `tsup.config.ts`). **Browser** build does
   not — `validateClusterLock` falls back to sync there.
@@ -159,18 +154,12 @@ client.exit.*         // Verify/recombine exit signatures
 |--------|---------|-------------|
 | `hasAcceptedTerms(address?)` | No | Whether `address` (default: the signer's) accepted the latest T&C |
 | `acceptObolLatestTermsAndConditions({ ifNotAccepted? })` | Yes | EIP-712 T&C acceptance (required before writes); `ifNotAccepted: true` skips if already accepted |
-| `preflightCreate(payload, { version? })` | No* | Read-only create checks, returns `{ ok, issues }` (*signer needed for the chain and terms checks) |
-| `createClusterDefinition(payload, version \| { version?, resumeFrom? })` | Yes | Register new cluster, returns `config_hash`; runs `preflightCreate` first; `resumeFrom` returns an existing matching definition instead of creating another |
-| `getAcceptanceSummary(configHash)` | No | Verified definition terms (operators, withdrawal / fee recipients) to show before accepting |
-| `preflightAccept(configHash, { enr, address?, version? })` | No | Read-only accept checks, returns `{ ok, issues }` |
-| `acceptClusterDefinition(operatorPayload, configHash)` | Yes | Operator joins cluster (runs `preflightAccept` first: definition hash, network, operator membership, terms; idempotent) |
+| `createClusterDefinition(payload, version?)` | Yes | Register new cluster, returns `config_hash`; `version` defaults to `CONFIG_VERSION` and must be in `SUPPORTED_DEFINITION_VERSIONS` |
+| `acceptClusterDefinition(operatorPayload, configHash)` | Yes | Operator joins cluster; verifies the definition first (config hash recomputed, network), fills `version` from it, requires the signer to be an operator; idempotent for the same ENR |
 | `getClusterDefinition(configHash)` | No | Fetch cluster definition |
 | `getClusterLock(configHash)` | No | Fetch cluster lock (post-DKG) |
 | `getClusterLockByHash(lockHash)` | No | Fetch lock by lock_hash |
-| `watchCluster(configHash, { signal? })` | No | Async iterator of progress (signatures → `definition_ready` → `lock_published`), polls with backoff |
-| `waitFor(configHash, target, { timeoutMs?, onProgress?, signal? })` | No | Resolve when `definition_ready` / `lock_published` is reached; throws `ClusterProgressTimeoutError` (`timeoutMs` omitted or `0`: no timeout) |
 | `getDepositData(lockHash, { verify?, amount? })` | No | Validated deposit payloads (wei) from a lock, for `eoa.deposit` / `splits.deposit` |
-| `checkExistingDeposits(deposits, { beaconUrl })` | No | Advisory beacon-node check: `new` / `top_up` / `conflict` per deposit |
 | `createObolRewardsSplit(payload)` | Yes | Deprecated for new clusters (use `splits.createValidatorManagerAndRewardsSplit`): deploy OWR + SplitMain (Mainnet/Hoodi only) |
 | `createObolTotalSplit(payload)` | Yes | Deprecated for new clusters (use `splits.createValidatorManagerAndTotalSplit`): deploy SplitMain only (Mainnet/Hoodi only) |
 | `getOWRTranches(owrAddress)` | No* | Read OWR contract state (*needs a provider, or a signer connected to one) |
@@ -183,13 +172,13 @@ client.exit.*         // Verify/recombine exit signatures
 | `createValidatorManagerAndRewardsSplit(payload)` | Deploy OVM + SplitV2 for rewards splitting |
 | `createValidatorManagerAndTotalSplit(payload)` | Deploy OVM + SplitV2 for total splitting |
 | `requestWithdrawal(payload)` | Submit withdrawal to OVM contract (`amounts` in gwei; unused fees refunded to `excessFeeRecipient`, default the signer) |
-| `deposit(payload)` | Deposit validators to OVM (checks root, amount, credentials, BLS; optional `beaconUrl`, see below) |
+| `deposit(payload)` | Deposit validators to OVM (checks root, amount, credentials, BLS; `kind: 'topUp'` for top-ups, see below) |
 
 **client.eoa**
 | Method | Description |
 |--------|-------------|
 | `requestWithdrawal(payload)` | Request validator withdrawal via EOA contract |
-| `deposit(payload)` | Batch deposit validators (up to 500 per tx; same checks and `beaconUrl` option) |
+| `deposit(payload)` | Batch deposit validators (up to 500 per tx; same checks and `kind` option) |
 
 **client.incentives**
 | Method | Description |
@@ -207,12 +196,11 @@ client.exit.*         // Verify/recombine exit signatures
 | `validateExitBlobs(config, payload, beaconUrl, existing)` | Comprehensive exit blob validation |
 | `recombineExitBlobs(exitBlob)` | Aggregate partial BLS signatures |
 
-**Pre-flight and resume** (`preflightCreate` / `preflightAccept`, `src/clusterPreflight.ts`): issues are `{ code, message, hint, severity? }`; `severity` defaults to `error`, and only errors make `ok` false (`warning`/`info` are advisory, e.g. `OPERATOR_ADDRESS_CHECKSUM`, `THRESHOLD`, `RECIPIENT_IS_CONTRACT`/`RECIPIENT_IS_EOA`, `ALREADY_ACCEPTED`). `createClusterDefinition` / `acceptClusterDefinition` run the same checks but only fail on the ones they already enforced (version, schema, config hash, signer chain, definition verification, operator membership) plus terms acceptance (`TERMS_NOT_ACCEPTED`; an unreadable terms status is only a warning). ENR problems (`INVALID_ENR`, `ENR_IN_USE`) and `ALREADY_ACCEPTED_DIFFERENT_ENR` are reported but left to the API. When the first failed check had its own error class it is still thrown (`ChainMismatchError`, `DefinitionVerificationError`, `NotAnOperatorError`, `NotFoundError`, ...); otherwise `PreflightFailedError` with `issues`. Resume a create with `createClusterDefinition(payload, { resumeFrom: configHash })`: the definition must verify, have this signer as `creator.address`, and recompute to the same `config_hash` from the payload with its `uuid`/`timestamp` (else `ResumeMismatchError` with `fields`). Self-accept stays the caller's step: call `acceptClusterDefinition` after resuming; it returns early if already accepted.
+**Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
 
 **Deposits and top-ups** (`eoa.deposit` / `splits.deposit`):
-- With `beaconUrl`, deposits are checked with `checkExistingDeposits` first. A `conflict` (pending deposit with other credentials) throws `DepositConflictError`. A `top_up` (validator has an index) skips the BLS check, may use the expected or all-zero credentials, and its maximum amount follows the existing validator's credentials (0x02 → 2048 ETH, else 32 ETH); every other deposit needs a valid signature and the expected credentials (`skipSignatureVerification` is ignored).
-- Without `beaconUrl`, `skipSignatureVerification: true` means the caller asserts every deposit is a top-up: no BLS check, expected or all-zero credentials, up to 2048 ETH. This is what Launchpad-style top-ups (all-zero credentials and signature) need.
-- Without either, a deposit with an all-zero signature is refused with `ObolSdkError` code `DEPOSIT_LOOKS_LIKE_TOP_UP` (it would be lost if the validator does not exist). Malformed signatures are reported as `Invalid deposit at index N: invalid deposit signature`.
+- `kind?: 'deposit' | 'topUp'` (default `'deposit'`) says what the payload is. `'deposit'`: every deposit needs a valid BLS signature for the chain and the expected withdrawal credentials, up to 32 ETH (2048 ETH for 0x02 credentials). `'topUp'`: the caller asserts every deposit tops up an existing validator: no BLS check, expected or all-zero credentials, up to 2048 ETH. This is what Launchpad-style top-ups (all-zero credentials and signature) need.
+- With `kind: 'deposit'`, a deposit with an all-zero signature is refused with `ObolSdkError` code `DEPOSIT_LOOKS_LIKE_TOP_UP` (it would be lost if the validator does not exist). Malformed signatures are reported as `Invalid deposit at index N: invalid deposit signature`.
 - `getWithdrawalRequestFee(provider)` / `resolveWithdrawalFee(...)` (exported) read and bound the EIP-7002 withdrawal request fee. Default fee when omitted: 2× the current fee for `splits.requestWithdrawal` (the OVM refunds the excess), exactly the current fee for `eoa.requestWithdrawal` (the EIP-7002 contract keeps any excess).
 - Contract-wallet signers (a Safe over WalletConnect) are supported on all four deposit / withdrawal methods: the SDK waits for the Safe's `ExecutionSuccess` (up to 30 minutes) and returns the executed hash; `onSent` reports the Safe's own hash with `contractWallet: true`.
 
@@ -276,7 +264,7 @@ Bench chunk workers after build: `node test/perf/parallelBench.mjs`.
 - **SplitRecipient**: `{ account, percentAllocation }` (V1)
 - **SplitV2Recipient**: `{ address, percentAllocation }` (V2)
 - **ValidatorDeposit**: `{ pubkey, withdrawal_credentials, signature, deposit_data_root, amount (wei) }` — `getDepositData` output and `eoa`/`splits` deposit input
-- **SignerType**: ethers v6 `Signer` (viem `WalletClient` via `walletClientToSigner` from `@obolnetwork/obol-sdk/viem`)
+- **SignerType**: any ethers v6 `Signer`
 - **ProviderType**: ethers v6 `Provider`
 
 ### Error Classes (`src/errors.ts`)
@@ -288,13 +276,9 @@ Local checks extend **ObolSdkError** (`code`, `hint`):
 - **DefinitionVerificationError**: Fetched cluster definition failed local verification (config hash, fork_version, version)
 - **NotAnOperatorError**: Signer is not an operator of the definition being accepted
 - **IncentivesPreflightError**: `claimIncentives` pre-flight check failed (`issues`)
-- **PreflightFailedError**: `createClusterDefinition` / `acceptClusterDefinition` pre-flight check failed (`issues`, code `PREFLIGHT_FAILED`)
-- **ResumeMismatchError**: `resumeFrom` definition has another creator or does not match the payload (`fields`)
-- **DepositConflictError**: `beaconUrl` check found a conflicting pending deposit (`conflicts`)
 - **PayloadValidationError**: payload failed AJV schema validation (code `PAYLOAD_INVALID`, `errors` = AJV errors; message `Validation failed: ...`)
-- **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`)
-- **ClusterProgressTimeoutError**: `waitFor` hit `timeoutMs`
-- **TransactionSubmissionError**: a write failed after broadcasting (`txHashes`, `pendingTxHash`, `cause`; code `TX_FAILED_AFTER_SEND`)
+- **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`), or unsupported `createClusterDefinition` version
+- **TransactionSubmissionError**: a write failed after broadcasting (`txHashes`, `pendingTxHash`, `pendingStatus`, `cause`; code `TX_FAILED_AFTER_SEND`)
 
 Other:
 - **SignerRequiredError**: Write method called without signer

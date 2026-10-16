@@ -5,7 +5,6 @@ export default defineConfig([
   {
     entry: [
       'src/index.ts',
-      'src/viem.ts',
       'src/blsUtils.ts',
       'src/verification/lockWorker.ts',
       'src/verification/parallelPool.ts',
@@ -23,7 +22,6 @@ export default defineConfig([
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'ethers',                      // ← Very large (~2MB), consumers always have it
-      'viem',                        // optional peer, only used by the /viem subpath
     ],
     esbuildOptions(options) {
       options.platform = 'node';
@@ -33,7 +31,6 @@ export default defineConfig([
   {
     entry: [
       'src/index.ts',
-      'src/viem.ts',
       'src/blsUtils.ts',
       'src/verification/lockWorker.ts',
       'src/verification/parallelPool.ts',
@@ -52,7 +49,6 @@ export default defineConfig([
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
       'ethers',                      // ← Very large (~2MB), consumers always have it
-      'viem',                        // optional peer, only used by the /viem subpath
     ],
     esbuildOptions(options) {
       options.platform = 'node';
@@ -60,7 +56,7 @@ export default defineConfig([
   },
   // Browser ESM build
   {
-    entry: ['src/index.ts', 'src/viem.ts'],
+    entry: ['src/index.ts'],
     format: ['esm'],
     dts: false,
     outDir: 'dist/browser/src',
@@ -79,8 +75,7 @@ export default defineConfig([
       '@metamask/eth-sig-util',
       '@safe-global/protocol-kit',
       '@safe-global/types-kit',
-      'ethers',
-      'viem'
+      'ethers'
     ],
     esbuildOptions(options) {
       options.platform = 'browser';

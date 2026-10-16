@@ -278,57 +278,6 @@ describe('acceptClusterDefinition verification', () => {
   });
 });
 
-describe('getAcceptanceSummary', () => {
-  test('returns the verified terms without a signer', async () => {
-    const def = pendingDefinition();
-    def.validators = [
-      def.validators[0],
-      {
-        fee_recipient_address:
-          def.validators[0].fee_recipient_address.toLowerCase(),
-        withdrawal_address: TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
-      },
-    ];
-    def.num_validators = 2;
-    def.deposit_amounts = null;
-    def.config_hash = clusterConfigOrDefinitionHash(def, true);
-    mockApi(def);
-    const client = new Client({ baseUrl, chainId: 560048 });
-
-    const summary = await client.getAcceptanceSummary(def.config_hash);
-
-    expect(summary).toEqual({
-      config_hash: def.config_hash,
-      name: def.name,
-      version: def.version,
-      fork_version: def.fork_version,
-      creator_address: def.creator.address,
-      operators: def.operators.map(o => o.address),
-      threshold: def.threshold,
-      num_validators: 2,
-      validators: def.validators,
-      withdrawal_addresses: [
-        def.validators[0].withdrawal_address,
-        TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2,
-      ],
-      fee_recipient_addresses: [def.validators[0].fee_recipient_address],
-      deposit_amounts: null,
-      compounding: def.compounding,
-    });
-  });
-
-  test('rejects a tampered definition', async () => {
-    const def = pendingDefinition();
-    def.validators[0].fee_recipient_address = TEST_ADDRESSES.REWARD_RECIPIENT_2;
-    mockApi(def);
-    const client = new Client({ baseUrl, chainId: 560048 });
-
-    await expect(client.getAcceptanceSummary(def.config_hash)).rejects.toThrow(
-      DefinitionVerificationError,
-    );
-  });
-});
-
 describe('signer chain check on other write methods', () => {
   test('createClusterDefinition throws ChainMismatchError before signing', async () => {
     const fetchSpy = mockApi({});

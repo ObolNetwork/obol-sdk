@@ -369,7 +369,7 @@ describe('EOA', () => {
         const hoodiEoa = new EOA(mockSigner, 560048, mockProvider);
         await hoodiEoa.deposit({
           deposits: [deposit],
-          skipSignatureVerification: true,
+          kind: 'topUp',
         });
         expect(submitEOABatchDeposit).toHaveBeenCalledTimes(1);
       });

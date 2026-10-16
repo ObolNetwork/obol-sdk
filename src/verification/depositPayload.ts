@@ -2,6 +2,7 @@ import { fromHexString } from '@chainsafe/ssz';
 import {
   FORK_MAPPING,
   type BlsSignatureCheck,
+  type DepositKind,
   type ValidatorDeposit,
 } from '../types.js';
 import { blsVerify } from '../blsUtils.js';
@@ -20,24 +21,13 @@ export type VerifyDepositPayloadOptions = {
   /** When set, withdrawal credentials must be 0x01/0x02 credentials for this address. */
   expectedWithdrawalAddress?: string;
   /**
-   * The caller asserts every deposit is a top-up to an existing validator:
-   * the BLS signature is not checked, withdrawal credentials may be all zero
-   * instead of pointing at `expectedWithdrawalAddress`, and the amount may be
-   * up to 2048 ETH (the validator's credential type is not known here).
+   * `'topUp'`: the caller asserts every deposit is a top-up to an existing
+   * validator, so the BLS signature is not checked, withdrawal credentials
+   * may be all zero instead of pointing at `expectedWithdrawalAddress`, and
+   * the amount may be up to 2048 ETH (the validator's credential type is not
+   * known here). Defaults to `'deposit'`.
    */
-  skipSignatureVerification?: boolean;
-  /**
-   * Indexes (into `deposits`) of top-ups to validators that already exist.
-   * Their BLS signature is not checked, and their withdrawal credentials may
-   * be all zero instead of pointing at `expectedWithdrawalAddress`. The other
-   * checks still apply.
-   *
-   * As a map, the values are the existing validators' withdrawal credentials
-   * (from the beacon node): the maximum amount of those top-ups then follows
-   * the validator's credentials (2048 ETH for 0x02, else 32 ETH) instead of
-   * the deposit's own, which do not apply to a top-up.
-   */
-  topUps?: ReadonlySet<number> | ReadonlyMap<number, string>;
+  kind?: DepositKind;
 };
 
 const WEI_PER_GWEI = BigInt(1_000_000_000);
@@ -60,20 +50,18 @@ const fail = (index: number, reason: string): never => {
 /**
  * Checks deposit data before ETH is sent to a deposit contract:
  * - `amount` (wei) is a whole number of gwei, at least 1 ETH, and at most
- *   32 ETH (0x00 / 0x01 credentials) or 2048 ETH (0x02 credentials); for
- *   top-ups with known validator credentials, the validator's credentials
- *   decide the limit;
+ *   32 ETH (0x00 / 0x01 credentials) or 2048 ETH (0x02 credentials, and
+ *   any top-up);
  * - withdrawal credentials have a known prefix and, if
- *   `expectedWithdrawalAddress` is given, point at that address (top-ups
- *   listed in `topUps` may instead use all-zero credentials);
+ *   `expectedWithdrawalAddress` is given, point at that address (top-ups may
+ *   instead use all-zero credentials);
  * - `deposit_data_root` matches the recomputed SSZ root of the deposit;
  * - the BLS signature is valid for the chain's deposit domain, unless
- *   `skipSignatureVerification` is set or the deposit is in `topUps`.
+ *   `kind` is `'topUp'`.
  *
- * With `skipSignatureVerification`, every deposit is treated as a top-up
- * (see {@link VerifyDepositPayloadOptions}). Without it and without `topUps`,
- * an all-zero signature (as used for top-ups) is refused with an
- * {@link ObolSdkError} coded `DEPOSIT_LOOKS_LIKE_TOP_UP`.
+ * For `kind: 'deposit'` (the default), an all-zero signature (as used for
+ * top-ups) is refused with an {@link ObolSdkError} coded
+ * `DEPOSIT_LOOKS_LIKE_TOP_UP`.
  *
  * @throws Error naming the first invalid deposit.
  */
@@ -82,12 +70,12 @@ export const verifyDepositPayloads = async (
   {
     chainId,
     expectedWithdrawalAddress,
-    skipSignatureVerification,
-    topUps,
+    kind = 'deposit',
   }: VerifyDepositPayloadOptions,
 ): Promise<void> => {
+  const isTopUp = kind === 'topUp';
   const forkVersion = FORK_MAPPING[chainId] as string | undefined;
-  if (!skipSignatureVerification && !forkVersion) {
+  if (!isTopUp && !forkVersion) {
     throw new Error(
       `Cannot verify deposit signatures on chain ${chainId}: unknown fork version`,
     );
@@ -101,15 +89,11 @@ export const verifyDepositPayloads = async (
   const checkIndexes: number[] = [];
 
   deposits.forEach((deposit, index) => {
-    if (
-      !skipSignatureVerification &&
-      topUps === undefined &&
-      ZERO_SIGNATURE.test(deposit.signature)
-    ) {
+    if (!isTopUp && ZERO_SIGNATURE.test(deposit.signature)) {
       throw new ObolSdkError(
         `Invalid deposit at index ${index}: the signature is all zero, as for a top-up to an existing validator`,
         'DEPOSIT_LOOKS_LIKE_TOP_UP',
-        'Pass skipSignatureVerification: true for top-ups to existing validators, or beaconUrl to have the SDK check; a zero-signature deposit to a new validator is rejected by the beacon chain and the ETH is not recoverable.',
+        "Pass kind: 'topUp' for top-ups to existing validators; a zero-signature deposit to a new validator is rejected by the beacon chain and the ETH is not recoverable.",
       );
     }
     const amountWei = BigInt(deposit.amount);
@@ -133,30 +117,17 @@ export const verifyDepositPayloads = async (
       fail(index, 'malformed execution withdrawal credentials');
     }
 
-    const isTopUp =
-      skipSignatureVerification === true || topUps?.has(index) === true;
-    // A top-up is credited to the existing validator, so its credentials set
-    // the maximum effective balance. Without them (caller-asserted top-ups),
-    // allow up to the compounding maximum.
-    const validatorCredentials =
-      topUps instanceof Map && topUps.has(index)
-        ? topUps.get(index)
-        : undefined;
-    const limitPrefix = validatorCredentials
-      ? validatorCredentials.toLowerCase().slice(0, 4)
-      : skipSignatureVerification === true
-        ? '0x02'
-        : prefix;
+    // A top-up is credited to the existing validator, whose credential type
+    // is not known here, so allow up to the compounding maximum.
+    const limitPrefix = isTopUp ? '0x02' : prefix;
     const maxAmount =
       limitPrefix === '0x02' ? MAX_COMPOUNDING_DEPOSIT_WEI : MAX_DEPOSIT_WEI;
     if (amountWei > maxAmount) {
       fail(
         index,
-        validatorCredentials
-          ? `amount exceeds ${limitPrefix === '0x02' ? 2048 : 32} ETH for a top-up to a validator with ${limitPrefix} withdrawal credentials`
-          : skipSignatureVerification === true
-            ? 'amount exceeds 2048 ETH, the maximum for a top-up'
-            : `amount exceeds ${limitPrefix === '0x02' ? 2048 : 32} ETH for ${prefix} withdrawal credentials`,
+        isTopUp
+          ? 'amount exceeds 2048 ETH, the maximum for a top-up'
+          : `amount exceeds ${limitPrefix === '0x02' ? 2048 : 32} ETH for ${prefix} withdrawal credentials`,
       );
     }
 
@@ -190,7 +161,7 @@ export const verifyDepositPayloads = async (
       fail(index, 'deposit_data_root does not match the deposit fields');
     }
 
-    if (!skipSignatureVerification && !isTopUp && depositDomain) {
+    if (!isTopUp && depositDomain) {
       checkIndexes.push(index);
       checks.push({
         pubkey: fromHexString(deposit.pubkey),
