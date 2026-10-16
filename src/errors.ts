@@ -546,9 +546,11 @@ export class ClusterProgressTimeoutError extends ObolSdkError {
  * it fails after at least one of its transactions was broadcast.
  *
  * `txHashes` holds the transactions of the call that were mined.
- * `pendingTxHash` is the one that was broadcast but whose receipt could not be
- * obtained or that reverted (for a contract wallet, the wallet's own
- * transaction hash). The original error is in `cause`.
+ * `pendingTxHash` is the one that was broadcast but not confirmed (for a
+ * contract wallet, the wallet's own transaction hash), and `pendingStatus`
+ * says why: `reverted` (mined and reverted, so it moved nothing and a retry is
+ * safe) or `unconfirmed` (no receipt was obtained; it may still be mined). The
+ * original error is in `cause`.
  *
  * To fix: look these transactions up before retrying, so nothing is sent twice.
  */
@@ -558,6 +560,8 @@ export class TransactionSubmissionError extends ObolSdkError {
   readonly txHashes: string[];
   /** Hash of the broadcast transaction that was not confirmed, if any. */
   readonly pendingTxHash?: string;
+  /** Why `pendingTxHash` is not confirmed; set with `pendingTxHash`. */
+  readonly pendingStatus?: 'reverted' | 'unconfirmed';
   /** The error that stopped the call. */
   readonly cause: unknown;
 
@@ -566,8 +570,14 @@ export class TransactionSubmissionError extends ObolSdkError {
     {
       txHashes,
       pendingTxHash,
+      pendingStatus,
       cause,
-    }: { txHashes: string[]; pendingTxHash?: string; cause: unknown },
+    }: {
+      txHashes: string[];
+      pendingTxHash?: string;
+      pendingStatus?: 'reverted' | 'unconfirmed';
+      cause: unknown;
+    },
   ) {
     super(
       message,
@@ -578,6 +588,7 @@ export class TransactionSubmissionError extends ObolSdkError {
     this.txHashes = txHashes;
     if (pendingTxHash !== undefined) {
       this.pendingTxHash = pendingTxHash;
+      this.pendingStatus = pendingStatus ?? 'unconfirmed';
     }
     this.cause = cause;
   }

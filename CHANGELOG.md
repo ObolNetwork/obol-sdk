@@ -40,6 +40,9 @@ All notable changes to this project will be documented in this file. Dates are d
 - fix(splits): `splits.requestWithdrawal` refunds unused EIP-7002 fees to a new optional `excessFeeRecipient`, defaulting to the signer's address; refunds were previously sent to the OVM, where they were distributed as rewards
 - feat: `splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal` and `incentives.claimIncentives` take an optional second argument `{ onSent }`, called with each transaction hash as soon as it is broadcast (for a contract wallet, the wallet's own hash)
 - feat(errors): when one of these methods fails after a transaction was broadcast, it throws `TransactionSubmissionError` (code `TX_FAILED_AFTER_SEND`) with the mined `txHashes`, the unconfirmed `pendingTxHash` and the original `cause`; its message is unchanged. Failures before anything is sent throw as before
+- fix(eoa): when `requiredFee` is omitted, `eoa.requestWithdrawal` sends exactly the current EIP-7002 fee; the EIP-7002 contract keeps any excess, so headroom would be lost (`splits.requestWithdrawal` keeps its 2× default, since the OVM refunds the excess). `resolveWithdrawalFee` takes an optional `defaultMultiplier`
+- feat(errors): `TransactionSubmissionError.pendingStatus` is `reverted` (mined and reverted, nothing moved) or `unconfirmed` (no receipt; it may still be mined)
+- fix(splits): `splits.deposit` and `splits.requestWithdrawal` from a contract wallet (e.g. a Safe over WalletConnect) wait for the Safe's execution instead of the wallet-returned hash, which never appears on-chain, as `eoa.deposit` and `eoa.requestWithdrawal` already do
 - docs: `splits.requestWithdrawal` amounts are in gwei; `createObolRewardsSplit` and `createObolTotalSplit` are deprecated for new clusters in favour of the OVM methods (they have no EIP-7002 withdrawal path)
 
 #### [v2.14.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.13.2...v2.14.0)

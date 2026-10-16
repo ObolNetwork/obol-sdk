@@ -170,7 +170,7 @@ describe('EOA', () => {
         });
       });
 
-      it('reads the fee from the withdrawal request contract when omitted', async () => {
+      it('reads the fee from the withdrawal request contract when omitted, without headroom (no refund)', async () => {
         mockFee(BigInt(3));
 
         await eoa.requestWithdrawal({ pubkey, allocation: 1 });
@@ -180,7 +180,7 @@ describe('EOA', () => {
           data: '0x',
         });
         expect(submitEOAWithdrawalRequest).toHaveBeenCalledWith(
-          expect.objectContaining({ requiredFee: '6' }),
+          expect.objectContaining({ requiredFee: '3' }),
         );
       });
 

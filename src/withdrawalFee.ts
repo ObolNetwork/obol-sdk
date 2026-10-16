@@ -38,7 +38,9 @@ export const getWithdrawalRequestFee = async (
 /**
  * Returns the total fee (wei) to send for `requestCount` withdrawal requests.
  *
- * Without `requestedFee`, returns twice the current fee per request. With
+ * Without `requestedFee`, returns `defaultMultiplier` (default 2) times the
+ * current fee per request. Headroom only makes sense where the excess is
+ * refunded (the OVM refunds it; the EIP-7002 contract itself does not). With
  * `requestedFee` (a total for all requests), returns it unchanged after
  * checking it covers the current fee and is not more than
  * max(10x the current fee, 1 gwei) per request.
@@ -47,14 +49,16 @@ export const resolveWithdrawalFee = ({
   currentFee,
   requestedFee,
   requestCount = 1,
+  defaultMultiplier = DEFAULT_FEE_MULTIPLIER,
 }: {
   currentFee: bigint;
   requestedFee?: string;
   requestCount?: number;
+  defaultMultiplier?: bigint;
 }): bigint => {
   const count = BigInt(requestCount);
   if (requestedFee === undefined) {
-    return currentFee * DEFAULT_FEE_MULTIPLIER * count;
+    return currentFee * defaultMultiplier * count;
   }
 
   const requested = BigInt(requestedFee);

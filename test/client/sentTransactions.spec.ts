@@ -20,6 +20,7 @@ const { submitEOABatchDeposit, submitEOAWithdrawalRequest } =
   await import('../../src/eoa/eoaHelpers.js');
 const { claimIncentivesFromMerkleDistributor } =
   await import('../../src/incentives/incentiveHelpers.js');
+const { OVMContract } = await import('../../src/abi/OVM.js');
 
 const hash = (n: number): string => '0x' + n.toString(16).padStart(64, '0');
 const OVM = TEST_ADDRESSES.REWARD_RECIPIENT_1;
@@ -284,5 +285,120 @@ describe('claimIncentivesFromMerkleDistributor', () => {
     expect(error).toBeInstanceOf(TransactionSubmissionError);
     expect(error.message).toBe('Failed to claim incentives: timeout');
     expect(error.pendingTxHash).toBe(hash(5));
+  });
+});
+
+describe('pendingStatus', () => {
+  it('is reverted for a mined revert and unconfirmed otherwise', async () => {
+    const revert = Object.assign(new Error('execution reverted'), {
+      code: 'CALL_EXCEPTION',
+      receipt: { status: 0, hash: hash(8) },
+    });
+    contract.withdraw = jest.fn(async () => sentTx(8, revert));
+
+    const reverted = await requestWithdrawalFromOVM({
+      ovmAddress: OVM,
+      pubKeys: [PUBKEY],
+      amounts: ['1'],
+      withdrawalFees: '2',
+      excessFeeRecipient: TEST_ADDRESSES.SPLIT_OWNER,
+      signer: eoaSigner(),
+    }).catch(e => e);
+    expect(reverted.pendingStatus).toBe('reverted');
+
+    contract.withdraw = jest.fn(async () => sentTx(9, new Error('timeout')));
+    const unconfirmed = await requestWithdrawalFromOVM({
+      ovmAddress: OVM,
+      pubKeys: [PUBKEY],
+      amounts: ['1'],
+      withdrawalFees: '2',
+      excessFeeRecipient: TEST_ADDRESSES.SPLIT_OWNER,
+      signer: eoaSigner(),
+    }).catch(e => e);
+    expect(unconfirmed.pendingStatus).toBe('unconfirmed');
+  });
+});
+
+describe('OVM writes from a contract wallet (Safe)', () => {
+  const SAFE = '0xAbCdEf0123456789012345678901234567890AbC';
+  const SAFE_TX_HASH = '0x' + 'aa'.repeat(32);
+  const EXECUTED = '0x' + 'ee'.repeat(32);
+  const SUCCESS_TOPIC = actualEthers.id('ExecutionSuccess(bytes32,uint256)');
+
+  const safeSigner = () => {
+    const provider = {
+      getBlockNumber: jest.fn(async () => 100),
+      getCode: jest.fn(async () => '0xabcdef'),
+      estimateGas: jest.fn(async () => 21000n),
+      getLogs: jest.fn(async () => [
+        {
+          address: SAFE,
+          transactionHash: EXECUTED,
+          topics: [SUCCESS_TOPIC, SAFE_TX_HASH],
+          data: '0x',
+        },
+      ]),
+      on: jest.fn(async () => {}),
+      off: jest.fn(async () => {}),
+    };
+    return {
+      provider,
+      getAddress: jest.fn(async () => SAFE),
+      sendUncheckedTransaction: jest.fn(async () => SAFE_TX_HASH),
+      sendTransaction: jest.fn(),
+    };
+  };
+
+  beforeEach(() => {
+    contract.interface = new actualEthers.Interface(OVMContract.abi);
+    contract.deposit = jest.fn();
+    contract.withdraw = jest.fn();
+  });
+
+  it('depositOVM waits for the Safe execution instead of tx.wait()', async () => {
+    const signer = safeSigner();
+    const onSent = jest.fn();
+
+    const result = await depositOVM({
+      ovmAddress: OVM,
+      deposits: [mainnetDepositPayload.deposit],
+      signer,
+      options: { onSent },
+    });
+
+    expect(result).toEqual({ txHashes: [EXECUTED] });
+    expect(contract.deposit).not.toHaveBeenCalled();
+    expect(signer.sendUncheckedTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: OVM,
+        value: BigInt(mainnetDepositPayload.deposit.amount),
+      }),
+    );
+    expect(onSent).toHaveBeenCalledWith({
+      hash: SAFE_TX_HASH,
+      index: 0,
+      contractWallet: true,
+    });
+  });
+
+  it('requestWithdrawalFromOVM waits for the Safe execution instead of tx.wait()', async () => {
+    const signer = safeSigner();
+
+    const result = await requestWithdrawalFromOVM({
+      ovmAddress: OVM,
+      pubKeys: [PUBKEY],
+      amounts: ['32000000000'],
+      withdrawalFees: '2',
+      excessFeeRecipient: TEST_ADDRESSES.SPLIT_OWNER,
+      signer,
+    });
+
+    expect(result).toEqual({ txHash: EXECUTED });
+    expect(contract.withdraw).not.toHaveBeenCalled();
+    const sentTx = signer.sendUncheckedTransaction.mock.calls[0][0];
+    expect(sentTx.value).toBe(BigInt(2));
+    expect(
+      contract.interface.decodeFunctionData('withdraw', sentTx.data)[3],
+    ).toBe(actualEthers.getAddress(TEST_ADDRESSES.SPLIT_OWNER));
   });
 });

@@ -558,6 +558,7 @@ export class ObolSplits {
       excessFeeRecipient:
         validatedPayload.excessFeeRecipient ?? (await this.signer.getAddress()),
       signer: this.signer,
+      provider: this.provider,
       options,
     });
   }
@@ -634,6 +635,7 @@ export class ObolSplits {
       ovmAddress: validatedPayload.ovmAddress,
       deposits: validatedPayload.deposits,
       signer: this.signer,
+      provider: this.provider,
       options,
     });
   }

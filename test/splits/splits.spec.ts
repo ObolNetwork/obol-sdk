@@ -371,6 +371,7 @@ describe('requestWithdrawal', () => {
       withdrawalFees: mockWithdrawalFees,
       excessFeeRecipient: '0x1234567890123456789012345678901234567890',
       signer: mockSigner,
+      provider: mockProvider,
     });
   });
 
@@ -510,6 +511,7 @@ describe('deposit', () => {
       ovmAddress: mockOVMAddress,
       deposits: singleDeposit,
       signer: mockSigner,
+      provider: mockProvider,
     });
   });
 
@@ -551,6 +553,7 @@ describe('deposit', () => {
       ovmAddress: mockOVMAddress,
       deposits: multipleDeposits,
       signer: mockSigner,
+      provider: mockProvider,
     });
   });
 

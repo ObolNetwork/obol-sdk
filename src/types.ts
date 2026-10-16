@@ -834,9 +834,9 @@ export type EOAWithdrawalPayload = {
   allocation: number;
 
   /**
-   * Fee in wei. Optional: if omitted, twice the current EIP-7002 fee is sent.
-   * If given, it must cover the current fee and be at most
-   * max(10x the current fee, 1 gwei).
+   * Fee in wei. Optional: if omitted, the current EIP-7002 fee is sent (the
+   * contract does not refund excess, so no headroom is added). If given, it
+   * must cover the current fee and be at most max(10x the current fee, 1 gwei).
    */
   requiredFee?: string;
 };

@@ -1366,8 +1366,10 @@ const getChainConfig = (chainId: number): ChainConfig => {
  * @param withdrawalFees - Total withdrawal fees in wei
  * @param excessFeeRecipient - Address refunded the unused part of the fees
  * @param signer - The signer to use for the transaction
+ * @param provider - Read provider for contract-wallet signers (defaults to the signer's)
  * @param options - Optional `onSent` callback
- * @returns Promise that resolves to the transaction hash
+ * @returns Promise that resolves to the transaction hash (for a contract
+ *   wallet such as a Safe, the hash it executed under)
  */
 export const requestWithdrawalFromOVM = async ({
   ovmAddress,
@@ -1376,6 +1378,7 @@ export const requestWithdrawalFromOVM = async ({
   withdrawalFees,
   excessFeeRecipient,
   signer,
+  provider,
   options,
 }: {
   ovmAddress: string;
@@ -1384,9 +1387,10 @@ export const requestWithdrawalFromOVM = async ({
   withdrawalFees: string;
   excessFeeRecipient: string;
   signer: SignerType;
+  provider?: ProviderType | null;
   options?: WriteOptions;
 }): Promise<{ txHash: string }> => {
-  const sent = new SentTransactions(options);
+  let sent = new SentTransactions(options);
   try {
     if (pubKeys.length === 0) {
       throw new Error('pubKeys array cannot be empty');
@@ -1398,6 +1402,28 @@ export const requestWithdrawalFromOVM = async ({
     const maxFeePerWithdrawal = BigInt(withdrawalFees) / BigInt(pubKeys.length);
 
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
+
+    // A Safe's wallet-returned hash never appears on-chain, so tx.wait()
+    // would hang; wait for the Safe's execution instead.
+    if (await isContractWalletSigner(signer, provider)) {
+      sent = new SentTransactions(options, true);
+      const txHash = await submitViaContractWalletAndWait({
+        signer: signer as UncheckedTransactionSigner,
+        to: ovmAddress,
+        data: ovmContract.interface.encodeFunctionData('withdraw', [
+          pubKeys,
+          bigintAmounts,
+          maxFeePerWithdrawal,
+          excessFeeRecipient,
+        ]),
+        value: BigInt(withdrawalFees),
+        provider,
+        onSubmitted: hash => {
+          sent.sent(hash);
+        },
+      });
+      return { txHash };
+    }
 
     const tx = await ovmContract.withdraw(
       pubKeys,
@@ -1425,13 +1451,16 @@ export const requestWithdrawalFromOVM = async ({
  * @param ovmAddress - The address of the OVM contract
  * @param deposits - Array of deposit objects with all required parameters
  * @param signer - The signer to use for the transaction
+ * @param provider - Read provider for contract-wallet signers (defaults to the signer's)
  * @param options - Optional `onSent` callback
- * @returns Promise that resolves to an array of transaction hashes
+ * @returns Promise that resolves to an array of transaction hashes (for a
+ *   contract wallet such as a Safe, the hashes they executed under)
  */
 export const depositOVM = async ({
   ovmAddress,
   deposits,
   signer,
+  provider,
   options,
 }: {
   ovmAddress: string;
@@ -1443,15 +1472,40 @@ export const depositOVM = async ({
     amount: string;
   }>;
   signer: SignerType;
+  provider?: ProviderType | null;
   options?: WriteOptions;
 }): Promise<{ txHashes: string[] }> => {
-  const sent = new SentTransactions(options);
+  let sent = new SentTransactions(options);
   try {
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
+    const contractWallet = await isContractWalletSigner(signer, provider);
+    sent = new SentTransactions(options, contractWallet);
 
     // Process each deposit as a separate transaction
     // Multicall3 cannot be used because it doesn't have the DEPOSIT_ROLE
     for (const deposit of deposits) {
+      if (contractWallet) {
+        // Wait for the Safe's execution: its returned hash never appears
+        // on-chain, so tx.wait() would hang.
+        const txHash = await submitViaContractWalletAndWait({
+          signer: signer as UncheckedTransactionSigner,
+          to: ovmAddress,
+          data: ovmContract.interface.encodeFunctionData('deposit', [
+            deposit.pubkey,
+            deposit.withdrawal_credentials,
+            deposit.signature,
+            deposit.deposit_data_root,
+          ]),
+          value: BigInt(deposit.amount),
+          provider,
+          onSubmitted: hash => {
+            sent.sent(hash);
+          },
+        });
+        sent.mined(txHash);
+        continue;
+      }
+
       const tx = await ovmContract.deposit(
         deposit.pubkey,
         deposit.withdrawal_credentials,

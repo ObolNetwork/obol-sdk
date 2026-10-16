@@ -1,6 +1,18 @@
 import { TransactionSubmissionError } from './errors.js';
 import { type WriteOptions } from './types.js';
 
+// ethers v6 `wait()` throws CALL_EXCEPTION with the receipt when a mined
+// transaction reverted; any other failure leaves the transaction unconfirmed.
+const isMinedRevert = (error: unknown): boolean => {
+  const e = error as { code?: unknown; receipt?: { status?: unknown } } | null;
+  return (
+    e?.code === 'CALL_EXCEPTION' &&
+    e.receipt !== undefined &&
+    e.receipt !== null &&
+    e.receipt.status === 0
+  );
+};
+
 /**
  * Records the transactions one write call broadcasts, reports each to
  * {@link WriteOptions.onSent}, and turns a later failure into a
@@ -50,6 +62,7 @@ export class SentTransactions {
     return new TransactionSubmissionError(message, {
       txHashes: this.hashes,
       pendingTxHash: this.pending,
+      pendingStatus: isMinedRevert(cause) ? 'reverted' : 'unconfirmed',
       cause,
     });
   }

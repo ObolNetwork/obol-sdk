@@ -72,9 +72,11 @@ export class EOA {
    * Sends an on-chain transaction. Requires both a signer and a provider.
    *
    * The fee is checked against the current fee read from the EIP-7002
-   * withdrawal request contract. If `requiredFee` is omitted, twice the
-   * current fee is sent. If it is given, it must cover the current fee and
-   * be at most max(10x the current fee, 1 gwei); otherwise the call throws.
+   * withdrawal request contract. If `requiredFee` is omitted, exactly the
+   * current fee is sent: the EIP-7002 contract keeps any excess, and if the
+   * fee rises before the transaction is mined it reverts (costing only gas).
+   * If `requiredFee` is given, it must cover the current fee and be at most
+   * max(10x the current fee, 1 gwei); otherwise the call throws.
    *
    * @param payload - Withdrawal data including validator `pubkey`, `allocation`
    *   (in ETH), and optional `requiredFee` (in wei).
@@ -126,9 +128,11 @@ export class EOA {
       this.provider,
       chainConfig.EOA_WITHDRAWAL_CONTRACT.address,
     );
+    // No headroom: the EIP-7002 contract does not refund excess fees.
     const requiredFee = resolveWithdrawalFee({
       currentFee,
       requestedFee: validatedPayload.requiredFee,
+      defaultMultiplier: BigInt(1),
     });
 
     return await submitEOAWithdrawalRequest({
