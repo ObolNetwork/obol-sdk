@@ -74,7 +74,7 @@ const withFields = (deposit, fields) => {
   const root = depositDataContainer.hashTreeRoot({
     pubkey: fromHexString(updated.pubkey),
     withdrawal_credentials: fromHexString(updated.withdrawal_credentials),
-    amount: Number(BigInt(updated.amount) / GWEI),
+    amount: BigInt(updated.amount) / GWEI,
     signature: fromHexString(updated.signature),
   });
   return {

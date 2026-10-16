@@ -1,4 +1,5 @@
 import {
+  type UintBigintType,
   type UintNumberByteLen,
   UintNumberType,
 } from '@chainsafe/ssz/lib/type/uint.js';
@@ -12,6 +13,9 @@ import {
   type operatorContainerTypeV1X11,
   type creatorAddressWrapperType,
   type creatorContainerTypeV1X11,
+  listOrEmpty,
+  toUint64,
+  uint64BigintType,
   validatorsContainerType,
 } from './sszTypes.js';
 import {
@@ -60,7 +64,7 @@ type DefinitionFieldsV1X11 = {
   >;
   creator: typeof creatorContainerTypeV1X11 | typeof creatorAddressWrapperType;
   validators: ListCompositeType<typeof validatorsContainerType>;
-  deposit_amounts: ListBasicType<UintNumberType>;
+  deposit_amounts: ListBasicType<UintBigintType>;
   consensus_protocol: ByteListType;
   target_gas_limit: UintNumberType;
   compounding: BooleanType;
@@ -87,10 +91,7 @@ export const clusterDefinitionContainerTypeV1X11 = (
     ),
     creator: newCreatorContainerTypeV1X11(configOnly),
     validators: new ListCompositeType(validatorsContainerType, 65536),
-    deposit_amounts: new ListBasicType(
-      new UintNumberType(8 as UintNumberByteLen),
-      256,
-    ),
+    deposit_amounts: new ListBasicType(uint64BigintType, 256),
     consensus_protocol: new ByteListType(256),
     target_gas_limit: new UintNumberType(8 as UintNumberByteLen),
     compounding: new BooleanType(),
@@ -113,15 +114,15 @@ export const hashClusterDefinitionV1X11 = (
   const definitionType = clusterDefinitionContainerTypeV1X11(configOnly);
   const val = definitionType.defaultValue();
 
-  val.uuid = strToUint8Array(cluster.uuid);
-  val.name = strToUint8Array(cluster.name);
-  val.version = strToUint8Array(cluster.version);
-  val.timestamp = strToUint8Array(cluster.timestamp);
+  val.uuid = strToUint8Array(cluster.uuid ?? '');
+  val.name = strToUint8Array(cluster.name ?? '');
+  val.version = strToUint8Array(cluster.version ?? '');
+  val.timestamp = strToUint8Array(cluster.timestamp ?? '');
   val.num_validators = cluster.num_validators;
   val.threshold = cluster.threshold;
-  val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm);
+  val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm ?? '');
   val.fork_version = fromHexString(cluster.fork_version);
-  val.operators = cluster.operators.map(operator => {
+  val.operators = listOrEmpty(cluster.operators).map(operator => {
     return configOnly
       ? { address: fromHexString(operator.address) }
       : {
@@ -141,17 +142,13 @@ export const hashClusterDefinitionV1X11 = (
           cluster.creator.config_signature as string,
         ),
       };
-  val.validators = cluster.validators.map(validator => {
+  val.validators = listOrEmpty(cluster.validators).map(validator => {
     return {
       fee_recipient_address: fromHexString(validator.fee_recipient_address),
       withdrawal_address: fromHexString(validator.withdrawal_address),
     };
   });
-  if (cluster.deposit_amounts) {
-    val.deposit_amounts = cluster.deposit_amounts.map((amount: string) => {
-      return parseInt(amount);
-    });
-  }
+  val.deposit_amounts = listOrEmpty(cluster.deposit_amounts).map(toUint64);
   if (cluster.consensus_protocol) {
     val.consensus_protocol = strToUint8Array(cluster.consensus_protocol);
   }
@@ -196,24 +193,24 @@ export const hashClusterLockV1X11 = (cluster: ClusterLock): string => {
     cluster.cluster_definition,
     false,
   );
-  val.distributed_validators = cluster.distributed_validators.map(
+  val.distributed_validators = listOrEmpty(cluster.distributed_validators).map(
     dValidator => {
       return {
         distributed_public_key: fromHexString(
           dValidator.distributed_public_key,
         ),
-        public_shares: dValidator.public_shares.map(publicShare =>
+        public_shares: listOrEmpty(dValidator.public_shares).map(publicShare =>
           fromHexString(publicShare),
         ),
-        partial_deposit_data: (
-          dValidator.partial_deposit_data as DepositData[]
+        partial_deposit_data: listOrEmpty(
+          dValidator.partial_deposit_data as DepositData[] | undefined,
         ).map(depositData => {
           return {
             pubkey: fromHexString(depositData.pubkey),
             withdrawal_credentials: fromHexString(
               depositData.withdrawal_credentials,
             ),
-            amount: parseInt(depositData.amount),
+            amount: toUint64(depositData.amount),
             signature: fromHexString(depositData.signature),
           };
         }),

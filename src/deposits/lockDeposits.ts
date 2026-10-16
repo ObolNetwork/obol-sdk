@@ -110,7 +110,7 @@ const toValidatorDeposit = (
         withdrawal_credentials: fromHexString(
           fields.withdrawal_credentials as string,
         ),
-        amount: Number(amount),
+        amount: BigInt(amount),
         signature: fromHexString(fields.signature as string),
       }),
     ).toString('hex');

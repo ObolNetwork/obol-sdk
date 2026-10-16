@@ -1,4 +1,5 @@
 import {
+  type UintBigintType,
   type UintNumberByteLen,
   UintNumberType,
 } from '@chainsafe/ssz/lib/type/uint.js';
@@ -12,6 +13,9 @@ import {
   newOperatorContainerType,
   type operatorAddressWrapperType,
   type operatorContainerType,
+  listOrEmpty,
+  toUint64,
+  uint64BigintType,
   validatorsContainerType,
 } from './sszTypes.js';
 import {
@@ -57,7 +61,7 @@ type DefinitionFieldsV1X8 = {
   >;
   creator: typeof creatorContainerType | typeof creatorAddressWrapperType;
   validators: ListCompositeType<typeof validatorsContainerType>;
-  deposit_amounts: ListBasicType<UintNumberType>;
+  deposit_amounts: ListBasicType<UintBigintType>;
   config_hash?: ByteVectorType;
 };
 
@@ -83,10 +87,7 @@ export const clusterDefinitionContainerTypeV1X8 = (
     operators: new ListCompositeType(newOperatorContainerType(configOnly), 256),
     creator: newCreatorContainerType(configOnly),
     validators: new ListCompositeType(validatorsContainerType, 65536),
-    deposit_amounts: new ListBasicType(
-      new UintNumberType(8 as UintNumberByteLen),
-      256,
-    ),
+    deposit_amounts: new ListBasicType(uint64BigintType, 256),
   };
 
   if (!configOnly) {
@@ -108,15 +109,15 @@ export const hashClusterDefinitionV1X8 = (
   const val = definitionType.defaultValue();
 
   // order should be same as charon https://github.com/ObolNetwork/charon/blob/main/cluster/ssz.go#L276
-  val.uuid = strToUint8Array(cluster.uuid);
-  val.name = strToUint8Array(cluster.name);
-  val.version = strToUint8Array(cluster.version);
-  val.timestamp = strToUint8Array(cluster.timestamp);
+  val.uuid = strToUint8Array(cluster.uuid ?? '');
+  val.name = strToUint8Array(cluster.name ?? '');
+  val.version = strToUint8Array(cluster.version ?? '');
+  val.timestamp = strToUint8Array(cluster.timestamp ?? '');
   val.num_validators = cluster.num_validators;
   val.threshold = cluster.threshold;
-  val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm);
+  val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm ?? '');
   val.fork_version = fromHexString(cluster.fork_version);
-  val.operators = cluster.operators.map(operator => {
+  val.operators = listOrEmpty(cluster.operators).map(operator => {
     return configOnly
       ? { address: fromHexString(operator.address) }
       : {
@@ -134,17 +135,13 @@ export const hashClusterDefinitionV1X8 = (
           cluster.creator.config_signature as string,
         ),
       };
-  val.validators = cluster.validators.map(validator => {
+  val.validators = listOrEmpty(cluster.validators).map(validator => {
     return {
       fee_recipient_address: fromHexString(validator.fee_recipient_address),
       withdrawal_address: fromHexString(validator.withdrawal_address),
     };
   });
-  if (cluster.deposit_amounts) {
-    val.deposit_amounts = cluster.deposit_amounts.map((amount: string) => {
-      return parseInt(amount);
-    });
-  }
+  val.deposit_amounts = listOrEmpty(cluster.deposit_amounts).map(toUint64);
 
   if (!configOnly) {
     val.config_hash = fromHexString(cluster.config_hash);
@@ -190,25 +187,24 @@ export const hashClusterLockV1X8 = (cluster: ClusterLock): string => {
     cluster.cluster_definition,
     false,
   );
-  val.distributed_validators = cluster.distributed_validators.map(
+  val.distributed_validators = listOrEmpty(cluster.distributed_validators).map(
     dValidator => {
       return {
         distributed_public_key: fromHexString(
           dValidator.distributed_public_key,
         ),
-        public_shares: dValidator.public_shares.map(publicShare =>
+        public_shares: listOrEmpty(dValidator.public_shares).map(publicShare =>
           fromHexString(publicShare),
         ),
-        // should be fixed
-        partial_deposit_data: (
-          dValidator.partial_deposit_data as DepositData[]
+        partial_deposit_data: listOrEmpty(
+          dValidator.partial_deposit_data as DepositData[] | undefined,
         ).map(depositData => {
           return {
             pubkey: fromHexString(depositData.pubkey),
             withdrawal_credentials: fromHexString(
               depositData.withdrawal_credentials,
             ),
-            amount: parseInt(depositData.amount),
+            amount: toUint64(depositData.amount),
             signature: fromHexString(depositData.signature),
           };
         }),
@@ -297,9 +293,14 @@ export const verifyDVV1X8 = async (
         validator.partial_deposit_data as DepositData[]
       ).map(d => d.amount);
 
-      // Check that partialDepositAmounts includes all unique elements of depositAmounts
-      const uniqueDepositAmounts = [...new Set(depositAmounts.map(Number))];
-      const partialAmountsSet = new Set(partialDepositAmounts.map(Number));
+      // Check that partialDepositAmounts includes all unique elements of depositAmounts.
+      // Compare as uint64 decimal strings: Number() loses precision above 2^53.
+      const uniqueDepositAmounts = [
+        ...new Set(depositAmounts.map(a => toUint64(a).toString())),
+      ];
+      const partialAmountsSet = new Set(
+        partialDepositAmounts.map(a => toUint64(a).toString()),
+      );
 
       if (
         !uniqueDepositAmounts.every(amount => partialAmountsSet.has(amount))

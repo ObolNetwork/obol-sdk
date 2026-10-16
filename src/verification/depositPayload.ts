@@ -151,7 +151,7 @@ export const verifyDepositPayloads = async (
     const depositDataRoot = depositDataContainer.hashTreeRoot({
       pubkey: fromHexString(deposit.pubkey),
       withdrawal_credentials: fromHexString(deposit.withdrawal_credentials),
-      amount: Number(amountGwei),
+      amount: amountWei / WEI_PER_GWEI,
       signature: fromHexString(deposit.signature),
     });
     if (

@@ -36,6 +36,7 @@ import {
   depositMessageType,
   forkDataType,
   signingRootType,
+  toUint64,
 } from './sszTypes.js';
 import { definitionFlow } from '../utils.js';
 import { ENR } from '@chainsafe/enr';
@@ -321,7 +322,7 @@ export const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
   depositMsgVal.withdrawal_credentials = fromHexString(
     msg.withdrawal_credentials as string,
   );
-  depositMsgVal.amount = parseInt(msg.amount as string);
+  depositMsgVal.amount = toUint64(msg.amount as string);
   return Buffer.from(depositMessageType.hashTreeRoot(depositMsgVal).buffer);
 };
 
