@@ -39,7 +39,10 @@ export const validateAddressSignature = async ({
       }
     }
     return validateEOASignature({ token, data, address });
-  } catch (error) {
+  } catch (error: any) {
+    console.warn(
+      `Smart contract signature validation failed, falling back to EOA: ${error.message}`,
+    );
     return validateEOASignature({ token, data, address });
   }
 };
@@ -82,6 +85,9 @@ export const validateSmartContractSignature = async ({
 }): Promise<boolean> => {
   try {
     const safeProvider = safeRpcUrl ?? PROVIDER_MAP[chainId];
+    if (!safeProvider || safeProvider === 'undefined') {
+      throw new Error(`No RPC provider configured for chain ${chainId}`);
+    }
 
     const protocolKit = await Safe.init({
       provider: safeProvider,
