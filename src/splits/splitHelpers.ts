@@ -42,12 +42,17 @@ const multicall3ContractInterface = new Interface(MultiCall3Contract.abi);
 const SAFE_EXECUTION_TIMEOUT_MS = 30 * 60_000;
 
 // Finds the OVM factory's CreateObolValidatorManager event in a receipt by
-// event signature. Position-based log indexing breaks when extra events are
-// interleaved, so match by topic instead.
+// emitter and event signature. Position-based log indexing breaks when extra
+// events are interleaved, so match by topic instead, and only accept logs
+// emitted by the configured factory (compared case-insensitively).
 export const extractOvmAddressFromReceipt = (
   receipt: TransactionReceipt,
+  factoryAddress: string,
 ): string => {
+  const factory = factoryAddress.toLowerCase();
   for (const log of receipt?.logs ?? []) {
+    // Only the configured OVM factory's events identify the created OVM.
+    if (log.address?.toLowerCase() !== factory) continue;
     try {
       const parsed = ovmFactoryContractInterface.parseLog({
         topics: [...log.topics],
@@ -1195,7 +1200,10 @@ export const deployOVMContract = async ({
       ...createArgs,
     );
     const receipt = (await tx.wait()) as TransactionReceipt;
-    return extractOvmAddressFromReceipt(receipt);
+    return extractOvmAddressFromReceipt(
+      receipt,
+      chainConfig.OVM_FACTORY_CONTRACT.address,
+    );
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM contract: ${error.message ?? 'OVM deployment failed'}`,
@@ -1313,7 +1321,10 @@ export const deployOVMAndSplitV2 = async ({
 
     // Extract the OVM address from the factory event by signature, robust to
     // interleaved events.
-    return extractOvmAddressFromReceipt(executeMultiCalls);
+    return extractOvmAddressFromReceipt(
+      executeMultiCalls,
+      chainConfig.OVM_FACTORY_CONTRACT.address,
+    );
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM and SplitV2: ${error.message ?? 'Deployment failed'}`,

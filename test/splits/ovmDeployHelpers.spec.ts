@@ -6,6 +6,8 @@ import {
   receiptMatchesSafeTx,
   resolveOvmAddressFromListenerArgs,
 } from '../../src/splits/splitHelpers';
+import { CHAIN_CONFIGURATION } from '../../src/constants';
+import { TEST_ADDRESSES } from '../fixtures';
 
 const OVM_ADDRESS = '0x1234567890123456789012345678901234567890';
 const OWNER = '0x0c89A5ba7FcEfA6e7A67f3F3eC3e2EA9B38924bA';
@@ -14,13 +16,16 @@ const SAFE_TX_HASH = '0x' + 'aa'.repeat(32);
 const SUCCESS_TOPIC = id('ExecutionSuccess(bytes32,uint256)');
 
 const factoryInterface = new Interface(OVMFactoryContract.abi);
+// Hoodi OVM factory
+const FACTORY_ADDRESS =
+  CHAIN_CONFIGURATION[560048].OVM_FACTORY_CONTRACT.address;
 
-const createOvmLog = () => {
+const createOvmLog = (ovm = OVM_ADDRESS, address = FACTORY_ADDRESS) => {
   const encoded = factoryInterface.encodeEventLog(
     'CreateObolValidatorManager',
-    [OVM_ADDRESS, OWNER, OWNER, OWNER, 16n],
+    [ovm, OWNER, OWNER, OWNER, 16n],
   );
-  return { topics: encoded.topics, data: encoded.data };
+  return { address, topics: encoded.topics, data: encoded.data };
 };
 
 describe('extractOvmAddressFromReceipt', () => {
@@ -32,14 +37,59 @@ describe('extractOvmAddressFromReceipt', () => {
         { topics: ['0x' + 'cd'.repeat(32)], data: '0x01' },
       ],
     };
-    expect(extractOvmAddressFromReceipt(receipt)).toBe(OVM_ADDRESS);
+    expect(extractOvmAddressFromReceipt(receipt, FACTORY_ADDRESS)).toBe(
+      OVM_ADDRESS,
+    );
+  });
+
+  it('ignores a matching event emitted by another contract', () => {
+    const decoyOvm = TEST_ADDRESSES.REWARD_RECIPIENT_2;
+    const receipt = {
+      logs: [
+        createOvmLog(decoyOvm, TEST_ADDRESSES.SPLIT_OWNER),
+        createOvmLog(),
+      ],
+    };
+    expect(extractOvmAddressFromReceipt(receipt, FACTORY_ADDRESS)).toBe(
+      OVM_ADDRESS,
+    );
+  });
+
+  it('throws when the only matching event is from another contract', () => {
+    const receipt = {
+      logs: [createOvmLog(OVM_ADDRESS, TEST_ADDRESSES.SPLIT_OWNER)],
+    };
+    expect(() =>
+      extractOvmAddressFromReceipt(receipt, FACTORY_ADDRESS),
+    ).toThrow('CreateObolValidatorManager event not found');
+  });
+
+  it('matches the factory address case-insensitively', () => {
+    const receipt = {
+      logs: [createOvmLog(OVM_ADDRESS, FACTORY_ADDRESS.toLowerCase())],
+    };
+    expect(
+      extractOvmAddressFromReceipt(
+        receipt,
+        FACTORY_ADDRESS.toUpperCase().replace('0X', '0x'),
+      ),
+    ).toBe(OVM_ADDRESS);
   });
 
   it('throws when the event is missing', () => {
     expect(() =>
-      extractOvmAddressFromReceipt({
-        logs: [{ topics: ['0x' + 'ab'.repeat(32)], data: '0x' }],
-      }),
+      extractOvmAddressFromReceipt(
+        {
+          logs: [
+            {
+              address: FACTORY_ADDRESS,
+              topics: ['0x' + 'ab'.repeat(32)],
+              data: '0x',
+            },
+          ],
+        },
+        FACTORY_ADDRESS,
+      ),
     ).toThrow('CreateObolValidatorManager event not found');
   });
 });
