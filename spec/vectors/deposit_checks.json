@@ -1,0 +1,661 @@
+{
+  "suite": "deposit_checks",
+  "description": "Outcome of the pure deposit checks run by verifyDepositData and prepareDeposit, in order per deposit: (1) kind deposit and all-zero signature -> DEPOSIT_LOOKS_LIKE_TOP_UP; (2) amount is whole gwei, >= 1 ETH; (3) credentials prefix 0x00/0x01/0x02, 0x01/0x02 with 11 zero bytes; (4) amount <= 32 ETH (0x00/0x01) or 2048 ETH (0x02, and any top-up); (5) credentials point at expectedWithdrawalAddress (0x01/0x02, case-insensitive), except all-zero credentials on a top-up; (6) deposit_data_root equals the SSZ hash_tree_root of DepositData; then (7) BLS signatures for kind deposit, batch-verified, reporting the first invalid index. Amounts are wei (decimal strings). The first failing deposit and rule is reported.",
+  "provenance": {
+    "source": "sdk",
+    "sdk_ref": "obol-sdk feat/sdk-v3 b9355ef (trimmed 2.15)",
+    "generated_by": "scratch generator running src/verification/depositPayload.ts verifyDepositPayloads",
+    "note": "Deposits come from test/fixtures.ts (mainnetDepositPayload from nullDepositAmountsClusterLockV1X8, hoodiCompoundingDepositPayload from clusterLockSoloV1X10, and depositDataFromLock(clusterLockV1X10)). Cases mirror test/verification/depositPayload.spec.ts and test/deposits/depositFlow.spec.ts. 2.15 throws Error(\"Invalid deposit at index N: <reason>\"); issue is the slug of <reason>, reason the v3 error code."
+  },
+  "cases": [
+    {
+      "name": "valid_mainnet_0x01",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x86B8145c98e5BD25BA722645b15eD65f024a87EC",
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null
+    },
+    {
+      "name": "valid_hoodi_0x02",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0xf6fF1a7A14D01e86a175bA958d3B6C75f2213966",
+        "deposits": [
+          {
+            "pubkey": "0xa999c018bf0bd74da8d0e5266e3fc5a18f2301ea06ed7cdf1b7979c8a5f81645f842058ea073a88d6047a7e4bd5ad3d5",
+            "withdrawal_credentials": "0x020000000000000000000000f6ff1a7a14d01e86a175ba958d3b6c75f2213966",
+            "signature": "0xac57e83ce968cbcc1dee8542b144c3b046f311fa497d938433c028fbc20feeea1a3debdc9dd018cae1a027e8f2225062045a2e7d8431db3ea9ef094a1a717e4eb1e1411acae85f574f73d38c68b20c0782650f2b8be0220c98db9a2aa0d389af",
+            "deposit_data_root": "0x81a6247371958d48d65a1c9462f3fa7fabd34958b2060e0e4709c43ba2b85120",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null
+    },
+    {
+      "name": "expected_address_case_insensitive",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x86B8145C98E5BD25BA722645B15ED65F024A87EC",
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null
+    },
+    {
+      "name": "wrong_credentials_other_address",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x1234567890123456789012345678901234567890",
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "credentials_mismatch",
+      "index": 0
+    },
+    {
+      "name": "bls_0x00_credentials_with_expected_address",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x86B8145c98e5BD25BA722645b15eD65f024a87EC",
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x00000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x1f62ad268d2ebfff74d59db4ae739b386dae085feb50c634ad84559d3c2ddc89",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "credentials_mismatch",
+      "index": 0,
+      "notes": "Root recomputed so only the credential rule fires."
+    },
+    {
+      "name": "credentials_prefix_0x03",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x03000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "credentials_prefix_unknown",
+      "index": 0
+    },
+    {
+      "name": "credentials_bad_padding",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01ff0000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "credentials_malformed",
+      "index": 0
+    },
+    {
+      "name": "bad_root",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x1111111111111111111111111111111111111111111111111111111111111111",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "root_mismatch",
+      "index": 0
+    },
+    {
+      "name": "signature_for_other_chain",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "signature_invalid",
+      "index": 0,
+      "notes": "Signed for mainnet (genesis fork 0x00000000), checked on Hoodi."
+    },
+    {
+      "name": "second_signature_invalid_reports_index",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          },
+          {
+            "pubkey": "0xa999c018bf0bd74da8d0e5266e3fc5a18f2301ea06ed7cdf1b7979c8a5f81645f842058ea073a88d6047a7e4bd5ad3d5",
+            "withdrawal_credentials": "0x020000000000000000000000f6ff1a7a14d01e86a175ba958d3b6c75f2213966",
+            "signature": "0xac57e83ce968cbcc1dee8542b144c3b046f311fa497d938433c028fbc20feeea1a3debdc9dd018cae1a027e8f2225062045a2e7d8431db3ea9ef094a1a717e4eb1e1411acae85f574f73d38c68b20c0782650f2b8be0220c98db9a2aa0d389af",
+            "deposit_data_root": "0x81a6247371958d48d65a1c9462f3fa7fabd34958b2060e0e4709c43ba2b85120",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "signature_invalid",
+      "index": 1
+    },
+    {
+      "name": "signature_not_a_curve_point",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xabababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+            "deposit_data_root": "0x6cc71da6c9057f5efd886a1c1e1446db868055fd0b26ba577e6102d0c12323bd",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "signature_invalid",
+      "index": 0,
+      "notes": "Root recomputed, so the signature check fires."
+    },
+    {
+      "name": "wrong_signature_valid_point",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x02000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0xa55e4a21004f1b98f54faaa9352efdd9c9adb1064f7110070b3718a21abddc87",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "signature_invalid",
+      "index": 0
+    },
+    {
+      "name": "amount_below_1_eth",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "500000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "amount_below_minimum",
+      "index": 0
+    },
+    {
+      "name": "amount_not_whole_gwei",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000001"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "amount_not_whole_gwei",
+      "index": 0
+    },
+    {
+      "name": "amount_in_gwei_not_wei",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "amount_below_minimum",
+      "index": 0
+    },
+    {
+      "name": "amount_33_eth_0x01",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "33000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "amount_above_maximum",
+      "index": 0
+    },
+    {
+      "name": "amount_2049_eth_0x02",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0xa999c018bf0bd74da8d0e5266e3fc5a18f2301ea06ed7cdf1b7979c8a5f81645f842058ea073a88d6047a7e4bd5ad3d5",
+            "withdrawal_credentials": "0x020000000000000000000000f6ff1a7a14d01e86a175ba958d3b6c75f2213966",
+            "signature": "0xac57e83ce968cbcc1dee8542b144c3b046f311fa497d938433c028fbc20feeea1a3debdc9dd018cae1a027e8f2225062045a2e7d8431db3ea9ef094a1a717e4eb1e1411acae85f574f73d38c68b20c0782650f2b8be0220c98db9a2aa0d389af",
+            "deposit_data_root": "0x81a6247371958d48d65a1c9462f3fa7fabd34958b2060e0e4709c43ba2b85120",
+            "amount": "2049000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "amount_above_maximum",
+      "index": 0
+    },
+    {
+      "name": "amount_2048_eth_0x02_passes_bounds",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0xa999c018bf0bd74da8d0e5266e3fc5a18f2301ea06ed7cdf1b7979c8a5f81645f842058ea073a88d6047a7e4bd5ad3d5",
+            "withdrawal_credentials": "0x020000000000000000000000f6ff1a7a14d01e86a175ba958d3b6c75f2213966",
+            "signature": "0xac57e83ce968cbcc1dee8542b144c3b046f311fa497d938433c028fbc20feeea1a3debdc9dd018cae1a027e8f2225062045a2e7d8431db3ea9ef094a1a717e4eb1e1411acae85f574f73d38c68b20c0782650f2b8be0220c98db9a2aa0d389af",
+            "deposit_data_root": "0x81a6247371958d48d65a1c9462f3fa7fabd34958b2060e0e4709c43ba2b85120",
+            "amount": "2048000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "root_mismatch",
+      "index": 0,
+      "notes": "Within bounds, so the root check (signed for 32 ETH) fires."
+    },
+    {
+      "name": "unknown_chain",
+      "input": {
+        "chainId": 999,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "UNSUPPORTED_CHAIN",
+      "issue": null,
+      "index": null
+    },
+    {
+      "name": "topup_skips_signature_only",
+      "input": {
+        "chainId": 560048,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null
+    },
+    {
+      "name": "topup_still_checks_root",
+      "input": {
+        "chainId": 560048,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "root_mismatch",
+      "index": 0
+    },
+    {
+      "name": "topup_unknown_chain_ok",
+      "input": {
+        "chainId": 999,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xb9969177a01747d320f3bd77f8010459b3e1e310e1a3b6c75bfbea1cd870fbd26a8a34131b8eadc480a8b6d0255a4501115f953617c10ac5032a12ed5002540b91e535b1b52b18d0a500c3f422039c950d29e61bf411fefc4e9d0aa568a43ca1",
+            "deposit_data_root": "0x99db6d13fabae0d8592a09202723939d949a965abdbabf6dc4cfbeec475eff9c",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null,
+      "notes": "No signature check, so no fork version is needed."
+    },
+    {
+      "name": "launchpad_topup_1_eth",
+      "input": {
+        "chainId": 560048,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "deposit_data_root": "0x4e409e8c66431434c1342fa7269038279da896f82a7e90c911cc4faa9cf3bed6",
+            "amount": "1000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null,
+      "notes": "Launchpad top-up shape (dv-launchpad utils/deposit.ts prepareTopUpData): all-zero credentials and signature."
+    },
+    {
+      "name": "launchpad_topup_64_eth",
+      "input": {
+        "chainId": 560048,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "deposit_data_root": "0xbb1f64fffd8cfc493adafcdfa02fbec1ee7d5594e6337bd9646f710bc24b8c44",
+            "amount": "64000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null,
+      "notes": "Launchpad top-up shape (dv-launchpad utils/deposit.ts prepareTopUpData): all-zero credentials and signature."
+    },
+    {
+      "name": "launchpad_topup_2048_eth",
+      "input": {
+        "chainId": 560048,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "deposit_data_root": "0x7842c27ee499862d74986fdc8eaa50e2cf9679eaed8c895b09c8aadd40433b74",
+            "amount": "2048000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null,
+      "notes": "Launchpad top-up shape (dv-launchpad utils/deposit.ts prepareTopUpData): all-zero credentials and signature."
+    },
+    {
+      "name": "launchpad_topup_2049_eth",
+      "input": {
+        "chainId": 560048,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "deposit_data_root": "0xc6892c46d01e5daf142b879c2d95e3e96d3c1b08af5c50191e711ea9b61459f1",
+            "amount": "2049000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "amount_above_maximum",
+      "index": 0
+    },
+    {
+      "name": "launchpad_topup_as_deposit",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "deposit_data_root": "0x4e409e8c66431434c1342fa7269038279da896f82a7e90c911cc4faa9cf3bed6",
+            "amount": "1000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_LOOKS_LIKE_TOP_UP",
+      "issue": "zero_signature",
+      "index": 0,
+      "notes": "Zero signature without kind topUp: refused before any other check; the ETH would be lost if the validator does not exist."
+    },
+    {
+      "name": "topup_other_credentials",
+      "input": {
+        "chainId": 560048,
+        "kind": "topUp",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x010000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "signature": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "deposit_data_root": "0xd39579b6730e34a93e0487c865d6b903256f8a2bc9469a74cb2cfbc6841b37e0",
+            "amount": "1000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "credentials_mismatch",
+      "index": 0,
+      "notes": "Only all-zero or expected credentials are accepted on a top-up."
+    },
+    {
+      "name": "zero_credentials_new_deposit",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "0x9270ce08995b529d1bf452fe119c8b35a16bb6965caaaa02026e4be68b2bdf36040c4e85e9f1bd15d3daac67114fdfed0925e389f8250b67bf25d38462abcd4322db08c2d85283c9de41979e061e67e1c9920e24e33dd290763051375380d4fd",
+            "deposit_data_root": "0x132fe7925593b0487dd9bfd2efae21282c420b6458109b0b9b3f6cc6e72e8fe9",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "credentials_mismatch",
+      "index": 0,
+      "notes": "All-zero (0x00 BLS) credentials on a new deposit do not point at the expected address."
+    },
+    {
+      "name": "lock_deposit_valid",
+      "input": {
+        "chainId": 560048,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": "0x86b8145c98e5bd25ba722645b15ed65f024a87ec",
+        "deposits": [
+          {
+            "pubkey": "0xa47fefdb2d5c92bfd319463b83975744c29ba8a646b5c0306e5591c6646a49834c787c1ad6f6d9b031015e230bd0d1f5",
+            "withdrawal_credentials": "0x02000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0x9270ce08995b529d1bf452fe119c8b35a16bb6965caaaa02026e4be68b2bdf36040c4e85e9f1bd15d3daac67114fdfed0925e389f8250b67bf25d38462abcd4322db08c2d85283c9de41979e061e67e1c9920e24e33dd290763051375380d4fd",
+            "deposit_data_root": "0x939ee02a3799ae961c29c62ffbdd29ad2d1639d27f445ee877984e20a6c4538a",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "index": null,
+      "notes": "depositDataFromLock output of the v1.10 fixture lock, as is."
+    }
+  ]
+}

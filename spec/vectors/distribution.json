@@ -1,0 +1,1452 @@
+{
+  "suite": "distribution",
+  "description": "OVM distributeFunds routing, SplitV2 PullSplit distribution amounts, and the calls + per-recipient preview of splits.prepareDistribution. Routing: distributable = balance - fundsPendingWithdrawal; if distributable >= principalThresholdGwei * 1e9 and amountOfPrincipalStake > 0, principal = min(distributable, stake) and reward = the rest, else all reward. prepare cases give the chain state read at one block and expect the Multicall3 aggregate3 calls (in order, with allowFailure) and the preview; amounts are wei decimal strings.",
+  "provenance": {
+    "source": "sdk",
+    "sdk_ref": "obol-sdk feat/sdk-2.16 working tree on 9297307 (staged, unreleased)",
+    "generated_by": "scratch generator running src/splits/distribution.ts getOVMDistributionRouting, getSplitV2Distribution and prepareDistribution against a fake provider",
+    "note": "The fake provider answers like test/splits/distribution.spec.ts makeChain (Hoodi addresses; test addresses stand in for the OVM and splits). Routing matches ObolValidatorManager._distributeFunds; the 1-wei rules match SplitsWarehouse.withdraw (balance - 1) and the PullSplit distribute amount used by 2.16 ((split balance - 1) + (warehouse balance - 1)), which was not re-checked against the SplitV2 source. Reason codes are the v3 codes; 2.16 threw InvalidArgumentError / ObolSdkError SPLIT_PAUSED."
+  },
+  "addresses": {
+    "multicall3": "0xcA11bde05977b3631167028862bE2a173976CA11",
+    "warehouse": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+    "splitMain": "0xc05ae267291705ac16F75283572294ed2a91CBc7",
+    "raf": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+    "nativeToken": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+  },
+  "routing": [
+    {
+      "name": "principal_then_reward",
+      "input": {
+        "fundsPendingWithdrawal": "0",
+        "amountOfPrincipalStake": "32000000000000000000",
+        "principalThresholdGwei": "16000000000",
+        "balance": "40000000000000000000"
+      },
+      "distributable": "40000000000000000000",
+      "principalPayout": "32000000000000000000",
+      "rewardPayout": "8000000000000000000"
+    },
+    {
+      "name": "principal_only_up_to_stake",
+      "input": {
+        "fundsPendingWithdrawal": "0",
+        "amountOfPrincipalStake": "32000000000000000000",
+        "principalThresholdGwei": "16000000000",
+        "balance": "20000000000000000000"
+      },
+      "distributable": "20000000000000000000",
+      "principalPayout": "20000000000000000000",
+      "rewardPayout": "0"
+    },
+    {
+      "name": "at_threshold_is_principal",
+      "input": {
+        "fundsPendingWithdrawal": "0",
+        "amountOfPrincipalStake": "32000000000000000000",
+        "principalThresholdGwei": "16000000000",
+        "balance": "16000000000000000000"
+      },
+      "distributable": "16000000000000000000",
+      "principalPayout": "16000000000000000000",
+      "rewardPayout": "0",
+      "notes": "distributable >= threshold counts as principal."
+    },
+    {
+      "name": "one_wei_below_threshold_is_reward",
+      "input": {
+        "fundsPendingWithdrawal": "0",
+        "amountOfPrincipalStake": "32000000000000000000",
+        "principalThresholdGwei": "16000000000",
+        "balance": "15999999999999999999"
+      },
+      "distributable": "15999999999999999999",
+      "principalPayout": "0",
+      "rewardPayout": "15999999999999999999"
+    },
+    {
+      "name": "no_stake_all_reward",
+      "input": {
+        "fundsPendingWithdrawal": "0",
+        "amountOfPrincipalStake": "0",
+        "principalThresholdGwei": "16000000000",
+        "balance": "40000000000000000000"
+      },
+      "distributable": "40000000000000000000",
+      "principalPayout": "0",
+      "rewardPayout": "40000000000000000000"
+    },
+    {
+      "name": "pending_withdrawal_left_out",
+      "input": {
+        "fundsPendingWithdrawal": "5000000000000000000",
+        "amountOfPrincipalStake": "32000000000000000000",
+        "principalThresholdGwei": "16000000000",
+        "balance": "20000000000000000000"
+      },
+      "distributable": "15000000000000000000",
+      "principalPayout": "0",
+      "rewardPayout": "15000000000000000000"
+    },
+    {
+      "name": "exactly_stake",
+      "input": {
+        "fundsPendingWithdrawal": "0",
+        "amountOfPrincipalStake": "32000000000000000000",
+        "principalThresholdGwei": "16000000000",
+        "balance": "32000000000000000000"
+      },
+      "distributable": "32000000000000000000",
+      "principalPayout": "32000000000000000000",
+      "rewardPayout": "0"
+    },
+    {
+      "name": "empty",
+      "input": {
+        "fundsPendingWithdrawal": "0",
+        "amountOfPrincipalStake": "32000000000000000000",
+        "principalThresholdGwei": "16000000000",
+        "balance": "0"
+      },
+      "distributable": "0",
+      "principalPayout": "0",
+      "rewardPayout": "0"
+    }
+  ],
+  "split_distribution": [
+    {
+      "name": "floor_each_share_incentive_first",
+      "input": {
+        "split": {
+          "recipients": [
+            "0x1234567890123456789012345678901234567890",
+            "0x2345678901234567890123456789012345678901"
+          ],
+          "allocations": ["1", "2"],
+          "totalAllocation": "3",
+          "distributionIncentive": 10000
+        },
+        "amount": "1000"
+      },
+      "amounts": ["330", "660"],
+      "distributorReward": "10",
+      "notes": "distributorReward = amount * incentive / 1e6; each recipient gets floor((amount - reward) * allocation / total)."
+    },
+    {
+      "name": "obol_reward_split_8_eth_minus_dust",
+      "input": {
+        "split": {
+          "recipients": [
+            "0x1234567890123456789012345678901234567890",
+            "0x2345678901234567890123456789012345678901",
+            "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+          ],
+          "allocations": ["500000", "490000", "10000"],
+          "totalAllocation": "1000000",
+          "distributionIncentive": 0
+        },
+        "amount": "7999999999999999999"
+      },
+      "amounts": [
+        "3999999999999999999",
+        "3919999999999999999",
+        "79999999999999999"
+      ],
+      "distributorReward": "0"
+    },
+    {
+      "name": "obol_principal_split_32_eth_minus_dust",
+      "input": {
+        "split": {
+          "recipients": [
+            "0x1234567890123456789012345678901234567890",
+            "0x2345678901234567890123456789012345678901"
+          ],
+          "allocations": ["505000", "495000"],
+          "totalAllocation": "1000000",
+          "distributionIncentive": 0
+        },
+        "amount": "31999999999999999999"
+      },
+      "amounts": ["16159999999999999999", "15839999999999999999"],
+      "distributorReward": "0"
+    },
+    {
+      "name": "max_incentive_uint16",
+      "input": {
+        "split": {
+          "recipients": [
+            "0x1234567890123456789012345678901234567890",
+            "0x2345678901234567890123456789012345678901"
+          ],
+          "allocations": ["500000", "500000"],
+          "totalAllocation": "1000000",
+          "distributionIncentive": 65535
+        },
+        "amount": "1000000000000000000"
+      },
+      "amounts": ["467232500000000000", "467232500000000000"],
+      "distributorReward": "65535000000000000"
+    }
+  ],
+  "prepare": [
+    {
+      "name": "ovm_and_both_splits_with_withdrawals",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {
+            "0x1234567890123456789012345678901234567890": "5"
+          },
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {
+            "0x1234567890123456789012345678901234567890": "10"
+          }
+        }
+      },
+      "accepted": true,
+      "reason": null,
+      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "calls": [
+        {
+          "op": "ovm.distributeFunds",
+          "target": "0x8901234567890123456789012345678901234567",
+          "allowFailure": false
+        },
+        {
+          "op": "split.distribute",
+          "target": "0x6789012345678901234567890123456789012345",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        },
+        {
+          "op": "split.distribute",
+          "target": "0x7890123456789012345678901234567890123456",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x1234567890123456789012345678901234567890",
+          "allowFailure": true
+        },
+        {
+          "op": "splitMain.withdraw",
+          "target": "0xc05ae267291705ac16F75283572294ed2a91CBc7",
+          "owner": "0x1234567890123456789012345678901234567890",
+          "allowFailure": true
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x2345678901234567890123456789012345678901",
+          "allowFailure": true
+        }
+      ],
+      "preview": {
+        "ovm": {
+          "address": "0x8901234567890123456789012345678901234567",
+          "distributable": "40000000000000000000",
+          "principalPayout": "32000000000000000000",
+          "rewardPayout": "8000000000000000000",
+          "principalRecipient": "0x7890123456789012345678901234567890123456",
+          "rewardRecipient": "0x6789012345678901234567890123456789012345"
+        },
+        "splits": [
+          {
+            "address": "0x6789012345678901234567890123456789012345",
+            "kind": "reward",
+            "distributable": "7999999999999999999",
+            "distributorReward": "0"
+          },
+          {
+            "address": "0x7890123456789012345678901234567890123456",
+            "kind": "principal",
+            "distributable": "31999999999999999999",
+            "distributorReward": "0"
+          }
+        ],
+        "recipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "fromOvm": "0",
+            "fromRewardSplit": "3999999999999999999",
+            "fromPrincipalSplit": "16159999999999999999",
+            "warehouseBalance": "5",
+            "splitMainBalance": "10",
+            "withdraw": true,
+            "toWallet": "20160000000000000011"
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "fromOvm": "0",
+            "fromRewardSplit": "3919999999999999999",
+            "fromPrincipalSplit": "15839999999999999999",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "19759999999999999997"
+          },
+          {
+            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "fromOvm": "0",
+            "fromRewardSplit": "79999999999999999",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          }
+        ]
+      },
+      "notes": "Withdrawals for every split recipient but the RAF. Splits keep 1 wei of what they move; warehouse and SplitMain withdrawals leave 1 wei."
+    },
+    {
+      "name": "plain_recipients_paid_by_ovm",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": null,
+          "principalSplit": null,
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "1000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x1234567890123456789012345678901234567890",
+            "rewardRecipient": "0x2345678901234567890123456789012345678901",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": true,
+      "reason": null,
+      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "calls": [
+        {
+          "op": "ovm.distributeFunds",
+          "target": "0x8901234567890123456789012345678901234567",
+          "allowFailure": false
+        }
+      ],
+      "preview": {
+        "ovm": {
+          "address": "0x8901234567890123456789012345678901234567",
+          "distributable": "1000000000000000000",
+          "principalPayout": "0",
+          "rewardPayout": "1000000000000000000",
+          "principalRecipient": "0x1234567890123456789012345678901234567890",
+          "rewardRecipient": "0x2345678901234567890123456789012345678901"
+        },
+        "splits": [],
+        "recipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "fromOvm": "0",
+            "fromRewardSplit": "0",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "fromOvm": "1000000000000000000",
+            "fromRewardSplit": "0",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "1000000000000000000"
+          }
+        ]
+      },
+      "notes": "OVM recipients that are not splits are paid directly (push)."
+    },
+    {
+      "name": "only_listed_recipients_skip_dust",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": [
+            "0x1234567890123456789012345678901234567890",
+            "0x2345678901234567890123456789012345678901"
+          ]
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "0",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {
+            "0x2345678901234567890123456789012345678901": "1",
+            "0x1234567890123456789012345678901234567890": "100"
+          },
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": true,
+      "reason": null,
+      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "calls": [
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x1234567890123456789012345678901234567890",
+          "allowFailure": true
+        }
+      ],
+      "preview": {
+        "ovm": {
+          "address": "0x8901234567890123456789012345678901234567",
+          "distributable": "0",
+          "principalPayout": "0",
+          "rewardPayout": "0",
+          "principalRecipient": "0x7890123456789012345678901234567890123456",
+          "rewardRecipient": "0x6789012345678901234567890123456789012345"
+        },
+        "splits": [
+          {
+            "address": "0x6789012345678901234567890123456789012345",
+            "kind": "reward",
+            "distributable": "0",
+            "distributorReward": "0"
+          },
+          {
+            "address": "0x7890123456789012345678901234567890123456",
+            "kind": "principal",
+            "distributable": "0",
+            "distributorReward": "0"
+          }
+        ],
+        "recipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "fromOvm": "0",
+            "fromRewardSplit": "0",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "100",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "99"
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "fromOvm": "0",
+            "fromRewardSplit": "0",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "1",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "0"
+          },
+          {
+            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "fromOvm": "0",
+            "fromRewardSplit": "0",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          }
+        ]
+      },
+      "notes": "Nothing to distribute; B holds only the 1 wei dust, so only A is withdrawn."
+    },
+    {
+      "name": "leftover_split_balance_without_ovm",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": null,
+          "rewardSplit": {
+            "address": "0x6789012345678901234567890123456789012345",
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": null,
+          "recipients": []
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "1001",
+              "warehouseBalance": "2"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": true,
+      "reason": null,
+      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "calls": [
+        {
+          "op": "split.distribute",
+          "target": "0x6789012345678901234567890123456789012345",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        }
+      ],
+      "preview": {
+        "splits": [
+          {
+            "address": "0x6789012345678901234567890123456789012345",
+            "kind": "reward",
+            "distributable": "1001",
+            "distributorReward": "0"
+          }
+        ],
+        "recipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "fromOvm": "0",
+            "fromRewardSplit": "500",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "fromOvm": "0",
+            "fromRewardSplit": "490",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          },
+          {
+            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "fromOvm": "0",
+            "fromRewardSplit": "10",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          }
+        ]
+      },
+      "notes": "distributable = (1001 - 1) + (2 - 1)."
+    },
+    {
+      "name": "paused_withdrawals_skipped_except_sender",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": [
+            "0x1234567890123456789012345678901234567890",
+            "0x5678901234567890123456789012345678901234"
+          ]
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {
+            "0x5678901234567890123456789012345678901234": "50"
+          },
+          "warehouseWithdrawPaused": {
+            "0x1234567890123456789012345678901234567890": true,
+            "0x5678901234567890123456789012345678901234": true
+          },
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": true,
+      "reason": null,
+      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "calls": [
+        {
+          "op": "ovm.distributeFunds",
+          "target": "0x8901234567890123456789012345678901234567",
+          "allowFailure": false
+        },
+        {
+          "op": "split.distribute",
+          "target": "0x6789012345678901234567890123456789012345",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        },
+        {
+          "op": "split.distribute",
+          "target": "0x7890123456789012345678901234567890123456",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x5678901234567890123456789012345678901234",
+          "allowFailure": true
+        }
+      ],
+      "preview": {
+        "ovm": {
+          "address": "0x8901234567890123456789012345678901234567",
+          "distributable": "40000000000000000000",
+          "principalPayout": "32000000000000000000",
+          "rewardPayout": "8000000000000000000",
+          "principalRecipient": "0x7890123456789012345678901234567890123456",
+          "rewardRecipient": "0x6789012345678901234567890123456789012345"
+        },
+        "splits": [
+          {
+            "address": "0x6789012345678901234567890123456789012345",
+            "kind": "reward",
+            "distributable": "7999999999999999999",
+            "distributorReward": "0"
+          },
+          {
+            "address": "0x7890123456789012345678901234567890123456",
+            "kind": "principal",
+            "distributable": "31999999999999999999",
+            "distributorReward": "0"
+          }
+        ],
+        "recipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "fromOvm": "0",
+            "fromRewardSplit": "3999999999999999999",
+            "fromPrincipalSplit": "16159999999999999999",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "0"
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "fromOvm": "0",
+            "fromRewardSplit": "3919999999999999999",
+            "fromPrincipalSplit": "15839999999999999999",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          },
+          {
+            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "fromOvm": "0",
+            "fromRewardSplit": "79999999999999999",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          },
+          {
+            "address": "0x5678901234567890123456789012345678901234",
+            "fromOvm": "0",
+            "fromRewardSplit": "0",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "50",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "49"
+          }
+        ]
+      },
+      "notes": "Warehouse.withdraw skips the pause check when tx.origin is the owner; this only holds when the sender is an EOA (not a Safe)."
+    },
+    {
+      "name": "below_threshold_all_to_reward_split",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "10000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": true,
+      "reason": null,
+      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "calls": [
+        {
+          "op": "ovm.distributeFunds",
+          "target": "0x8901234567890123456789012345678901234567",
+          "allowFailure": false
+        },
+        {
+          "op": "split.distribute",
+          "target": "0x6789012345678901234567890123456789012345",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x1234567890123456789012345678901234567890",
+          "allowFailure": true
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x2345678901234567890123456789012345678901",
+          "allowFailure": true
+        }
+      ],
+      "preview": {
+        "ovm": {
+          "address": "0x8901234567890123456789012345678901234567",
+          "distributable": "10000000000000000000",
+          "principalPayout": "0",
+          "rewardPayout": "10000000000000000000",
+          "principalRecipient": "0x7890123456789012345678901234567890123456",
+          "rewardRecipient": "0x6789012345678901234567890123456789012345"
+        },
+        "splits": [
+          {
+            "address": "0x6789012345678901234567890123456789012345",
+            "kind": "reward",
+            "distributable": "9999999999999999999",
+            "distributorReward": "0"
+          },
+          {
+            "address": "0x7890123456789012345678901234567890123456",
+            "kind": "principal",
+            "distributable": "0",
+            "distributorReward": "0"
+          }
+        ],
+        "recipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "fromOvm": "0",
+            "fromRewardSplit": "4999999999999999999",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "4999999999999999998"
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "fromOvm": "0",
+            "fromRewardSplit": "4899999999999999999",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "4899999999999999998"
+          },
+          {
+            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "fromOvm": "0",
+            "fromRewardSplit": "99999999999999999",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          }
+        ]
+      },
+      "notes": "Principal split gets nothing, so it is not distributed."
+    },
+    {
+      "name": "reject_ovm_recipient_split_without_params",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": null,
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": false,
+      "reason": "SPLIT_PARAMS_REQUIRED",
+      "calls": null,
+      "preview": null
+    },
+    {
+      "name": "reject_params_mismatch",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["990000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": false,
+      "reason": "SPLIT_PARAMS_MISMATCH",
+      "calls": null,
+      "preview": null
+    },
+    {
+      "name": "reject_address_not_ovm_recipient",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "address": "0x2345678901234567890123456789012345678901",
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": false,
+      "reason": "SPLIT_NOT_OVM_RECIPIENT",
+      "calls": null,
+      "preview": null
+    },
+    {
+      "name": "reject_paused_split_not_owner",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": true,
+              "owner": "0x2345678901234567890123456789012345678901",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": false,
+      "reason": "SPLIT_PAUSED",
+      "calls": null,
+      "preview": null
+    },
+    {
+      "name": "paused_split_owner_sender_ok",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901",
+              "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+            ],
+            "allocations": ["500000", "490000", "10000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "principalSplit": {
+            "recipients": [
+              "0x1234567890123456789012345678901234567890",
+              "0x2345678901234567890123456789012345678901"
+            ],
+            "allocations": ["505000", "495000"],
+            "totalAllocation": "1000000",
+            "distributionIncentive": 0
+          },
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": {
+            "address": "0x8901234567890123456789012345678901234567",
+            "balance": "40000000000000000000",
+            "fundsPendingWithdrawal": "0",
+            "amountOfPrincipalStake": "32000000000000000000",
+            "principalRecipient": "0x7890123456789012345678901234567890123456",
+            "rewardRecipient": "0x6789012345678901234567890123456789012345",
+            "principalThresholdGwei": "16000000000"
+          },
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": true,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": true,
+      "reason": null,
+      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "calls": [
+        {
+          "op": "ovm.distributeFunds",
+          "target": "0x8901234567890123456789012345678901234567",
+          "allowFailure": false
+        },
+        {
+          "op": "split.distribute",
+          "target": "0x6789012345678901234567890123456789012345",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        },
+        {
+          "op": "split.distribute",
+          "target": "0x7890123456789012345678901234567890123456",
+          "distributor": "0x5678901234567890123456789012345678901234",
+          "allowFailure": false
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x1234567890123456789012345678901234567890",
+          "allowFailure": true
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+          "owner": "0x2345678901234567890123456789012345678901",
+          "allowFailure": true
+        }
+      ],
+      "preview": {
+        "ovm": {
+          "address": "0x8901234567890123456789012345678901234567",
+          "distributable": "40000000000000000000",
+          "principalPayout": "32000000000000000000",
+          "rewardPayout": "8000000000000000000",
+          "principalRecipient": "0x7890123456789012345678901234567890123456",
+          "rewardRecipient": "0x6789012345678901234567890123456789012345"
+        },
+        "splits": [
+          {
+            "address": "0x6789012345678901234567890123456789012345",
+            "kind": "reward",
+            "distributable": "7999999999999999999",
+            "distributorReward": "0"
+          },
+          {
+            "address": "0x7890123456789012345678901234567890123456",
+            "kind": "principal",
+            "distributable": "31999999999999999999",
+            "distributorReward": "0"
+          }
+        ],
+        "recipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "fromOvm": "0",
+            "fromRewardSplit": "3999999999999999999",
+            "fromPrincipalSplit": "16159999999999999999",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "20159999999999999997"
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "fromOvm": "0",
+            "fromRewardSplit": "3919999999999999999",
+            "fromPrincipalSplit": "15839999999999999999",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": true,
+            "toWallet": "19759999999999999997"
+          },
+          {
+            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "fromOvm": "0",
+            "fromRewardSplit": "79999999999999999",
+            "fromPrincipalSplit": "0",
+            "warehouseBalance": "0",
+            "splitMainBalance": "0",
+            "withdraw": false,
+            "toWallet": "0"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reject_not_an_ovm",
+      "input": {
+        "chainId": 560048,
+        "sender": "0x5678901234567890123456789012345678901234",
+        "payload": {
+          "ovmAddress": "0x8901234567890123456789012345678901234567",
+          "rewardSplit": null,
+          "principalSplit": null,
+          "recipients": null
+        },
+        "chainState": {
+          "ovm": null,
+          "splits": [
+            {
+              "address": "0x6789012345678901234567890123456789012345",
+              "splitHash": "0x511c299d2ed2bdb4546677164aec78700a6e9340930dce9a94da60a1ea9ee461",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            },
+            {
+              "address": "0x7890123456789012345678901234567890123456",
+              "splitHash": "0xcee02bcbd48ed10352f83c32f88913fb3db5f00c03c0f225916201d750b7c886",
+              "paused": false,
+              "owner": "0x5678901234567890123456789012345678901234",
+              "balance": "0",
+              "warehouseBalance": "0"
+            }
+          ],
+          "warehouseBalances": {},
+          "warehouseWithdrawPaused": {},
+          "splitMainBalances": {}
+        }
+      },
+      "accepted": false,
+      "reason": "OVM_READ_FAILED",
+      "calls": null,
+      "preview": null
+    }
+  ]
+}
