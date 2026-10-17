@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Base, type BaseConfig } from './base.js';
 import {
-  CONFLICT_ERROR_MSG,
   CreatorConfigHashSigningTypes,
   Domain,
   DKG_ALGORITHM,
@@ -12,13 +11,18 @@ import {
   TermsAndConditionsSigningTypes,
   DEFAULT_BASE_VERSION,
   TERMS_AND_CONDITIONS_HASH,
+  TERMS_ACCEPTED_MSG,
   CHAIN_CONFIGURATION,
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   OBOL_SDK_EMAIL,
   isChainSupportedForSplitters,
+  SUPPORTED_DEFINITION_VERSIONS,
 } from './constants.js';
 import {
   ConflictError,
+  DefinitionVerificationError,
+  InvalidArgumentError,
+  NotAnOperatorError,
   SignerRequiredError,
   UnsupportedChainError,
 } from './errors.js';
@@ -50,30 +54,65 @@ import {
   predictSplitterAddress,
   getOWRTranches,
 } from './splits/splitHelpers.js';
-import { isContractAvailable } from './utils.js';
+import { assertSignerChain, isContractAvailable } from './utils.js';
+import { assertAddress, assertHash32 } from './validation.js';
 import { Incentives } from './incentives/incentives.js';
 import { Exit } from './exits/exit.js';
 import { ObolSplits } from './splits/splits.js';
 import { EOA } from './eoa/eoa.js';
+import { validateClusterLock } from './services.js';
+import {
+  depositDataFromLock,
+  type GetDepositDataOptions,
+  type LockDepositData,
+} from './deposits/lockDeposits.js';
 export * from './types.js';
 export * from './services.js';
 export * from './verification/signature-validator.js';
 export * from './verification/common.js';
 export * from './constants.js';
 export {
+  ChainMismatchError,
   ConflictError,
   ClusterLockValidationBusyError,
   ClusterLockValidationTimeoutError,
+  DefinitionVerificationError,
+  IncentivesPreflightError,
+  InvalidArgumentError,
   InvalidBaseUrlError,
+  NotAnOperatorError,
+  NotFoundError,
+  ObolApiError,
+  type ObolApiErrorInit,
+  ObolSdkError,
+  PayloadValidationError,
+  RateLimitError,
+  RequestTimeoutError,
   SignerRequiredError,
+  TransactionSubmissionError,
+  UnauthorizedError,
   UnsupportedChainError,
+  ValidationError,
 } from './errors.js';
-export { ALLOWED_OBOL_API_BASE_URLS } from './base.js';
+export {
+  ALLOWED_OBOL_API_BASE_URLS,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+} from './base.js';
 export { Incentives } from './incentives/incentives.js';
 export { Exit } from './exits/exit.js';
 export { ObolSplits } from './splits/splits.js';
 export { EOA } from './eoa/eoa.js';
 export { blsVerify } from './blsUtils.js';
+export {
+  getWithdrawalRequestFee,
+  resolveWithdrawalFee,
+  WITHDRAWAL_REQUEST_CONTRACT_ADDRESS,
+} from './withdrawalFee.js';
+export {
+  depositDataFromLock,
+  type GetDepositDataOptions,
+  type LockDepositData,
+} from './deposits/lockDeposits.js';
 export { ENR } from '@chainsafe/enr';
 
 /**
@@ -87,18 +126,22 @@ export { ENR } from '@chainsafe/enr';
  * - `client.eoa.*`         – EOA withdrawals and batch deposits
  *
  * Cluster lifecycle helpers live directly on the client:
+ * - {@link Client.hasAcceptedTerms}
  * - {@link Client.acceptObolLatestTermsAndConditions}
  * - {@link Client.createClusterDefinition}
  * - {@link Client.acceptClusterDefinition}
  * - {@link Client.getClusterDefinition}
  * - {@link Client.getClusterLock}
  * - {@link Client.getClusterLockByHash}
+ * - {@link Client.getDepositData}
  * - {@link Client.createObolRewardsSplit}
  * - {@link Client.createObolTotalSplit}
  * - {@link Client.getOWRTranches}
  *
- * Supported networks (by `chainId`): Mainnet (1), Hoodi (560048),
- * Gnosis (100), Sepolia (11155111).
+ * Supported networks (by `chainId`): Mainnet (1) and Hoodi (560048), plus
+ * Gnosis (100) and Sepolia (11155111) for cluster definitions and locks only
+ * (no splitter contracts; not recommended for new clusters). Any other
+ * `chainId` throws {@link UnsupportedChainError} from the constructor.
  *
  * @example
  * ```typescript
@@ -172,11 +215,17 @@ export class Client extends Base {
    * @param config.baseUrl - Obol API base URL. Defaults to `https://api.obol.tech`.
    *   Must match one of {@link ALLOWED_OBOL_API_BASE_URLS} (API paths use `/v1/...` separately).
    * @param config.chainId - Target chain ID. Defaults to `560048` (Hoodi).
-   *   Supported: 1 (Mainnet), 560048 (Hoodi), 100 (Gnosis), 11155111 (Sepolia).
-   * @param signer - An ethers `Wallet` or `JsonRpcSigner`. Required for any
+   *   Supported: 1 (Mainnet), 560048 (Hoodi), and for cluster definitions and
+   *   locks only, 100 (Gnosis) and 11155111 (Sepolia); see {@link SUPPORTED_CHAIN_IDS}.
+   * @param config.timeoutMs - Obol API request timeout in milliseconds.
+   *   Defaults to 30000; `0` disables it. Timeouts throw {@link RequestTimeoutError}.
+   * @param signer - Any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`,
+   *   `NonceManager`, or a custom `AbstractSigner`). Required for any
    *   write operation (creating clusters, deploying splits, claiming incentives).
    *   Read-only operations (`getClusterDefinition`, `getClusterLock`) work without a signer.
    * @param provider - An ethers `Provider`. If omitted, falls back to `signer.provider`.
+   * @throws {UnsupportedChainError} If `chainId` is not a supported chain.
+   * @throws {InvalidBaseUrlError} If `baseUrl` is not an allowed Obol API URL.
    *
    * @example
    * ```typescript
@@ -211,27 +260,75 @@ export class Client extends Base {
   }
 
   /**
+   * Checks whether an address has accepted the latest Obol terms and conditions.
+   *
+   * This is a read-only API call; no signature is requested.
+   *
+   * @param address - Address to check. Defaults to the signer's address.
+   * @returns `true` if the terms have been accepted, otherwise `false`.
+   * @throws {SignerRequiredError} If no address is given and no signer was provided.
+   * @throws {Error} If `address` is given and is not a 0x-prefixed 20-byte
+   *   address (checked before calling the API).
+   * @throws {ValidationError} If the API rejects the address.
+   *
+   * @example
+   * ```typescript
+   * if (!(await client.hasAcceptedTerms())) {
+   *   await client.acceptObolLatestTermsAndConditions();
+   * }
+   * ```
+   */
+  async hasAcceptedTerms(address?: string): Promise<boolean> {
+    let target = address;
+    if (target === undefined) {
+      if (!this.signer) {
+        throw new SignerRequiredError('hasAcceptedTerms');
+      }
+      target = await this.signer.getAddress();
+    } else {
+      assertAddress(target, 'address');
+    }
+
+    const response: { isTermsAndConditionsSigned: boolean } =
+      await this.request(
+        `/${DEFAULT_BASE_VERSION}/termsAndConditions/${encodeURIComponent(target)}`,
+        { method: 'GET' },
+      );
+    return Boolean(response?.isTermsAndConditionsSigned);
+  }
+
+  /**
    * Accepts the latest Obol terms and conditions.
    *
    * **Must be called once** before any write operation
    * (`createClusterDefinition`, `acceptClusterDefinition`, etc.).
-   * Calling it again after acceptance throws a {@link ConflictError}.
    *
    * - Requires a `signer` to be provided at client construction.
    * - Signs an EIP-712 typed-data message; no on-chain transaction is sent.
-   * - Idempotent per signer address: once accepted, subsequent calls throw `ConflictError`.
+   * - Not idempotent by default: calling it again after acceptance throws a
+   *   {@link ConflictError}. Pass `{ ifNotAccepted: true }` to first check with
+   *   {@link Client.hasAcceptedTerms} and return without signing if the signer
+   *   has already accepted.
    *
+   * @param options - Optional settings.
+   * @param options.ifNotAccepted - When `true`, skip signing and return
+   *   {@link TERMS_ACCEPTED_MSG} if the signer has already accepted the terms.
    * @returns A success message string from the Obol API.
    * @throws {SignerRequiredError} If no signer was provided to the client.
-   * @throws {ConflictError} If the terms were already accepted by this address.
+   * @throws {ConflictError} If the terms were already accepted by this address
+   *   (only when `ifNotAccepted` is not set).
    *
    * @example
    * ```typescript
-   * const message = await client.acceptObolLatestTermsAndConditions();
-   * console.log(message); // "Terms and conditions accepted successfully"
+   * const message = await client.acceptObolLatestTermsAndConditions({
+   *   ifNotAccepted: true,
+   * });
+   * console.log(message); // "successful authorization"
    * ```
    */
-  async acceptObolLatestTermsAndConditions(): Promise<string> {
+  async acceptObolLatestTermsAndConditions(options?: {
+    ifNotAccepted?: boolean;
+  }): Promise<string> {
     if (!this.signer) {
       throw new SignerRequiredError('acceptObolLatestTermsAndConditions');
     }
@@ -239,6 +336,13 @@ export class Client extends Base {
     try {
       const termsAndConditionsHash = TERMS_AND_CONDITIONS_HASH;
       const address = await this.signer.getAddress();
+
+      if (options?.ifNotAccepted === true) {
+        if (await this.hasAcceptedTerms(address)) {
+          return TERMS_ACCEPTED_MSG;
+        }
+      }
+
       const termsAndConditionsPayload = {
         address,
         version: TERMS_AND_CONDITIONS_VERSION,
@@ -265,8 +369,9 @@ export class Client extends Base {
         });
       return termsAndConditionsResponse?.message;
     } catch (err: any) {
-      if (err?.message === CONFLICT_ERROR_MSG) {
-        throw new ConflictError();
+      if (err instanceof ConflictError) {
+        err.hint =
+          'Terms already accepted by this address; use hasAcceptedTerms() or pass { ifNotAccepted: true }.';
       }
       throw err;
     }
@@ -289,6 +394,7 @@ export class Client extends Base {
    * @returns The deployed OWR address as `withdrawal_address` and the
    *   splitter proxy address as `fee_recipient_address`.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain does not support splitters.
    *
    * @example
@@ -303,6 +409,12 @@ export class Client extends Base {
    *     etherAmount: 32,
    *   });
    * ```
+   *
+   * @deprecated For new clusters use
+   *   {@link ObolSplits.createValidatorManagerAndRewardsSplit}. An OWR cannot
+   *   make EIP-7002 withdrawal requests, so getting the stake back depends on
+   *   pre-signed exits. Reading existing OWRs ({@link Client.getOWRTranches})
+   *   is unaffected.
    */
   async createObolRewardsSplit({
     splitRecipients,
@@ -340,6 +452,12 @@ export class Client extends Base {
     if (!chainConfig?.SPLITMAIN_CONTRACT) {
       throw new UnsupportedChainError(this.chainId, 'createObolRewardsSplit');
     }
+
+    await assertSignerChain(
+      this.signer,
+      this.chainId,
+      'createObolRewardsSplit',
+    );
 
     const checkSplitMainAddress = await isContractAvailable(
       chainConfig.SPLITMAIN_CONTRACT.address,
@@ -431,6 +549,7 @@ export class Client extends Base {
    * @param totalSplitPayload - Configuration for the splitter deployment.
    * @returns The splitter address as both `withdrawal_address` and `fee_recipient_address`.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain does not support splitters.
    * @throws {Error} If required on-chain factory contracts are unavailable.
    *
@@ -445,6 +564,12 @@ export class Client extends Base {
    *   });
    * // withdrawal_address === fee_recipient_address (same splitter)
    * ```
+   *
+   * @deprecated For new clusters use
+   *   {@link ObolSplits.createValidatorManagerAndTotalSplit}. A splitter as
+   *   withdrawal address cannot make EIP-7002 withdrawal requests, so getting
+   *   the stake back depends on pre-signed exits. Existing splitters are
+   *   unaffected.
    */
   async createObolTotalSplit({
     splitRecipients,
@@ -476,6 +601,8 @@ export class Client extends Base {
     if (!chainConfig?.SPLITMAIN_CONTRACT) {
       throw new UnsupportedChainError(this.chainId, 'createObolTotalSplit');
     }
+
+    await assertSignerChain(this.signer, this.chainId, 'createObolTotalSplit');
 
     const checkSplitMainAddress = await isContractAvailable(
       chainConfig.SPLITMAIN_CONTRACT.address,
@@ -543,11 +670,12 @@ export class Client extends Base {
    * Returns the principal recipient, reward recipient, and staked principal amount
    * configured in the OWR. This is a read-only on-chain call (no transaction sent).
    *
-   * - Requires a `signer` (for provider access).
+   * - Uses the client's provider (or the signer's provider); no signer is
+   *   needed when a provider was passed to the `Client`.
    *
    * @param owrAddress - The Ethereum address of the deployed OWR contract.
    * @returns The OWR tranche data: `principalRecipient`, `rewardRecipient`, and `amountOfPrincipalStake`.
-   * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {SignerRequiredError} If the client has neither a provider nor a signer.
    *
    * @example
    * ```typescript
@@ -558,14 +686,13 @@ export class Client extends Base {
    * ```
    */
   async getOWRTranches(owrAddress: ETH_ADDRESS): Promise<OWRTranches> {
-    if (!this.signer) {
+    if (!this.provider && !this.signer) {
       throw new SignerRequiredError('getOWRTranches');
     }
 
-    const signer = this.signer;
     return await getOWRTranches({
       owrAddress,
-      signer,
+      signer: this.signer,
       provider: this.provider,
     });
   }
@@ -584,14 +711,17 @@ export class Client extends Base {
    * - Creating a duplicate cluster throws a {@link ConflictError}.
    *
    * @param newCluster - The cluster configuration payload.
-   * @param version - Cluster definition version to create. Defaults to
-   *   {@link CONFIG_VERSION} (the latest). Pass an earlier version (e.g.
-   *   `'v1.10.0'`) to create clusters compatible with a charon version that
-   *   does not yet support the latest schema — the DKG nodes must run a charon
-   *   release that supports the chosen version. Must be a charon-supported
-   *   version string.
+   * @param version - Definition version. Defaults to {@link CONFIG_VERSION};
+   *   must be one of {@link SUPPORTED_DEFINITION_VERSIONS}. Pass an earlier
+   *   version such as `'v1.10.0'` for DKG nodes running a charon release
+   *   without the latest schema.
    * @returns The `config_hash` string that uniquely identifies this cluster definition.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {InvalidArgumentError} If `version` is not supported.
+   * @throws {PayloadValidationError} If the payload fails validation (unknown
+   *   fields, fewer than 4 operators, invalid or duplicate addresses, zero
+   *   withdrawal or fee recipient address).
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {ConflictError} If an identical cluster definition already exists.
    *
    * @example
@@ -615,6 +745,13 @@ export class Client extends Base {
       throw new SignerRequiredError('createClusterDefinition');
     }
 
+    if (!SUPPORTED_DEFINITION_VERSIONS.includes(version)) {
+      throw new InvalidArgumentError(
+        `Unsupported cluster definition version ${String(version)}; expected one of ${SUPPORTED_DEFINITION_VERSIONS.join(', ')}`,
+        'version',
+      );
+    }
+
     const validatedCluster = validatePayload<ClusterPayload>(
       newCluster,
       definitionSchema,
@@ -630,6 +767,12 @@ export class Client extends Base {
       threshold: Math.ceil((2 * validatedCluster.operators.length) / 3),
       num_validators: validatedCluster.validators.length,
     };
+    await assertSignerChain(
+      this.signer,
+      this.chainId,
+      'createClusterDefinition',
+    );
+
     try {
       const address = await this.signer.getAddress();
 
@@ -658,8 +801,8 @@ export class Client extends Base {
       );
       return clusterDefinition?.config_hash;
     } catch (err: any) {
-      if (err?.message === CONFLICT_ERROR_MSG) {
-        throw new ConflictError();
+      if (err instanceof ConflictError) {
+        err.hint = `This cluster definition already exists; call getClusterDefinition('${clusterConfig.config_hash}') to read its state.`;
       }
       throw err;
     }
@@ -671,20 +814,37 @@ export class Client extends Base {
    * Each operator in the cluster must call this method with their ENR and the
    * cluster's `config_hash` to signal readiness for the DKG ceremony.
    *
+   * Before signing, the definition is fetched and verified locally: the
+   * returned `config_hash` equals `configHash`, the `config_hash` recomputed
+   * from the definition's contents matches, and the definition's
+   * `fork_version` matches this client's chain. The signer's address must be
+   * one of the definition's operators. Integrators should show the user the
+   * definition's withdrawal and fee recipient addresses before calling this
+   * method.
+   *
    * - Requires a `signer` (the operator's address is derived from it).
    * - Signs two EIP-712 messages: one for the config hash, one for the ENR.
-   * - The operator must be listed in the cluster definition's `operators` array.
+   * - If this operator has already accepted with the same ENR, the current
+   *   definition is returned and nothing is signed.
    *
-   * @param operatorPayload - Operator data. Must include `enr` (Ethereum Node Record)
-   *   and `version` at minimum.
+   * @param operatorPayload - Operator data. Must include `enr` (Ethereum Node
+   *   Record). `version` is optional and defaults to the definition's version;
+   *   if given, it must match it.
    * @param configHash - The `config_hash` returned by {@link Client.createClusterDefinition}.
    * @returns The updated cluster definition with the operator's acceptance recorded.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {InvalidArgumentError} If `configHash` is not a 0x-prefixed
+   *   32-byte hex string.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
+   * @throws {DefinitionVerificationError} If the definition fails verification
+   *   or `operatorPayload.version` differs from the definition's version.
+   * @throws {PayloadValidationError} If the operator payload is invalid.
+   * @throws {NotAnOperatorError} If the signer is not an operator in the definition.
    *
    * @example
    * ```typescript
    * const updatedDef = await client.acceptClusterDefinition(
-   *   { enr: "enr:-LK4Q...", version: "v1.11.0" },
+   *   { enr: "enr:-LK4Q..." },
    *   configHash,
    * );
    * ```
@@ -696,46 +856,115 @@ export class Client extends Base {
     if (!this.signer) {
       throw new SignerRequiredError('acceptClusterDefinition');
     }
+    assertHash32(configHash, 'configHash');
+
+    await assertSignerChain(
+      this.signer,
+      this.chainId,
+      'acceptClusterDefinition',
+    );
+
+    const definition = await this.getVerifiedClusterDefinition(configHash);
+
+    if (
+      operatorPayload?.version !== undefined &&
+      operatorPayload.version !== definition.version
+    ) {
+      throw new DefinitionVerificationError(
+        `Operator payload version ${operatorPayload.version} does not match cluster definition version ${definition.version}`,
+      );
+    }
 
     const validatedPayload = validatePayload<OperatorPayload>(
-      operatorPayload,
+      { ...operatorPayload, version: definition.version },
       operatorPayloadSchema,
     );
 
-    try {
-      const address = await this.signer.getAddress();
-
-      const operatorConfigSignature = await this.signer.signTypedData(
-        Domain(this.chainId),
-        OperatorConfigHashSigningTypes,
-        { operator_config_hash: configHash },
-      );
-      const operatorENRSignature = await this.signer.signTypedData(
-        Domain(this.chainId),
-        EnrSigningTypes,
-        { enr: validatedPayload.enr },
-      );
-
-      const operatorData: OperatorPayload = {
-        ...validatedPayload,
-        address,
-        enr_signature: operatorENRSignature,
-        fork_version: this.fork_version,
-      };
-      const clusterDefinition: ClusterDefinition = await this.request(
-        `/${DEFAULT_BASE_VERSION}/definition/${configHash}`,
-        {
-          method: 'PUT',
-          body: JSON.stringify(operatorData),
-          headers: {
-            Authorization: `Bearer ${operatorConfigSignature}`,
-          },
-        },
-      );
-      return clusterDefinition;
-    } catch (err: any) {
-      throw err;
+    const address = await this.signer.getAddress();
+    const operator = definition.operators.find(
+      o => o.address?.toLowerCase() === address.toLowerCase(),
+    );
+    if (!operator) {
+      throw new NotAnOperatorError(address, configHash);
     }
+
+    if (operator.config_signature && operator.enr === validatedPayload.enr) {
+      return definition;
+    }
+
+    const operatorConfigSignature = await this.signer.signTypedData(
+      Domain(this.chainId),
+      OperatorConfigHashSigningTypes,
+      { operator_config_hash: configHash },
+    );
+    const operatorENRSignature = await this.signer.signTypedData(
+      Domain(this.chainId),
+      EnrSigningTypes,
+      { enr: validatedPayload.enr },
+    );
+
+    const operatorData: OperatorPayload = {
+      ...validatedPayload,
+      address,
+      enr_signature: operatorENRSignature,
+      fork_version: this.fork_version,
+    };
+    const clusterDefinition: ClusterDefinition = await this.request(
+      `/${DEFAULT_BASE_VERSION}/definition/${encodeURIComponent(configHash)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(operatorData),
+        headers: {
+          Authorization: `Bearer ${operatorConfigSignature}`,
+        },
+      },
+    );
+    return clusterDefinition;
+  }
+
+  /**
+   * Fetches a cluster definition and checks that it is the definition
+   * identified by `configHash` and that it targets this client's chain.
+   */
+  private async getVerifiedClusterDefinition(
+    configHash: string,
+  ): Promise<ClusterDefinition> {
+    const definition = await this.getClusterDefinition(configHash);
+    const expected = String(configHash).toLowerCase();
+
+    if (
+      typeof definition?.config_hash !== 'string' ||
+      definition.config_hash.toLowerCase() !== expected
+    ) {
+      throw new DefinitionVerificationError(
+        `Cluster definition returned for ${configHash} has config_hash ${definition?.config_hash}`,
+      );
+    }
+
+    let computedHash: string;
+    try {
+      computedHash = clusterConfigOrDefinitionHash(definition, true);
+    } catch (err: any) {
+      throw new DefinitionVerificationError(
+        `Cannot verify cluster definition ${configHash} (version ${definition.version}): ${err?.message}`,
+      );
+    }
+    if (computedHash.toLowerCase() !== expected) {
+      throw new DefinitionVerificationError(
+        `Cluster definition ${configHash} does not match its config_hash (computed ${computedHash})`,
+      );
+    }
+
+    if (
+      typeof definition.fork_version !== 'string' ||
+      definition.fork_version.toLowerCase() !== this.fork_version.toLowerCase()
+    ) {
+      throw new DefinitionVerificationError(
+        `Cluster definition ${configHash} has fork_version ${definition.fork_version}, but this client is configured for chain ${this.chainId} (fork_version ${this.fork_version})`,
+      );
+    }
+
+    return definition;
   }
 
   /**
@@ -746,6 +975,7 @@ export class Client extends Base {
    * @param configHash - The `config_hash` returned by {@link Client.createClusterDefinition}.
    * @returns The full cluster definition including operators, validators, and metadata.
    * @throws {Error} If no cluster definition exists for the given hash (404).
+   * @throws {Error} If `configHash` is not a 0x-prefixed 32-byte hex string.
    *
    * @example
    * ```typescript
@@ -754,8 +984,9 @@ export class Client extends Base {
    * ```
    */
   async getClusterDefinition(configHash: string): Promise<ClusterDefinition> {
+    assertHash32(configHash, 'configHash');
     const clusterDefinition: ClusterDefinition = await this.request(
-      `/${DEFAULT_BASE_VERSION}/definition/${configHash}`,
+      `/${DEFAULT_BASE_VERSION}/definition/${encodeURIComponent(configHash)}`,
       {
         method: 'GET',
       },
@@ -774,6 +1005,7 @@ export class Client extends Base {
    * @param configHash - The `config_hash` from the cluster definition.
    * @returns The cluster lock including distributed validators and deposit data.
    * @throws {Error} If no lock exists for the given config hash (DKG not yet complete, or not found).
+   * @throws {Error} If `configHash` is not a 0x-prefixed 32-byte hex string.
    *
    * @example
    * ```typescript
@@ -783,8 +1015,9 @@ export class Client extends Base {
    * ```
    */
   async getClusterLock(configHash: string): Promise<ClusterLock> {
+    assertHash32(configHash, 'configHash');
     const lock: ClusterLock = await this.request(
-      `/${DEFAULT_BASE_VERSION}/lock/configHash/${configHash}`,
+      `/${DEFAULT_BASE_VERSION}/lock/configHash/${encodeURIComponent(configHash)}`,
       {
         method: 'GET',
       },
@@ -801,6 +1034,7 @@ export class Client extends Base {
    * @param lockHash - The `lock_hash` from a cluster lock.
    * @returns The cluster lock including distributed validators and deposit data.
    * @throws {Error} If no lock exists for the given lock hash (not found).
+   * @throws {Error} If `lockHash` is not a 0x-prefixed 32-byte hex string.
    *
    * @example
    * ```typescript
@@ -809,12 +1043,71 @@ export class Client extends Base {
    * ```
    */
   async getClusterLockByHash(lockHash: string): Promise<ClusterLock> {
+    assertHash32(lockHash, 'lockHash');
     const lock: ClusterLock = await this.request(
-      `/${DEFAULT_BASE_VERSION}/lock/${lockHash}`,
+      `/${DEFAULT_BASE_VERSION}/lock/${encodeURIComponent(lockHash)}`,
       {
         method: 'GET',
       },
     );
     return lock;
+  }
+
+  /**
+   * Fetches a cluster lock by lock hash and returns its deposit data as
+   * payloads for {@link EOA.deposit} / {@link ObolSplits.deposit}
+   * (`amount` in wei, hex fields 0x-prefixed).
+   *
+   * By default the lock is fully validated first ({@link validateClusterLock}:
+   * operator signatures, lock hash, every deposit signature). This is
+   * CPU-bound and can take from seconds to about a minute for locks with
+   * hundreds of validators; pass `verify: false` only if the lock was already
+   * validated. The lock's fork version must match this client's chain.
+   *
+   * Locks from v1.8.0 carry `partial_deposit_data`, which can hold several
+   * deposit amounts per validator (e.g. 1 ETH and 32 ETH). When there is more
+   * than one, pass `amount` (wei) to choose, or read `depositsByAmount`;
+   * `deposits` is then only set for the chosen amount. Older locks with a
+   * single `deposit_data` are supported.
+   *
+   * This is a read-only API call – no signer is required.
+   *
+   * @param lockHash - The `lock_hash` of the cluster lock.
+   * @param options.verify - Validate the lock first. Defaults to `true`.
+   * @param options.amount - Deposit amount to return, in wei.
+   * @param options.safeRpcUrl - RPC URL for Safe wallet signatures in the lock.
+   * @returns The lock hash, the available amounts, deposits grouped by amount,
+   *   and `deposits` for the chosen (or only) amount.
+   * @throws {Error} If the lock is not found, fails validation, was created
+   *   for another chain, has missing/malformed deposit data, or `amount` is
+   *   not available for every validator.
+   *
+   * @example
+   * ```typescript
+   * const { deposits } = await client.getDepositData(lockHash, {
+   *   amount: "32000000000000000000",
+   * });
+   * await client.eoa.deposit({ deposits: deposits! });
+   * ```
+   */
+  async getDepositData(
+    lockHash: string,
+    { verify = true, amount, safeRpcUrl }: GetDepositDataOptions = {},
+  ): Promise<LockDepositData> {
+    const lock = await this.getClusterLockByHash(lockHash);
+
+    if (
+      lock?.cluster_definition?.fork_version?.toLowerCase() !==
+      this.fork_version?.toLowerCase()
+    ) {
+      throw new Error(
+        `Cluster lock fork version ${lock?.cluster_definition?.fork_version} does not match chain ${this.chainId}`,
+      );
+    }
+    if (verify && !(await validateClusterLock(lock, safeRpcUrl))) {
+      throw new Error('Cluster lock failed validation');
+    }
+
+    return depositDataFromLock(lock, { amount });
   }
 }

@@ -5,6 +5,7 @@ import {
   type SignerType,
   type ProviderType,
 } from '../../src/types.js';
+import { TEST_ADDRESSES, mainnetDepositPayload } from '../fixtures.js';
 // ESM-safe mocking: mock helpers before importing the module under test
 // @ts-expect-error - ESM mocking requires top-level await
 await jest.unstable_mockModule('../../src/eoa/eoaHelpers.js', () => ({
@@ -40,6 +41,8 @@ describe('EOA', () => {
     } as unknown as SignerType;
     mockProvider = {
       getNetwork: jest.fn().mockResolvedValue({ chainId: 1 }),
+      // EIP-7002 fee read: 1 wei
+      call: jest.fn().mockResolvedValue('0x' + '1'.padStart(64, '0')),
     } as unknown as ProviderType;
     eoa = new EOA(mockSigner, 1, mockProvider);
   });
@@ -152,23 +155,61 @@ describe('EOA', () => {
 
       expect(result).toEqual(mockResult);
     });
+
+    describe('withdrawal fee', () => {
+      const pubkey = '0x' + '12'.repeat(48);
+      const mockFee = (fee: bigint): void => {
+        (mockProvider.call as jest.Mock).mockResolvedValue(
+          '0x' + fee.toString(16).padStart(64, '0'),
+        );
+      };
+
+      beforeEach(() => {
+        (submitEOAWithdrawalRequest as jest.Mock).mockResolvedValue({
+          txHash: '0xhash',
+        });
+      });
+
+      it('reads the fee from the withdrawal request contract when omitted, without headroom (no refund)', async () => {
+        mockFee(BigInt(3));
+
+        await eoa.requestWithdrawal({ pubkey, allocation: 1 });
+
+        expect(mockProvider.call).toHaveBeenCalledWith({
+          to: '0x00000961Ef480Eb55e80D19ad83579A64c007002',
+          data: '0x',
+        });
+        expect(submitEOAWithdrawalRequest).toHaveBeenCalledWith(
+          expect.objectContaining({ requiredFee: '3' }),
+        );
+      });
+
+      it('rejects a requiredFee below the current fee', async () => {
+        mockFee(BigInt(5));
+
+        await expect(
+          eoa.requestWithdrawal({ pubkey, allocation: 1, requiredFee: '4' }),
+        ).rejects.toThrow('below the current withdrawal request fee');
+        expect(submitEOAWithdrawalRequest).not.toHaveBeenCalled();
+      });
+
+      it('rejects a requiredFee far above the current fee', async () => {
+        mockFee(BigInt(1));
+
+        await expect(
+          eoa.requestWithdrawal({
+            pubkey,
+            allocation: 1,
+            requiredFee: '1000000000000000000',
+          }),
+        ).rejects.toThrow('far above the current withdrawal request fee');
+        expect(submitEOAWithdrawalRequest).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('deposit', () => {
-    const mockDeposits = [
-      {
-        pubkey:
-          '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-        withdrawal_credentials:
-          '0x1234567890123456789012345678901234567890123456789012345678901234',
-        deposit_data_root:
-          '0x7f7f280756b8d5fe06ae922e5a20afb708c0f00d8954caede4c262795d956c01',
-
-        signature:
-          '0x121234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012000000000000000000',
-        amount: '32000000000000000000', // 32 ETH in wei
-      },
-    ];
+    const mockDeposits = [mainnetDepositPayload.deposit];
 
     it('should successfully deposit to batch contract', async () => {
       const mockPayload = {
@@ -229,30 +270,8 @@ describe('EOA', () => {
 
     it('should handle multiple deposits', async () => {
       const multipleDeposits = [
-        {
-          pubkey:
-            '0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456',
-          withdrawal_credentials:
-            '0x1234567890123456789012345678901234567890123456789012345678901234',
-          deposit_data_root:
-            '0x7f7f280756b8d5fe06ae922e5a20afb708c0f00d8954caede4c262795d956c01',
-
-          signature:
-            '0x121234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012000000000000000000',
-          amount: '32000000000000000000',
-        },
-        {
-          pubkey:
-            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdcd',
-          withdrawal_credentials:
-            '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-          deposit_data_root:
-            '0x7f7f280756b8d5fe06ae922e5a20afb708c0f00d8954caede4c262795d956c01',
-
-          signature:
-            '0x121234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012000000000000000000',
-          amount: '16000000000000000000',
-        },
+        mainnetDepositPayload.deposit,
+        mainnetDepositPayload.deposit,
       ];
 
       const mockPayload = {
@@ -287,6 +306,73 @@ describe('EOA', () => {
       });
 
       expect(result).toEqual(mockResult);
+    });
+    describe('deposit data checks', () => {
+      const deposit = mainnetDepositPayload.deposit;
+
+      beforeEach(() => {
+        (submitEOABatchDeposit as jest.Mock).mockResolvedValue({
+          txHashes: ['0xhash'],
+        });
+      });
+
+      it('accepts deposits for the expected withdrawal address', async () => {
+        await eoa.deposit({
+          deposits: [deposit],
+          expectedWithdrawalAddress: mainnetDepositPayload.withdrawalAddress,
+        });
+        expect(submitEOABatchDeposit).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        [
+          'wrong withdrawal credentials',
+          {
+            deposits: [deposit],
+            expectedWithdrawalAddress: TEST_ADDRESSES.REWARD_RECIPIENT_1,
+          },
+          'withdrawal credentials do not point at',
+        ],
+        [
+          'a bad deposit_data_root',
+          {
+            deposits: [
+              { ...deposit, deposit_data_root: '0x' + '22'.repeat(32) },
+            ],
+          },
+          'deposit_data_root does not match',
+        ],
+        [
+          'an amount below 1 ETH',
+          { deposits: [{ ...deposit, amount: '100000000000000000' }] },
+          'at least 1 ETH',
+        ],
+        [
+          'an amount above 32 ETH for 0x01 credentials',
+          { deposits: [{ ...deposit, amount: '64000000000000000000' }] },
+          'exceeds 32 ETH',
+        ],
+      ])('rejects %s before sending', async (_label, payload, message) => {
+        await expect(eoa.deposit(payload)).rejects.toThrow(message);
+        expect(submitEOABatchDeposit).not.toHaveBeenCalled();
+      });
+
+      it('rejects a signature for another chain', async () => {
+        const hoodiEoa = new EOA(mockSigner, 560048, mockProvider);
+        await expect(hoodiEoa.deposit({ deposits: [deposit] })).rejects.toThrow(
+          'invalid deposit signature for chain 560048',
+        );
+        expect(submitEOABatchDeposit).not.toHaveBeenCalled();
+      });
+
+      it('skips the signature check for top-ups when asked', async () => {
+        const hoodiEoa = new EOA(mockSigner, 560048, mockProvider);
+        await hoodiEoa.deposit({
+          deposits: [deposit],
+          kind: 'topUp',
+        });
+        expect(submitEOABatchDeposit).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });

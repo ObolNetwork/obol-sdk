@@ -1,20 +1,14 @@
-import {
-  type Wallet,
-  type ethers,
-  type JsonRpcApiProvider,
-  type JsonRpcProvider,
-  type JsonRpcSigner,
-  type Provider,
-} from 'ethers';
+import { type Provider, type Signer } from 'ethers';
 
 /**
  * Maps Ethereum consensus-layer fork versions (hex) to execution-layer chain IDs.
  *
- * Supported networks:
  * - `0x00000000` → 1 (Mainnet)
- * - `0x00000064` → 100 (Gnosis Chain)
- * - `0x90000069` → 11155111 (Sepolia)
  * - `0x10000910` → 560048 (Hoodi)
+ * - `0x00000064` → 100 (Gnosis; definitions and locks only, no splits)
+ * - `0x90000069` → 11155111 (Sepolia; definitions and locks only, no splits)
+ *
+ * The {@link Client} accepts the chain IDs in {@link SUPPORTED_CHAIN_IDS}.
  */
 export enum FORK_MAPPING {
   /** Mainnet. */
@@ -68,11 +62,13 @@ export type ClusterOperator = {
  * Payload an operator provides when joining a cluster via
  * {@link Client.acceptClusterDefinition}.
  *
- * Requires at minimum `enr` (Ethereum Node Record) and `version`.
+ * Requires at minimum `enr` (Ethereum Node Record). `version` is optional:
+ * when omitted it is taken from the cluster definition; when given it must
+ * match the definition's version.
  * Other `ClusterOperator` fields are optional overrides.
  */
 export type OperatorPayload = Partial<ClusterOperator> &
-  Required<Pick<ClusterOperator, 'enr' | 'version'>>;
+  Required<Pick<ClusterOperator, 'enr'>>;
 
 /**
  * Cluster creator data
@@ -236,7 +232,10 @@ export type OVMBaseSplitPayload = {
   /** Principal threshold in ETH for OVM contract. */
   principalThreshold?: number;
 
-  /** Distributor fee percentage (0-10). */
+  /**
+   * Share of each distribution paid to whoever calls `distribute`, in percent
+   * (0 to 6.5535, rounded to the nearest 0.0001). Defaults to 0.
+   */
   distributorFeePercent?: number;
 };
 
@@ -417,14 +416,11 @@ export type ClaimableIncentives = {
 export type ETH_ADDRESS = string;
 
 /**
- * Accepted ethers provider types for on-chain reads.
- * Pass any of these as the third argument to `new Client(config, signer, provider)`.
+ * Accepted ethers provider types for on-chain reads: any ethers v6 `Provider`
+ * (`JsonRpcProvider`, `BrowserProvider`, `FallbackProvider`, ...).
+ * Pass as the third argument to `new Client(config, signer, provider)`.
  */
-export type ProviderType =
-  | Provider
-  | JsonRpcProvider
-  | JsonRpcApiProvider
-  | ethers.BrowserProvider;
+export type ProviderType = Provider;
 
 /**
  * Safe Wallet Provider Types
@@ -432,15 +428,65 @@ export type ProviderType =
 export type SafeRpcUrl = string;
 
 /**
- * Accepted ethers signer types for signing transactions and EIP-712 messages.
+ * Accepted ethers signer types for signing transactions and EIP-712 messages:
+ * any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`,
+ * `NonceManager`, or a custom `AbstractSigner`).
  * Pass as the second argument to `new Client(config, signer)`.
  */
-export type SignerType = JsonRpcSigner | Wallet;
+export type SignerType = Signer;
 
 /**
  * claimIncentives Response
  */
 export type ClaimIncentivesResponse = { txHash: string | null };
+
+/**
+ * Passed to {@link WriteOptions.onSent} for each transaction a write method
+ * broadcasts, before its receipt is awaited.
+ */
+export type TransactionSentInfo = {
+  /**
+   * Hash returned by the wallet. For a contract wallet (e.g. a Safe) this is
+   * the wallet's own transaction hash, not the hash it executes under.
+   */
+  hash: string;
+  /** Position of this transaction among those sent by the call (from 0). */
+  index: number;
+  /** Whether the signer is a contract wallet (e.g. a Safe). */
+  contractWallet: boolean;
+};
+
+/** Options accepted by the SDK methods that send transactions. */
+export type WriteOptions = {
+  /**
+   * Called as soon as each transaction is broadcast, before waiting for it to
+   * be mined, so the hash can be shown or stored even if waiting fails.
+   * Errors thrown by the callback are ignored.
+   */
+  onSent?: (info: TransactionSentInfo) => void;
+};
+
+/**
+ * A single problem found by a pre-flight check.
+ */
+export type PreflightIssue = {
+  /** Stable, machine-readable issue code. */
+  code: string;
+
+  /** Human-readable description of the problem. */
+  message: string;
+
+  /** Short suggestion for what to do next. */
+  hint: string;
+};
+
+/**
+ * Result of a read-only pre-flight check. `ok` is `true` when `issues` is empty.
+ */
+export type PreflightResult = {
+  ok: boolean;
+  issues: PreflightIssue[];
+};
 
 /**
  * Represents the structure of an Ethereum operator for exit validation, primarily their ENR.
@@ -657,11 +703,23 @@ export type ChainConfig = {
  * Requests withdrawal of validator funds from an OVM contract.
  */
 export type OVMRequestWithdrawalPayload = {
-  /** request withdrawal fees in wei */
-  withdrawalFees: string;
+  /**
+   * Total withdrawal request fees in wei for all `pubKeys`. Optional: if
+   * omitted, twice the current EIP-7002 fee per request is sent. If given, it
+   * must cover the current fee and be at most max(10x the current fee, 1 gwei)
+   * per request. Any excess is refunded to `excessFeeRecipient`.
+   */
+  withdrawalFees?: string;
 
   /** OVM contract address */
   ovmAddress: string;
+
+  /**
+   * Address the OVM refunds unused withdrawal fees to. Defaults to the
+   * signer's address. A refund sent to the OVM itself would be distributed
+   * as rewards.
+   */
+  excessFeeRecipient?: string;
 
   /** Array of validator public keys in bytes format */
   pubKeys: string[];
@@ -680,9 +738,36 @@ export type EOAWithdrawalPayload = {
   /** Withdrawal amount in ETH */
   allocation: number;
 
-  /** Required fee in wei */
-  requiredFee: string;
+  /**
+   * Fee in wei. Optional: if omitted, the current EIP-7002 fee is sent (the
+   * contract does not refund excess, so no headroom is added). If given, it
+   * must cover the current fee and be at most max(10x the current fee, 1 gwei).
+   */
+  requiredFee?: string;
 };
+
+/**
+ * One deposit as taken by {@link EOA.deposit} and {@link ObolSplits.deposit},
+ * and as returned by {@link Client.getDepositData} (`amount` in wei).
+ */
+export type ValidatorDeposit = {
+  /** Validator public key in hex format (48 bytes) */
+  pubkey: string;
+  /** Withdrawal credentials in hex format */
+  withdrawal_credentials: string;
+  /** Deposit signature in hex format */
+  signature: string;
+  /** Deposit data root in hex format (32 bytes) */
+  deposit_data_root: string;
+  /** Deposit amount in wei as string */
+  amount: string;
+};
+
+/**
+ * What `eoa.deposit` / `splits.deposit` are sending: deposits to new
+ * validators (`'deposit'`) or top-ups to existing ones (`'topUp'`).
+ */
+export type DepositKind = 'deposit' | 'topUp';
 
 /**
  * Input payload for {@link ObolSplits.deposit}.
@@ -693,18 +778,18 @@ export type OVMDepositPayload = {
   ovmAddress: string;
 
   /** Array of deposit objects */
-  deposits: Array<{
-    /** Validator public key in hex format (48 bytes) */
-    pubkey: string;
-    /** Withdrawal credentials in hex format */
-    withdrawal_credentials: string;
-    /** Deposit signature in hex format */
-    signature: string;
-    /** Deposit data root in hex format (32 bytes) */
-    deposit_data_root: string;
-    /** Deposit amount in wei as string */
-    amount: string;
-  }>;
+  deposits: ValidatorDeposit[];
+
+  /**
+   * What the deposits are. `'deposit'` (the default): deposits to new
+   * validators, which need a valid BLS signature for this chain and the
+   * expected withdrawal credentials; an all-zero signature is refused with
+   * `DEPOSIT_LOOKS_LIKE_TOP_UP`. `'topUp'`: every deposit tops up a validator
+   * that already exists on the beacon chain (where the signature is not
+   * checked): no BLS check, the expected or all-zero withdrawal credentials,
+   * and up to 2048 ETH per deposit.
+   */
+  kind?: DepositKind;
 };
 
 /**
@@ -713,16 +798,22 @@ export type OVMDepositPayload = {
  */
 export type EOADepositPayload = {
   /** Array of deposit objects */
-  deposits: Array<{
-    /** Validator public key in hex format (48 bytes) */
-    pubkey: string;
-    /** Withdrawal credentials in hex format */
-    withdrawal_credentials: string;
-    /** Deposit signature in hex format */
-    signature: string;
-    /** Deposit data root in hex format (32 bytes) */
-    deposit_data_root: string;
-    /** Deposit amount in wei as string */
-    amount: string;
-  }>;
+  deposits: ValidatorDeposit[];
+
+  /**
+   * If set, every deposit's withdrawal credentials must be 0x01 or 0x02
+   * credentials for this address.
+   */
+  expectedWithdrawalAddress?: string;
+
+  /**
+   * What the deposits are. `'deposit'` (the default): deposits to new
+   * validators, which need a valid BLS signature for this chain and the
+   * expected withdrawal credentials; an all-zero signature is refused with
+   * `DEPOSIT_LOOKS_LIKE_TOP_UP`. `'topUp'`: every deposit tops up a validator
+   * that already exists on the beacon chain (where the signature is not
+   * checked): no BLS check, the expected or all-zero withdrawal credentials,
+   * and up to 2048 ETH per deposit.
+   */
+  kind?: DepositKind;
 };

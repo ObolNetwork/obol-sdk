@@ -32,6 +32,10 @@ const definition = await client.getClusterDefinition(configHash);
 const lock = await client.getClusterLock(configHash);
 ```
 
+### Signers
+
+The `signer` can be any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`, `NonceManager`, or a custom `AbstractSigner`).
+
 ## Getting Started
 
 Checkout our [docs](https://docs.obol.org/docs/advanced/quickstart-sdk), [examples](https://github.com/ObolNetwork/obol-sdk-examples/), and SDK [reference](https://docs.obol.org/sdk). Further guides and walkthroughs coming soon.
@@ -49,7 +53,7 @@ To use obol-sdk and in order to be able to create a cluster definition or accept
 
 ## ⚡️ Integration with Safe Wallet
 
-When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_GNOSIS` or `RPC_SEPOLIA` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
+When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
 
 
 ## Contributing
@@ -88,7 +92,7 @@ Thank you for contributing to Obol-SDK!
 If you are an LLM, code-generation agent, or tool using this SDK programmatically, follow these guidelines to avoid common mistakes:
 
 - **Primary entrypoint:** `Client` from `@obolnetwork/obol-sdk`.
-- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi).
+- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi). `signer` is any ethers v6 `Signer`; no `as any` cast is needed.
 - **All operations are namespaced** under the client instance. Do **not** construct HTTP requests manually.
 
 ### Client API Surface
@@ -97,22 +101,23 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 |-----------|--------|-------------|
 | *(root)* | `acceptObolLatestTermsAndConditions()` | Accept T&C (required once before writes) |
 | *(root)* | `createClusterDefinition(payload)` | Create a new cluster → returns `config_hash` |
-| *(root)* | `acceptClusterDefinition(operatorPayload, configHash)` | Join a cluster as an operator |
+| *(root)* | `acceptClusterDefinition(operatorPayload, configHash)` | Join a cluster as an operator (verifies the definition and operator membership first) |
 | *(root)* | `getClusterDefinition(configHash)` | Fetch cluster definition (read-only) |
 | *(root)* | `getClusterLock(configHash)` | Fetch cluster lock by config hash (read-only) |
 | *(root)* | `getClusterLockByHash(lockHash)` | Fetch cluster lock by lock hash (read-only) |
+| *(root)* | `getDepositData(lockHash)` | Validated deposit payloads (wei) from a lock, for `eoa.deposit` / `splits.deposit` (read-only) |
 | *(root)* | `createObolRewardsSplit(payload)` | Deploy OWR + splitter (rewards-only split) |
 | *(root)* | `createObolTotalSplit(payload)` | Deploy splitter (total split) |
 | *(root)* | `getOWRTranches(owrAddress)` | Read OWR tranche info (read-only on-chain) |
 | `client.splits` | `createValidatorManagerAndRewardsSplit(payload)` | Deploy OVM + SplitV2 (rewards-only) |
 | `client.splits` | `createValidatorManagerAndTotalSplit(payload)` | Deploy OVM + SplitV2 (total) |
 | `client.splits` | `requestWithdrawal(payload)` | Request withdrawal from OVM |
-| `client.splits` | `deposit(payload)` | Deposit to OVM contract |
+| `client.splits` | `deposit(payload)` | Deposit to OVM contract (verified first; `kind: 'topUp'` for top-ups) |
 | `client.incentives` | `getIncentivesByAddress(address)` | Fetch claimable incentives (read-only) |
 | `client.incentives` | `isClaimed(contractAddress, index)` | Check if incentives claimed (read-only) |
 | `client.incentives` | `claimIncentives(address)` | Claim incentives on-chain |
 | `client.eoa` | `requestWithdrawal(payload)` | Request EOA withdrawal |
-| `client.eoa` | `deposit(payload)` | Batch deposit validators |
+| `client.eoa` | `deposit(payload)` | Batch deposit validators (verified first; `kind: 'topUp'` for top-ups) |
 | `client.exit` | `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
 | `client.exit` | `verifyExitPayloadSignature(...)` | Verify ECDSA exit payload signature |
 | `client.exit` | `validateExitBlobs(...)` | Validate exit blobs against cluster config |
@@ -129,7 +134,7 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 1. All request/response types are exported from the package root.
 2. Error types exported: `ConflictError`, `SignerRequiredError`, `UnsupportedChainError`.
 3. Methods that **write** (create, deploy, claim) require a `signer`. Methods that **read** (get, fetch) do not.
-4. Supported chain IDs: `1` (Mainnet), `560048` (Hoodi).
+4. Supported chain IDs: `1` (Mainnet), `560048` (Hoodi); `100` (Gnosis) and `11155111` (Sepolia) for cluster definitions and locks only.
 5. Splitter/OVM deployment is only supported on chains 1 and 560048.
 
 ## Next.js / SSR Configuration

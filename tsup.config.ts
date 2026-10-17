@@ -69,8 +69,6 @@ export default defineConfig([
       'ajv',
       'ajv-formats',
       'ajv-keywords',
-      'cross-fetch',
-      'elliptic',
       'semver',
       'uuid',
       '@chainsafe/ssz',

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { jest } from '@jest/globals';
-import { ethers, JsonRpcProvider } from 'ethers';
+import { ethers, JsonRpcProvider, ZeroAddress } from 'ethers';
 import { Client, validateClusterLock, type SignerType } from '../../src/index';
 import {
   clusterConfigV1X10,
@@ -10,6 +10,8 @@ import {
   clusterLockWithSafe,
   nullDepositAmountsClusterLockV1X8,
   clusterLockSoloV1X10,
+  charonCreateClusterLockV1X10,
+  charonCreateDkgLockV1X10,
 } from '../fixtures.js';
 import { SDK_VERSION, CONFIG_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
@@ -27,6 +29,8 @@ const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
 const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
 const provider = new JsonRpcProvider(
   process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
+  560048,
+  { staticNetwork: true },
 );
 const wallet = new ethers.Wallet(privateKey, provider);
 const mockSigner = wallet.connect(provider) as unknown as SignerType;
@@ -69,34 +73,39 @@ describe('Cluster Client', () => {
       .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
     clientInstance['request'] = requestMock as never;
 
+    const postBodies = () =>
+      requestMock.mock.calls
+        .filter(([, init]) => init?.method === 'POST')
+        .map(([, init]) => JSON.parse((init as { body: string }).body));
+
     // Explicit older version (e.g. while charon prod is pre-v1.11).
     await clientInstance.createClusterDefinition(clusterConfigV1X10, 'v1.10.0');
-    const explicitBody = JSON.parse(
-      (requestMock.mock.calls[0][1] as { body: string }).body,
-    );
-    expect(explicitBody.version).toEqual('v1.10.0');
+    expect(postBodies()[0].version).toEqual('v1.10.0');
 
     // Omitting the arg defaults to the SDK's CONFIG_VERSION.
     await clientInstance.createClusterDefinition(clusterConfigV1X10);
-    const defaultBody = JSON.parse(
-      (requestMock.mock.calls[1][1] as { body: string }).body,
-    );
-    expect(defaultBody.version).toEqual(CONFIG_VERSION);
+    expect(postBodies()[1].version).toEqual(CONFIG_VERSION);
   });
 
   test('acceptClusterDefinition should return cluster definition', async () => {
+    // The signer must be an operator of the (verified) definition.
+    const definition = structuredClone(clusterLockV1X10.cluster_definition);
+    definition.operators = definition.operators.map((o, i) =>
+      i === 0 ? { address: wallet.address } : { address: o.address },
+    );
+    definition.config_hash = clusterConfigOrDefinitionHash(definition, true);
     clientInstance['request'] = jest
       .fn()
-      .mockReturnValue(Promise.resolve(clusterLockV1X10.cluster_definition));
+      .mockReturnValue(Promise.resolve(definition));
 
     const clusterDefinition = await clientInstance.acceptClusterDefinition(
       {
         enr: clusterLockV1X10.cluster_definition.operators[0].enr,
         version: clusterLockV1X10.cluster_definition.version,
       },
-      clusterLockV1X10.cluster_definition.config_hash,
+      definition.config_hash,
     );
-    expect(clusterDefinition).toEqual(clusterLockV1X10.cluster_definition);
+    expect(clusterDefinition).toEqual(definition);
   });
 
   test('createClusterDefinition should throw an error on invalid operators', async () => {
@@ -113,6 +122,109 @@ describe('Cluster Client', () => {
         'Validation failed: /operators must pass "validateUniqueAddresses" keyword validation, /operators must NOT have fewer than 4 items',
       );
     }
+  });
+
+  test('createClusterDefinition rejects versions the SDK cannot hash', async () => {
+    const requestMock = jest
+      .fn()
+      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
+    clientInstance['request'] = requestMock as never;
+
+    for (const version of ['v1.9.0', '1.10.0', 'v2.0.0', '']) {
+      await expect(
+        clientInstance.createClusterDefinition(clusterConfigV1X10, version),
+      ).rejects.toThrow('Unsupported cluster definition version');
+    }
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  test('createClusterDefinition rejects unknown payload fields', async () => {
+    const requestMock = jest
+      .fn()
+      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
+    clientInstance['request'] = requestMock as never;
+
+    await expect(
+      clientInstance.createClusterDefinition({
+        ...clusterConfigV1X10,
+        dkg_algorithm: 'other',
+      } as any),
+    ).rejects.toThrow('must NOT have additional properties');
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  test('createClusterDefinition rejects a zero withdrawal address', async () => {
+    const requestMock = jest.fn();
+    clientInstance['request'] = requestMock as never;
+
+    await expect(
+      clientInstance.createClusterDefinition({
+        ...clusterConfigV1X10,
+        validators: [
+          {
+            ...clusterConfigV1X10.validators[0],
+            withdrawal_address: ZeroAddress,
+          },
+        ],
+      }),
+    ).rejects.toThrow('/validators/0/withdrawal_address must NOT be valid');
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['getClusterDefinition', 'configHash'],
+    ['getClusterLock', 'configHash'],
+    ['getClusterLockByHash', 'lockHash'],
+  ])(
+    '%s rejects malformed hashes before making a request',
+    async (method, name) => {
+      const requestMock = jest.fn();
+      clientInstance['request'] = requestMock as never;
+
+      for (const hash of [
+        '../lock/0x00',
+        mockConfigHash.slice(2),
+        `${mockConfigHash}?x=1`,
+        `${mockConfigHash}00`,
+      ]) {
+        await expect(clientInstance[method](hash)).rejects.toThrow(
+          `Invalid ${name}`,
+        );
+      }
+      expect(requestMock).not.toHaveBeenCalled();
+    },
+  );
+
+  test('acceptClusterDefinition rejects a malformed config hash before signing', async () => {
+    const requestMock = jest.fn();
+    clientInstance['request'] = requestMock as never;
+    const signSpy = jest.spyOn(mockSigner, 'signTypedData');
+
+    await expect(
+      clientInstance.acceptClusterDefinition(
+        {
+          enr: clusterLockV1X10.cluster_definition.operators[0].enr,
+          version: clusterLockV1X10.cluster_definition.version,
+        },
+        '0x1234/../../lock',
+      ),
+    ).rejects.toThrow('Invalid configHash');
+    expect(signSpy).not.toHaveBeenCalled();
+    expect(requestMock).not.toHaveBeenCalled();
+    signSpy.mockRestore();
+  });
+
+  test('getClusterLockByHash requests the lock hash path', async () => {
+    const requestMock = jest
+      .fn()
+      .mockReturnValue(Promise.resolve(clusterLockV1X10));
+    clientInstance['request'] = requestMock as never;
+
+    await clientInstance.getClusterLockByHash(clusterLockV1X10.lock_hash);
+    expect(requestMock).toHaveBeenCalledWith(
+      `/v1/lock/${clusterLockV1X10.lock_hash}`,
+      { method: 'GET' },
+    );
   });
 
   test('getClusterdefinition should return cluster definition if config hash exist', async () => {
@@ -251,7 +363,7 @@ describe('Cluster Client without a signer', () => {
    *
    * validateClusterLock performs the following REAL cryptographic validations:
    * 1. BLS signature verification (@chainsafe/bls) - verifies deposit data signatures
-   * 2. ECDSA signature verification (elliptic) - verifies operator signatures
+   * 2. ECDSA signature verification (secp256k1) - verifies operator signatures
    * 3. SSZ hashing (@chainsafe/ssz) - hashes cluster definitions and locks
    * 4. ENR validation (@chainsafe/enr) - validates Ethereum Node Records
    * 5. Safe wallet signature verification (via RPC) - for Safe multisig addresses
@@ -276,6 +388,14 @@ describe('Cluster Client without a signer', () => {
     {
       version: 'v1.10.0 with compounding withdrawals',
       clusterLock: clusterLockWithCompoundingWithdrawals,
+    },
+    {
+      version: 'v1.10.0 charon create cluster',
+      clusterLock: charonCreateClusterLockV1X10,
+    },
+    {
+      version: 'v1.10.0 charon create dkg --operator-enrs',
+      clusterLock: charonCreateDkgLockV1X10,
     },
     // Only run the Safe-operator case when a real mainnet RPC is available.
     ...(mainnetSafeRpcUrl

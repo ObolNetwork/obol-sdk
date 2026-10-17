@@ -1,9 +1,11 @@
 import { ethers } from 'ethers';
 import { DefinitionFlow, PROVIDER_MAP } from './constants.js';
+import { ChainMismatchError } from './errors.js';
 import {
   FORK_NAMES,
   type ProviderType,
   type ClusterDefinition,
+  type SignerType,
 } from './types.js';
 
 export const hexWithout0x = (hex: string): string => {
@@ -91,4 +93,29 @@ export const getProvider = (
     throw new Error(`No provider configured for ${FORK_NAMES[chainId]}`);
   }
   return new ethers.JsonRpcProvider(resolvedRpcUrl);
+};
+
+/**
+ * Asserts that the signer's provider is on `chainId` before a transaction is
+ * sent or chain-bound typed data is signed. Signers without a provider (e.g.
+ * an offline `Wallet`) are not checked.
+ *
+ * @throws {ChainMismatchError} If the signer's provider reports another chain.
+ */
+export const assertSignerChain = async (
+  signer: SignerType,
+  chainId: number,
+  method: string,
+): Promise<void> => {
+  const provider = signer.provider as
+    | { getNetwork?: () => Promise<{ chainId: bigint | number }> }
+    | null
+    | undefined;
+  if (typeof provider?.getNetwork !== 'function') {
+    return;
+  }
+  const network = await provider.getNetwork();
+  if (BigInt(network.chainId) !== BigInt(chainId)) {
+    throw new ChainMismatchError(chainId, Number(network.chainId), method);
+  }
 };

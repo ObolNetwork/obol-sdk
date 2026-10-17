@@ -111,19 +111,19 @@ describe('Cluster Definition', () => {
         configHash,
       );
     } catch (err: any) {
-      expect(err.message).toEqual('Data not found');
+      // Rejected locally, before anything is signed.
+      expect(err.name).toEqual('NotAnOperatorError');
     }
   });
 
-  it('should throw on accept a cluster if the user did not sign latest terms and conditions', async () => {
+  it('should throw on accept a cluster by an address that is not an operator, before terms are checked', async () => {
     try {
       await unauthorisedClient.acceptClusterDefinition(
         { enr, version: clusterDefinition.version },
         configHash,
       );
     } catch (err: any) {
-      expect(err.message).toEqual('Missing t&c signature');
-      expect(err.statusCode).toEqual(401);
+      expect(err.name).toEqual('NotAnOperatorError');
     }
   });
 

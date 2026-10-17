@@ -6,6 +6,26 @@ import {
 } from './constants.js';
 import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv.js';
 
+export const ADDRESS_PATTERN = '^0x[a-fA-F0-9]{40}$';
+const ZERO_ADDRESS_PATTERN = '^0x0{40}$';
+
+const addressSchema = {
+  type: 'string',
+  pattern: ADDRESS_PATTERN,
+};
+
+const nonZeroAddressSchema = {
+  ...addressSchema,
+  not: { pattern: ZERO_ADDRESS_PATTERN },
+};
+
+// Split recipient share, in percent. Must be positive and at most 100.
+const percentAllocationSchema = {
+  type: 'number',
+  exclusiveMinimum: 0,
+  maximum: 100,
+};
+
 export const operatorPayloadSchema = {
   type: 'object',
   properties: {
@@ -25,8 +45,10 @@ export const definitionSchema = {
       items: {
         type: 'object',
         properties: {
+          // Empty for solo clusters, where every operator address is ''.
           address: {
             type: 'string',
+            pattern: '^(0x[a-fA-F0-9]{40})?$',
           },
         },
         required: ['address'],
@@ -39,14 +61,8 @@ export const definitionSchema = {
       items: {
         type: 'object',
         properties: {
-          fee_recipient_address: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{40}$',
-          },
-          withdrawal_address: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{40}$',
-          },
+          fee_recipient_address: nonZeroAddressSchema,
+          withdrawal_address: nonZeroAddressSchema,
         },
         required: ['fee_recipient_address', 'withdrawal_address'],
       },
@@ -88,6 +104,9 @@ export const definitionSchema = {
     },
   },
   required: ['name', 'operators', 'validators'],
+  // The validated payload is spread into the signed cluster config, so only
+  // known fields are accepted.
+  additionalProperties: false,
 };
 
 export const totalSplitterPayloadSchema = {
@@ -98,14 +117,12 @@ export const totalSplitterPayloadSchema = {
       items: {
         type: 'object',
         properties: {
-          account: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{40}$',
-          },
-          percentAllocation: { type: 'number' },
+          account: addressSchema,
+          percentAllocation: percentAllocationSchema,
         },
         required: ['account', 'percentAllocation'],
       },
+      uniqueRecipientAddresses: 'account',
     },
     ObolRAFSplit: {
       type: 'number',
@@ -120,7 +137,7 @@ export const totalSplitterPayloadSchema = {
     },
     controllerAddress: {
       type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
+      pattern: ADDRESS_PATTERN,
       default: ZeroAddress,
     },
   },
@@ -139,13 +156,13 @@ export const rewardsSplitterPayloadSchema = {
     },
     recoveryAddress: {
       type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
+      pattern: ADDRESS_PATTERN,
       default: ZeroAddress,
     },
     etherAmount: { type: 'number' },
     principalRecipient: {
       type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
+      pattern: ADDRESS_PATTERN,
     },
   },
   validateRewardsSplitRecipients: true,
@@ -158,22 +175,20 @@ export const ovmBaseSplitPayload = {
     items: {
       type: 'object',
       properties: {
-        address: {
-          type: 'string',
-          pattern: '^0x[a-fA-F0-9]{40}$',
-        },
-        percentAllocation: { type: 'number' },
+        address: addressSchema,
+        percentAllocation: percentAllocationSchema,
       },
       required: ['address', 'percentAllocation'],
     },
+    uniqueRecipientAddresses: 'address',
   },
   OVMOwnerAddress: {
     type: 'string',
-    pattern: '^0x[a-fA-F0-9]{40}$',
+    pattern: ADDRESS_PATTERN,
   },
   splitOwnerAddress: {
     type: 'string',
-    pattern: '^0x[a-fA-F0-9]{40}$',
+    pattern: ADDRESS_PATTERN,
     default: ZeroAddress,
   },
   principalThreshold: {
@@ -181,10 +196,12 @@ export const ovmBaseSplitPayload = {
     minimum: 16,
     default: PRINCIPAL_THRESHOLD,
   },
+  // SplitV2 stores the incentive as a uint16 at 1e6 = 100%, so at most
+  // 6.5535%; values are rounded to the nearest 0.0001%.
   distributorFeePercent: {
     type: 'number',
     minimum: 0,
-    maximum: 10,
+    maximum: 6.5535,
     default: 0,
   },
 };
@@ -195,7 +212,7 @@ export const ovmRewardsSplitPayloadSchema = {
     ...ovmBaseSplitPayload,
     principalRecipient: {
       type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
+      pattern: ADDRESS_PATTERN,
     },
   },
   validateOVMRewardsSplitRecipients: true,
@@ -211,14 +228,12 @@ export const ovmTotalSplitPayloadSchema = {
       items: {
         type: 'object',
         properties: {
-          address: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{40}$',
-          },
-          percentAllocation: { type: 'number' },
+          address: addressSchema,
+          percentAllocation: percentAllocationSchema,
         },
         required: ['address', 'percentAllocation'],
       },
+      uniqueRecipientAddresses: 'address',
     },
   },
   validateOVMRewardsSplitRecipients: true,
@@ -239,8 +254,9 @@ export const ovmRequestWithdrawalPayloadSchema = {
     },
     ovmAddress: {
       type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
+      pattern: ADDRESS_PATTERN,
     },
+    excessFeeRecipient: nonZeroAddressSchema,
     pubKeys: {
       type: 'array',
       minItems: 1,
@@ -259,7 +275,7 @@ export const ovmRequestWithdrawalPayloadSchema = {
     },
   },
   validateOVMRequestWithdrawalPayload: true,
-  required: ['ovmAddress', 'pubKeys', 'amounts', 'withdrawalFees'],
+  required: ['ovmAddress', 'pubKeys', 'amounts'],
 };
 
 export const eoaWithdrawalPayloadSchema = {
@@ -278,7 +294,7 @@ export const eoaWithdrawalPayloadSchema = {
       pattern: '^[0-9]+$',
     },
   },
-  required: ['pubkey', 'allocation', 'requiredFee'],
+  required: ['pubkey', 'allocation'],
 };
 
 export const ovmDepositPayloadSchema = {
@@ -286,7 +302,7 @@ export const ovmDepositPayloadSchema = {
   properties: {
     ovmAddress: {
       type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
+      pattern: ADDRESS_PATTERN,
     },
     deposits: {
       type: 'array',
@@ -325,6 +341,10 @@ export const ovmDepositPayloadSchema = {
           'amount',
         ],
       },
+    },
+    kind: {
+      type: 'string',
+      enum: ['deposit', 'topUp'],
     },
   },
   required: ['ovmAddress', 'deposits'],
@@ -370,6 +390,14 @@ export const eoaDepositPayloadSchema = {
           'amount',
         ],
       },
+    },
+    expectedWithdrawalAddress: {
+      type: 'string',
+      pattern: '^0x[a-fA-F0-9]{40}$',
+    },
+    kind: {
+      type: 'string',
+      enum: ['deposit', 'topUp'],
     },
   },
   required: ['deposits'],

@@ -2,8 +2,10 @@ import {
   type ProviderType,
   type SignerType,
   type ETH_ADDRESS,
+  type WriteOptions,
 } from '../types.js';
 import { Contract } from 'ethers';
+import { SentTransactions } from '../sentTransactions.js';
 import { MerkleDistributorABI } from '../abi/MerkleDistributorWithDeadline.js';
 
 export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
@@ -13,7 +15,9 @@ export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
   operatorAddress: ETH_ADDRESS;
   amount: string;
   merkleProof: string[];
+  options?: WriteOptions;
 }): Promise<{ txHash: string }> => {
+  const sent = new SentTransactions(incentivesData.options);
   try {
     const contract = new Contract(
       incentivesData.contractAddress,
@@ -27,13 +31,14 @@ export const claimIncentivesFromMerkleDistributor = async (incentivesData: {
       BigInt(incentivesData.amount),
       incentivesData.merkleProof,
     );
+    sent.sent(tx.hash as string);
 
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };
   } catch (error: any) {
-    console.log('Error claiming incentives:', error);
-    throw new Error(`Failed to claim incentives: ${error.message}`);
+    const message = `Failed to claim incentives: ${error.message}`;
+    throw sent.failure(message, error, new Error(message));
   }
 };
 
@@ -53,7 +58,6 @@ export const isClaimedFromMerkleDistributor = async (
 
     return claimed;
   } catch (error: any) {
-    console.log('Error checking claim status:', error);
     throw new Error(`Failed to check claim status: ${error.message}`);
   }
 };

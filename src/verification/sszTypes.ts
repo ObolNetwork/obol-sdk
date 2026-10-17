@@ -3,9 +3,42 @@ import {
   ByteVectorType,
   ContainerType,
   ListCompositeType,
+  UintBigintType,
   UintNumberType,
 } from '@chainsafe/ssz';
 import { type UintNumberByteLen } from '@chainsafe/ssz/lib/type/uint.js';
+
+const MAX_UINT64 = BigInt('0xffffffffffffffff');
+
+/**
+ * Converts a uint64 cluster file value (deposit amounts are decimal strings) to
+ * a bigint for SSZ hashing. Amounts can exceed 2^53, so they must not go
+ * through `parseInt` / `Number`, which silently lose precision.
+ * @throws if the value is not an integer in the uint64 range
+ */
+export const toUint64 = (value: string | number | bigint): bigint => {
+  // BigInt('') is 0 and BigInt(1.5) throws; accept only plain decimal integers.
+  if (
+    (typeof value === 'string' && !/^[0-9]+$/.test(value)) ||
+    (typeof value === 'number' && !Number.isSafeInteger(value))
+  ) {
+    throw new Error(`value ${String(value)} is not a uint64`);
+  }
+  const n = BigInt(value);
+  if (n < BigInt(0) || n > MAX_UINT64) {
+    throw new Error(`value ${String(value)} is out of the uint64 range`);
+  }
+  return n;
+};
+
+/**
+ * Charon writes empty lists as JSON `null` (Go nil slices) and omits some of
+ * them; the spec requires `null`, absent and `[]` to hash alike.
+ */
+export const listOrEmpty = <T>(list: T[] | null | undefined): T[] => list ?? [];
+
+/** uint64 SSZ type for values that can exceed 2^53 (deposit amounts). */
+export const uint64BigintType = new UintBigintType(8);
 
 export const operatorAddressWrapperType = new ContainerType({
   address: new ByteVectorType(20),
@@ -77,7 +110,7 @@ export const newOperatorContainerTypeV1X11 = (
 export const depositDataContainer = new ContainerType({
   pubkey: new ByteVectorType(48),
   withdrawal_credentials: new ByteVectorType(32),
-  amount: new UintNumberType(8 as UintNumberByteLen),
+  amount: uint64BigintType,
   signature: new ByteVectorType(96),
 });
 
@@ -109,7 +142,7 @@ export const forkDataType = new ContainerType({
 export const depositMessageType = new ContainerType({
   pubkey: new ByteVectorType(48),
   withdrawal_credentials: new ByteVectorType(32),
-  amount: new UintNumberType(8),
+  amount: uint64BigintType,
 });
 
 export const signingRootType = new ContainerType({

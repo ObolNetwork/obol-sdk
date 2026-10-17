@@ -1,5 +1,4 @@
 import { fromHexString } from '@chainsafe/ssz';
-import elliptic from 'elliptic';
 import {
   FORK_MAPPING,
   type BlsSignatureCheck,
@@ -37,8 +36,9 @@ import {
   depositMessageType,
   forkDataType,
   signingRootType,
+  toUint64,
 } from './sszTypes.js';
-import { definitionFlow, hexWithout0x } from '../utils.js';
+import { definitionFlow } from '../utils.js';
 import { ENR } from '@chainsafe/enr';
 import {
   clusterDefinitionContainerTypeV1X8,
@@ -60,6 +60,7 @@ import {
   verifyDVV1X11,
 } from './v1.11.0.js';
 import { blsVerify } from '../blsUtils.js';
+import { secp256k1VerifyDigest } from '../secp256k1Utils.js';
 import { ClusterLockValidationTimeoutError } from '../errors.js';
 
 // cluster-definition hash
@@ -314,14 +315,14 @@ const computeSigningRoot = (
   );
 };
 
-const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
+export const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
   const depositMsgVal = depositMessageType.defaultValue();
 
   depositMsgVal.pubkey = fromHexString(msg.pubkey as string);
   depositMsgVal.withdrawal_credentials = fromHexString(
     msg.withdrawal_credentials as string,
   );
-  depositMsgVal.amount = parseInt(msg.amount as string);
+  depositMsgVal.amount = toUint64(msg.amount as string);
   return Buffer.from(depositMessageType.hashTreeRoot(depositMsgVal).buffer);
 };
 
@@ -537,7 +538,6 @@ export const builderBlsCheck = (
 };
 
 export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
-  const ec = new elliptic.ec('secp256k1');
   const nodeSignatures = clusterLock.node_signatures;
 
   if (
@@ -547,24 +547,14 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
     return false;
   }
 
-  const lockHashWithout0x = hexWithout0x(clusterLock.lock_hash);
+  const lockHash = fromHexString(clusterLock.lock_hash);
   // node(ENR) signatures
   for (let i = 0; i < nodeSignatures.length; i++) {
-    const publicKeyBytes = ENR.decodeTxt(
+    const publicKey = ENR.decodeTxt(
       clusterLock.cluster_definition.operators[i].enr as string,
     ).publicKey;
-    const pubkey = Buffer.from(publicKeyBytes).toString('hex');
 
-    const ENRsignature = {
-      r: nodeSignatures[i].slice(2, 66),
-      s: nodeSignatures[i].slice(66, 130),
-    };
-
-    const nodeSignatureVerification = ec
-      .keyFromPublic(pubkey, 'hex')
-      .verify(lockHashWithout0x, ENRsignature);
-
-    if (!nodeSignatureVerification) {
+    if (!secp256k1VerifyDigest(publicKey, lockHash, nodeSignatures[i])) {
       return false;
     }
   }
@@ -635,6 +625,14 @@ export const isValidClusterLock = async (
       return false;
     }
 
+    // Operator and creator signatures are over config_hash, so it must match
+    // the definition's config fields or those signatures don't cover them.
+    if (
+      clusterConfigOrDefinitionHash(clusterLock.cluster_definition, true) !==
+      clusterLock.cluster_definition.config_hash
+    ) {
+      return false;
+    }
     if (
       clusterConfigOrDefinitionHash(clusterLock.cluster_definition, false) !==
       clusterLock.cluster_definition.definition_hash

@@ -10,6 +10,9 @@ import {
   newOperatorContainerType,
   type operatorAddressWrapperType,
   type operatorContainerType,
+  listOrEmpty,
+  toUint64,
+  uint64BigintType,
   validatorsContainerType,
 } from './sszTypes.js';
 import {
@@ -94,15 +97,15 @@ export const hashClusterDefinitionV1X6 = (
   const val = definitionType.defaultValue();
 
   // order should be same as charon https://github.com/ObolNetwork/charon/blob/main/cluster/ssz.go#L276
-  val.uuid = strToUint8Array(cluster.uuid);
-  val.name = strToUint8Array(cluster.name);
-  val.version = strToUint8Array(cluster.version);
-  val.timestamp = strToUint8Array(cluster.timestamp);
+  val.uuid = strToUint8Array(cluster.uuid ?? '');
+  val.name = strToUint8Array(cluster.name ?? '');
+  val.version = strToUint8Array(cluster.version ?? '');
+  val.timestamp = strToUint8Array(cluster.timestamp ?? '');
   val.num_validators = cluster.num_validators;
   val.threshold = cluster.threshold;
-  val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm);
+  val.dkg_algorithm = strToUint8Array(cluster.dkg_algorithm ?? '');
   val.fork_version = fromHexString(cluster.fork_version);
-  val.operators = cluster.operators.map(operator => {
+  val.operators = listOrEmpty(cluster.operators).map(operator => {
     return configOnly
       ? { address: fromHexString(operator.address) }
       : {
@@ -120,7 +123,7 @@ export const hashClusterDefinitionV1X6 = (
           cluster.creator.config_signature as string,
         ),
       };
-  val.validators = cluster.validators.map(validator => {
+  val.validators = listOrEmpty(cluster.validators).map(validator => {
     return {
       fee_recipient_address: fromHexString(validator.fee_recipient_address),
       withdrawal_address: fromHexString(validator.withdrawal_address),
@@ -140,7 +143,7 @@ const dvContainerTypeV1X6 = new ContainerType({
   public_shares: new ListCompositeType(new ByteVectorType(48), 256),
   pubkey: new ByteVectorType(48),
   withdrawal_credentials: new ByteVectorType(32),
-  amount: new UintNumberType(8 as UintNumberByteLen),
+  amount: uint64BigintType,
   signature: new ByteVectorType(96),
 });
 
@@ -173,20 +176,20 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
     cluster.cluster_definition,
     false,
   );
-  val.distributed_validators = cluster.distributed_validators.map(
+  val.distributed_validators = listOrEmpty(cluster.distributed_validators).map(
     dValidator => {
       return {
         distributed_public_key: fromHexString(
           dValidator.distributed_public_key,
         ),
-        public_shares: dValidator.public_shares.map(publicShare =>
+        public_shares: listOrEmpty(dValidator.public_shares).map(publicShare =>
           fromHexString(publicShare),
         ),
         pubkey: fromHexString(dValidator.deposit_data?.pubkey as string),
         withdrawal_credentials: fromHexString(
           dValidator.deposit_data?.withdrawal_credentials as string,
         ),
-        amount: parseInt(dValidator.deposit_data?.amount as string),
+        amount: toUint64(dValidator.deposit_data?.amount as string),
         signature: fromHexString(dValidator.deposit_data?.signature as string),
       };
     },

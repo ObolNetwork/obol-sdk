@@ -136,6 +136,7 @@ describe('submitViaContractWalletAndWait', () => {
 
 describe('submitEOAWithdrawalRequest signer branching', () => {
   it('uses the Safe path for contract-wallet signers (no tx.wait hang)', async () => {
+    const onSent = jest.fn();
     const { signer } = makeSafeSigner({
       liveLog: executionSuccessLog(SAFE_TX_HASH),
     });
@@ -148,10 +149,17 @@ describe('submitEOAWithdrawalRequest signer branching', () => {
       requiredFee: '1',
       chainId: 560048,
       signer,
+      options: { onSent },
     });
 
     expect(txHash).toBe(EXECUTED_TX_HASH);
     expect(signer.sendTransaction).not.toHaveBeenCalled();
+    // The Safe's own hash is reported as soon as the wallet accepts it.
+    expect(onSent).toHaveBeenCalledWith({
+      hash: SAFE_TX_HASH,
+      index: 0,
+      contractWallet: true,
+    });
   });
 
   it('keeps the legacy sendTransaction + wait path for EOAs', async () => {

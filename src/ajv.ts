@@ -9,6 +9,7 @@ import {
   type OVMRequestWithdrawalPayload,
 } from './types.js';
 import Ajv from 'ajv';
+import { PayloadValidationError } from './errors.js';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
@@ -26,21 +27,55 @@ export const VALID_NON_COMPOUNDING_AMOUNTS = [
   parseUnits('32', 'gwei').toString(),
 ];
 
-const calculateTotalPercentage = (
-  recipients: Array<{ percentAllocation: number }>,
-): number => {
-  return recipients.reduce((acc, curr) => acc + curr.percentAllocation, 0);
-};
+// Split contracts take allocations as integers where 100% = 1e6 (four
+// decimals of a percent); formatSplitRecipients scales by the same factor.
+const PERCENT_SCALE = 1e4;
+const TOTAL_SCALED_PERCENT = 100 * PERCENT_SCALE;
 
-const validateTotalPercentage = (totalPercentage: number): boolean => {
-  return totalPercentage === 100;
+const toScaledPercent = (percent: number): number =>
+  Math.round(percent * PERCENT_SCALE);
+
+/**
+ * Sums the recipients' allocations as scaled integers, so the comparison
+ * against 100% is exact. Returns NaN if any allocation is not a number or
+ * rounds to zero at contract precision.
+ */
+const calculateTotalPercentage = (
+  recipients: Array<{ percentAllocation: number }> | undefined,
+): number => {
+  if (!Array.isArray(recipients)) {
+    return NaN;
+  }
+  return recipients.reduce((acc, curr) => {
+    const percent = curr?.percentAllocation;
+    if (typeof percent !== 'number' || !Number.isFinite(percent)) {
+      return NaN;
+    }
+    const scaled = toScaledPercent(percent);
+    return scaled < 1 ? NaN : acc + scaled;
+  }, 0);
 };
 
 const validateTotalPercentageWithRAF = (
   totalPercentage: number,
   rafPercentage: number,
 ): boolean => {
-  return totalPercentage + rafPercentage === 100;
+  return (
+    totalPercentage + toScaledPercent(rafPercentage) === TOTAL_SCALED_PERCENT
+  );
+};
+
+const validateUniqueRecipientAddresses = (
+  key: string,
+  recipients: Array<Record<string, unknown>>,
+): boolean => {
+  if (!Array.isArray(recipients)) {
+    return true;
+  }
+  const addresses = recipients.map(recipient =>
+    String(recipient?.[key]).toLowerCase(),
+  );
+  return new Set(addresses).size === addresses.length;
 };
 
 const validateRewardsSplitRecipients = (
@@ -75,19 +110,37 @@ const validateUniqueAddresses = (
     return false;
   }
 
-  if (operators.every(op => op.address === '')) {
+  if (operators.every(op => op?.address === '')) {
     return true;
   }
 
-  if (operators.some(op => op.address.length !== 42)) {
+  if (
+    operators.some(
+      op =>
+        typeof op?.address !== 'string' ||
+        !/^0x[0-9a-fA-F]{40}$/.test(op.address),
+    )
+  ) {
     return false;
   }
 
-  const addresses = operators.map(op => op.address);
+  const addresses = operators.map(op => op.address.toLowerCase());
   const uniqueAddresses = new Set(addresses);
   const isUnique = uniqueAddresses.size === addresses.length;
   return isUnique;
 };
+
+/**
+ * SplitV2 (used with the OVM) takes the sum of the allocations as its total,
+ * so shares that do not add up to exactly 100% at contract precision are
+ * still split proportionally. Allow up to one unit (1e-4 %) of rounding per
+ * recipient, e.g. three shares of 33.3333...% after spreading 1% over them.
+ */
+const isTotalWithinRoundingOfFull = (
+  totalPercentage: number,
+  recipientCount: number,
+): boolean =>
+  Math.abs(totalPercentage - TOTAL_SCALED_PERCENT) <= recipientCount;
 
 const validateOVMRewardsSplitRecipients = (
   _: boolean,
@@ -95,7 +148,10 @@ const validateOVMRewardsSplitRecipients = (
 ): boolean => {
   const obolRAFSplit = DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT;
   const splitPercentage = calculateTotalPercentage(data.rewardSplitRecipients);
-  return validateTotalPercentageWithRAF(splitPercentage, obolRAFSplit);
+  return isTotalWithinRoundingOfFull(
+    splitPercentage + toScaledPercent(obolRAFSplit),
+    (data.rewardSplitRecipients?.length ?? 0) + 1,
+  );
 };
 
 const validateOVMTotalSplitRecipients = (
@@ -105,7 +161,10 @@ const validateOVMTotalSplitRecipients = (
   const splitPercentage = calculateTotalPercentage(
     data.principalSplitRecipients,
   );
-  return validateTotalPercentage(splitPercentage);
+  return isTotalWithinRoundingOfFull(
+    splitPercentage,
+    data.principalSplitRecipients?.length ?? 0,
+  );
 };
 
 const validateOVMRequestWithdrawalPayload = (
@@ -161,6 +220,13 @@ ajv.addKeyword({
 });
 
 ajv.addKeyword({
+  keyword: 'uniqueRecipientAddresses',
+  validate: validateUniqueRecipientAddresses,
+  schemaType: 'string',
+  error: { message: 'must not contain duplicate recipient addresses' },
+});
+
+ajv.addKeyword({
   keyword: 'validateOVMRewardsSplitRecipients',
   validate: validateOVMRewardsSplitRecipients,
   schemaType: 'boolean',
@@ -185,7 +251,10 @@ export function validatePayload<T>(data: unknown, schema: object): T {
     const errors = validate.errors
       ?.map(e => `${e.instancePath} ${e.message}`)
       .join(', ');
-    throw new Error(`Validation failed: ${errors}`);
+    throw new PayloadValidationError(
+      `Validation failed: ${errors}`,
+      validate.errors ?? [],
+    );
   }
   return data;
 }

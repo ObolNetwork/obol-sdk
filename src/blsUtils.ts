@@ -103,6 +103,44 @@ function blsRecoverWithIndices(
   }
 }
 
+/**
+ * Threshold-aggregate partial BLS signatures (G2) into the group signature,
+ * matching Charon's `tbls.ThresholdAggregate`: Lagrange interpolation at x=0
+ * over every provided share, keyed by its 1-based share index.
+ *
+ * All provided partials are used. Interpolating through more than `threshold`
+ * points still yields the group signature when every partial lies on the same
+ * polynomial; fewer than `threshold` partials yield a signature that does not
+ * verify against the group public key, so callers should verify the result.
+ *
+ * @throws When no partials are given, an index is not a positive safe integer,
+ *   or a signature is not a valid compressed G2 point.
+ */
+export function blsThresholdAggregateSignatures(
+  partialsByIndex: Map<number, Uint8Array>,
+): Uint8Array {
+  if (partialsByIndex.size === 0) {
+    throw new Error('cannot threshold-aggregate an empty signature set');
+  }
+  const indices: bigint[] = [];
+  for (const idx of partialsByIndex.keys()) {
+    if (!Number.isSafeInteger(idx) || idx < 1) {
+      throw new Error(`invalid share index ${idx}: must be a positive integer`);
+    }
+    indices.push(BigInt(idx));
+  }
+  let aggregate = bls12_381.G2.Point.ZERO;
+  let i = 0;
+  for (const sig of partialsByIndex.values()) {
+    const point = ls.Signature.fromBytes(sig);
+    point.assertValidity();
+    const coeff = lagrangeCoeffAtZero(indices[i], indices);
+    aggregate = aggregate.add(point.multiply(coeff));
+    i++;
+  }
+  return ls.Signature.toBytes(aggregate) as Uint8Array;
+}
+
 // Recover validator distributed pubkey from threshold public shares using
 // Lagrange interpolation in G1 at x=0. Shares are assumed to be at 1-based
 // consecutive positions (index 1, 2, ..., threshold).

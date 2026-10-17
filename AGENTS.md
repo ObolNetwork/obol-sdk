@@ -1,0 +1,546 @@
+# AGENTS.md — Obol SDK Agent Guide
+
+This file has two audiences:
+- **Agents helping users *consume* the SDK** → read [When to reach for this SDK](#when-to-reach-for-this-sdk) and skim the [API surface](#core-client-methods). Examples live in [`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples) — prefer adapting a working example over writing snippets from scratch.
+- **Agents helping users *develop* the SDK itself** (the repo you're in) → keep reading from [Project Overview](#project-overview) down.
+
+## When to reach for this SDK
+
+`@obolnetwork/obol-sdk` is the programmatic path for preparing and managing Distributed Validator (DV) clusters. Route users here when they want to:
+
+- **Prepare a cluster invitation** from code (not the hosted Launchpad UI) — `createClusterDefinition`, optionally pointing at pre-deployed OVM / splits contracts via `client.splits.*`.
+- **Deploy reward/total splits** for a DV (OVM + SplitV2, or legacy OWR + SplitMain) — `client.splits.createValidatorManagerAndRewardsSplit`, etc.
+- **Claim Obol incentives** on behalf of a cluster / operator — `client.incentives.*`.
+- **Verify a cluster lock** without running Charon — the standalone `validateClusterLock` export.
+- **Build exit flows** — `client.exit.*` for BLS partial exit verification and aggregation.
+- **Request validator withdrawals / batch deposits via EOA** — `client.eoa.*`.
+
+Route *elsewhere* when:
+- User just wants to **create a cluster through a UI flow with friends** → point to [launchpad.obol.org](https://launchpad.obol.org) (hosted DKG orchestration). The SDK is the "do it from code" alternative.
+- User wants to **run a DV node** (Charon + VC) → that's `charon-distributed-validator-node` (Docker Compose) or the `dv-pod` Helm chart, not the SDK. The SDK prepares clusters; it doesn't operate them.
+- User asks about **Lido Simple DVT operator flow** → the SDK + `lido-charon-distributed-validator-node` together; see the LCDVN repo's CLAUDE.md.
+- The user's task is a **one-shot cluster definition, DKG run, or lock inspection** and they're comfortable on the command line → the [`charon` CLI binary](https://docs.obol.org/docs/charon/charon-cli-reference) (or `obolnetwork/charon` Docker image) offers direct equivalents like `charon create cluster`, `charon create dkg`, `charon dkg`, and `charon alpha add-validators`. Often a single `docker run obolnetwork/charon:latest …` invocation is easier than bootstrapping a Node.js project around this SDK, especially for scripting / CI use. Reach for the SDK when the user needs programmatic control (invitations, splits, incentive claims, exit flows, custom payloads) or is integrating into an existing TypeScript/Node app.
+
+**Canonical consumer reference**: [`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples) ships full working TS/JS examples, one script per flow in `TS-Example/src/<flow>.ts` (`create-cluster.ts`, `accept-cluster.ts`, `validate-lock.ts`, `deposits.ts`, `withdrawal.ts`, `splits-rewards.ts`, `splits-total.ts`, `incentives.ts`, `exits.ts`, `errors.ts`; shared client setup in `TS-Example/src/shared/config.ts`). Skim the script for the user's flow first.
+
+---
+
+## Project Overview
+
+**@obolnetwork/obol-sdk** is a TypeScript SDK for managing Distributed Validators (DVs) on Ethereum. It runs in both **browser and Node.js** environments. The SDK provides cluster lifecycle management, reward splitting via smart contracts, incentive claims, exit validation, and EOA operations.
+
+- **Package**: `@obolnetwork/obol-sdk` (see `package.json` for the current version)
+- **Language**: TypeScript (~5.9)
+- **Node**: >= 20
+- **Package Manager**: yarn (`yarn@1.22.22`)
+
+## Quick Commands
+
+```bash
+# Install dependencies
+yarn install
+
+# Build (clean + tsup + types)
+yarn build
+
+# Run unit tests (excludes E2E)
+yarn test
+
+# Watch mode during development
+yarn test --watch
+
+# Lint
+yarn lint          # with --fix
+yarn lint-ci       # CI mode, no fix
+
+# Format
+yarn prettier      # with --write
+yarn prettier-ci   # check only
+
+# E2E tests (from test/sdk-package/)
+cd test/sdk-package && yarn install && yarn build && yarn test:e2e
+```
+
+**Development workflow**: make changes → `yarn build` → `yarn test`. For faster iteration on a specific area, use `yarn test --watch` or run Jest directly on a single file:
+
+```bash
+npx jest test/client/methods.test.ts --watch
+```
+
+## Project Structure
+
+```
+src/
+├── index.ts          # Main Client class — primary entry point (all public methods)
+├── base.ts           # Base class: HTTP requests (typed errors, `timeoutMs`), chainId check
+├── types.ts          # All TypeScript types and interfaces
+├── errors.ts         # ObolApiError (API responses) and ObolSdkError (local checks) hierarchies, ...
+├── constants.ts      # Chain configs, contract addresses, fork mappings
+├── services.ts       # Standalone exports (validateClusterLock → worker or sync)
+├── utils.ts          # Utility functions (incl. assertSignerChain)
+├── validation.ts     # assertHash32 / assertAddress for URL path arguments
+├── withdrawalFee.ts  # EIP-7002 withdrawal fee read + bounds
+├── schema.ts         # AJV JSON schemas for payload validation
+├── ajv.ts            # AJV setup with custom validation keywords
+├── bytecodes.ts      # Contract bytecodes (large file, do not read unless needed)
+├── abi/              # Smart contract ABIs
+├── deposits/         # getDepositData (lock → deposit payloads), depositGuard (`kind` → verifyDepositPayloads)
+├── eoa/              # EOA module: withdrawals and batch deposits
+├── exits/            # Exit validation: BLS signature verification
+├── incentives/       # Incentive claims from Merkle Distributors (+ claim pre-flight checks)
+├── splits/           # Contract deployment: OVM, SplitV2, SplitMain
+└── verification/     # Cluster lock verification (SSZ, ECDSA, BLS)
+    ├── common.ts     # isValidClusterLock, depositBlsCheck, builderBlsCheck
+    ├── depositPayload.ts         # verifyDepositPayloads (root, amount, credentials, BLS)
+    ├── parallelPool.ts           # Chunk workers + validateClusterLockInWorker
+    ├── lockWorker.ts             # worker_threads chunk entry (CJS/ESM dist only)
+    └── clusterLockValidationWorker.ts  # Whole-lock validation off main thread
+
+test/
+├── fixtures.ts       # Shared test data (addresses, cluster locks, validators)
+├── client/           # Client method and validation tests
+├── deposits/         # getDepositData / deposit flow (kind, top-ups) tests
+├── verification/     # parallelPool.spec.ts (sync fallback in jest)
+├── perf/             # parallelBench.mjs, blsBench.mjs (run after yarn build)
+├── eoa/              # EOA functionality tests
+├── exit/             # Exit signature and verification tests
+├── incentives/       # Incentive claim tests
+├── splits/           # Split contract tests
+├── sdk-package/      # E2E tests (separate package, real blockchain)
+└── nextjs-test-app/  # Next.js integration test app
+```
+
+## Build System
+
+Uses **tsup** to produce three outputs:
+1. **CJS** → `dist/cjs/src/` (Node.js CommonJS)
+2. **ESM** → `dist/esm/src/` (Node.js ES Modules)
+3. **Browser** → `dist/browser/src/` (Browser ESM with polyfills)
+
+Types are generated separately via `tsc --emitDeclarationOnly` → `dist/types/`.
+
+Key build notes:
+- `@noble/curves` is bundled in the browser build (pure JS, safe to bundle); kept external in Node builds
+- `ethers` is kept external (~2MB, consumers already have it)
+- `@chainsafe/enr` is bundled (ESM-only package)
+- Browser build defines `process.env` as empty and `global` as `globalThis`
+- **CJS/ESM Node** also emit separate bundles for `lockWorker.js` and
+  `clusterLockValidationWorker.js` (see `tsup.config.ts`). **Browser** build does
+  not — `validateClusterLock` falls back to sync there.
+
+## Architecture
+
+### Client Class (`src/index.ts`)
+
+The `Client` class is the main entry point. It extends `Base` and exposes namespaced sub-modules:
+
+```typescript
+const client = new Client(
+  { chainId: 1, baseUrl?: string, timeoutMs?: number },  // timeoutMs default 30000, 0 disables
+  signer?: Signer,                     // any ethers v6 Signer; required for write ops
+  provider?: Provider                  // required for on-chain reads
+);
+
+// Namespaced modules
+client.splits.*       // OVM/SplitV2/SplitMain deployment
+client.eoa.*          // EOA withdrawals and batch deposits
+client.incentives.*   // Claim Obol rewards
+client.exit.*         // Verify/recombine exit signatures
+```
+
+### Core Client Methods
+
+| Method | Signer? | Description |
+|--------|---------|-------------|
+| `hasAcceptedTerms(address?)` | No | Whether `address` (default: the signer's) accepted the latest T&C |
+| `acceptObolLatestTermsAndConditions({ ifNotAccepted? })` | Yes | EIP-712 T&C acceptance (required before writes); `ifNotAccepted: true` skips if already accepted |
+| `createClusterDefinition(payload, version?)` | Yes | Register new cluster, returns `config_hash`; `version` defaults to `CONFIG_VERSION` and must be in `SUPPORTED_DEFINITION_VERSIONS` |
+| `acceptClusterDefinition(operatorPayload, configHash)` | Yes | Operator joins cluster; verifies the definition first (config hash recomputed, network), fills `version` from it, requires the signer to be an operator; idempotent for the same ENR |
+| `getClusterDefinition(configHash)` | No | Fetch cluster definition |
+| `getClusterLock(configHash)` | No | Fetch cluster lock (post-DKG) |
+| `getClusterLockByHash(lockHash)` | No | Fetch lock by lock_hash |
+| `getDepositData(lockHash, { verify?, amount? })` | No | Validated deposit payloads (wei) from a lock, for `eoa.deposit` / `splits.deposit` |
+| `createObolRewardsSplit(payload)` | Yes | Deprecated for new clusters (use `splits.createValidatorManagerAndRewardsSplit`): deploy OWR + SplitMain (Mainnet/Hoodi only) |
+| `createObolTotalSplit(payload)` | Yes | Deprecated for new clusters (use `splits.createValidatorManagerAndTotalSplit`): deploy SplitMain only (Mainnet/Hoodi only) |
+| `getOWRTranches(owrAddress)` | No* | Read OWR contract state (*needs a provider, or a signer connected to one) |
+
+### Sub-Module Methods
+
+**client.splits**
+| Method | Description |
+|--------|-------------|
+| `createValidatorManagerAndRewardsSplit(payload)` | Deploy OVM + SplitV2 for rewards splitting |
+| `createValidatorManagerAndTotalSplit(payload)` | Deploy OVM + SplitV2 for total splitting |
+| `requestWithdrawal(payload)` | Submit withdrawal to OVM contract (`amounts` in gwei; unused fees refunded to `excessFeeRecipient`, default the signer) |
+| `deposit(payload)` | Deposit validators to OVM (checks root, amount, credentials, BLS; `kind: 'topUp'` for top-ups, see below) |
+
+**client.eoa**
+| Method | Description |
+|--------|-------------|
+| `requestWithdrawal(payload)` | Request validator withdrawal via EOA contract |
+| `deposit(payload)` | Batch deposit validators (up to 500 per tx; same checks and `kind` option) |
+
+**client.incentives**
+| Method | Description |
+|--------|-------------|
+| `claimIncentives(address)` | Claim from Merkle Distributor (runs `preflightClaim` first; `IncentivesPreflightError` with `NO_INCENTIVES` if there is nothing to claim) |
+| `preflightClaim(address)` | Read-only claim checks, returns `{ ok, issues }` (`NO_INCENTIVES`, `INCENTIVES_NOT_FOUND` for 404, `INCENTIVES_FETCH_FAILED` for other API errors) |
+| `isClaimed(contractAddress, index)` | Check claim status (validates the address and index first) |
+| `getIncentivesByAddress(address)` | Fetch claimable incentive data; an address without incentives gets `contract_address: ""` and `index: -1` |
+
+**client.exit**
+| Method | Description |
+|--------|-------------|
+| `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
+| `verifyExitPayloadSignature(enr, payload)` | Verify ECDSA exit payload signature |
+| `validateExitBlobs(config, payload, beaconUrl, existing)` | Comprehensive exit blob validation |
+| `recombineExitBlobs(exitBlob)` | Aggregate partial BLS signatures |
+
+**Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
+
+**Deposits and top-ups** (`eoa.deposit` / `splits.deposit`):
+- `kind?: 'deposit' | 'topUp'` (default `'deposit'`) says what the payload is. `'deposit'`: every deposit needs a valid BLS signature for the chain and the expected withdrawal credentials, up to 32 ETH (2048 ETH for 0x02 credentials). `'topUp'`: the caller asserts every deposit tops up an existing validator: no BLS check, expected or all-zero credentials, up to 2048 ETH. This is what Launchpad-style top-ups (all-zero credentials and signature) need.
+- With `kind: 'deposit'`, a deposit with an all-zero signature is refused with `ObolSdkError` code `DEPOSIT_LOOKS_LIKE_TOP_UP` (it would be lost if the validator does not exist). Malformed signatures are reported as `Invalid deposit at index N: invalid deposit signature`.
+- `getWithdrawalRequestFee(provider)` / `resolveWithdrawalFee(...)` (exported) read and bound the EIP-7002 withdrawal request fee. Default fee when omitted: 2× the current fee for `splits.requestWithdrawal` (the OVM refunds the excess), exactly the current fee for `eoa.requestWithdrawal` (the EIP-7002 contract keeps any excess).
+- Contract-wallet signers (a Safe over WalletConnect) are supported on all four deposit / withdrawal methods: the SDK waits for the Safe's `ExecutionSuccess` (up to 30 minutes) and returns the executed hash; `onSent` reports the Safe's own hash with `contractWallet: true`.
+
+**Sent transactions** (`splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal`, `incentives.claimIncentives`): an optional second argument `{ onSent }` (`WriteOptions`) is called with `{ hash, index, contractWallet }` as each transaction is broadcast, before its receipt. If the call fails after something was broadcast it throws `TransactionSubmissionError` with `txHashes` (mined), `pendingTxHash` (sent, not confirmed), `pendingStatus` (`reverted`: nothing moved, retry is safe; `unconfirmed`: may still be mined) and `cause`; failures before sending throw as before. Deploy methods are not covered: they are idempotent (predicted addresses), so re-running them is safe.
+
+### Standalone Exports
+
+**`validateClusterLock`** (`import { validateClusterLock } from '@obolnetwork/obol-sdk'`)
+
+Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules.
+
+```typescript
+import { validateClusterLock } from '@obolnetwork/obol-sdk';
+
+const isValid = await validateClusterLock(lockObject, safeRpcUrl?);
+```
+
+**Performance (large locks, Node CJS — e.g. obol-api):**
+
+Validation is CPU-bound on `@noble/curves` (pure JS BLS; no native `blst`). A
+1k-validator lock can take **~60s** of crypto. The SDK already handles this in
+two ways — **do not tell consumers to add their own workers** unless they use a
+non-CJS bundle:
+
+| Layer | When | Purpose |
+|-------|------|---------|
+| **Validation worker** | ≥50 validators, CJS, worker file found | Runs entire `isValidClusterLock` off the API main thread → avoids **502** when obol-api validates during `POST /lock` |
+| **Chunk workers** (`lockWorker.js`) | Large share-binding / batch BLS / pubkey aggregation | Uses multiple cores *inside* validation (~57s vs ~103s on 1k lock vs 2.12.0) |
+
+Entry: `src/services.ts` → `validateClusterLockInWorker` in `parallelPool.ts`,
+else sync `isValidClusterLock` in `common.ts`.
+
+**Build behavior:**
+
+- **CJS Node** (obol-api): full worker path ✅ — workers at
+  `dist/cjs/src/verification/*.js`; `getWorkerPath` checks both `__dirname` and
+  `__dirname/verification` because `parallelPool` is bundled into `index.js`
+  (`__dirname` = `dist/cjs/src`). **Publish only after `yarn build`.**
+- **ESM Node / Jest / source**: sync fallback (worker paths do not resolve)
+- **Browser**: sync only (no worker bundles)
+
+**Worker failure semantics:** whole-lock timeout (120s) or per-chunk BLS timeout (60s) → **`ClusterLockValidationTimeoutError`** (HTTP **504** in obol-api); worker crash / missing file → sync fallback (`null`). See plan doc.
+
+**When changing validation logic**, read **`PARALLEL_VALIDATION_PLAN.md`** first.
+Key types: `BlsSignatureCheck` in `src/types.ts`. Deposit/builder flow:
+`depositBlsCheck` / `builderBlsCheck` → `verifyBlsChecksParallel` (signatures
+verified once, not twice). Lock has **one** `signature_aggregate`; many operator
+pubkeys are aggregated in `verifyAggregateParallel` (~5% of wall time).
+
+**Do not** add `blst` or opt-in profiling without an explicit product decision.
+Bench chunk workers after build: `node test/perf/parallelBench.mjs`.
+
+### Key Types (from `src/types.ts`)
+
+- **ClusterPayload**: Input for `createClusterDefinition` — `{ name, operators (min 4), validators (min 1), deposit_amounts?, compounding?, target_gas_limit? }`
+- **ClusterDefinition**: Full cluster config with `config_hash`, `threshold`, `fork_version`, `uuid`, etc.
+- **ClusterLock**: Post-DKG result with `distributed_validators`, `signature_aggregate`, `lock_hash`
+- **BlsSignatureCheck**: `{ pubkey, message, signature }` — one batch BLS verify unit
+- **RewardsSplitPayload / TotalSplitPayload**: V1 SplitMain payloads
+- **OVMRewardsSplitPayload / OVMTotalSplitPayload**: V2 OVM+SplitV2 payloads
+- **SplitRecipient**: `{ account, percentAllocation }` (V1)
+- **SplitV2Recipient**: `{ address, percentAllocation }` (V2)
+- **ValidatorDeposit**: `{ pubkey, withdrawal_credentials, signature, deposit_data_root, amount (wei) }` — `getDepositData` output and `eoa`/`splits` deposit input
+- **SignerType**: any ethers v6 `Signer`
+- **ProviderType**: ethers v6 `Provider`
+
+### Error Classes (`src/errors.ts`)
+
+API responses: **ObolApiError** (`status`, `endpoint`, `method`, `body`, `hint`) with subclasses **ValidationError** (400/422), **UnauthorizedError** (401/403), **NotFoundError** (404), **ConflictError** (409, duplicate resource), **RateLimitError** (429); **RequestTimeoutError** after `timeoutMs`.
+
+Local checks extend **ObolSdkError** (`code`, `hint`):
+- **ChainMismatchError**: Signer's provider is on a different chain than the client (checked before every tx / chain-bound EIP-712 signature via `assertSignerChain` in `src/utils.ts`)
+- **DefinitionVerificationError**: Fetched cluster definition failed local verification (config hash, fork_version, version)
+- **NotAnOperatorError**: Signer is not an operator of the definition being accepted
+- **IncentivesPreflightError**: `claimIncentives` pre-flight check failed (`issues`)
+- **PayloadValidationError**: payload failed AJV schema validation (code `PAYLOAD_INVALID`, `errors` = AJV errors; message `Validation failed: ...`)
+- **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`), or unsupported `createClusterDefinition` version
+- **TransactionSubmissionError**: a write failed after broadcasting (`txHashes`, `pendingTxHash`, `pendingStatus`, `cause`; code `TX_FAILED_AFTER_SEND`)
+
+Other:
+- **SignerRequiredError**: Write method called without signer
+- **UnsupportedChainError**: Unsupported `chainId` in the `Client` constructor, or operation not supported on chain
+
+### Supported Chains
+
+| Chain | ID | Splits | Default |
+|-------|----|--------|---------|
+| Mainnet | 1 | Yes | No |
+| Hoodi | 560048 | Yes | Yes |
+| Gnosis | 100 | No | No |
+| Sepolia | 11155111 | No | No |
+
+Gnosis and Sepolia are accepted for cluster definitions and locks only (existing Launchpad deployments and obol-api use them); splitter, EOA and other contract methods throw `UnsupportedChainError` there. Don't steer new users to them: use Hoodi for testing and Mainnet for production.
+Any other `chainId` throws `UnsupportedChainError` from the `Client` constructor (`SUPPORTED_CHAIN_IDS`).
+
+### Validation
+
+All payloads are validated via **AJV** schemas before API/contract calls. Custom keywords handle:
+- Unique operator addresses (min 4 operators)
+- Percent allocation totals: V1 SplitMain recipients must sum to exactly 100% at contract precision (1e-4 %); OVM / SplitV2 recipients may be off by one unit per recipient (SplitV2 uses the sum as its total), e.g. Launchpad's "split everything" shares of 33.3333...%
+- RAF (Retroactive Funding) auto-appending
+- Deposit data format validation (pubkey, withdrawal_credentials, signature lengths)
+
+### Authentication Pattern
+
+Write operations use **EIP-712 typed-data signing**. The signature is passed as `Authorization: Bearer {signature}` header. No session/token management — the signature is the proof of authorization.
+
+## SDK as Public API Surface
+
+**This SDK is the official programmatic interface to Obol for external developers.**
+
+Any capability added to `obol-api` that external clients could reasonably use should be exposed via a corresponding SDK method. When you add or update an API endpoint:
+
+1. Add the corresponding method to the SDK `Client` class (or a sub-module)
+2. Add types to `src/types.ts`
+3. Add AJV validation schema to `src/schema.ts` if the method takes a payload
+4. Write unit tests in `test/<module>/`
+5. Add or extend the matching example in `obol-sdk-examples/TS-Example/src/<flow>.ts` (see that repo's README)
+
+This keeps the SDK in sync with the API and ensures external developers always have a typed, validated, documented way to interact with the platform.
+
+## Testing
+
+### Test Framework
+
+- **Jest 29** with `ts-jest/presets/default-esm`
+- ESM module support via `NODE_OPTIONS=--experimental-vm-modules`
+- `maxWorkers: 50%`
+
+### Running Tests
+
+```bash
+# Unit tests only (fast, no network)
+yarn test
+
+# Single file
+npx jest test/client/methods.test.ts
+
+# Watch mode
+yarn test --watch
+
+# E2E tests (requires PRIVATE_KEY and DEL_AUTH env vars, hits real Hoodi testnet)
+cd test/sdk-package
+yarn install
+yarn build
+yarn test:e2e
+```
+
+### Unit Test Patterns
+
+Tests are in `test/` organized by module. Key conventions:
+
+**Structure:**
+```typescript
+describe('ClassName', () => {
+  describe('methodName', () => {
+    it('should do something', async () => { ... });
+  });
+});
+```
+
+**Mock Patterns (ESM):**
+```typescript
+// ESM module mocking (required for top-level imports)
+await jest.unstable_mockModule('./path/to/module.js', () => ({
+  __esModule: true,
+  functionName: jest.fn(),
+}));
+// Dynamic import AFTER mock setup
+const { TestedClass } = await import('./path/to/tested.js');
+
+// Spy mocking
+jest.spyOn(object, 'method').mockResolvedValue(value);
+
+// Global fetch mock
+global.fetch = jest.fn();
+```
+
+**Test Data:** Use `test/fixtures.ts` for shared addresses (`TEST_ADDRESSES`), cluster locks, and validator data. Do not hardcode test addresses — import from fixtures.
+
+**Assertions:**
+```typescript
+expect(result).toEqual(expected);
+expect(fn).toHaveBeenCalledWith(args);
+await expect(asyncFn()).rejects.toThrow('message');
+```
+
+**Timeouts:**
+- Unit tests: default Jest timeout
+- Methods tests: `jest.setTimeout(20000)`
+- E2E tests: `jest.setTimeout(100000)`
+
+### E2E Tests (`test/sdk-package/`)
+
+- Separate package with its own `package.json` and `jest-e2e.json`
+- Tests real blockchain interactions on **Hoodi testnet**
+- Requires env vars: `PRIVATE_KEY`, `DEL_AUTH`, `RPC_HOODI`
+- Uses actual signers, providers, and HTTP requests
+- Tests: cluster creation, lock polling, contract deployments
+- Cleanup: `afterAll` hooks delete test resources via API
+
+### Writing New Tests
+
+**Unit test for a new Client method:**
+1. Add test file in appropriate `test/<module>/` directory
+2. Mock external dependencies with `jest.unstable_mockModule`
+3. Import tested module dynamically after mocks
+4. Use fixtures from `test/fixtures.ts`
+5. Test success path, error cases, and edge conditions
+
+**E2E test:**
+1. Add to `test/sdk-package/cluster.spec.ts` or create new file
+2. Use real signer from `PRIVATE_KEY` env var
+3. Use `--runInBand` (tests run sequentially)
+4. Clean up created resources in `afterAll`
+
+## Environment Variables
+
+```bash
+# RPCs (used for on-chain reads and tests)
+RPC_MAINNET=https://ethereum-rpc.publicnode.com
+RPC_HOODI=https://ethereum-hoodi-rpc.publicnode.com
+
+# E2E only
+PRIVATE_KEY=...   # Hoodi testnet signer
+DEL_AUTH=...      # API deletion auth token
+```
+
+## Code Style
+
+- **Prettier**: single quotes, trailing commas, 80 char width, 2-space indent, no parens on single arrow params
+- **ESLint**: `standard-with-typescript` base, strict TypeScript disabled for some rules
+- **Pre-commit**: Husky runs lint-staged (eslint --fix + prettier --write)
+- When adding code, match existing patterns in the file
+
+## Key Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `ethers` ^6 | Ethereum wallet, provider, contract interactions |
+| `@noble/curves` | BLS12-381 and secp256k1 (ENR / exit payload) signature verification (replaces @chainsafe/bls and elliptic) |
+| `@chainsafe/ssz` | SSZ serialization for consensus types |
+| `@chainsafe/enr` | Ethereum Node Record parsing |
+| `@safe-global/protocol-kit` | Safe multisig wallet integration |
+| `ajv` | JSON schema payload validation |
+
+## Dependencies policy
+
+When adding a new dependency:
+- Use the **latest stable exact version** (e.g. `"some-lib": "3.2.1"` not `"^3.2.1"`)
+- Verify compatibility with both Node.js and browser build targets — some packages are Node-only
+- Check for peer dependency conflicts with `ethers ^6`, `@noble/curves`, and `typescript ~5.9`
+- Run `yarn build` and `yarn test` after adding to confirm all three build outputs still work
+
+## Release and Publishing
+
+**Never publish from local.** The release process is:
+
+1. Make changes, open a PR, get it reviewed and merged to `main`
+2. Manually trigger the **"Release PR"** GitHub Actions workflow — this bumps the version via `release-it` and opens a release PR with the `release` label
+3. Review and merge the release PR
+4. Manually trigger the **"Publish Obol-SDK to NPM"** workflow — this publishes the package to npm
+
+Version bumping follows semantic versioning:
+- **Patch**: bug fixes, no API changes
+- **Minor**: new methods, new supported chains, backwards-compatible additions
+- **Major**: breaking changes to the `Client` API, removed methods, type signature changes
+
+## CI/CD
+
+- **PR checks**: lint, prettier, build, unit tests, E2E tests (GitHub Actions)
+- **Node version in CI**: 24.x
+
+## Common Patterns When Modifying Code
+
+### Adding a New Client Method
+
+1. Add types to `src/types.ts`
+2. Add validation schema to `src/schema.ts` with AJV keyword if needed
+3. Implement in `src/index.ts` (or sub-module file)
+4. If it requires signer, check `this.signer` and throw `SignerRequiredError`
+5. If chain-restricted, check `chainId` and throw `UnsupportedChainError`
+6. Validate payload with AJV before API/contract call
+7. Add unit test in `test/<module>/`
+8. Add E2E test in `test/sdk-package/` if it involves real chain interaction
+9. Add or extend the matching example in `obol-sdk-examples/TS-Example/src/<flow>.ts`
+
+### Adding a New Sub-Module
+
+1. Create `src/<module>/<module>.ts` with class extending needed patterns
+2. Create `src/<module>/<module>Helpers.ts` for helper functions
+3. Instantiate in `Client` constructor and expose as `this.<module>`
+4. Pass `signer`, `chainId`, `provider`, and `request` function to constructor
+5. Export types from `src/types.ts`
+6. Add tests in `test/<module>/`
+
+### Adding Support for a New Chain
+
+1. Add chain ID and fork versions to `src/constants.ts` (`FORK_MAPPING`, `CAPELLA_FORK_MAPPING`)
+2. Add contract addresses to the chain config objects
+3. Update `FORK_MAPPING` enum in `src/types.ts`
+4. Add RPC env var to `.env.template`
+5. Update supported chain checks in relevant methods
+
+### Contract Interaction Pattern
+
+```typescript
+// Predict address before deploying (idempotent)
+const predictedAddress = await predictContractAddress(...);
+const isDeployed = await isContractAvailable(predictedAddress, provider);
+if (isDeployed) return predictedAddress; // skip deployment
+// Deploy if not exists
+const tx = await deployContract(...);
+```
+
+## Do Not
+
+- Do not read `src/bytecodes.ts` unless specifically working on contract deployments — it's 200KB of hex bytecodes
+- Do not modify contract ABIs in `src/abi/` unless updating to new contract versions
+- Do not skip AJV validation — all payloads must be validated before API/contract calls
+- Do not use `jest.mock()` — use `jest.unstable_mockModule()` for ESM compatibility
+- Do not hardcode test addresses — use `TEST_ADDRESSES` from `test/fixtures.ts`
+- Do not publish to npm from local — always use the GitHub Actions workflow
+
+## Related products
+
+- **[`ObolNetwork/obol-sdk-examples`](https://github.com/ObolNetwork/obol-sdk-examples)** — canonical consumer examples (TypeScript, JavaScript, Lido script). Adapt from these before writing snippets from scratch.
+- **[Obol API](https://api.obol.tech)** — the hosted service this SDK talks to. `baseUrl` defaults to production. Private source; treat as a black box with EIP-712 Bearer auth.
+- **[launchpad.obol.org](https://launchpad.obol.org)** — hosted UI equivalent for cluster creation + DKG. The SDK is the "code path"; Launchpad is the "UI path".
+- **[`charon` CLI / `obolnetwork/charon` Docker image](https://docs.obol.org/docs/charon/charon-cli-reference)** — command-line equivalent for creation / DKG / lock operations. Often simpler than a Node.js project for one-shot tasks.
+- **`charon-distributed-validator-node`** (CDVN) — stock Docker Compose launcher for running a DV node. Operates clusters this SDK prepares.
+- **`lido-charon-distributed-validator-node`** (LCDVN) — Lido Simple DVT variant. Used with the SDK for Lido operator flows.
+- **`obol-splits`** — reference Solidity contracts (OVM, SplitV2, SplitMain, OWR) the SDK deploys on behalf of users.
+
+## Key docs
+
+- **Lock validation performance / workers**: `PARALLEL_VALIDATION_PLAN.md` (in this repo)
+- SDK TypeDoc reference: https://obolnetwork.github.io/obol-sdk
+- Obol SDK quickstart: https://docs.obol.org/docs/advanced/quickstart-sdk
+- Charon CLI reference: https://docs.obol.org/docs/charon/charon-cli-reference
+- DKG ceremony: https://docs.obol.org/docs/start/dkg
+- Obol Terms of Service: https://obol.org/terms.pdf
+- Canonical agent index: https://obol.org/llms.txt

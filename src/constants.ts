@@ -17,7 +17,14 @@ import {
   MAINNET_WAREHOUSE_BYTECODE,
 } from './bytecodes.js';
 
+/**
+ * @deprecated Conflicts are detected by HTTP status (409) and thrown as
+ * {@link ConflictError}; this message is no longer matched.
+ */
 export const CONFLICT_ERROR_MSG = 'Conflict';
+
+/** Success message the Obol API returns when terms and conditions are accepted. */
+export const TERMS_ACCEPTED_MSG = 'successful authorization';
 
 export const EIP712_DOMAIN_NAME = 'Obol';
 export const EIP712_DOMAIN_VERSION = '1';
@@ -124,6 +131,18 @@ export const DKG_ALGORITHM = 'default';
 
 export const CONFIG_VERSION = 'v1.11.0';
 
+/**
+ * Cluster definition versions the SDK can hash, and so can create with
+ * {@link Client.createClusterDefinition}.
+ */
+export const SUPPORTED_DEFINITION_VERSIONS: readonly string[] = [
+  'v1.6.0',
+  'v1.7.0',
+  'v1.8.0',
+  'v1.10.0',
+  'v1.11.0',
+];
+
 export const SDK_VERSION = pjson.version;
 
 export const DOMAIN_APPLICATION_BUILDER = '00000001';
@@ -141,6 +160,21 @@ export enum DefinitionFlow {
 export const DEFAULT_BASE_URL = 'https://api.obol.tech';
 export const DEFAULT_BASE_VERSION = 'v1';
 export const DEFAULT_CHAIN_ID = 560048;
+
+/**
+ * Chain IDs accepted by the {@link Client} constructor: Mainnet (1), Hoodi
+ * (560048), Gnosis (100) and Sepolia (11155111).
+ *
+ * Mainnet and Hoodi are the recommended networks. Gnosis and Sepolia are
+ * supported for cluster definitions and locks only; splitter and other
+ * contract operations stay limited to the chains that have the contracts.
+ */
+export const SUPPORTED_CHAIN_IDS: readonly number[] = [
+  FORK_MAPPING['0x00000000'],
+  FORK_MAPPING['0x10000910'],
+  FORK_MAPPING['0x00000064'],
+  FORK_MAPPING['0x90000069'],
+];
 
 export const ETHER_TO_GWEI = 10 ** 9;
 
@@ -248,6 +282,32 @@ export const SPLITS_V2_SALT =
 export const PRINCIPAL_THRESHOLD = 16;
 
 export const OBOL_SDK_EMAIL = 'sdk@dvlabs.tech';
+
+/**
+ * OBOL ERC-20 token paid out by the incentives Merkle Distributors, per chain.
+ */
+export const OBOL_TOKEN_ADDRESS: Record<number, string> = {
+  [FORK_MAPPING['0x00000000']]: '0x0B010000b7624eb9B3DfBC279673C76E9D29D5F7', // Mainnet
+  [FORK_MAPPING['0x10000910']]: '0x6407a4f5cfa1ccb0ef9e6cfb9ee12bf9756262c3', // Hoodi
+};
+
+/**
+ * Reference runtime code of `MerkleDistributorWithDeadline` from
+ * ObolNetwork/merkle-distributor (solc 0.8.17, via-IR, 200 runs, london).
+ *
+ * Each incentives round is a separate deployment whose runtime code embeds its
+ * own `token`, `merkleRoot` and `endTime` immutables, and the CBOR metadata
+ * trailer depends on build paths. `codeHash` is the keccak256 of the runtime
+ * code with the `immutableOffsets` (32 bytes each) and the metadata trailer
+ * (all but its 2-byte length suffix) zeroed.
+ */
+export const MERKLE_DISTRIBUTOR_RUNTIME = {
+  codeLength: 2437,
+  metadataLength: 51,
+  immutableOffsets: [155, 656, 715, 893, 952, 1103, 1386, 1496],
+  codeHash:
+    '0x24b74a2b834aa0d14e312af3a4d4be7e62ceb7fc67c822bc3612cff4329d04c8',
+} as const;
 
 export const PROVIDER_MAP: Record<number, string> = {
   1: `${process.env.RPC_MAINNET}`, // Mainnet

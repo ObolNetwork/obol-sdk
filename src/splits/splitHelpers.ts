@@ -8,6 +8,7 @@ import {
   type OVMArgs,
   type ChainConfig,
   type ProviderType,
+  type WriteOptions,
 } from '../types.js';
 import {
   Contract,
@@ -18,8 +19,8 @@ import {
   parseEther,
   ZeroAddress,
   getAddress as toChecksumAddress,
-  type JsonRpcSigner,
   type TransactionReceipt,
+  type TransactionRequest,
 } from 'ethers';
 import { OWRContract, OWRFactoryContract } from '../abi/OWR.js';
 import { OVMFactoryContract, OVMContract } from '../abi/OVM.js';
@@ -29,6 +30,7 @@ import { splitV2FactoryAbi } from '../abi/splitV2FactoryAbi.js';
 import { MultiCall3Contract } from '../abi/Multicall3.js';
 import { isContractAvailable } from '../utils.js';
 import { SignerRequiredError } from '../errors.js';
+import { SentTransactions } from '../sentTransactions.js';
 
 const splitMainContractInterface = new Interface(splitMainEthereumAbi);
 const owrFactoryContractInterface = new Interface(OWRFactoryContract.abi);
@@ -40,12 +42,17 @@ const multicall3ContractInterface = new Interface(MultiCall3Contract.abi);
 const SAFE_EXECUTION_TIMEOUT_MS = 30 * 60_000;
 
 // Finds the OVM factory's CreateObolValidatorManager event in a receipt by
-// event signature. Position-based log indexing breaks when extra events are
-// interleaved, so match by topic instead.
+// emitter and event signature. Position-based log indexing breaks when extra
+// events are interleaved, so match by topic instead, and only accept logs
+// emitted by the configured factory (compared case-insensitively).
 export const extractOvmAddressFromReceipt = (
   receipt: TransactionReceipt,
+  factoryAddress: string,
 ): string => {
+  const factory = factoryAddress.toLowerCase();
   for (const log of receipt?.logs ?? []) {
+    // Only the configured OVM factory's events identify the created OVM.
+    if (log.address?.toLowerCase() !== factory) continue;
     try {
       const parsed = ovmFactoryContractInterface.parseLog({
         topics: [...log.topics],
@@ -96,8 +103,37 @@ export const resolveOvmAddressFromListenerArgs = (
   return null;
 };
 
+// A signer that can submit a transaction and return its hash without waiting
+// for it to be mined, such as ethers' JsonRpcSigner.
+export type UncheckedTransactionSigner = SignerType & {
+  sendUncheckedTransaction: (tx: TransactionRequest) => Promise<string>;
+};
+
+export const canSendUncheckedTransaction = (
+  signer: SignerType,
+): signer is UncheckedTransactionSigner =>
+  typeof (signer as Partial<UncheckedTransactionSigner>)
+    .sendUncheckedTransaction === 'function';
+
+// Read provider for the contract-wallet flows: the caller's provider, else the
+// signer's own. Every signer that reaches these flows has one (JsonRpcSigner
+// always does), so a missing provider is a configuration error.
+const requireReadProvider = (
+  signer: SignerType,
+  provider?: ProviderType | null,
+): ProviderType => {
+  const readProvider = provider ?? signer.provider;
+  if (!readProvider) {
+    throw new Error(
+      'A provider is required: pass one to the Client or use a signer connected to a provider',
+    );
+  }
+  return readProvider;
+};
+
 // True when the signer is a smart-contract wallet (e.g. a Safe) going through
-// a JSON-RPC connection. Local Wallet signers are always EOAs.
+// a wallet connection that submits transactions unchecked. Local Wallet
+// signers are always EOAs.
 export const isContractWalletSigner = async (
   signer: SignerType,
   provider?: ProviderType | null,
@@ -106,7 +142,7 @@ export const isContractWalletSigner = async (
     throw new SignerRequiredError('isContractWalletSigner');
   }
   const readProvider = provider ?? signer.provider;
-  if (!readProvider || !('sendUncheckedTransaction' in signer)) {
+  if (!readProvider || !canSendUncheckedTransaction(signer)) {
     return false;
   }
   return await isContractAvailable(await signer.getAddress(), readProvider);
@@ -153,7 +189,7 @@ const submitViaContractWalletAndResolveOvm = async ({
   timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
   provider: readProvider,
 }: {
-  signer: JsonRpcSigner;
+  signer: UncheckedTransactionSigner;
   to: string;
   data: string;
   factoryAddress: string;
@@ -161,7 +197,7 @@ const submitViaContractWalletAndResolveOvm = async ({
   timeoutMs?: number;
   provider?: ProviderType | null;
 }): Promise<string> => {
-  const provider = readProvider ?? signer.provider;
+  const provider = requireReadProvider(signer, readProvider);
   const safeAddress = await signer.getAddress();
   const factory = new Contract(
     factoryAddress,
@@ -274,18 +310,21 @@ export const submitViaContractWalletAndWait = async ({
   value,
   timeoutMs = SAFE_EXECUTION_TIMEOUT_MS,
   provider: readProvider,
+  onSubmitted,
 }: {
-  signer: JsonRpcSigner;
+  signer: UncheckedTransactionSigner;
   to: string;
   data: string;
   value?: bigint;
   timeoutMs?: number;
   provider?: ProviderType | null;
+  /** Called with the wallet-returned hash once the wallet accepts the transaction. */
+  onSubmitted?: (hash: string) => void;
 }): Promise<string> => {
   if (!signer) {
     throw new SignerRequiredError('submitViaContractWalletAndWait');
   }
-  const provider = readProvider ?? signer.provider;
+  const provider = requireReadProvider(signer, readProvider);
   const safeAddress = await signer.getAddress();
   const filter = {
     address: safeAddress,
@@ -371,6 +410,7 @@ export const submitViaContractWalletAndWait = async ({
       })
       .then(async hash => {
         submittedHash = hash;
+        onSubmitted?.(hash);
         // Backfill logs mined between startBlock and now.
         const past = await provider.getLogs({
           ...filter,
@@ -835,7 +875,7 @@ export const getOWRTranches = async ({
   provider,
 }: {
   owrAddress: ETH_ADDRESS;
-  signer: SignerType;
+  signer?: SignerType;
   provider?: ProviderType | null;
 }): Promise<OWRTranches> => {
   try {
@@ -1005,7 +1045,8 @@ const createSplitV2Params = (
     recipients: addresses,
     allocations,
     totalAllocation,
-    distributionIncentive: distributorFeePercent,
+    // SplitV2 reads distributionIncentive (uint16) at 1e6 = 100%.
+    distributionIncentive: Math.round(distributorFeePercent * 1e4),
   };
 };
 
@@ -1139,7 +1180,7 @@ export const deployOVMContract = async ({
     ];
 
     if (
-      'sendUncheckedTransaction' in signer &&
+      canSendUncheckedTransaction(signer) &&
       (await isContractWalletSigner(signer, provider))
     ) {
       return await submitViaContractWalletAndResolveOvm({
@@ -1159,7 +1200,10 @@ export const deployOVMContract = async ({
       ...createArgs,
     );
     const receipt = (await tx.wait()) as TransactionReceipt;
-    return extractOvmAddressFromReceipt(receipt);
+    return extractOvmAddressFromReceipt(
+      receipt,
+      chainConfig.OVM_FACTORY_CONTRACT.address,
+    );
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM contract: ${error.message ?? 'OVM deployment failed'}`,
@@ -1253,7 +1297,7 @@ export const deployOVMAndSplitV2 = async ({
     });
 
     if (
-      'sendUncheckedTransaction' in signer &&
+      canSendUncheckedTransaction(signer) &&
       (await isContractWalletSigner(signer, provider))
     ) {
       return await submitViaContractWalletAndResolveOvm({
@@ -1277,7 +1321,10 @@ export const deployOVMAndSplitV2 = async ({
 
     // Extract the OVM address from the factory event by signature, robust to
     // interleaved events.
-    return extractOvmAddressFromReceipt(executeMultiCalls);
+    return extractOvmAddressFromReceipt(
+      executeMultiCalls,
+      chainConfig.OVM_FACTORY_CONTRACT.address,
+    );
   } catch (error: any) {
     throw new Error(
       `Failed to deploy OVM and SplitV2: ${error.message ?? 'Deployment failed'}`,
@@ -1327,24 +1374,35 @@ const getChainConfig = (chainId: number): ChainConfig => {
  * Requests withdrawal from an OVM contract
  * @param ovmAddress - The address of the OVM contract
  * @param pubKeys - Array of validator public keys in bytes format
- * @param amounts - Array of withdrawal amounts in wei (uint64)
+ * @param amounts - Array of withdrawal amounts in gwei (uint64)
  * @param withdrawalFees - Total withdrawal fees in wei
+ * @param excessFeeRecipient - Address refunded the unused part of the fees
  * @param signer - The signer to use for the transaction
- * @returns Promise that resolves to the transaction hash
+ * @param provider - Read provider for contract-wallet signers (defaults to the signer's)
+ * @param options - Optional `onSent` callback
+ * @returns Promise that resolves to the transaction hash (for a contract
+ *   wallet such as a Safe, the hash it executed under)
  */
 export const requestWithdrawalFromOVM = async ({
   ovmAddress,
   pubKeys,
   amounts,
   withdrawalFees,
+  excessFeeRecipient,
   signer,
+  provider,
+  options,
 }: {
   ovmAddress: string;
   pubKeys: string[];
   amounts: string[];
   withdrawalFees: string;
+  excessFeeRecipient: string;
   signer: SignerType;
+  provider?: ProviderType | null;
+  options?: WriteOptions;
 }): Promise<{ txHash: string }> => {
+  let sent = new SentTransactions(options);
   try {
     if (pubKeys.length === 0) {
       throw new Error('pubKeys array cannot be empty');
@@ -1355,10 +1413,29 @@ export const requestWithdrawalFromOVM = async ({
     // Calculate maxFeePerWithdrawal as withdrawalFees / pubKeys.length
     const maxFeePerWithdrawal = BigInt(withdrawalFees) / BigInt(pubKeys.length);
 
-    // Use ovmAddress as excessFeeRecipient
-    const excessFeeRecipient = ovmAddress;
-
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
+
+    // A Safe's wallet-returned hash never appears on-chain, so tx.wait()
+    // would hang; wait for the Safe's execution instead.
+    if (await isContractWalletSigner(signer, provider)) {
+      sent = new SentTransactions(options, true);
+      const txHash = await submitViaContractWalletAndWait({
+        signer: signer as UncheckedTransactionSigner,
+        to: ovmAddress,
+        data: ovmContract.interface.encodeFunctionData('withdraw', [
+          pubKeys,
+          bigintAmounts,
+          maxFeePerWithdrawal,
+          excessFeeRecipient,
+        ]),
+        value: BigInt(withdrawalFees),
+        provider,
+        onSubmitted: hash => {
+          sent.sent(hash);
+        },
+      });
+      return { txHash };
+    }
 
     const tx = await ovmContract.withdraw(
       pubKeys,
@@ -1369,13 +1446,15 @@ export const requestWithdrawalFromOVM = async ({
         value: BigInt(withdrawalFees),
       },
     );
+    sent.sent(tx.hash as string);
     const receipt = await tx.wait();
 
     return { txHash: receipt.hash };
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : 'Request withdrawal failed';
-    throw new Error(`Failed to request withdrawal from OVM: ${errorMessage}`);
+    const message = `Failed to request withdrawal from OVM: ${errorMessage}`;
+    throw sent.failure(message, error, new Error(message));
   }
 };
 
@@ -1384,12 +1463,17 @@ export const requestWithdrawalFromOVM = async ({
  * @param ovmAddress - The address of the OVM contract
  * @param deposits - Array of deposit objects with all required parameters
  * @param signer - The signer to use for the transaction
- * @returns Promise that resolves to an array of transaction hashes
+ * @param provider - Read provider for contract-wallet signers (defaults to the signer's)
+ * @param options - Optional `onSent` callback
+ * @returns Promise that resolves to an array of transaction hashes (for a
+ *   contract wallet such as a Safe, the hashes they executed under)
  */
 export const depositOVM = async ({
   ovmAddress,
   deposits,
   signer,
+  provider,
+  options,
 }: {
   ovmAddress: string;
   deposits: Array<{
@@ -1400,14 +1484,40 @@ export const depositOVM = async ({
     amount: string;
   }>;
   signer: SignerType;
+  provider?: ProviderType | null;
+  options?: WriteOptions;
 }): Promise<{ txHashes: string[] }> => {
+  let sent = new SentTransactions(options);
   try {
     const ovmContract = new Contract(ovmAddress, OVMContract.abi, signer);
-    const txHashes: string[] = [];
+    const contractWallet = await isContractWalletSigner(signer, provider);
+    sent = new SentTransactions(options, contractWallet);
 
     // Process each deposit as a separate transaction
     // Multicall3 cannot be used because it doesn't have the DEPOSIT_ROLE
     for (const deposit of deposits) {
+      if (contractWallet) {
+        // Wait for the Safe's execution: its returned hash never appears
+        // on-chain, so tx.wait() would hang.
+        const txHash = await submitViaContractWalletAndWait({
+          signer: signer as UncheckedTransactionSigner,
+          to: ovmAddress,
+          data: ovmContract.interface.encodeFunctionData('deposit', [
+            deposit.pubkey,
+            deposit.withdrawal_credentials,
+            deposit.signature,
+            deposit.deposit_data_root,
+          ]),
+          value: BigInt(deposit.amount),
+          provider,
+          onSubmitted: hash => {
+            sent.sent(hash);
+          },
+        });
+        sent.mined(txHash);
+        continue;
+      }
+
       const tx = await ovmContract.deposit(
         deposit.pubkey,
         deposit.withdrawal_credentials,
@@ -1417,17 +1527,19 @@ export const depositOVM = async ({
           value: BigInt(deposit.amount),
         },
       );
+      sent.sent(tx.hash as string);
 
       const receipt = await tx.wait();
       if (receipt?.hash) {
-        txHashes.push(receipt.hash as string);
+        sent.mined(receipt.hash as string);
       }
     }
 
-    return { txHashes };
+    return { txHashes: sent.hashes };
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : 'Deposit failed';
-    throw new Error(`Failed to deposit to OVM: ${errorMessage}`);
+    const message = `Failed to deposit to OVM: ${errorMessage}`;
+    throw sent.failure(message, error, new Error(message));
   }
 };

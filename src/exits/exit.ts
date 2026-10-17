@@ -1,6 +1,6 @@
 import { ENR } from '@chainsafe/enr';
-import * as elliptic from 'elliptic';
-import { blsVerify, blsAggregateSignatures } from '../blsUtils.js';
+import { blsVerify, blsThresholdAggregateSignatures } from '../blsUtils.js';
+import { secp256k1VerifyDigest } from '../secp256k1Utils.js';
 import {
   ByteVectorType,
   ContainerType,
@@ -231,10 +231,10 @@ export class Exit {
    * @param exitsPayload - The exit validation payload containing partial exits and operator signature
    *
    * @returns Promise resolving to true if the payload signature is valid, false otherwise
+   *   (including high-s signatures and public keys that are not valid secp256k1 points)
    *
    * @throws {Error} When the ENR string is invalid or cannot be decoded
-   * @throws {Error} When the signature format is invalid (must be 130 hex characters)
-   * @throws {Error} When signature verification encounters an error
+   * @throws {Error} When the signature is not 64 or 65 bytes of hex (`r || s`, optionally followed by the recovery id)
    *
    * @example
    * ```typescript
@@ -253,11 +253,10 @@ export class Exit {
     exitsPayload: ExitValidationPayload,
   ): Promise<boolean> {
     const partialExitsDtoHashRoot = Exit.computeExitPayloadRoot(exitsPayload);
-    const ec = new elliptic.ec('secp256k1');
 
-    let pubKeyHex;
+    let publicKey: Uint8Array;
     try {
-      pubKeyHex = ENR.decodeTxt(enrString).publicKey.toString();
+      publicKey = ENR.decodeTxt(enrString).publicKey;
     } catch (e: any) {
       throw new Error(
         `Invalid ENR string: ${enrString}. Error: ${e.message ?? String(e)}`,
@@ -268,29 +267,21 @@ export class Exit {
       ? exitsPayload.signature.substring(2)
       : exitsPayload.signature;
 
-    if (sigHex.length !== 130) {
+    if (sigHex.length !== 128 && sigHex.length !== 130) {
       throw new Error(
-        `Invalid signature length. Expected 130 hex chars (r + s), got ${sigHex.length}`,
+        `Invalid signature length. Expected 128 or 130 hex chars (r + s, optionally + v), got ${sigHex.length}`,
       );
     }
 
-    const r = sigHex.slice(0, 64);
-    const s = sigHex.slice(64, 128);
-
-    const enrSignature = { r, s };
-
-    try {
-      return ec
-        .keyFromPublic(pubKeyHex, 'hex')
-        .verify(
-          partialExitsDtoHashRoot,
-          enrSignature as elliptic.ec.SignatureOptions,
-        );
-    } catch (e: any) {
-      throw new Error(
-        `Signature verification failed: ${e.message ?? String(e)}`,
-      );
+    if (!/^[0-9a-fA-F]*$/.test(sigHex)) {
+      throw new Error('Invalid signature. Expected a hex string');
     }
+
+    return secp256k1VerifyDigest(
+      publicKey,
+      fromHexString(partialExitsDtoHashRoot),
+      exitsPayload.signature,
+    );
   }
 
   private async validateOperatorAndPayload(
@@ -561,8 +552,12 @@ export class Exit {
   /**
    * Recombines exit blobs into a single exit blob.
    *
-   * This method aggregates partial exit signatures from multiple operators into a single exit blob.
-   * It ensures that the signatures are properly ordered and aggregated according to the operator indices.
+   * This method threshold-aggregates partial exit signatures from multiple operators into a
+   * single exit blob, matching Charon's `tbls.ThresholdAggregate`: each partial signature is
+   * weighted by its Lagrange coefficient at x=0, where the share index of the signature keyed
+   * by operator index `i` (0-based) is `i + 1`. Every provided partial is used, so the result
+   * is only the validator's signature when at least `threshold` valid partials are present;
+   * verify it against the validator public key before broadcasting.
    *
    * @param exitBlob - The existing exit blob data containing partial exit signatures
    *
@@ -570,7 +565,8 @@ export class Exit {
    *
    * @throws {Error} When no valid signatures are found for aggregation
    * @throws {Error} When signature length is invalid
-   * @throws {Error} When signature parsing fails
+   * @throws {Error} When signature parsing fails or a signature is not a valid G2 point
+   * @throws {Error} When a share index key is not a non-negative integer or is duplicated
    *
    * @example
    * ```typescript
@@ -610,34 +606,46 @@ export class Exit {
         );
       }
 
+      // Keys are 0-based operator indices; the share index is sigIdx+1
+      // (matching Go's sigIdx+1). Reject anything that is not a canonical
+      // non-negative integer so two keys cannot map to the same share.
+      if (!/^(0|[1-9]\d*)$/.test(sigIdxStr)) {
+        throw new Error(`Invalid share index: ${sigIdxStr}`);
+      }
+      const shareIdx = Number(sigIdxStr) + 1;
+      if (!Number.isSafeInteger(shareIdx)) {
+        throw new Error(`Invalid share index: ${sigIdxStr}`);
+      }
+      if (signaturesByIndex.has(shareIdx)) {
+        throw new Error(
+          `Duplicate partial signature for share index ${shareIdx}`,
+        );
+      }
+
+      let sigBytes: Uint8Array;
       try {
-        const sigBytes = fromHexString(cleanSigStr);
-        // Convert string index to number and add 1 (matching Go's sigIdx+1)
-        const sigIdx = parseInt(sigIdxStr, 10);
-        signaturesByIndex.set(sigIdx + 1, sigBytes);
+        sigBytes = fromHexString(cleanSigStr);
       } catch (err) {
         throw new Error(`Invalid partial signature: ${String(err)}`);
       }
+      signaturesByIndex.set(shareIdx, sigBytes);
     }
 
     if (signaturesByIndex.size === 0) {
       throw new Error('No valid signatures found for aggregation');
     }
 
-    // Sort by index and extract signatures in correct order
-    const sortedIndices = Array.from(signaturesByIndex.keys()).sort(
-      (a, b) => a - b,
-    );
-    const rawSignatures = sortedIndices.map(idx => {
-      const signature = signaturesByIndex.get(idx);
-      if (signature === undefined) {
-        throw new Error(`Missing signature for index ${idx}`);
-      }
-      return signature;
-    });
-
-    // Aggregate signatures (equivalent to tbls.ThresholdAggregate in Go)
-    const fullSig = blsAggregateSignatures(rawSignatures);
+    // Threshold aggregation (equivalent to tbls.ThresholdAggregate in Go):
+    // each partial signature is weighted by its Lagrange coefficient at x=0
+    // for the set of share indices present, using every provided partial.
+    let fullSig: Uint8Array;
+    try {
+      fullSig = blsThresholdAggregateSignatures(signaturesByIndex);
+    } catch (err) {
+      throw new Error(
+        `Failed to threshold-aggregate partial signatures: ${String(err)}`,
+      );
+    }
 
     return {
       public_key: exitBlob.public_key,

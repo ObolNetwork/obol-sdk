@@ -8,12 +8,19 @@ import {
   eoaDepositPayloadSchema,
 } from '../schema.js';
 import { CHAIN_CONFIGURATION } from '../constants.js';
+import { assertSignerChain } from '../utils.js';
+import {
+  getWithdrawalRequestFee,
+  resolveWithdrawalFee,
+} from '../withdrawalFee.js';
+import { verifyDepositsBeforeSend } from '../deposits/depositGuard.js';
 import { SignerRequiredError, UnsupportedChainError } from '../errors.js';
 import {
   type ProviderType,
   type SignerType,
   type EOAWithdrawalPayload,
   type EOADepositPayload,
+  type WriteOptions,
 } from '../types.js';
 
 /**
@@ -36,7 +43,6 @@ import {
  * const { txHash } = await client.eoa.requestWithdrawal({
  *   pubkey: "0xValidatorPubkey...",
  *   allocation: 32,
- *   requiredFee: "1",
  * });
  *
  * // Batch deposit
@@ -65,23 +71,36 @@ export class EOA {
    *
    * Sends an on-chain transaction. Requires both a signer and a provider.
    *
+   * The fee is checked against the current fee read from the EIP-7002
+   * withdrawal request contract. If `requiredFee` is omitted, exactly the
+   * current fee is sent: the EIP-7002 contract keeps any excess, and if the
+   * fee rises before the transaction is mined it reverts (costing only gas).
+   * If `requiredFee` is given, it must cover the current fee and be at most
+   * max(10x the current fee, 1 gwei); otherwise the call throws.
+   *
    * @param payload - Withdrawal data including validator `pubkey`, `allocation`
-   *   (in ETH), and `requiredFee` (in wei).
+   *   (in ETH), and optional `requiredFee` (in wei).
+   * @param options - Optional `onSent` callback, called with each transaction
+   *   hash as soon as it is broadcast.
    * @returns The transaction hash, or `null` if no transaction was needed.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain has no EOA withdrawal contract.
+   * @throws If `requiredFee` is below the current fee or far above it.
+   * @throws {TransactionSubmissionError} If the call fails after a transaction
+   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
    * @example
    * ```typescript
    * const { txHash } = await client.eoa.requestWithdrawal({
    *   pubkey: "0xValidatorPubkey...",
    *   allocation: 32,
-   *   requiredFee: "1",
    * });
    * ```
    */
   async requestWithdrawal(
     payload: EOAWithdrawalPayload,
+    options?: WriteOptions,
   ): Promise<{ txHash: string | null }> {
     if (!this.signer) {
       throw new SignerRequiredError('requestWithdrawal');
@@ -101,17 +120,31 @@ export class EOA {
       eoaWithdrawalPayloadSchema,
     );
 
+    await assertSignerChain(this.signer, this.chainId, 'requestWithdrawal');
+
     const withdrawalAddress = await this.signer.getAddress();
+
+    const currentFee = await getWithdrawalRequestFee(
+      this.provider,
+      chainConfig.EOA_WITHDRAWAL_CONTRACT.address,
+    );
+    // No headroom: the EIP-7002 contract does not refund excess fees.
+    const requiredFee = resolveWithdrawalFee({
+      currentFee,
+      requestedFee: validatedPayload.requiredFee,
+      defaultMultiplier: BigInt(1),
+    });
 
     return await submitEOAWithdrawalRequest({
       pubkey: validatedPayload.pubkey,
       allocation: validatedPayload.allocation,
       withdrawalAddress,
       withdrawalContractAddress: chainConfig.EOA_WITHDRAWAL_CONTRACT.address,
-      requiredFee: validatedPayload.requiredFee,
+      requiredFee: requiredFee.toString(),
       chainId: this.chainId,
       signer: this.signer,
       provider: this.provider,
+      options,
     });
   }
 
@@ -122,10 +155,28 @@ export class EOA {
    * Due to EVM gas limits, it is recommended to deposit at most 500
    * validators per call.
    *
+   * Before sending, each deposit is checked: `amount` (wei) is a whole number
+   * of gwei between 1 ETH and 32 ETH (2048 ETH for 0x02 credentials),
+   * `deposit_data_root` matches the deposit fields, the BLS signature is valid
+   * for this chain, and, if `expectedWithdrawalAddress` is given, the
+   * withdrawal credentials point at it. For top-ups to validators that
+   * already exist on the beacon chain, pass `kind: 'topUp'`: the signature is
+   * not checked, the withdrawal credentials may be all zero instead of the
+   * expected ones, and up to 2048 ETH is allowed per deposit. Without it, a
+   * deposit with an all-zero signature is refused (`DEPOSIT_LOOKS_LIKE_TOP_UP`).
+   * The output of {@link Client.getDepositData} can be passed as `deposits`.
+   *
    * @param payload - Deposit data including an array of validator deposit objects.
+   * @param options - Optional `onSent` callback, called with each transaction
+   *   hash as soon as it is broadcast.
    * @returns An array of transaction hashes, one per batch.
    * @throws {SignerRequiredError} If no signer was provided.
+   * @throws {ChainMismatchError} If the signer is connected to a different chain.
    * @throws {UnsupportedChainError} If the chain has no batch deposit contract.
+   * @throws {PayloadValidationError} If the payload is invalid.
+   * @throws If any deposit fails the checks above.
+   * @throws {TransactionSubmissionError} If the call fails after a transaction
+   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
    *
    * @example
    * ```typescript
@@ -137,10 +188,14 @@ export class EOA {
    *     signature: "0x...",
    *     amount: "32000000000000000000",
    *   }],
+   *   expectedWithdrawalAddress: "0xWithdrawalAddress...",
    * });
    * ```
    */
-  async deposit(payload: EOADepositPayload): Promise<{ txHashes: string[] }> {
+  async deposit(
+    payload: EOADepositPayload,
+    options?: WriteOptions,
+  ): Promise<{ txHashes: string[] }> {
     if (!this.signer) {
       throw new SignerRequiredError('deposit');
     }
@@ -155,11 +210,20 @@ export class EOA {
       eoaDepositPayloadSchema,
     );
 
+    await assertSignerChain(this.signer, this.chainId, 'deposit');
+
+    await verifyDepositsBeforeSend(validatedPayload.deposits, {
+      chainId: this.chainId,
+      expectedWithdrawalAddress: validatedPayload.expectedWithdrawalAddress,
+      kind: validatedPayload.kind,
+    });
+
     return await submitEOABatchDeposit({
       deposits: validatedPayload.deposits,
       batchDepositContractAddress: chainConfig.BATCH_DEPOSIT_CONTRACT.address,
       signer: this.signer,
       provider: this.provider,
+      options,
     });
   }
 }

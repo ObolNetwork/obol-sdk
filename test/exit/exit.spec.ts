@@ -28,22 +28,16 @@ const mockAggregateSignatures = jest.fn();
 await jest.unstable_mockModule('../../src/blsUtils.js', () => ({
   __esModule: true,
   blsVerify: mockBlsVerify,
-  blsAggregateSignatures: mockAggregateSignatures,
+  blsThresholdAggregateSignatures: mockAggregateSignatures,
 }));
 
-// Mock elliptic with a proper EC constructor
+// Mock secp256k1 verification (real signatures are covered in
+// exitPayloadSignature.spec.ts)
 const mockEcVerify = jest.fn();
-const mockKeyFromPublic = jest.fn(() => ({
-  verify: mockEcVerify,
-}));
 // @ts-expect-error - ESM mocking requires top-level await
-await jest.unstable_mockModule('elliptic', () => ({
+await jest.unstable_mockModule('../../src/secp256k1Utils.js', () => ({
   __esModule: true,
-  ec: jest.fn(function (this: any, curve: string) {
-    this.curve = curve;
-    this.keyFromPublic = mockKeyFromPublic;
-    return this;
-  }),
+  secp256k1VerifyDigest: mockEcVerify,
 }));
 
 const ethUtils = await import('../../src/exits/ethUtils.js');
@@ -123,7 +117,6 @@ describe('exit', () => {
     // Set up mocks
     mockBlsVerify.mockReturnValue(true);
     mockEcVerify.mockReturnValue(true);
-    mockKeyFromPublic.mockReturnValue({ verify: mockEcVerify });
 
     mockedEthUtils.getCapellaFork.mockResolvedValue(
       MAINNET_CAPELLA_FORK_VERSION,
@@ -613,12 +606,13 @@ describe('exit', () => {
       expect(mockAggregateSignatures).toHaveBeenCalledTimes(1);
 
       const calls = mockAggregateSignatures.mock.calls;
-      const rawSignatures = calls[0][0];
+      const signaturesByIndex = calls[0][0];
 
-      // Check if signatures were passed in sorted order of operator index
-      expect(rawSignatures[0]).toEqual(fromHexString('a0'.repeat(96)));
-      expect(rawSignatures[1]).toEqual(fromHexString('a1'.repeat(96)));
-      expect(rawSignatures[2]).toEqual(fromHexString('a2'.repeat(96)));
+      // Each signature is keyed by its 1-based share index (operator index + 1)
+      expect([...signaturesByIndex.keys()].sort()).toEqual([1, 2, 3]);
+      expect(signaturesByIndex.get(1)).toEqual(fromHexString('a0'.repeat(96)));
+      expect(signaturesByIndex.get(2)).toEqual(fromHexString('a1'.repeat(96)));
+      expect(signaturesByIndex.get(3)).toEqual(fromHexString('a2'.repeat(96)));
 
       expect(result).toEqual({
         public_key: mockExistingBlob.public_key,
@@ -662,6 +656,40 @@ describe('exit', () => {
       };
       await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
         'Invalid signature length',
+      );
+    });
+
+    it.each(['-1', '01', '1.5', 'abc', ''])(
+      'should reject share index key %p',
+      async key => {
+        const mockExistingBlob: ExistingExitValidationBlobData = {
+          public_key: '0x' + '1234'.repeat(24),
+          epoch: '100',
+          validator_index: '200',
+          shares_exit_data: [
+            { [key]: { partial_exit_signature: '0x' + 'a0'.repeat(96) } },
+          ],
+        };
+        await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+          'Invalid share index',
+        );
+      },
+    );
+
+    it('should surface aggregation errors', async () => {
+      mockAggregateSignatures.mockImplementationOnce(() => {
+        throw new Error('bad point');
+      });
+      const mockExistingBlob: ExistingExitValidationBlobData = {
+        public_key: '0x' + '1234'.repeat(24),
+        epoch: '100',
+        validator_index: '200',
+        shares_exit_data: [
+          { 0: { partial_exit_signature: '0x' + 'a0'.repeat(96) } },
+        ],
+      };
+      await expect(exit.recombineExitBlobs(mockExistingBlob)).rejects.toThrow(
+        'Failed to threshold-aggregate partial signatures',
       );
     });
 
