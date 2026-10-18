@@ -79,6 +79,7 @@
     "@metamask/eth-sig-util": "8.2.0",
     "@safe-global/protocol-kit": "7.1.0",
     "@safe-global/types-kit": "3.1.0",
+    "@sinclair/typebox": "0.34.52",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "ajv-keywords": "5.1.0",
@@ -93,9 +94,9 @@
     "@types/node": "24.12.2",
     "@types/semver": "7.7.1",
     "@types/uuid": "9.0.8",
-    "dotenv": "17.4.2",
     "@typescript-eslint/eslint-plugin": "6.21.0",
     "@typescript-eslint/parser": "6.21.0",
+    "dotenv": "17.4.2",
     "eslint": "8.57.1",
     "eslint-config-standard-with-typescript": "43.0.1",
     "eslint-plugin-import": "2.32.0",
@@ -113,7 +114,8 @@
     "tsup": "8.5.1",
     "typedoc": "0.28.19",
     "typedoc-plugin-markdown": "4.11.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "viem": "2.57.3"
   },
   "engines": {
     "node": ">= 20"
@@ -188,5 +190,8 @@
     ],
     "maxWorkers": "50%"
   },
-  "packageManager": "yarn@1.22.22"
+  "packageManager": "yarn@1.22.22",
+  "peerDependencies": {
+    "viem": "^2.21.0"
+  }
 }

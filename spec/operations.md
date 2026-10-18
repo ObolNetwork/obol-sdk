@@ -331,8 +331,9 @@ Output: `Prepared<DepositPreview>[]`:
 - via ovm: one per deposit (through Multicall3 the OVM would see Multicall3 as the sender, and anyone can call
   Multicall3, so it must not hold `DEPOSIT_ROLE`), `OVM.deposit(pubkey, withdrawal_credentials,
   signature, deposit_data_root)`, `value = amount`. (2.15 `depositOVM`)
-- via batch: one per 500 deposits, `batchDeposit((pubKey, withdrawalCredentials, signature, depositDataRoot,
-  amount)[])`, `value` = sum of amounts. (2.15 `submitEOABatchDeposit`)
+- via batch: one per 500 deposits, `batchDeposit((pubKey, withdrawalCredentials, signature, amount)[])` (the
+  contract computes each deposit data root itself; check 1 has already verified ours), `value` = sum of amounts.
+  (2.15 `submitEOABatchDeposit`)
 
 `DepositPreview = { pubkeys: Pubkey[], total: bigint, kind }`.
 
