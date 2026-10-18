@@ -1,6 +1,6 @@
 # Errors and findings
 
-Every error is an `ObolError` with a stable `code`, a `message` (not normative), an optional `hint` and `cause`, and
+Every error is an `ObolError` with a stable `code` (API errors are `ObolApiError`, a subclass with the HTTP fields), a `message` (not normative), an optional `hint` and `cause`, and
 the extra fields listed. Findings (`Prepared.checks`, or `issues` in a result) have a `code` and a `severity`.
 "2.15" names the 2.15 code or class that had the same meaning; codes are reused where the meaning is the same.
 
@@ -35,6 +35,7 @@ fails a local check raises the check's own code.
 | `API_RATE_LIMIT` | 429. | back off and retry | `RateLimitError` |
 | `API_TIMEOUT` | No response within `timeoutMs`. The API may have processed a write. | read the resource before retrying a write | `RequestTimeoutError` |
 | `API_ERROR` | Any other non-2xx status, or an unparsable body. | retry later | `ObolApiError` |
+| `API_RESPONSE_MISMATCH` | A 2xx answer is not for what was asked (a definition or lock whose hash differs from the requested one). | report it; do not use the answer | new |
 
 ### Cluster
 
@@ -68,8 +69,9 @@ fails a local check raises the check's own code.
 | `OVM_ROLE_MISSING` | The sender is neither the owner nor holds the role the call needs; it would revert. Fields: `from`, `role`. | `prepareDeposit` (ovm), `prepareWithdraw`, `prepareConsolidate`, role-gated writes | send from the owner or a role holder, or `prepareGrantRoles` first | new |
 | `NOT_OVM_OWNER` | An owner-only call from another account. Fields: `from`, `owner`. | `prepareGrantRoles`, `prepareRevokeRoles`, `prepareTransfer`, `prepareCompleteOwnershipHandover`, `prepareSweep` with `beneficiary` | send from the owner | new |
 | `OWNERSHIP_HANDOVER_NOT_PENDING` | No unexpired handover request from `pendingOwner`. | `prepareCompleteOwnershipHandover` | have the new owner call `requestOwnershipHandover` (valid 48 h) | new |
+| `FULL_EXIT_NOT_ACKNOWLEDGED` | A withdrawal request with amount 0 (a full exit) without `acknowledgeFullExit: true`. | `prepareWithdraw`, `prepareEoaWithdraw` | confirm the validator should exit, then pass it; or pass the partial amount | new |
 | `CONSOLIDATION_NOT_ACKNOWLEDGED` | `acknowledgeStakeMovesToTarget: true` missing. | `prepareConsolidate` | confirm the targets are yours, then pass it | 2.16 `CONSOLIDATION_NOT_ACKNOWLEDGED` |
-| `FEE_OUT_OF_RANGE` | A given request fee is below the current fee × n or above max(10 × fee, 1 gwei) × n. Fields: `fee`, `minimum`, `maximum`. | `prepareWithdraw`, `prepareConsolidate`, `eoaWithdraw` | omit the fee to use the default, or pass one in range | plain `Error` ("Withdrawal fee … below / far above …") |
+| `FEE_OUT_OF_RANGE` | A given request fee is below the current fee × n or above max(10 × fee, 1 gwei) × n. Fields: `fee`, `minimum`, `maximum`. | `prepareWithdraw`, `prepareConsolidate`, `prepareEoaWithdraw` | omit the fee to use the default, or pass one in range | plain `Error` ("Withdrawal fee … below / far above …") |
 | `FEE_READ_FAILED` | The EIP-7002 / EIP-7251 predeploy fee could not be read. | same | retry; check the chain is post-Pectra | plain `Error` |
 
 ### Splits and setup
@@ -77,7 +79,7 @@ fails a local check raises the check's own code.
 | Code | Meaning | Thrown by | Caller should | 2.16 |
 |---|---|---|---|---|
 | `SPLIT_ALREADY_EXISTS` | The split is already deployed at the predicted address. Fields: `address`. | `splits.prepareCreateSplit` | use `address`; nothing to send | new |
-| `SPLIT_NOT_FOUND` | The address is not a SplitV2 split. | `splits.getSplit` | check the address | new |
+| `SPLIT_NOT_FOUND` | The address is not a SplitV2 split (no code, an EIP-7702 delegation, a failed call or a zero `splitHash`). | `splits.getSplit` | check the address | new |
 | `SPLIT_PARAMS_MISMATCH` | Split params do not hash to the split's on-chain `splitHash`, or reward and principal params differ for one address. Fields: `address`. | `getSplit`, `prepareDistribution` | pass the exact params the split was created with | `InvalidArgumentError` |
 | `SPLIT_PARAMS_REQUIRED` | An OVM recipient is a SplitV2 split but no params were given; its funds would stay undistributed. Fields: `address`, `kind`. | `prepareDistribution` | pass its params as `rewardSplit` / `principalSplit` | `InvalidArgumentError` |
 | `SPLIT_NOT_OVM_RECIPIENT` | A given split address is not the OVM's recipient of that kind. | `prepareDistribution` | omit the address or fix it | `InvalidArgumentError` |
@@ -117,7 +119,7 @@ All exit errors were plain `Error`s in 2.15.
 | `TX_REJECTED` | The wallet refused or failed before returning a hash; nothing was sent. | `send` | retry if the user wants | new |
 | `TX_REVERTED` | Mined with `status = 0`; nothing moved. Fields: `hash`, `receipt`. | `wait` | retry is safe; read the revert reason | `TX_FAILED_AFTER_SEND` with `pendingStatus: "reverted"` |
 | `TX_REPLACED` | A different transaction was mined with the nonce (viem `cancelled` / `replaced`). Fields: `hash`, `replacement`. | `wait` | retry is safe for this call | new |
-| `TX_UNCONFIRMED` | No receipt within the timeout; it may still be mined. Fields: `hash`. | `wait` | watch the hash before retrying, so nothing is sent twice | `TX_FAILED_AFTER_SEND` with `pendingStatus: "unconfirmed"` |
+| `TX_UNCONFIRMED` | No receipt within the timeout (for a contract wallet: no Safe execution log); it may still be mined or executed. Fields: `hash`, `contractWallet`. | `wait` | watch the hash before retrying, so nothing is sent twice | `TX_FAILED_AFTER_SEND` with `pendingStatus: "unconfirmed"` |
 
 ## Findings
 
@@ -128,16 +130,21 @@ All exit errors were plain `Error`s in 2.15.
 | `DEPOSIT_EXISTENCE_UNCHECKED` [info] | No deposit status source; `kind` was trusted. | `prepareDeposit` | enable the API or pass `beaconUrl` to have it checked |
 | `DEPOSIT_IS_TOP_UP` [warning] | `kind: "deposit"` for an existing validator: it tops up, and its credentials are ignored. | `prepareDeposit` | confirm this is intended |
 | `DEPOSIT_ALREADY_QUEUED` [info] | Deposits with the same credentials are already queued for the pubkey. | `prepareDeposit` | make sure this is not a repeat |
+| `TOP_UP_ABOVE_EFFECTIVE_CAP` [warning] | Deposit to a `0x01` (or `0x00`) validator that takes its balance (with queued deposits) above 32 ETH; the excess is swept back to the withdrawal address, not staked. | `prepareDeposit` | deposit at most up to 32 ETH, or consolidate to `0x02` first |
 | `TOP_UP_EXITED_VALIDATOR` [warning] | Top-up to an exited validator: the ETH is swept back to its withdrawal address, not staked. | `prepareDeposit` | do not top up |
 | `OVM_STAKE_NOT_TRACKED` [warning] | Deposit to OVM credentials through the batch contract: `amountOfPrincipalStake` is not raised, so the principal would later be paid as rewards. | `prepareDeposit` | deposit via the OVM, or have the owner call `setAmountOfPrincipalStake` |
 | `PROVENANCE_UNKNOWN` [warning] | OVM provenance could not be checked (outside `prepareDeposit`). | OVM writes, `prepareDistribution` | retry `ovm.verify` before relying on the contract |
-| `WITHDRAW_FULL_EXIT` [warning] | A request with amount 0: a full exit. | `prepareWithdraw`, `eoaWithdraw` | confirm the validator should exit |
-| `WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING` [warning] | Partial withdrawal for a validator without `0x02` credentials: the beacon chain ignores it and keeps the fee. | `prepareWithdraw`, `eoaWithdraw` | consolidate to `0x02` first, or exit |
+| `WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING` [warning] | Partial withdrawal for a validator without `0x02` credentials: the beacon chain ignores it and keeps the fee. | `prepareWithdraw`, `prepareEoaWithdraw` | consolidate to `0x02` first, or exit |
 | `WITHDRAW_CREDENTIALS_NOT_OVM` [warning] | The validator's credentials do not point at this OVM: the request is ignored, fee kept. | `prepareWithdraw` | use the OVM the validator points at |
-| `WITHDRAW_CREDENTIALS_NOT_SENDER` [warning] | Direct EIP-7002 request from an address that is not the validator's withdrawal address. | `eoaWithdraw` | send from the withdrawal address |
+| `WITHDRAW_CREDENTIALS_NOT_SENDER` [warning] | Direct EIP-7002 request from an address that is not the validator's withdrawal address. | `prepareEoaWithdraw` | send from the withdrawal address |
 | `WITHDRAW_VALIDATOR_NOT_ACTIVE` [warning] | The validator is not active (queued or exited). | `prepareWithdraw` | wait for activation, or drop the request |
 | `CONSOLIDATION_TARGET_NOT_COMPOUNDING` [warning] | Target not active or without `0x02` credentials. | `prepareConsolidate` | switch the target to `0x02` first |
 | `CONSOLIDATION_CREDENTIALS_DIFFER` [warning] | Source and target have different withdrawal credentials. | `prepareConsolidate` | check the pubkeys |
+| `PRINCIPAL_STAKE_MISMATCH` [warning] | `amountOfPrincipalStake` differs by more than 1 ETH from the principal the beacon chain credited to this OVM's validators (API `principalOnBeaconChain`). Distributions may pay rewards out as principal, or the reverse. Fields: `amountOfPrincipalStake`, `principalOnBeaconChain`. | `ovm.getState` | review deposits made via `OVM.deposit`; the owner can correct it with `prepareSetAmountOfPrincipalStake` |
+| `ROLES_SURVIVE_TRANSFER` [warning] | A transfer or ownership handover keeps the current non-owner role holders. Fields: `holders`. | `prepareTransfer`, `prepareCompleteOwnershipHandover` | revoke roles that should not survive, before or after |
+| `ROLE_HOLDERS_UNCHECKED` [info] | Role holders could not be read, so `ROLES_SURVIVE_TRANSFER` was not checked. | same | check `ovm.getRoleHolders` later |
+| `ROLE_GRANT_CONSOLIDATION` [warning] | Granting `CONSOLIDATION`: the holder can move the whole stake into a validator it controls. | `prepareGrantRoles` | grant only to an address you would trust with the stake |
+| `ROLE_GRANT_DEPOSIT_TO_PRINCIPAL` [warning] | Granting `DEPOSIT` to the principal recipient: it can raise `amountOfPrincipalStake` and take rewards as principal. | `prepareGrantRoles` | grant `DEPOSIT` to someone else |
 | `RECIPIENT_WITHDRAW_PAUSED` [info] | A recipient paused Warehouse withdrawals and the sender cannot bypass it; its withdrawal is left out. | `prepareDistribution` | the recipient withdraws itself |
 | `SPLIT_REUSED` [info] | A split already exists at the predicted address and is reused, not created. | `prepareOvmWithSplits` | none |
 | `RECIPIENT_NOT_CONTRACT` [info] | An OVM recipient has no code (an EOA, or a split not created yet). | `prepareCreateOvm` | if it should be a split, create it first or use `prepareOvmWithSplits` |

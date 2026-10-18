@@ -12,9 +12,10 @@ Contents: [Shared types](#shared-types) · [Client](#client) · [cluster](#clust
 
 ```
 Prepared<P> = {
-  request: { to: Address, data: Hex, value: bigint, chainId: uint }
-  checks:  Finding[]          # every warning / info from the checks; errors throw instead
-  preview: P?                 # what the transaction will do
+  request:     { to: Address, data: Hex, value: bigint, chainId: uint }
+  checks:      Finding[]      # every warning / info from the checks; errors throw instead
+  preview:     P?             # what the transaction will do
+  blockNumber: uint?          # the block the checks and preview read; absent for operations that read no chain state
 }
 Finding = { code: string, severity: "warning" | "info", message: string, hint: string? }
 Source  = "api" | "chain"
@@ -23,8 +24,9 @@ Deposit = { pubkey: Pubkey, withdrawalCredentials: Hex32, signature: Hex96, depo
 ```
 
 - `request.chainId` is the client chain. `request.value` is `0` unless stated.
-- A `Prepared` is a snapshot: it was checked at the block the operation read (`preview.blockNumber` where given).
-  Nothing stops a caller sending it later; see [Open questions](#open-questions) (Q6).
+- A `Prepared` is a snapshot checked at `blockNumber`. `send` does not refuse an old one: the writes are safe when
+  stale (a distribution pays what is there at execution; fees have a maximum), and the UI re-prepares on confirm. A
+  caller that shows a preview for long should prepare again before sending.
 
 ### Checks every operation runs
 
@@ -181,8 +183,8 @@ Tag: `api`. `get(configHash)` → definition (`GET /v1/definition/:configHash`).
 goes in the path (`PAYLOAD_INVALID`). Not found: `API_NOT_FOUND`. The returned file is not verified; use
 `verifyDefinition` / `verifyLock` (or `deposits.fromLock`, which verifies by default).
 
-> Open: should `getLock` check that the returned lock's `config_hash` / `lock_hash` equal the requested one (cheap,
-> catches a wrong API answer)? 2.15 does not.
+`get` and `getLock` check that the returned file's `config_hash` / `lock_hash` (case-insensitive) equals the
+requested one, else `API_RESPONSE_MISMATCH`. Cheap, and it catches a wrong API answer. (new; 2.15 did not)
 
 ### cluster.watch
 
@@ -201,8 +203,9 @@ Rules: poll `GET /v1/definition/:configHash` until every operator has `config_si
 iteration without an error. API errors other than 404 are thrown from the iterator. See
 [`lifecycles.md`](lifecycles.md#cluster).
 
-> Open: polling interval and backoff (design says client-side polling heuristics belong in the API; an API stream
-> would replace this).
+Polling: every `intervalMs` (default 12,000, minimum 2,000); after an `API_RATE_LIMIT`, `API_TIMEOUT` or 5xx it
+doubles the wait up to 60,000 and returns to `intervalMs` after a success, and only throws after 5 failures in a row.
+An API stream would replace this later without changing the events.
 
 ## deposits
 
@@ -262,7 +265,8 @@ Tag: `api+chain`. Inputs: `pubkeys: Pubkey[]`, `{ beaconUrl: string? }`. Output 
 
 ```
 { pubkey, status: "new" | "queued" | "active" | "exited", source: Source,
-  validatorIndex: uint?, withdrawalCredentials: Hex32?, balance: bigint?,
+  beaconStatus: string?,      # the raw beacon name: "pending_deposit" (EIP-6110 queue only), "pending_initialized", "active_ongoing", ...
+  validatorIndex: uint?, withdrawalCredentials: Hex32?, balance: bigint?, effectiveBalance: bigint?,
   pendingDeposits: { amount: bigint, withdrawalCredentials: Hex32 }[] }
 ```
 
@@ -277,8 +281,10 @@ the queue to the registry is not missed (2.16 `existingDeposits.ts`). Without AP
 A malformed or incomplete answer (missing pubkey, duplicate result, bad credentials) is `STATUS_UNAVAILABLE`, never a
 guessed `new`. (2.16)
 
-> Open: whether `queued` should include registry `pending_*` (it does here) or be only the EIP-6110 queue, as the
-> design's wording suggests.
+`queued` is deliberately broad; `beaconStatus` tells the cases apart. They behave differently for a second deposit:
+a registry `pending_initialized` / `pending_queued` validator can still take the rest of a chunked activation deposit,
+while an app may refuse further deposits to a `pending_deposit` pubkey until the queue processes it (the launchpad
+does). `beaconStatus` is `"pending_deposit"` for a pubkey only in the queue and absent for `new`.
 
 ### deposits.prepareDeposit
 
@@ -309,7 +315,13 @@ Checks:
    - `kind: "deposit"` and the validator exists → Finding `DEPOSIT_IS_TOP_UP` (warning: credentials are ignored, the
      validator keeps its own) (2.16 message);
    - same-credential deposits already queued → Finding `DEPOSIT_ALREADY_QUEUED` (info) (2.16);
-   - `kind: "topUp"` to an `exited` validator → Finding `TOP_UP_EXITED_VALIDATOR` (warning) (new).
+   - `kind: "topUp"` to an `exited` validator → Finding `TOP_UP_EXITED_VALIDATOR` (warning) (new);
+   - the validator has `0x01` (or `0x00`) credentials and `balance` + queued amounts + this deposit > 32 ETH →
+     Finding `TOP_UP_ABOVE_EFFECTIVE_CAP` (warning: the excess is swept back to the withdrawal address by the next
+     partial-withdrawal sweep, not staked) (new).
+
+   `DEPOSIT_ALREADY_QUEUED` is info because a chunked activation deposit is legitimate. An app may treat it as a stop
+   for `beaconStatus = "pending_deposit"`.
 6. The target contract has code: the OVM (2.15 implicit), or the chain's batch deposit contract
    (`0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756` mainnet, `0x4c9506eE2fCd962f03022D9d8ebf6f7828abEfaf` Hoodi), else
    `CONTRACT_NOT_AVAILABLE`.
@@ -323,6 +335,10 @@ Output: `Prepared<DepositPreview>[]`:
   amount)[])`, `value` = sum of amounts. (2.15 `submitEOABatchDeposit`)
 
 `DepositPreview = { pubkeys: Pubkey[], total: bigint, kind }`.
+
+A Safe that holds `DEPOSIT_ROLE` can still deposit to several validators with one signature: it batches the
+`Prepared[]` requests with Safe `MultiSend` (a `delegatecall`, so the Safe stays `msg.sender` and its role applies).
+Planning top-ups (how much each validator needs to reach the next whole-ETH effective balance) is left to the app.
 
 ## ovm
 
@@ -360,13 +376,36 @@ Tag: `api+chain` (money values always `chain`). Input: `ovm`. Output:
 ```
 { address, blockNumber: uint, owner, principalRecipient, rewardRecipient,
   amountOfPrincipalStake: bigint, fundsPendingWithdrawal: bigint, principalThreshold: bigint (wei),
-  version: string?, balance: bigint, pullBalances: { principalRecipient: bigint, rewardRecipient: bigint }, source }
+  version: string?, balance: bigint, pullBalances: { principalRecipient: bigint, rewardRecipient: bigint },
+  distributable: bigint, principalPayout: bigint, rewardPayout: bigint,   # what distributeFunds() would pay now
+  principalOnBeaconChain: bigint?,                                         # API only, see below
+  findings: Finding[], source }
 ```
 
 Chain read: one Multicall3 `aggregate3` of `owner`, `principalRecipient`, `rewardRecipient`, `amountOfPrincipalStake`,
 `fundsPendingWithdrawal`, `principalThreshold` (gwei → wei), `version` (may fail: `null`), `getEthBalance(ovm)`,
 `getBlockNumber`; then `getPullBalance` of both recipients at that block. Any required getter failing →
 `OVM_READ_FAILED`. Does not check provenance; call `verify`. (2.16)
+
+`distributable`, `principalPayout` and `rewardPayout` follow `ObolValidatorManager._distributeFunds` (vectors
+`distribution.json` `routing`): `distributable = balance − fundsPendingWithdrawal`; if `distributable ≥
+principalThreshold` and `amountOfPrincipalStake > 0`, principal gets `min(distributable, amountOfPrincipalStake)` and
+rewards the rest; otherwise rewards get everything. One call gives a page its "to distribute" figure and routing.
+
+**`amountOfPrincipalStake` is a routing counter, not a measure of stake.** Anyone holding `DEPOSIT_ROLE` raises it
+with each `OVM.deposit`, including deposits to validators with other credentials, and repeating a deposit with the
+same ETH (exit, redeposit) raises it again; at distribution the excess comes out of rewards. Never use it for
+incentives, TVS or "staked" figures. With the API, `principalOnBeaconChain` is the ETH the beacon chain credited to
+validators with this OVM's credentials minus principal already paid out (indexed by the API); when it differs from
+`amountOfPrincipalStake` by more than 1 ETH, `findings` has `PRINCIPAL_STAKE_MISMATCH` (warning) with both values.
+Without the API both are absent.
+
+### ovm.getValidators
+
+Tag: `api`. Input: `ovm`. Output: `{ validators: { pubkey, lockHash: Hash32?, status, beaconStatus, balance: bigint?,
+withdrawalCredentials: Hex32 }[], blockNumber }`: every validator, in any cluster, whose credentials (or queued
+deposit's credentials) point at the OVM. Source: the new `GET /v1/ovm/:network/:address` (`validators`). Statuses as
+`deposits.status`.
 
 ### ovm.getRoleHolders
 
@@ -385,11 +424,13 @@ Roles shown come from `rolesOf`, never from the events alone.
 ### ovm.prepareWithdraw
 
 Tag: `chain`. Inputs: `{ ovm: Address, requests: { pubkey: Pubkey, amount: bigint }[], fee: bigint?,
-excessFeeRecipient: Address?, from: Address? }`. `amount = 0` is a full exit (EIP-7002).
+excessFeeRecipient: Address?, from: Address?, acknowledgeFullExit: true? }`. `amount = 0` is a full exit (EIP-7002).
 
 Checks:
 
 1. At least one request; each `amount` whole gwei and ≤ 2^64−1 gwei (`PAYLOAD_INVALID`). (2.15 schema; units new)
+   Any `amount = 0` requires `acknowledgeFullExit: true`, else `FULL_EXIT_NOT_ACKNOWLEDGED`: an exit is
+   irreversible and takes the validator offline, and 0 is too easy to pass by accident. (new)
 2. `excessFeeRecipient` (default: `from`, else the wallet account) is non-zero. (2.15)
 3. `ovm.verify`: `notObol` → `OVM_NOT_OBOL`; `unknown` → Finding `PROVENANCE_UNKNOWN` (warning). (new)
 4. Sender is owner or holds `WITHDRAWAL` (`OVM_ROLE_MISSING`). (new)
@@ -399,11 +440,15 @@ Checks:
 6. With `deposits.status` available, per pubkey (Findings, warning): credentials do not point at the OVM →
    `WITHDRAW_CREDENTIALS_NOT_OVM` (the request is ignored, the fee is kept); `amount > 0` and credentials are not
    `0x02` → `WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING`; validator not `active` → `WITHDRAW_VALIDATOR_NOT_ACTIVE`. (new)
-7. Any `amount = 0` → Finding `WITHDRAW_FULL_EXIT` (warning). (new)
-
-Output: `Prepared<{ requests, totalFee: bigint, maxFeePerRequest: bigint }>` with
+Output: `Prepared<{ requests: { pubkey, amount, routedAs, principalPart, rewardPart }[], totalFee: bigint,
+maxFeePerRequest: bigint }>` with
 `OVM.withdraw(pubKeys, amounts_gwei, maxFeePerWithdrawal = floor(totalFee / n), excessFeeRecipient)`,
 `value = totalFee`. The contract requires `value ≥ maxFeePerWithdrawal × n` and `currentFee ≤ maxFeePerWithdrawal`.
+
+`routedAs` (`"principal" | "reward" | "mixed"`) says how a distribution right after this request's ETH arrives would
+route it, if nothing else arrives: the routing above applied to `distributable + amount` (for a full exit, `amount` is
+the validator's balance from `deposits.status`, else `routedAs` is absent). With the default 16 ETH threshold, a
+withdrawal of 16 ETH or more is paid as principal while `amountOfPrincipalStake` lasts.
 
 ### ovm.prepareConsolidate
 
@@ -435,6 +480,9 @@ Tag: `chain`. Inputs: `{ ovm, mode: "push" | "pull" (default "push") }`. Calls `
 Preview: the routing of `distribution.json` `routing` (`distributable`, `principalPayout`, `rewardPayout`) with the
 recipients. Use `splits.prepareDistribution` to also distribute the splits behind the recipients.
 
+`ovm.previewDistribute(input)` (`chain`) runs the same reads and returns the preview without throwing for
+`NOTHING_TO_DISTRIBUTE` (zeros instead), so a page can show the figures with the button disabled.
+
 ### ovm role and ownership writes
 
 Tag: `chain`. Thin wrappers; each returns `Prepared<{ function, args }>` calling the OVM function of the same name.
@@ -456,6 +504,18 @@ Shared checks: `ovm` provenance as `prepareWithdraw` 3; the sender's authority a
 | `prepareSweep` | `sweep(beneficiary, amount)` | anyone; owner when `beneficiary` is set | `amount` ≤ principal recipient's pull balance (0 = all); `beneficiary` default zero (= principal recipient) |
 | `prepareWithdrawPullBalance` | `withdrawPullBalance(account)` | anyone | `account` non-zero; pull balance 0 → `NOTHING_TO_DISTRIBUTE` |
 | `prepareRecoverFunds` | `recoverFunds(token, recipient)` | owner or `RECOVER_FUNDS` | both non-zero |
+
+Previews and findings on these writes:
+
+- `prepareSetAmountOfPrincipalStake`: preview `{ current, next, delta }` (wei, `delta` signed): raising it by 32 ETH
+  means reward recipients get 32 ETH less at the next distribution.
+- `prepareTransfer` and `prepareCompleteOwnershipHandover`: Finding `ROLES_SURVIVE_TRANSFER` (warning) listing the
+  current non-owner role holders (`ovm.getRoleHolders`), since a transfer does not revoke roles. Absent when there are
+  none; if the holders cannot be read, Finding `ROLE_HOLDERS_UNCHECKED` (info).
+- `prepareGrantRoles`: Finding `ROLE_GRANT_CONSOLIDATION` (warning) when `roles` includes `CONSOLIDATION` (the holder
+  can consolidate every validator into one it controls, moving the whole stake); Finding
+  `ROLE_GRANT_DEPOSIT_TO_PRINCIPAL` (warning) when `roles` includes `DEPOSIT` and `user` is the principal recipient
+  (it can raise `amountOfPrincipalStake` and take rewards as principal; see `getState`).
 
 `transferOwnership` and `renounceOwnership` are not wrapped: `transfer` and the two-step handover cover the use, and
 renouncing leaves an OVM without an owner. (2.16 did not wrap them either.)
@@ -502,13 +562,23 @@ factory.
 
 ### splits.getSplit
 
-Tag: `chain`. Inputs: `{ address, params: SplitParams? }`. Output: `{ address, splitHash: Hash32, owner, paused,
-balance: bigint, warehouseBalance: bigint, params?: SplitParams }`. With `params`, `keccak256(abi.encode((address[],
-uint256[], uint256, uint16)))` of them must equal `splitHash`, else `SPLIT_PARAMS_MISMATCH`. Not a split (call fails or
-`splitHash` is zero) → `SPLIT_NOT_FOUND`. (2.16)
+Tag: `api+chain` (state always `chain`). Inputs: `{ address, params: SplitParams? }`. Output: `{ address, splitHash:
+Hash32, owner, paused, balance: bigint, warehouseBalance: bigint, params: SplitParams?, paramsSource: Source |
+"input" | null }`.
 
-> Open: recipients cannot be read from chain (only the hash). Source for `params` without input: the 0xSplits API,
-> creation logs, or a new Obol API field.
+1. `getCode(address)` is non-empty and not an EIP-7702 delegation (`0xef0100…`), else `SPLIT_NOT_FOUND`. This comes
+   first: a precompile (e.g. `0x…02`, SHA-256) has no code but answers every call with 32 non-zero bytes, so
+   "`splitHash()` returned non-zero" alone accepts it. (new; 2.16 and the 0xSplits SDK lack it)
+2. `splitHash()`, `owner()`, `paused()`, balance and Warehouse balance in one `aggregate3`. A failed call or a zero
+   `splitHash` → `SPLIT_NOT_FOUND`. (2.16)
+3. Params: the input `params`; else the API (`GET /v1/ovm/:network/:address` lists the params of the OVM's split
+   recipients, and a split endpoint may follow); else the chain: the latest `SplitUpdated(Split)` log of the split, or,
+   if it never updated, the factory's `SplitCreated(address indexed split, Split splitParams, …)` log with `topic1 =
+   address` (chunked scan from the factory deployment block, as `ovm.verify` 3). Whatever the source,
+   `keccak256(abi.encode((address[], uint256[], uint256, uint16)))` of the params must equal `splitHash`: for input
+   params a mismatch is `SPLIT_PARAMS_MISMATCH`; an API or log answer that does not match is discarded and the next
+   source tried. No matching params → `params: null`, `paramsSource: null` (not an error; `prepareDistribution` then
+   throws `SPLIT_PARAMS_REQUIRED` if it needs them).
 
 ### splits.prepareDistribution
 
@@ -517,6 +587,7 @@ Tag: `chain`. Inputs:
 ```
 { ovm: Address?, rewardSplit: SplitParams & { address: Address? }?, principalSplit: (same)?,
   recipients: Address[]?,          # whose balances to withdraw; default every split recipient except the RAF
+  minWithdraw: bigint? (1),        # skip a leg (OVM distribution, split distribution, recipient withdrawal) below this
   distributor: Address?, from: Address? }
 ```
 
@@ -531,25 +602,35 @@ All reads in one `aggregate3` at one block. Vectors `distribution.json` (`routin
    `SPLIT_NOT_OVM_RECIPIENT`; no address and no `ovm` → `PAYLOAD_INVALID`.
 4. Reward and principal split at the same address: params must hash the same (else `SPLIT_PARAMS_MISMATCH`); it is
    distributed once with both payouts.
-5. An OVM recipient given without params that is a SplitV2 split (`splitHash` non-zero) → `SPLIT_PARAMS_REQUIRED`
-   (its funds would stay undistributed).
+5. An OVM recipient that is a SplitV2 split (as `getSplit` 1–2) and has no params from the input → params from
+   `getSplit` 3; none → `SPLIT_PARAMS_REQUIRED` (its funds would stay undistributed).
 6. Each split's on-chain `splitHash` equals the params hash, else `SPLIT_PARAMS_MISMATCH`.
 7. A split with something to distribute that is `paused` and not owned by the sender → `SPLIT_PAUSED`.
 8. Splits with a non-zero `distributionIncentive` need `distributor` (default the sender), else `PAYLOAD_INVALID`.
 9. No calls result → `NOTHING_TO_DISTRIBUTE`. (2.16 threw this at send)
 
+`splits.previewDistribution(input)` runs the same reads and returns the preview without throwing for
+`NOTHING_TO_DISTRIBUTE`, for a page that shows greyed-out legs with the button disabled.
+
 Calls (`aggregate3` on Multicall3, in this order):
 
-1. `distributeFunds()` on the OVM if `distributable > 0` (`allowFailure: false`).
-2. Per split with `distributable > 0`: `distribute(params, NATIVE_TOKEN, distributor)` (`allowFailure: false`), where
-   `distributable = max(splitBalance + incoming − 1, 0) + max(warehouseBalance − 1, 0)`.
-3. Per withdrawn recipient: Warehouse `withdraw(owner, NATIVE_TOKEN)` if its balance after the distributions is > 1
-   and withdrawals are not paused for it (or it is the transaction origin); SplitMain v1 `withdraw(account, 1, [])` if
-   its ETH balance is > 1. Both `allowFailure: true`: a zero balance or a paused owner reverts that call alone.
+1. `distributeFunds()` on the OVM if `distributable ≥ minWithdraw` (`allowFailure: false`).
+2. Per split with `distributable ≥ minWithdraw`: `distribute(params, NATIVE_TOKEN, distributor)` (`allowFailure:
+   false`), where `distributable = max(splitBalance + incoming − 1, 0) + max(warehouseBalance − 1, 0)`.
+3. Per withdrawn recipient whose amount (balance after the distributions, minus the 1 wei left) is `≥ minWithdraw`:
+   Warehouse `withdraw(owner, NATIVE_TOKEN)` if withdrawals are not paused for it (or it is the transaction origin);
+   SplitMain v1 `withdraw(account, 1, [])`. Both `allowFailure: true`: a zero balance or a paused owner reverts that
+   call alone.
+
+With the default `minWithdraw = 1` wei every non-empty leg is included (2.16 behaviour). Legs below it are still
+listed in the preview with a `skipReason`.
 
 Preview: `{ blockNumber, ovm?: { address, distributable, principalPayout, rewardPayout, principalRecipient,
-rewardRecipient }, splits: { address, kind, distributable, distributorReward }[], recipients: { address, fromOvm,
-fromRewardSplit, fromPrincipalSplit, warehouseBalance, splitMainBalance, withdraw: bool, toWallet }[] }`. Each split
+rewardRecipient, skipReason? }, splits: { address, kind, distributable, distributorReward, skipReason? }[],
+recipients: { address, fromOvm, fromRewardSplit, fromPrincipalSplit, warehouseBalance, splitMainBalance, withdraw:
+bool, skipReason?, toWallet }[] }`. `skipReason` is set exactly when a leg is left out: `"nothing"` (0 after the 1 wei
+kept), `"dust"` (positive but below `minWithdraw`) or `"paused"` (recipients only: Warehouse withdrawals paused and
+the sender cannot bypass it). Each split
 recipient gets `floor((distributable − distributorReward) × allocation / totalAllocation)`, with `distributorReward =
 floor(distributable × distributionIncentive / 1e6)`; withdrawals leave 1 wei.
 
@@ -692,8 +773,10 @@ dropped). (2.15 `validateExitBlobs`)
    root in domain `DOMAIN_VOLUNTARY_EXIT 0x04000000` with the Capella fork and genesis validators root
    (`EXIT_PARTIAL_SIGNATURE_INVALID`).
 
-> Open: 2.15 fetches the genesis validators root from a beacon URL. It is a per-chain constant; v3 could take it from
-> a table and make this `pure`, as tagged here.
+The genesis validators root comes from a per-chain table (mainnet
+`0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95`, Hoodi
+`0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f`), so this is `pure`; `genesisValidatorsRoot`
+overrides it. 2.15 fetched it from a beacon URL.
 
 ### exits.aggregate
 
@@ -735,7 +818,8 @@ version: 1 }` with the domain without `chainId` and posts `{ address, version, t
 
 ### send
 
-Tag: wallet. Input: `Prepared`. Output: `{ hash: Hash32, wait(options?: { onReplaced?, timeoutMs?, confirmations? }) }`.
+Tag: wallet. Input: `Prepared`. Output: `{ hash: Hash32, contractWallet: bool, wait(options?: { onReplaced?,
+timeoutMs?, confirmations? }) }`.
 
 1. `prepared.request.chainId` equals the client chain and the wallet chain, else `CHAIN_MISMATCH`.
 2. `request` fields are well-formed (`to` an address, `data` hex, `value` ≥ 0), else `PREPARED_INVALID`.
@@ -750,51 +834,64 @@ Tag: wallet. Input: `Prepared`. Output: `{ hash: Hash32, wait(options?: { onRepl
   through `onReplaced`;
 - no receipt within `timeoutMs` → `TX_UNCONFIRMED` (it may still be mined).
 
-A contract-wallet "hash" (a Safe's `safeTxHash`) never appears on-chain; the Safe connector handles proposal and
-execution (design: no Safe-specific code). See [`lifecycles.md`](lifecycles.md#transaction).
+**Contract wallets.** A Safe connected over WalletConnect returns its `safeTxHash` from `sendTransaction`; that hash
+never appears on-chain, and waiting for a receipt would time out silently. `send` therefore checks the wallet account
+with `getCode`: non-empty code that is not an EIP-7702 delegation means a contract wallet, and the result has
+`contractWallet: true`. For a contract wallet, `wait` does not look for a receipt of `hash`: it watches the account for
+the Safe `ExecutionSuccess(bytes32 txHash, uint256 payment)` / `ExecutionFailure(bytes32 txHash, uint256 payment)` log
+with `txHash = hash`, from the block `send` returned at, and resolves with the receipt of the transaction that emitted
+it (`ExecutionFailure` → `TX_REVERTED`; nothing within `timeoutMs`, default 30 minutes for contract wallets →
+`TX_UNCONFIRMED` with `contractWallet: true`). A contract wallet that is not a Safe never emits these, so it ends in
+`TX_UNCONFIRMED`; its app tracks execution itself. This is chain-only (no Safe Transaction Service) and is the only
+Safe-specific code. (2.15 waited for `ExecutionSuccess` the same way)
+
+`waitForContractWalletExecution({ publicClient, account, safeTxHash, fromBlock, timeoutMs })` (`chain`) exposes the
+same rule for apps that send through their own wallet layer (wagmi) and only need the waiting part.
+
+See [`lifecycles.md`](lifecycles.md#transaction).
 
 ## Not placed in the module table
 
 2.15 features the design's module table does not list. Specified here so their checks are not lost.
 
-### eoaWithdraw (2.15 `eoa.requestWithdrawal`)
+### withdrawals.prepareEoaWithdraw (2.15 `eoa.requestWithdrawal`)
 
 Tag: `chain`. A withdrawal request sent by the validator's withdrawal address directly to the EIP-7002 predeploy.
-Inputs: `{ pubkey, amount: bigint (wei, whole gwei; 0 = full exit), fee: bigint? }`.
+Inputs: `{ pubkey, amount: bigint (wei, whole gwei; 0 = full exit), fee: bigint?, acknowledgeFullExit: true? }`.
 
 1. Fee as `ovm.prepareWithdraw` 5 with default multiplier **1**: the predeploy keeps any excess. (2.15)
 2. With status: credentials must point at the sender (`0x01`/`0x02` + sender), else Finding
    `WITHDRAW_CREDENTIALS_NOT_SENDER` (warning; the request is ignored and the fee kept). (new)
-3. Full exit / partial rules as `prepareWithdraw` 6–7.
+3. Full exit (`acknowledgeFullExit`) and partial rules as `prepareWithdraw` 1 and 6.
 
 Output: `Prepared` to `0x00000961Ef480Eb55e80D19ad83579A64c007002`, `data = pubkey ‖ uint64_be(amount_gwei)`,
 `value = fee`.
 
-### owr.getTranches (2.15 `getOWRTranches`)
+### legacy.getOwrTranches (2.15 `getOWRTranches`)
 
 Tag: `chain`. Reads an existing OptimisticWithdrawalRecipient's tranches. Kept as a read (design: reads of existing
 legacy contracts stay).
 
-> Open: module for these two (`ovm`? `deposits`? a small `legacy` module).
+Placed in two small modules: `withdrawals` (direct EIP-7002 requests from a withdrawal address) and `legacy` (reads
+of OWR and SplitMain v1 contracts, no creation).
 
 ## Open questions
 
-Collected from the sections above, plus the ones that came up writing the spec.
+Resolved after the launchpad review (2026-10-18); kept here with the answer so the reasoning is not lost.
 
-1. **cluster.getLock**: check the returned hashes equal the requested one?
-2. **cluster.watch**: polling interval and backoff, or an API stream.
-3. **deposits.status**: does `queued` include registry `pending_initialized` / `pending_queued`?
-4. **splits.getSplit**: where recipients come from when no params are given.
-5. **setup presets**: Lido CSM addresses and roles per chain.
-6. **Prepared staleness**: a `Prepared` reflects one block. Should it carry `blockNumber` everywhere and should `send`
-   refuse one older than N blocks for money-moving writes (distribution amounts, fees)?
-7. **exits.verifyPartialExit**: genesis validators root from a constant table (pure) instead of a beacon URL.
-8. **Full exits**: `amount = 0` in `prepareWithdraw` / `eoaWithdraw` is a full exit. Warning only (as here), or an
-   explicit opt-in like `acknowledgeStakeMovesToTarget`?
-9. **prepareCreateSplit on an existing split**: throw `SPLIT_ALREADY_EXISTS` (as here) or return a `Prepared`-less
-   result (`{ address, exists: true }`)?
-10. **Unplaced 2.15 features**: module for direct EIP-7002 withdrawals and OWR reads.
-11. **Error class names**: the design has `ValidationError` for inputs and a `Validation` family under
-    `ObolApiError`. This spec uses codes `PAYLOAD_INVALID` and `API_VALIDATION`; class names to be settled.
-12. **Address strictness**: v3 rejects mixed-case addresses with a bad EIP-55 checksum (viem `isAddress`); 2.15
-    accepted any case.
+1. **cluster.getLock**: yes, check the returned hashes (`API_RESPONSE_MISMATCH`).
+2. **cluster.watch**: client polling with backoff as specified; an API stream later.
+3. **deposits.status**: `queued` stays broad; `beaconStatus` carries the raw beacon name.
+4. **splits.getSplit params**: input, then the API, then `SplitUpdated` / `SplitCreated` logs, always checked
+   against `splitHash`.
+5. **setup presets, Lido CSM**: still open: addresses and roles per chain to be confirmed with the Lido integration.
+6. **Prepared staleness**: `blockNumber` on every `Prepared` that reads state; `send` does not refuse.
+7. **exits genesis validators root**: per-chain table; the operation is `pure`.
+8. **Full exits**: explicit `acknowledgeFullExit: true` (`FULL_EXIT_NOT_ACKNOWLEDGED`).
+9. **prepareCreateSplit on an existing split**: throws `SPLIT_ALREADY_EXISTS` with the address.
+10. **Unplaced 2.15 features**: `withdrawals` and `legacy` modules.
+11. **Error class names**: two classes. `ObolError` (`code`, `message`, `hint?`, `cause?`, plus the fields each code
+    lists) and `ObolApiError extends ObolError` (adds `status`, `endpoint`, `method`, `body`). Callers switch on
+    `code`; there is no class per code, which also maps directly to a Go error type with a code.
+12. **Address strictness**: all-lowercase, all-uppercase or valid EIP-55 accepted; mixed case with a bad checksum
+    rejected; outputs checksummed.

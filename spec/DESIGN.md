@@ -1,6 +1,6 @@
 # obol-sdk v3 design
 
-Status: draft for review. Branch `feat/sdk-v3`, based on the trimmed 2.15 (PR #244).
+Status: reviewed by the launchpad side (2026-10-18), implementation started. Branch `feat/sdk-v3`, based on v2.15.0.
 
 ## Goals
 
@@ -11,7 +11,7 @@ Status: draft for review. Branch `feat/sdk-v3`, based on the trimmed 2.15 (PR #2
   be switched off.
 - **Prepare, then send.** The SDK builds and checks transactions; the caller's wallet layer (wagmi, a Safe, a script)
   sends them. A small send helper exists for scripts.
-- **viem-native.** viem `Chain`, `PublicClient`, `WalletClient`, ABIs and units. ethers only through a thin adapter.
+- **viem-native.** viem `Chain`, `PublicClient`, `WalletClient`, ABIs and units. No ethers.
 - **Spec-backed.** Operations, checks, error codes and lifecycles are written down in `spec/` with JSON test vectors,
   so a second client (Go) can be written against the same contract. Cluster files follow
   [distributed-validator-specs](https://github.com/ObolNetwork/distributed-validator-specs) and the SDK runs its
@@ -62,7 +62,7 @@ type Finding = { code: string; severity: 'warning' | 'info'; message: string; hi
 - `prepareX` throws a typed error for anything that would lose funds or certainly revert (bad deposit signature,
   wrong credentials, fee out of range, unknown OVM provenance where it matters). Warnings come back in `checks`.
 - Callers send `request` themselves (`walletClient.sendTransaction(prepared.request)`, wagmi `useSendTransaction`,
-  a Safe app). The SDK has no Safe-specific code: a Safe connector handles proposal and execution.
+  a Safe app).
 - Send helper for scripts and simple apps:
 
 ```ts
@@ -72,6 +72,11 @@ const receipt = await wait({ onReplaced })              // viem waitForTransacti
 
   `send` re-checks the chain and returns as soon as the wallet returns a hash, so the caller always has it before
   waiting. Errors from `wait` carry the hash.
+- **Safe.** A Safe over WalletConnect returns a `safeTxHash` that never appears on-chain. `send` detects a
+  contract-wallet account (code at the address) and `wait` then follows the Safe's `ExecutionSuccess` /
+  `ExecutionFailure` log for that hash, chain-only, as 2.15 did. That is the only Safe-specific code; apps that send
+  through wagmi themselves can call `waitForContractWalletExecution` with the same rule. A Safe with `DEPOSIT_ROLE`
+  batches several OVM deposits with `MultiSend` (delegatecall keeps the Safe as `msg.sender`).
 
 ## Events
 
@@ -85,8 +90,8 @@ for await (const event of obol.cluster.watch(configHash, { signal })) {
 
 - Transaction lifecycle uses viem's own (`wait({ onReplaced })`).
 - Deposit lifecycle is a status, not a stream: `obol.deposits.status(pubkeys)` →
-  `new | queued | active | exited` per pubkey with credentials and amounts (API `/state`, including the EIP-6110
-  queue; chain fallback via a beacon URL if given).
+  `new | queued | active | exited` per pubkey with the raw `beaconStatus`, credentials and amounts (API `/state`,
+  including the EIP-6110 queue; chain fallback via a beacon URL if given).
 - Rationale: async iterables + abort map directly onto Go channels + `context.Context`.
 
 ## Units and types
@@ -99,17 +104,13 @@ for await (const event of obol.cluster.watch(configHash, { signal })) {
   deterministically (first recipient after sorting by address).
 - Addresses `Address`, hex `Hex` (viem types). Hashes as `Hex`.
 - **Schemas: TypeBox.** One definition gives the TypeScript type and a JSON Schema; the JSON Schemas are published in
-  `spec/schemas/` for other clients. (New dependency; to be confirmed.)
+  `spec/schemas/` for other clients.
 
 ## Errors
 
-- `ObolError` base: `code` (stable string), `message`, `hint?`, `cause?`. Families:
-  - `ObolApiError` (`status`, `endpoint`, `body`) with `NotFound`, `Validation`, `Unauthorized`, `Conflict`,
-    `RateLimit`, `Timeout`;
-  - `ValidationError` for inputs (`issues`: path + message);
-  - check failures with their own codes (`CHAIN_MISMATCH`, `DEPOSIT_INVALID`, `DEPOSIT_LOOKS_LIKE_TOP_UP`,
-    `NOT_AN_OPERATOR`, `DEFINITION_INVALID`, `PROVENANCE_UNKNOWN`, `FEE_OUT_OF_RANGE`, ...);
-  - `ApiDisabledError`.
+- Two classes: `ObolError` (`code` (stable string), `message`, `hint?`, `cause?`, plus the fields each code lists)
+  and `ObolApiError extends ObolError` (`status`, `endpoint`, `method`, `body`; codes `API_*`). Callers switch on
+  `code`. Input failures are `PAYLOAD_INVALID` with `issues` (path + message).
 - Every code is listed in `spec/errors.md` with when it is thrown and what to do.
 
 ## Modules
@@ -118,12 +119,14 @@ for await (const event of obol.cluster.watch(configHash, { signal })) {
 |---|---|---|
 | `cluster` | Definitions and locks | `prepareDefinition` (build + hash, sign via walletClient) / `create`, `accept`, `get`, `getLock`, `watch`; pure `verifyDefinition`, `verifyLock`, `computeConfigHash`, `computeLockHash` |
 | `deposits` | Deposit data and status | `fromLock(lock, { amount })`, `prepareDeposit` (OVM: one transaction per deposit, so it returns `Prepared[]`; batch deposit contract: one per 500; `kind: 'deposit' \| 'topUp'`), `status(pubkeys)`; pure `verifyDepositData`. Depositing to OVM credentials through the batch contract warns `OVM_STAKE_NOT_TRACKED` (the OVM's `amountOfPrincipalStake` is not raised, so principal would later be paid out as rewards) |
-| `ovm` | ObolValidatorManager | reads `verify` (provenance: obol / notObol / unknown + source), `getState`, `getRoleHolders` (`api+chain`); `prepareWithdraw`, `prepareConsolidate` (explicit opt-in), `prepareDistribute`, role and ownership writes; pure `expectedWithdrawalCredentials`, `OVM_ROLES` |
-| `splits` | 0xSplits v2 PullSplits | `predictSplit`, `prepareCreateSplit`, `getSplit`, `prepareDistribution` (OVM + splits + warehouse withdrawals, with a per-recipient preview) |
+| `ovm` | ObolValidatorManager | reads `verify` (provenance: obol / notObol / unknown + source), `getState` (with distributable and routing), `getRoleHolders` (`api+chain`), `getValidators` (`api`); `prepareWithdraw` (full exits opt-in), `prepareConsolidate` (explicit opt-in), `prepareDistribute` / `previewDistribute`, role and ownership writes with previews and findings; pure `expectedWithdrawalCredentials`, `OVM_ROLES` |
+| `splits` | 0xSplits v2 PullSplits | `predictSplit`, `prepareCreateSplit`, `getSplit` (params from input, API or logs, checked against `splitHash`), `prepareDistribution` / `previewDistribution` (OVM + splits + warehouse withdrawals, per-recipient preview, `minWithdraw` and skip reasons) |
 | `setup` | Compositions | `prepareOvmWithSplits` (one Multicall3 tx: reward split, optional principal split, OVM; idempotent); presets (solo, Lido CSM, rewards split, total split) built on the individual builders |
 | `incentives` | Obol incentives | `get(address)`, `prepareClaim` (proof vs on-chain root, deadline, contract code check) |
 | `exits` | Exit messages | `verifyPartialExit`, `aggregate`; pure BLS helpers |
 | `terms` | Terms and conditions | `hasAccepted`, `accept` |
+| `withdrawals` | Direct EIP-7002 requests | `prepareEoaWithdraw` (from the validator's withdrawal address) |
+| `legacy` | Existing OWR / SplitMain v1 | reads only (`getOwrTranches`) |
 
 ### Setup flows
 
@@ -145,7 +148,10 @@ Endpoints v3 relies on (existing unless marked):
 
 - definitions / locks / terms / incentives (existing);
 - `GET /v1/state/:lockHash` including queued deposits (`pending_deposit`, obol-api PR `fix/state-pending-deposits`);
-- **new:** `GET /v1/ovm/:network/:address`: provenance (factory creation), current role holders, cached state;
+- **new:** `GET /v1/ovm/:network/:address`: provenance (factory creation), current role holders, cached state, the
+  split params of its recipients (from `SplitCreated` / `SplitUpdated`), the validators whose credentials point at
+  it (any cluster, with status), and `principalOnBeaconChain` (ETH the beacon chain credited to those validators minus
+  principal paid out), to reconcile against `amountOfPrincipalStake`;
 - **new:** deposit status by pubkey with credentials (registry + queue), for `deposits.status` and deposit checks;
 - Etherscan proxies (`/v1/eth/contract-creation`, `/v1/eth/logs`) as interim sources until the above exist.
 
@@ -174,9 +180,8 @@ spec/
 ## Packaging
 
 - One package, ESM + CJS, with correct `.d.ts` for both. Tree-shakeable modules.
-- Peer dependency: `viem@^2`. Bundled: `@noble/curves`, `@chainsafe/ssz`. No ethers in the main entry.
-- `@obolnetwork/obol-sdk/ethers`: adapter from an ethers v6 `Signer` / `Provider` to viem clients (thin; may be
-  dropped if nobody needs it).
+- Peer dependency: `viem@^2`. Bundled: `@noble/curves`, `@chainsafe/ssz`. No ethers (the launchpad uses wagmi / viem;
+  the ethers adapter was dropped).
 - Node ≥ 20, browsers via the ESM build.
 
 ## Migration from 2.x
@@ -193,11 +198,12 @@ routing and previews, the consolidation fee helper, and the Hoodi checks of each
 
 ## Open questions
 
-1. TypeBox (vs zod v4 / valibot): TypeBox gives JSON Schema natively, which is what a second client needs.
-2. Keep the ethers adapter at all?
+1. ~~TypeBox~~: confirmed.
+2. ~~ethers adapter~~: dropped.
 3. Where the SDK vector suites live long-term (this repo vs distributed-validator-specs).
-4. Gnosis and Sepolia: cluster files only, or drop?
+4. Gnosis and Sepolia: cluster files only (kept for existing deployments).
 5. Exact shape of the new obol-api OVM and deposit-status endpoints (to design with obol-api).
+6. Lido CSM preset addresses and roles per chain.
 
 ## Milestones
 

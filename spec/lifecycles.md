@@ -53,8 +53,9 @@ Notes:
   `TX_REVERTED`, `"unconfirmed"` → `TX_UNCONFIRMED`).
 - Multi-transaction operations (`prepareDeposit` via OVM, more than 500 batch deposits) return several `Prepared`;
   each goes through this lifecycle on its own. The caller keeps the hashes; the SDK does not loop.
-- A Safe returns a `safeTxHash`, which never appears on-chain: the caller's Safe connector tracks proposal and
-  execution. The SDK's `wait` is for real transaction hashes only.
+- A Safe returns a `safeTxHash`, which never appears on-chain. `send` detects a contract-wallet account
+  (`contractWallet: true`) and `wait` then follows the Safe's `ExecutionSuccess` / `ExecutionFailure` log for that hash
+  instead of a receipt; `sent` covers proposal, collecting signatures and execution, and can take a long time.
 - Idempotency on retry: deposits are not idempotent (a second deposit adds stake or tops up); creating a split is (same
   CREATE2 address; `prepareOvmWithSplits` skips existing splits); creating an OVM is not (each call deploys a new one);
   distribution is (a second call distributes 0); a withdrawal request is not (each one is queued and charged).
@@ -76,7 +77,7 @@ fallback with `beaconUrl`).
 | Status | Beacon state | Observed by | What `prepareDeposit` does |
 |---|---|---|---|
 | `new` | no registry entry, no pending deposit | `deposits.status` | `deposit`: full checks incl. BLS. `topUp`: `DEPOSIT_TOP_UP_TARGET_MISSING` |
-| `queued` | in `pending_deposits`, or registry `pending_initialized` / `pending_queued` | `deposits.status` (`pendingDeposits[]`) | same credentials: `DEPOSIT_ALREADY_QUEUED` (info); different or unknown credentials: `DEPOSIT_CONFLICT` |
+| `queued` | in `pending_deposits` (`beaconStatus: "pending_deposit"`), or registry `pending_initialized` / `pending_queued` | `deposits.status` (`pendingDeposits[]`, `beaconStatus`) | same credentials: `DEPOSIT_ALREADY_QUEUED` (info); different or unknown credentials: `DEPOSIT_CONFLICT` |
 | `active` | `active_ongoing`, `active_exiting`, `active_slashed` | `deposits.status` (`validatorIndex`, `balance`) | `deposit`: `DEPOSIT_IS_TOP_UP` (warning); `topUp`: allowed |
 | `exited` | `exited_*`, `withdrawal_*` | `deposits.status` | `topUp`: `TOP_UP_EXITED_VALIDATOR` (warning) |
 
@@ -91,7 +92,7 @@ Notes:
   known is a deposit with an invalid signature: the ETH is lost.
 - A deposit through the OVM (`OVM.deposit`) also raises `amountOfPrincipalStake`, which decides how withdrawn funds are
   routed (see `distribution.json` `routing`). A deposit through the batch contract does not.
-- **Withdrawal and exit** requests (EIP-7002 via `ovm.prepareWithdraw` / `eoaWithdraw`) move a validator towards
+- **Withdrawal and exit** requests (EIP-7002 via `ovm.prepareWithdraw` / `withdrawals.prepareEoaWithdraw`) move a validator towards
   `exited` (amount 0) or reduce its balance (partial, `0x02` only). The request transaction being mined does not mean
   the beacon chain accepted it; `deposits.status` shows the effect.
 - Without the API and without `beaconUrl`, there is no status: `prepareDeposit` adds `DEPOSIT_EXISTENCE_UNCHECKED` and
