@@ -54,7 +54,7 @@ export const addressTopic = (address: Address): Hex =>
  */
 export const scanLogs = async (
   client: PublicClient,
-  filter: { address: Address; topics: Array<Hex | null> },
+  filter: { address: Address; topics: Array<Hex | Hex[] | null> },
   fromBlock: bigint,
   toBlock: bigint,
   stopOnFirst = false,
@@ -98,15 +98,12 @@ export const chainReadFailed = (what: string, cause: unknown): ObolError =>
 export const contractNotAvailable = (
   address: Address,
   what: string,
+  reason = 'has no code on this chain',
 ): ObolError =>
-  new ObolError(
-    'CONTRACT_NOT_AVAILABLE',
-    `${what} at ${address} has no code on this chain`,
-    {
-      hint: 'Check the chain; contact Obol if it persists',
-      details: { address },
-    },
-  );
+  new ObolError('CONTRACT_NOT_AVAILABLE', `${what} at ${address} ${reason}`, {
+    hint: 'Check the chain; contact Obol if it persists',
+    details: { address },
+  });
 
 export const finding = (
   code: string,
@@ -148,10 +145,15 @@ const MAX_FEE_FLOOR = 1_000_000_000n; // 1 gwei
 export const readRequestFee = async (
   client: PublicClient,
   predeploy: Address,
+  blockNumber?: bigint,
 ): Promise<bigint> => {
   let data: Hex | undefined;
   try {
-    ({ data } = await client.call({ to: predeploy, data: '0x' }));
+    ({ data } = await client.call({
+      to: predeploy,
+      data: '0x',
+      ...(blockNumber !== undefined ? { blockNumber } : {}),
+    }));
   } catch (cause) {
     throw new ObolError(
       'FEE_READ_FAILED',

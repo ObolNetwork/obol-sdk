@@ -82,6 +82,8 @@ export interface FakeChainOptions {
   receipts?: Record<string, unknown>;
   /** Intercept any request first; return undefined to fall through. */
   onRequest?: (method: string, params: any[]) => unknown;
+  /** Timestamp returned by eth_getBlockByNumber. */
+  blockTimestamp?: bigint;
   walletAccount?: Address;
   walletChainId?: number;
   /** Called with each eth_sendTransaction; return the hash. */
@@ -273,6 +275,32 @@ export const fakeChain = (options: FakeChainOptions = {}) => {
             logIndex: toHex(l.logIndex ?? i),
             removed: false,
           }));
+      }
+      case 'eth_getBlockByNumber': {
+        const tag = params[0];
+        const n =
+          tag === 'latest' || tag === undefined ? blockNumber : BigInt(tag);
+        return {
+          number: toHex(n),
+          hash: `0x${'ab'.repeat(32)}`,
+          parentHash: `0x${'00'.repeat(32)}`,
+          timestamp: toHex(options.blockTimestamp ?? 1_760_000_000n),
+          transactions: [],
+          baseFeePerGas: '0x1',
+          gasLimit: '0x1c9c380',
+          gasUsed: '0x0',
+          logsBloom: `0x${'00'.repeat(256)}`,
+          miner: `0x${'00'.repeat(20)}`,
+          nonce: '0x0000000000000000',
+          difficulty: '0x0',
+          extraData: '0x',
+          size: '0x0',
+          stateRoot: `0x${'00'.repeat(32)}`,
+          receiptsRoot: `0x${'00'.repeat(32)}`,
+          transactionsRoot: `0x${'00'.repeat(32)}`,
+          sha3Uncles: `0x${'00'.repeat(32)}`,
+          uncles: [],
+        };
       }
       case 'eth_getTransactionReceipt':
         return options.receipts?.[lower(params[0])] ?? null;

@@ -41,7 +41,7 @@ fails a local check raises the check's own code.
 
 | Code | Meaning | Thrown by | Caller should | 2.15 |
 |---|---|---|---|---|
-| `DEFINITION_INVALID` | A definition failed `verifyDefinition`: config hash mismatch, wrong `fork_version`, unsupported version, invalid signature, or a conflicting `version` input. Fields: `issues: { code, message }[]` (`config_hash_mismatch`, `fork_version_mismatch`, `version_unsupported`, `signature_invalid`). | `cluster.accept`, `cluster.create`, `computeConfigHash` | do not sign it; check the config hash and the client chain | `DEFINITION_VERIFICATION_FAILED` (`DefinitionVerificationError`) |
+| `DEFINITION_INVALID` | A definition failed `verifyDefinition`: config hash mismatch, wrong `fork_version`, unsupported version, invalid signature, or a conflicting `version` input. Fields: `issues: { code, message }[]` (`config_hash_mismatch`, `fork_version_mismatch`, `version_unsupported`, `version_mismatch`, `signature_invalid`). | `cluster.accept`, `cluster.create`, `computeConfigHash` | do not sign it; check the config hash and the client chain | `DEFINITION_VERIFICATION_FAILED` (`DefinitionVerificationError`) |
 | `NOT_AN_OPERATOR` | The wallet account is not an operator of the definition. Fields: `address`, `configHash`. | `cluster.accept` | use the wallet of one of the operator addresses | `NOT_AN_OPERATOR` |
 | `LOCK_INVALID` | A lock failed `verifyLock` or its deposit data is malformed. Fields: `step` (see `verifyLock`) or `issue` (`deposit_data_missing`, `deposit_data_invalid`, `fork_version_mismatch`). | `deposits.fromLock` | do not deposit; report the lock | plain `Error` ("Cluster lock failed validation", "Invalid deposit data for validator N") |
 | `LOCK_VERIFICATION_TIMEOUT` | Lock verification exceeded its worker time limit. Not a verdict on the lock. Fields: `timeoutMs`. | `verifyLock`, `deposits.fromLock` | retry later (HTTP gateways: 504) | `ClusterLockValidationTimeoutError` |
@@ -56,7 +56,7 @@ fails a local check raises the check's own code.
 | `DEPOSIT_CONFLICT` | A pending deposit for the pubkey has different or unknown withdrawal credentials; the first processed deposit fixes them. Fields: `index`, `pubkey`, `existingCredentials?`. | `prepareDeposit` | do not send; find out who queued the other deposit | 2.16 `DepositConflictError` |
 | `DEPOSIT_TOP_UP_TARGET_MISSING` | `kind: "topUp"` for a pubkey with no validator and no pending deposit; the deposit would be treated as new and fail its signature check. Fields: `index`, `pubkey`. | `prepareDeposit` | check the pubkey; send the full deposit data first | new |
 | `DEPOSIT_AMOUNT_NOT_IN_LOCK` | The requested amount is not present for every validator of the lock. Fields: `amount`, `available: bigint[]`. | `deposits.fromLock` | pick one of `available` | plain `Error` |
-| `STATUS_UNAVAILABLE` | The deposit status source answered incompletely or malformed. | `deposits.status` | retry; do not assume `new` | 2.16 plain `Error` ("Malformed …") |
+| `STATUS_UNAVAILABLE` | The deposit status source failed, or answered incompletely or malformed. | `deposits.status`, `ovm.getValidators`, writes that read status | retry; do not assume `new` | 2.16 plain `Error` ("Malformed …") |
 
 ### OVM
 

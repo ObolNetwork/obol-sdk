@@ -172,9 +172,9 @@ rules, in this order (first failure is reported as `step`):
    `signature_aggregate` verifies over `lock_hash` against all public shares in file order (plain aggregate).
    `lock_signature_invalid`. (spec step 4)
 
-Large locks may run in workers; exceeding the time limit throws `LOCK_VERIFICATION_TIMEOUT` (not a verdict), too
-many concurrent runs throw `LOCK_VERIFICATION_BUSY`. (2.15) Vectors: `cluster_hashing.json` `real_keys_3_of_4`
-(passes every step) and the hash cases.
+Large locks run the share, BLS and aggregate checks in worker chunks (Node CJS build); exceeding the time limit throws `LOCK_VERIFICATION_TIMEOUT` (not a verdict), too
+many concurrent runs throw `LOCK_VERIFICATION_BUSY`. (2.15) Vectors: the `cluster_hashing.json` hash cases. (`real_keys_3_of_4` has placeholder EIP-712, deposit and builder
+signatures, so it stops at `definition_signature_invalid`; it is not a full-pass fixture.)
 
 ### cluster.get / cluster.getLock
 
@@ -261,7 +261,7 @@ Failures 2–7 are `DEPOSIT_INVALID` with `issue` and `index`.
 
 ### deposits.status
 
-Tag: `api+chain`. Inputs: `pubkeys: Pubkey[]`, `{ beaconUrl: string? }`. Output per pubkey:
+Tag: `api+chain`. Inputs: `pubkeys: Pubkey[]`, `{ beaconUrl: string?, lockHash: Hash32? }`. Output per pubkey:
 
 ```
 { pubkey, status: "new" | "queued" | "active" | "exited", source: Source,
@@ -274,12 +274,18 @@ Mapping (beacon names): no registry entry and no pending deposit → `new`; a pe
 `pending_deposits`) and no registry entry, or a registry entry in `pending_initialized` / `pending_queued` → `queued`;
 `active_*` → `active`; `exited_*` / `withdrawal_*` → `exited`.
 
-Sources: API (new endpoint, design "API enrichment"; interim `GET /v1/state/:lockHash` with `pending_deposit`); chain
+Sources: API (a by-pubkey endpoint is planned, design "API enrichment"; until then `GET /v1/state/:lockHash` with
+`pending_deposit`, which answers by lock: `lockHash` is required with the API, the lock is fetched first, a pubkey
+not in it is `PAYLOAD_INVALID` (issue `not_in_lock`), and a pubkey the lock has but `/state` leaves out is `new`); chain
 fallback with `beaconUrl`: `POST /eth/v1/beacon/states/head/validators` and
 `GET /eth/v1/beacon/states/head/pending_deposits`, pending queue read before the registry so a deposit moving from
 the queue to the registry is not missed (2.16 `existingDeposits.ts`). Without API and `beaconUrl`: `API_DISABLED`.
-A malformed or incomplete answer (missing pubkey, duplicate result, bad credentials) is `STATUS_UNAVAILABLE`, never a
-guessed `new`. (2.16)
+A malformed or incomplete answer (missing pubkey, duplicate result, bad credentials) or a failed beacon request is
+`STATUS_UNAVAILABLE`, never a guessed `new`. (2.16)
+
+The writes that read status (`prepareDeposit`, `prepareWithdraw`, `prepareConsolidate`, `prepareEoaWithdraw`) take
+the same `beaconUrl` / `lockHash` options. A source that is configured and fails makes the write throw; the status
+checks are skipped (with `DEPOSIT_EXISTENCE_UNCHECKED` for deposits) only when there is no source at all.
 
 `queued` is deliberately broad; `beaconStatus` tells the cases apart. They behave differently for a second deposit:
 a registry `pending_initialized` / `pending_queued` validator can still take the rest of a chunked activation deposit,
@@ -413,7 +419,7 @@ deposit's credentials) point at the OVM. Source: the new `GET /v1/ovm/:network/:
 Tag: `api+chain`. Input: `ovm`. Output: `{ owner, holders: { address, roles: uint, roleNames: string[], isOwner:
 bool }[], source, blockNumber }`.
 
-1. Candidates from `RolesUpdated(address indexed user, uint256 roles)` logs of the OVM from the factory deployment
+1. Candidates from `RolesUpdated(address indexed user, uint256 indexed roles)` logs of the OVM from the factory deployment
    block: API (new OVM endpoint; interim `GET /v1/eth/logs/:network?address&topic0&fromBlock`, used only if
    `status = "1"` and not truncated) plus an RPC scan of the last 50,000 blocks; else a full chunked RPC scan. A failed
    full scan → `OVM_ROLE_EVENTS_UNAVAILABLE`. (2.16)
@@ -481,8 +487,9 @@ Tag: `chain`. Inputs: `{ ovm, mode: "push" | "pull" (default "push") }`. Calls `
 Preview: the routing of `distribution.json` `routing` (`distributable`, `principalPayout`, `rewardPayout`) with the
 recipients. Use `splits.prepareDistribution` to also distribute the splits behind the recipients.
 
-`ovm.previewDistribute(input)` (`chain`) runs the same reads and returns the preview without throwing for
-`NOTHING_TO_DISTRIBUTE` (zeros instead), so a page can show the figures with the button disabled.
+`ovm.previewDistribute(input)` (`chain`) runs the same reads and returns `preview & { blockNumber, checks }` without
+throwing for `NOTHING_TO_DISTRIBUTE` (zeros instead), so a page can show the figures with the button disabled. It is
+not a `Prepared`, so it cannot be sent by mistake.
 
 ### ovm role and ownership writes
 
@@ -563,7 +570,8 @@ factory.
 
 ### splits.getSplit
 
-Tag: `api+chain` (state always `chain`). Inputs: `{ address, params: SplitParams? }`. Output: `{ address, splitHash:
+Tag: `api+chain` (state always `chain`). Inputs: `{ address, params: SplitParams?, ovm: Address? }` (the API source
+is keyed by OVM, so it is asked only when `ovm` is given; `prepareDistribution` passes it). Output: `{ address, splitHash:
 Hash32, owner, paused, balance: bigint, warehouseBalance: bigint, params: SplitParams?, paramsSource: Source |
 "input" | null }`.
 
@@ -592,7 +600,8 @@ Tag: `chain`. Inputs:
   distributor: Address?, from: Address? }
 ```
 
-All reads in one `aggregate3` at one block. Vectors `distribution.json` (`routing`, `split_distribution`, `prepare`).
+Reads in two `aggregate3` calls pinned to one block: the OVM first (its recipients name the splits), then the splits
+and balances. Vectors `distribution.json` (`routing`, `split_distribution`, `prepare`).
 (2.16 `prepareDistribution`)
 
 1. At least one of `ovm`, `rewardSplit`, `principalSplit` (`PAYLOAD_INVALID`). Split params: allocations match
@@ -610,8 +619,10 @@ All reads in one `aggregate3` at one block. Vectors `distribution.json` (`routin
 8. Splits with a non-zero `distributionIncentive` need `distributor` (default the sender), else `PAYLOAD_INVALID`.
 9. No calls result → `NOTHING_TO_DISTRIBUTE`. (2.16 threw this at send)
 
-`splits.previewDistribution(input)` runs the same reads and returns the preview without throwing for
-`NOTHING_TO_DISTRIBUTE`, for a page that shows greyed-out legs with the button disabled.
+`splits.previewDistribution(input)` runs the same reads and returns `{ preview, checks, blockNumber }` without
+throwing for `NOTHING_TO_DISTRIBUTE`, for a page that shows greyed-out legs with the button disabled. Other errors
+(e.g. `SPLIT_PAUSED`) still throw. A recipient in the withdrawal set whose withdrawal is left out keeps `withdraw:
+true` and gets a `skipReason`.
 
 Calls (`aggregate3` on Multicall3, in this order):
 
@@ -689,7 +700,8 @@ the earlier `CreateObolValidatorManager` event (by owner, `topic2`).
 
 ### setup.ovmFromReceipt
 
-Tag: `pure`. Input: a receipt. Output: `{ ovm, owner, principalRecipient, rewardRecipient, principalThreshold }` from
+Tag: `pure` (takes `{ chainId }` for the factory address; the client fills it). Input: a receipt. Output: `{ ovm,
+owner, principalRecipient, rewardRecipient, principalThreshold }` from
 the `CreateObolValidatorManager` log **emitted by the chain's OVM factory**. None → `OVM_CREATE_EVENT_MISSING`; more
 than one → `OVM_CREATE_EVENT_AMBIGUOUS`. (2.15 matched the event signature on any address)
 
@@ -781,7 +793,10 @@ overrides it. 2.15 fetched it from a beacon URL.
 
 ### exits.aggregate
 
-Tag: `pure`. Inputs: `{ existing: ExistingExit, threshold: uint }`. Output: `{ publicKey, signedExitMessage: {
+Tag: `pure`. Inputs: `{ existing: ExistingExit, threshold: uint, forkVersion: Hex4, genesisValidatorsRoot: Hash32? }`
+(the fork and root give the exit domain for step 4; the client fills `forkVersion`). `ExistingExit = { publicKey,
+epoch, validatorIndex, partialSignatures: { [0-based share key]: Hex96 | "" } }`, epochs and indexes as decimal
+uint64 strings. Output: `{ publicKey, signedExitMessage: {
 message: { epoch, validatorIndex }, signature: Hex96 } }`.
 
 1. Signatures are 96-byte hex (`EXIT_SIGNATURE_MALFORMED`); empty entries are ignored.
