@@ -103,4 +103,4 @@ Differences from the distributed-validator-specs format, on purpose: byte string
 shares as `bigint`) are decimal strings.
 
 To run them, a client loads each file, maps `input` onto its own function, and compares the outputs and `reason`. The
-TypeScript runners are `test/v3/vectors/*.spec.ts`, one per suite.
+TypeScript runners are `test/vectors/*.spec.ts`, one per suite.

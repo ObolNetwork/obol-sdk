@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v3.0.0-rc.1)
+
+> 19 October 2026
+
+First release candidate of SDK v3, a rewrite. **Breaking:** nothing from the 2.x API is kept. What every operation
+checks, reads and returns, and every error code, is specified in [`spec/`](spec/README.md). A migration guide from
+2.x follows.
+
+**Changed**
+
+- Built on viem: `createObolClient({ chain, publicClient, walletClient?, api? })` replaces `new Client(config, signer,
+  provider)`. `viem@^2` is a peer dependency.
+- Prepare, then send: every write is a `prepare*` operation that runs its checks and returns a `Prepared` transaction
+  (`request`, `checks` findings, `preview`, `blockNumber`). The caller's wallet layer sends it, or `send` does.
+- Modules: `cluster`, `deposits`, `ovm`, `splits`, `setup`, `incentives`, `exits`, `terms`, `withdrawals` and
+  `legacy`, bound to the client and also exported as namespaces, so pure functions (hashing, lock verification,
+  share math, exit aggregation) work without a client.
+- One error class, `ObolError` (`ObolApiError` for API responses), with a stable `code`, a `hint` and `details`,
+  replaces the 2.x error hierarchy.
+- Inputs are validated with TypeBox schemas instead of AJV.
+- Incentive claims, EOA withdrawals and OWR reads carry over as `incentives.prepareClaim`,
+  `withdrawals.prepareEoaWithdraw` and `legacy.getOwrTranches`.
+
+**New**
+
+- `cluster.verifyLock` reports the first failing step; `cluster.watch` follows signatures and the lock.
+- `deposits.status` and the existence checks in `deposits.prepareDeposit` (pending deposits, top-ups, balances).
+- OVM provenance (`ovm.verify`), state, role and validator reads; withdraw, consolidate and distribute with
+  previews; role and ownership writes.
+- SplitV2 integer share math, distribution routing and previews; `setup` flows and presets for OVM with splits.
+- `exits.aggregate` does threshold (Lagrange) aggregation and checks the result against the group key (2.x summed the
+  partials); exit domains come from the chain table (EIP-7044), with no beacon node needed.
+- JSON test vectors in `spec/vectors/`, plus the distributed-validator-specs vectors.
+
+**Removed**
+
+- ethers support, and with it `@safe-global/*`, `@metamask/eth-sig-util`, AJV, `semver` and `uuid`.
+- The 2.x `Client` and all its methods and sub-modules (`splits`, `eoa`, `incentives`, `exit`), the standalone
+  `validateClusterLock` and the whole-lock validation worker, and creation of OWR / SplitMain contracts.
+
 #### [v2.15.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.14.0...v2.15.0)
 
 - feat: SDK 2.15 hardening [`#244`](https://github.com/ObolNetwork/obol-sdk/pull/244)

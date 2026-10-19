@@ -769,14 +769,14 @@ Partial exits are collected by the Obol API from each operator and aggregated on
 
 Tag: `pure`. Inputs: `{ cluster: { operators: { enr }[], forkVersion: Hex4, threshold: uint, validators: {
 distributedPublicKey, publicShares[] }[] }, payload: { shareIdx: uint, partialExits: ExitBlob[], signature: Hex65 },
-existing: ExistingExit?, genesisValidatorsRoot: Hash32? }`. Output: the blobs that are new (already stored ones are
-dropped). (2.15 `validateExitBlobs`)
+existing: ExistingExit? }`. Output: the blobs that are new (already stored ones are dropped). (2.15
+`validateExitBlobs`)
 
 1. `1 ≤ shareIdx ≤ operators` (`EXIT_SHARE_INDEX_INVALID`).
 2. The payload signature (secp256k1, 64 or 65 bytes) over the SSZ root of the partial exits payload is by the ENR key
    of operator `shareIdx` (`EXIT_PAYLOAD_SIGNATURE_INVALID`; an unparsable ENR is `PAYLOAD_INVALID`).
-3. The chain's Capella fork version exists for `forkVersion` (EIP-7044 exit domain) and a genesis validators root is
-   known, else `UNSUPPORTED_CHAIN`.
+3. `forkVersion` is a chain in the chain table with a Capella fork version and a genesis validators root (mainnet,
+   Hoodi), else `UNSUPPORTED_CHAIN`.
 4. Per blob: the pubkey is a validator of the cluster (`EXIT_VALIDATOR_NOT_IN_CLUSTER`) with a public share at
    `shareIdx` (`EXIT_SHARE_INDEX_INVALID`).
 5. Against `existing` for the same pubkey: same `validator_index` (`EXIT_VALIDATOR_INDEX_MISMATCH`); epoch not lower
@@ -786,17 +786,19 @@ dropped). (2.15 `validateExitBlobs`)
    root in domain `DOMAIN_VOLUNTARY_EXIT 0x04000000` with the Capella fork and genesis validators root
    (`EXIT_PARTIAL_SIGNATURE_INVALID`).
 
-The genesis validators root comes from a per-chain table (mainnet
-`0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95`, Hoodi
-`0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f`), so this is `pure`; `genesisValidatorsRoot`
-overrides it. 2.15 fetched it from a beacon URL.
+Since EIP-7044 (Deneb) voluntary exits are always signed with the Capella fork version and the chain's genesis
+validators root, so both come from the chain table (mainnet `0x03000000` /
+`0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95`, Hoodi `0x40000910` /
+`0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f`) and this is `pure`; there are no overrides.
+Gnosis and Sepolia have no genesis validators root in the table, so their exits are `UNSUPPORTED_CHAIN`. 2.15 fetched
+the root from a beacon URL.
 
 ### exits.aggregate
 
-Tag: `pure`. Inputs: `{ existing: ExistingExit, threshold: uint, forkVersion: Hex4, genesisValidatorsRoot: Hash32? }`
-(the fork and root give the exit domain for step 4; the client fills `forkVersion`). `ExistingExit = { publicKey,
-epoch, validatorIndex, partialSignatures: { [0-based share key]: Hex96 | "" } }`, epochs and indexes as decimal
-uint64 strings. Output: `{ publicKey, signedExitMessage: {
+Tag: `pure`. Inputs: `{ existing: ExistingExit, threshold: uint, chainId: uint }` (the chain table gives the exit
+domain for step 4, as in `exits.verifyPartialExit`; the client fills `chainId`; a chain without a genesis validators
+root is `UNSUPPORTED_CHAIN`). `ExistingExit = { publicKey, epoch, validatorIndex, partialSignatures: { [0-based share
+key]: Hex96 | "" } }`, epochs and indexes as decimal uint64 strings. Output: `{ publicKey, signedExitMessage: {
 message: { epoch, validatorIndex }, signature: Hex96 } }`.
 
 1. Signatures are 96-byte hex (`EXIT_SIGNATURE_MALFORMED`); empty entries are ignored.

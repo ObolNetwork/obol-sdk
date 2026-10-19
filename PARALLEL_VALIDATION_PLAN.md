@@ -78,7 +78,7 @@ POST /lock/verify or /lock (obol-api main thread)
             │               └── isValidClusterLock()   ← layer 1
             └── [<50 or no worker file] isValidClusterLock() on main thread
 
-isValidClusterLock()                             [src/verification/common.ts]
+isValidClusterLock()                             [src/internal/verification/common.ts]
     ├── definition_signatures (ECDSA / Safe RPC)
     ├── definition_hash + lock_hash (SSZ)
     ├── unique DV keys
@@ -94,7 +94,7 @@ isValidClusterLock()                             [src/verification/common.ts]
 ### Deposit / builder BLS (readable flow)
 
 1. `depositBlsCheck` / `builderBlsCheck` — structural checks + signing root; return
-   `BlsSignatureCheck | null` (type in `src/types.ts`).
+   `BlsSignatureCheck | null` (type in `src/internal/types.ts`).
 2. `verifyBlsChecksParallel(checks)` — verify all deposit/builder signatures **once**
    in batch (not twice like 2.12.0).
 
@@ -118,22 +118,22 @@ step is a small fraction of total time on 1k locks (~5%).
 
 Consumers `require('@obolnetwork/obol-sdk')` → bundled **`dist/cjs/src/index.js`**.
 `parallelPool` is inlined there, so runtime `__dirname` is **`dist/cjs/src`**, not
-`dist/cjs/src/verification`.
+`dist/cjs/src/internal/verification`.
 
 Worker bundles are emitted beside it:
 
 ```text
 dist/cjs/src/index.js                              ← main entry (bundled)
-dist/cjs/src/verification/clusterLockValidationWorker.js
-dist/cjs/src/verification/lockWorker.js
+dist/cjs/src/internal/verification/clusterLockValidationWorker.js
+dist/cjs/src/internal/verification/lockWorker.js
 ```
 
 `getWorkerPath()` in `parallelPool.ts` tries both:
 
-1. `path.join(__dirname, filename)` — standalone `parallelPool.js` entry
-2. `path.join(__dirname, 'verification', filename)` — **bundled index (obol-api)**
+1. `path.join(__dirname, 'internal', 'verification', filename)` — **bundled index (obol-api)**
+2. `path.join(__dirname, filename)` — a build that emits `parallelPool.js` beside the worker
 
-Without (2), workers are never found → sync validation on the main thread → frozen
+Without (1), workers are never found → sync validation on the main thread → frozen
 API (`/docs` hangs for ~60s). **Always run `yarn build` before publish**; npm
 package `files` includes all of `dist/`.
 
@@ -143,7 +143,7 @@ package `files` includes all of `dist/`.
 
 | Build target | Validation worker (layer 1) | Chunk workers (layer 2) | Outcome |
 |---|---|---|---|
-| **CJS Node** (obol-api) | ✅ if `verification/*.js` resolves | ✅ same | Full parallel + main thread free |
+| **CJS Node** (obol-api) | ✅ if `internal/verification/*.js` resolves | ✅ same | Full parallel + main thread free |
 | ESM Node | ❌ sync fallback | ❌ sync fallback | See "Why ESM is sync" |
 | Browser | not emitted | not emitted | Sync only (acceptable) |
 | Jest / source | worker file missing | worker file missing | Sync fallback in tests |
@@ -160,7 +160,7 @@ charon --publish --publish-address http://localhost:3001/v1
 
 ---
 
-## Thresholds (`src/verification/parallelPool.ts`)
+## Thresholds (`src/internal/verification/parallelPool.ts`)
 
 | Constant | Value | Purpose |
 |---|---|---|
@@ -181,13 +181,13 @@ charon --publish --publish-address http://localhost:3001/v1
 | File | Role |
 |---|---|
 | `src/services.ts` | Public `validateClusterLock` — worker first, else sync |
-| `src/types.ts` | `BlsSignatureCheck` |
-| `src/verification/common.ts` | `depositBlsCheck`, `builderBlsCheck`, `isValidClusterLock` |
-| `src/verification/parallelPool.ts` | Chunk pool API + `validateClusterLockInWorker` |
-| `src/verification/lockWorker.ts` | Chunk worker: `shareBinding`, `verifyBatch`, `aggregatePubkeys` |
-| `src/verification/clusterLockValidationWorker.ts` | Layer-1 worker entry (~20 lines) |
-| `src/verification/v1.6.0.ts` … `v1.8.0.ts` | DV verify; v1.10 aliases v1.8 |
-| `src/blsUtils.ts` | Noble BLS primitives |
+| `src/internal/types.ts` | `BlsSignatureCheck` |
+| `src/internal/verification/common.ts` | `depositBlsCheck`, `builderBlsCheck`, `isValidClusterLock` |
+| `src/internal/verification/parallelPool.ts` | Chunk pool API + `validateClusterLockInWorker` |
+| `src/internal/verification/lockWorker.ts` | Chunk worker: `shareBinding`, `verifyBatch`, `aggregatePubkeys` |
+| `src/internal/verification/clusterLockValidationWorker.ts` | Layer-1 worker entry (~20 lines) |
+| `src/internal/verification/v1.6.0.ts` … `v1.8.0.ts` | DV verify; v1.10 aliases v1.8 |
+| `src/internal/bls.ts` | Noble BLS primitives |
 | `tsup.config.ts` | Separate CJS/ESM entries for workers (not in browser bundle) |
 
 **Removed in simplification pass (do not re-add without reason):**
@@ -195,7 +195,7 @@ charon --publish --publish-address http://localhost:3001/v1
 | Removed | Was |
 |---|---|
 | `lockProfiler.ts` | Opt-in `OBOL_SDK_LOCK_PROFILE=1` phase timings |
-| `blsTypes.ts` | Type moved to `src/types.ts` |
+| `blsTypes.ts` | Type moved to `src/internal/types.ts` |
 | `validationWorker.ts` | Merged into `parallelPool.ts` as `validateClusterLockInWorker` |
 | `test/perf/validateLockFile.mjs` | Redundant with `parallelBench.mjs` + `POST /lock/verify` |
 
@@ -304,7 +304,7 @@ Link local SDK in obol-api: `"@obolnetwork/obol-sdk": "file:../obol-sdk"`.
 
 ## Why ESM Node is sync
 
-**CJS (obol-api):** fixed via `getWorkerPath` checking `verification/` under
+**CJS (obol-api):** fixed via `getWorkerPath` checking `internal/verification/` under
 bundled `index.js` `__dirname` (see above).
 
 **ESM Node:** `import` resolves `dist/esm/src/index.js`; worker path resolution
