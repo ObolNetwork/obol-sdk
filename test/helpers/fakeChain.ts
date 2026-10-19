@@ -30,6 +30,7 @@ import { hoodi, mainnet } from 'viem/chains';
 import { CHAINS } from '../../src/chains.js';
 import type { Context } from '../../src/context.js';
 import { ObolApi } from '../../src/api.js';
+import { ObolApiError } from '../../src/errors.js';
 
 export const MULTICALL3 = getAddress(
   '0xcA11bde05977b3631167028862bE2a173976CA11',
@@ -361,6 +362,8 @@ export const fakeChain = (options: FakeChainOptions = {}) => {
 };
 
 /** A fake ObolApi answering by `METHOD path` (exact) or path prefix. */
+const DEPOSIT_STATUS = /^\/v1\/validators\/[a-z]+\/deposit-status$/;
+
 export const fakeApi = (
   routes: Record<string, (body?: unknown) => unknown>,
 ): ObolApi & {
@@ -372,6 +375,14 @@ export const fakeApi = (
     const method = opts.method ?? 'GET';
     calls.push({ method, endpoint, body: opts.body });
     const handler = routes[`${method} ${endpoint}`] ?? routes[endpoint];
+    if (handler === undefined && DEPOSIT_STATUS.test(endpoint)) {
+      // Not deployed yet: unless a test serves it, the route answers 404.
+      throw new ObolApiError('API_NOT_FOUND', 'Cannot POST', {
+        status: 404,
+        endpoint,
+        method,
+      });
+    }
     if (handler === undefined) {
       throw new Error(`fakeApi: no route for ${method} ${endpoint}`);
     }

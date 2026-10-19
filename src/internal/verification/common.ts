@@ -3,10 +3,14 @@
  * registration and node signature checks (carried over from SDK 2.x). The
  * lock verification steps themselves live in `cluster/verifyLock.ts`.
  */
-import { fromHexString } from '@chainsafe/ssz';
+import {
+  ByteVectorType,
+  ContainerType,
+  ListCompositeType,
+  fromHexString,
+} from '@chainsafe/ssz';
 import { ENR } from '@chainsafe/enr';
 import {
-  type BlsSignatureCheck,
   type BuilderRegistrationMessage,
   type ClusterDefinition,
   type ClusterLock,
@@ -18,31 +22,42 @@ import {
   builderRegistrationMessageType,
   depositMessageType,
   forkDataType,
+  listOrEmpty,
   signingRootType,
   toUint64,
 } from './sszTypes.js';
 import {
   clusterDefinitionContainerTypeV1X6,
+  dvContainerTypeV1X6,
+  dvValueV1X6,
   hashClusterDefinitionV1X6,
   hashClusterLockV1X6,
 } from './v1.6.0.js';
 import {
   clusterDefinitionContainerTypeV1X7,
+  dvContainerTypeV1X7,
+  dvValueV1X7,
   hashClusterDefinitionV1X7,
   hashClusterLockV1X7,
 } from './v1.7.0.js';
 import {
   clusterDefinitionContainerTypeV1X8,
+  dvContainerTypeV1X8,
+  dvValueV1X8,
   hashClusterDefinitionV1X8,
   hashClusterLockV1X8,
 } from './v1.8.0.js';
 import {
   clusterDefinitionContainerTypeV1X10,
+  dvContainerTypeV1X10,
+  dvValueV1X10,
   hashClusterDefinitionV1X10,
   hashClusterLockV1X10,
 } from './v1.10.0.js';
 import {
   clusterDefinitionContainerTypeV1X11,
+  dvContainerTypeV1X11,
+  dvValueV1X11,
   hashClusterDefinitionV1X11,
   hashClusterLockV1X11,
 } from './v1.11.0.js';
@@ -116,6 +131,22 @@ export const clusterConfigOrDefinitionHash = (
 
 // cluster-lock hash
 
+/** v1.8.0 reads a null `deposit_amounts` as one 32 ETH partial deposit. */
+const checkV1X8DepositAmounts = (clusterLock: ClusterLock): void => {
+  if (
+    clusterLock.cluster_definition.deposit_amounts === null &&
+    clusterLock.distributed_validators.some(
+      distributedValidator =>
+        distributedValidator.partial_deposit_data?.length !== 1 ||
+        distributedValidator.partial_deposit_data[0].amount !== '32000000000',
+    )
+  ) {
+    throw new Error(
+      'mismatch between deposit_amounts and partial_deposit_data fields',
+    );
+  }
+};
+
 /**
  * Returns the SSZ cluster lock hash of the given cluster lock object
  * @param cluster The cluster lock whose lock hash needs to be calculated
@@ -131,18 +162,7 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
   }
 
   if (clusterLock.cluster_definition.version === 'v1.8.0') {
-    if (
-      clusterLock.cluster_definition.deposit_amounts === null &&
-      clusterLock.distributed_validators.some(
-        distributedValidator =>
-          distributedValidator.partial_deposit_data?.length !== 1 ||
-          distributedValidator.partial_deposit_data[0].amount !== '32000000000',
-      )
-    ) {
-      throw new Error(
-        'mismatch between deposit_amounts and partial_deposit_data fields',
-      );
-    }
+    checkV1X8DepositAmounts(clusterLock);
     return hashClusterLockV1X8(clusterLock);
   }
 
@@ -162,6 +182,140 @@ export const clusterLockHash = (clusterLock: ClusterLock): string => {
 
   // other versions
   throw new Error('unsupported version');
+};
+
+interface DefinitionHashing {
+  type: (configOnly: boolean) => ContainerType<any>;
+  value: (cluster: ClusterDefinition, configOnly: boolean) => unknown;
+}
+
+const DEFINITION_HASHING: Record<string, DefinitionHashing> = {
+  'v1.6.0': {
+    type: clusterDefinitionContainerTypeV1X6,
+    value: hashClusterDefinitionV1X6,
+  },
+  'v1.7.0': {
+    type: clusterDefinitionContainerTypeV1X7,
+    value: hashClusterDefinitionV1X7,
+  },
+  'v1.8.0': {
+    type: clusterDefinitionContainerTypeV1X8,
+    value: hashClusterDefinitionV1X8,
+  },
+  'v1.10.0': {
+    type: clusterDefinitionContainerTypeV1X10,
+    value: hashClusterDefinitionV1X10,
+  },
+  'v1.11.0': {
+    type: clusterDefinitionContainerTypeV1X11,
+    value: hashClusterDefinitionV1X11,
+  },
+};
+
+const bytes32 = new ByteVectorType(32);
+/** Element roots between ticks while hashing a long list. */
+const ROOTS_PER_TICK = 256;
+
+/**
+ * hash_tree_root of a container value, with the elements of its list field
+ * `listField` hashed a slice at a time (awaiting `tick` between slices). A
+ * list of composite elements merkleizes their roots and a container its
+ * field roots, so 32-byte stand-ins for both give the same root.
+ */
+const containerRootSliced = async (
+  type: ContainerType<any>,
+  value: Record<string, unknown>,
+  listField: string,
+  tick: () => Promise<void>,
+): Promise<Uint8Array> => {
+  const roots: Record<string, Uint8Array> = {};
+  const standIns: Record<string, ByteVectorType> = {};
+  for (const entry of type.fieldsEntries) {
+    const fieldName = String(entry.fieldName);
+    const fieldType = entry.fieldType;
+    standIns[fieldName] = bytes32;
+    if (fieldName !== listField) {
+      roots[fieldName] = fieldType.hashTreeRoot(value[fieldName]);
+      continue;
+    }
+    const list = fieldType as ListCompositeType<any>;
+    const items = value[fieldName] as unknown[];
+    const elementRoots: Uint8Array[] = [];
+    for (let i = 0; i < items.length; i++) {
+      elementRoots.push(list.elementType.hashTreeRoot(items[i]) as Uint8Array);
+      if (i % ROOTS_PER_TICK === ROOTS_PER_TICK - 1) await tick();
+    }
+    roots[fieldName] = new ListCompositeType(bytes32, list.limit).hashTreeRoot(
+      elementRoots,
+    );
+  }
+  return new ContainerType(standIns).hashTreeRoot(roots);
+};
+
+/**
+ * {@link clusterConfigOrDefinitionHash}, hashing the validators list a slice
+ * at a time (awaiting `tick` between slices).
+ */
+export const clusterConfigOrDefinitionHashSliced = async (
+  cluster: ClusterDefinition,
+  configOnly: boolean,
+  tick: () => Promise<void>,
+): Promise<string> => {
+  const hashing = DEFINITION_HASHING[cluster.version];
+  if (hashing === undefined) throw new Error('unsupported version');
+  const root = await containerRootSliced(
+    hashing.type(configOnly),
+    hashing.value(cluster, configOnly) as Record<string, unknown>,
+    'validators',
+    tick,
+  );
+  return '0x' + Buffer.from(root).toString('hex');
+};
+
+interface DvHashing {
+  type: { hashTreeRoot: (value: never) => Uint8Array };
+  value: (dv: ClusterLock['distributed_validators'][number]) => unknown;
+}
+
+const DV_HASHING: Record<string, DvHashing> = {
+  'v1.6.0': { type: dvContainerTypeV1X6, value: dvValueV1X6 },
+  'v1.7.0': { type: dvContainerTypeV1X7, value: dvValueV1X7 },
+  'v1.8.0': { type: dvContainerTypeV1X8, value: dvValueV1X8 },
+  'v1.10.0': { type: dvContainerTypeV1X10, value: dvValueV1X10 },
+  'v1.11.0': { type: dvContainerTypeV1X11, value: dvValueV1X11 },
+};
+
+// A list of composite elements merkleizes their roots, and a container its
+// field roots, so these 32-byte stand-ins give the same roots.
+const dvRootsType = new ListCompositeType(new ByteVectorType(32), 65536);
+const lockRootsType = new ContainerType({
+  cluster_definition: new ByteVectorType(32),
+  distributed_validators: new ByteVectorType(32),
+});
+
+/**
+ * {@link clusterLockHash} computed one distributed validator at a time,
+ * awaiting `tick` between them, from the already checked definition hash.
+ */
+export const clusterLockHashSliced = async (
+  clusterLock: ClusterLock,
+  definitionRoot: Uint8Array,
+  tick: () => Promise<void>,
+): Promise<string> => {
+  const version = clusterLock.cluster_definition.version;
+  const hashing = DV_HASHING[version];
+  if (hashing === undefined) throw new Error('unsupported version');
+  if (version === 'v1.8.0') checkV1X8DepositAmounts(clusterLock);
+  const roots: Uint8Array[] = [];
+  for (const dv of listOrEmpty(clusterLock.distributed_validators)) {
+    roots.push(hashing.type.hashTreeRoot(hashing.value(dv) as never));
+    await tick();
+  }
+  const root = lockRootsType.hashTreeRoot({
+    cluster_definition: definitionRoot,
+    distributed_validators: dvRootsType.hashTreeRoot(roots),
+  });
+  return '0x' + Buffer.from(root).toString('hex');
 };
 
 // cluster-lock data verification
@@ -237,138 +391,66 @@ export const builderDomainForFork = (forkVersion: string): Uint8Array =>
   computeDomain(fromHexString(DOMAIN_APPLICATION_BUILDER), forkVersion);
 
 /**
- * Structural deposit checks + signing root (no BLS). Used before batch BLS verify.
+ * The deposit's pubkey is the group key, its credentials are `0x01` (`0x02`
+ * with `compounding`) + 11 zero bytes + the withdrawal address, and it has a
+ * signature.
  */
-export const validateDepositDataStructure = (
+export const depositFieldsMatch = (
   distributedPublicKey: string,
   depositData: Partial<DepositData>,
   withdrawalAddress: string,
-  forkVersion: string,
   compounding?: boolean,
-  precomputedDepositDomain?: Uint8Array,
-): { valid: boolean; message: Uint8Array } => {
-  const depositDomain =
-    precomputedDepositDomain ??
-    computeDomain(fromHexString(DOMAIN_DEPOSIT), forkVersion);
+): boolean => {
   const withdrawalPrefix = compounding ? '0x02' : '0x01';
   const expectedWithdrawalCredentials =
     withdrawalPrefix +
     '0'.repeat(22) +
     withdrawalAddress.toLowerCase().slice(2);
-
-  if (expectedWithdrawalCredentials !== depositData.withdrawal_credentials) {
-    return { valid: false, message: new Uint8Array(0) };
-  }
-
-  if (distributedPublicKey !== depositData.pubkey) {
-    return { valid: false, message: new Uint8Array(0) };
-  }
-
-  const depositMessageBuffer = computeDepositMsgRoot(depositData);
-  const message = signingRoot(depositDomain, depositMessageBuffer);
-  if (!depositData.signature) {
-    return { valid: false, message };
-  }
-
-  return { valid: true, message };
+  return (
+    expectedWithdrawalCredentials === depositData.withdrawal_credentials &&
+    distributedPublicKey === depositData.pubkey &&
+    typeof depositData.signature === 'string' &&
+    depositData.signature.length > 0
+  );
 };
 
-/** Deposit fields + BLS triple for batch verification. Returns null if structure is invalid. */
-export const depositBlsCheck = (
-  distributedPublicKey: string,
+/** Signing root of a deposit message in `domain`. */
+export const depositSigningRoot = (
   depositData: Partial<DepositData>,
-  withdrawalAddress: string,
-  forkVersion: string,
-  compounding?: boolean,
-  precomputedDepositDomain?: Uint8Array,
-): BlsSignatureCheck | null => {
-  const { valid, message } = validateDepositDataStructure(
-    distributedPublicKey,
-    depositData,
-    withdrawalAddress,
-    forkVersion,
-    compounding,
-    precomputedDepositDomain,
-  );
-  if (!valid || !depositData.signature || !depositData.pubkey) return null;
-  return {
-    pubkey: fromHexString(depositData.pubkey),
-    message,
-    signature: fromHexString(depositData.signature),
-  };
-};
+  domain: Uint8Array,
+): Uint8Array => signingRoot(domain, computeDepositMsgRoot(depositData));
 
-export const verifyBuilderRegistration = (
+/**
+ * The builder registration is for the group key and the fee recipient, and
+ * has a signature.
+ */
+export const builderFieldsMatch = (
   validator: DistributedValidator,
   feeRecipientAddress: string,
-  forkVersion: string,
-  precomputedBuilderDomain?: Uint8Array,
-): {
-  isValidBuilderRegistration: boolean;
-  builderRegistrationMsg: Uint8Array;
-} => {
-  const builderDomain =
-    precomputedBuilderDomain ??
-    computeDomain(fromHexString(DOMAIN_APPLICATION_BUILDER), forkVersion);
-
-  if (
-    validator.distributed_public_key !==
-    validator.builder_registration?.message.pubkey
-  ) {
-    return {
-      isValidBuilderRegistration: false,
-      builderRegistrationMsg: new Uint8Array(0),
-    };
-  }
-  if (
-    feeRecipientAddress.toLowerCase() !==
-    validator.builder_registration.message.fee_recipient.toLowerCase()
-  ) {
-    return {
-      isValidBuilderRegistration: false,
-      builderRegistrationMsg: new Uint8Array(0),
-    };
-  }
-
-  const builderRegistrationMessageBuffer = computebuilderRegistrationMsgRoot(
-    validator.builder_registration.message,
+): boolean => {
+  const registration = validator.builder_registration;
+  return (
+    registration !== undefined &&
+    registration !== null &&
+    validator.distributed_public_key === registration.message.pubkey &&
+    feeRecipientAddress.toLowerCase() ===
+      registration.message.fee_recipient.toLowerCase() &&
+    typeof registration.signature === 'string' &&
+    registration.signature.length > 0
   );
-
-  const builderRegistrationMessage = signingRoot(
-    builderDomain,
-    builderRegistrationMessageBuffer,
-  );
-
-  return {
-    isValidBuilderRegistration: true,
-    builderRegistrationMsg: builderRegistrationMessage,
-  };
 };
 
-/** Builder registration BLS triple for batch verification. Returns null if structure is invalid. */
-export const builderBlsCheck = (
-  validator: DistributedValidator,
-  feeRecipientAddress: string,
-  forkVersion: string,
-  precomputedBuilderDomain?: Uint8Array,
-): BlsSignatureCheck | null => {
-  const { isValidBuilderRegistration, builderRegistrationMsg } =
-    verifyBuilderRegistration(
-      validator,
-      feeRecipientAddress,
-      forkVersion,
-      precomputedBuilderDomain,
-    );
-  const sig = validator.builder_registration?.signature;
-  if (!isValidBuilderRegistration || !sig) return null;
-  return {
-    pubkey: fromHexString(validator.distributed_public_key),
-    message: builderRegistrationMsg,
-    signature: fromHexString(sig),
-  };
-};
+/** Signing root of a builder registration message in `domain`. */
+export const builderSigningRoot = (
+  message: BuilderRegistrationMessage,
+  domain: Uint8Array,
+): Uint8Array =>
+  signingRoot(domain, computebuilderRegistrationMsgRoot(message));
 
-export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
+export const verifyNodeSignatures = async (
+  clusterLock: ClusterLock,
+  tick: () => Promise<void> = async () => {},
+): Promise<boolean> => {
   const nodeSignatures = clusterLock.node_signatures;
 
   if (
@@ -384,10 +466,12 @@ export const verifyNodeSignatures = (clusterLock: ClusterLock): boolean => {
     const publicKey = ENR.decodeTxt(
       clusterLock.cluster_definition.operators[i].enr as string,
     ).publicKey;
+    await tick();
 
     if (!secp256k1VerifyDigest(publicKey, lockHash, nodeSignatures[i])) {
       return false;
     }
+    await tick();
   }
 
   return true;

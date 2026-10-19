@@ -88,7 +88,7 @@ src/
 ├── abi.ts            # Contract ABIs (viem `as const`)
 ├── chainUtils.ts     # Chain read helpers (CHAIN_READ_FAILED)
 ├── send.ts           # send + waitForContractWalletExecution (Safe)
-├── cluster/          # Definitions and locks: hashing, EIP-712, prepare/create/accept, verifyLock, watch
+├── cluster/          # Definitions and locks: hashing, EIP-712, prepare/create/accept, verifyLock (+ BlsBackend), watch
 ├── deposits/         # fromLock, verifyDepositData, status, prepareDeposit
 ├── ovm/              # OVM reads (verify, state, roles, validators), routing, withdraw / consolidate / distribute, role writes
 ├── splits/           # SplitV2: share math, predict / create, getSplit, distributions
@@ -101,22 +101,22 @@ src/
 └── internal/         # Pure code carried over from 2.x (not exported)
     ├── types.ts      # Loose cluster file shapes read by the hashing code
     ├── definitionFlow.ts         # Group / Solo / Charon flow detection
-    ├── bls.ts                    # BLS12-381 (@noble/curves): verify, aggregate, threshold, share recovery
+    ├── bls.ts                    # BLS12-381 (@noble/curves): point decoding, finite differences, randomised batch, threshold aggregation
     ├── secp256k1.ts              # ENR-key signature verification
     ├── exitDomain.ts             # computeDomain / signingRoot for exits
+    ├── yielder.ts                # createTick: yield to the event loop every yieldMs
     └── verification/
-        ├── common.ts             # Config / definition / lock hashes, deposit + builder BLS checks, node signatures
+        ├── common.ts             # Config / definition / lock hashes (one-shot and sliced), deposit + builder fields and signing roots, node signatures
+        ├── shareBinding.ts       # Step 5 for one validator (decode with the subgroup shortcut, finite differences)
+        ├── signatureBatch.ts     # firstInvalidSignature: batches of 32, one-by-one fallback
         ├── sszTypes.ts           # Shared SSZ containers
-        ├── v1.6.0.ts … v1.11.0.ts  # Per-version SSZ hashing
-        ├── parallelPool.ts       # Worker-thread BLS batches (LOCK_VERIFICATION_TIMEOUT)
-        ├── lockWorker.ts         # worker_threads entry (own bundle in the Node builds)
-        └── validationConcurrency.ts  # Per-process verifyLock limit (LOCK_VERIFICATION_BUSY)
+        └── v1.6.0.ts … v1.11.0.ts  # Per-version SSZ hashing
 
 test/
 ├── fixtures.ts       # Shared cluster locks, ENRs, deposit payloads
 ├── fixtures/spec/    # Vendored distributed-validator-specs vectors (cluster_hashing, bls_threshold)
 ├── bytecodes.ts      # Factory runtime code for fake chains (large; do not read unless needed)
-├── helpers/          # fakeChain / fakeApi: EIP-1193 fake chain and API for unit tests
+├── helpers/          # fakeChain / fakeApi (EIP-1193 fake chain and API), syntheticLock (real-key locks), blstBackend (test-only adapter)
 ├── vectors/          # spec/vectors and distributed-validator-specs suites
 └── <module>/         # One directory per src module (cluster, deposits, ovm, splits, setup, ...)
 ```
@@ -134,7 +134,7 @@ Key build notes:
 - `viem` is a peer dependency and always external.
 - `@noble/curves`, `@noble/hashes` and `@chainsafe/enr` (ESM-only) are bundled; `@chainsafe/ssz` and `@sinclair/typebox` are dependencies.
 - Browser build defines `process.env` as empty and `global` as `globalThis`.
-- **CJS/ESM Node** also emit the chunk worker as its own bundle, `internal/verification/lockWorker.js` (see `tsup.config.ts`). The browser build does not; BLS work runs inline there.
+- One entry per build (`src/index.ts`); no worker bundle and no `worker_threads` / native imports in `dist`.
 
 ## Architecture
 
@@ -196,24 +196,16 @@ Exits use the EIP-7044 domain: the Capella fork version and genesis validators r
 
 One class, **`ObolError`** (`code`, `message`, `hint`, `details`), and **`ObolApiError`** for API responses (`status`, `endpoint`, ...). Callers switch on `code`, with `isObolError(error, code)`. Every code, what throws it and what the caller should do is in `spec/errors.md`; findings codes are there too. Add a new code there first.
 
-### Lock verification and workers
+### Lock verification
 
-`cluster.verifyLock` runs the distributed-validator-specs "Verifying a Lock Before Use" steps and reports the first failing `step` (`{ ok, step?, issue? }`); a malformed lock is `PAYLOAD_INVALID`. It is CPU-bound on `@noble/curves` (pure JS BLS; no native `blst`): a 1k-validator lock is roughly a minute of crypto.
+`cluster.verifyLock(lock, { level, signatures, yieldMs, bls, publicClient })` runs the distributed-validator-specs "Verifying a Lock Before Use" steps and reports the first failing `step` (`{ ok, level, step?, issue?, validator? }`); a malformed lock or bad options is `PAYLOAD_INVALID`. The contract is `spec/operations.md` "cluster.verifyLock".
 
-| Layer | When | Purpose |
-|-------|------|---------|
-| **Chunk workers** (`lockWorker.js`) | Large share-binding / batch BLS / pubkey aggregation, CJS Node | Uses multiple cores inside one verification |
-| **Concurrency limit** | Every `verifyLock` | `OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS` (default 2, `0` = no limit); over it throws `LOCK_VERIFICATION_BUSY` |
-
-**Build behavior:**
-
-- **CJS Node** (obol-api): worker path ✅. `parallelPool` is bundled into `index.js` (`__dirname` = `dist/cjs/src`), and `getWorkerPath` looks for `internal/verification/lockWorker.js` under it, then `__dirname` itself. **Publish only after `yarn build`.**
-- **ESM Node / Jest / source**: inline fallback (no `__dirname`).
-- **Browser**: inline only (no worker bundle).
-
-**Worker failure semantics:** a chunk worker over its time limit (180 s) → `ObolError` **`LOCK_VERIFICATION_TIMEOUT`** with `details.timeoutMs` (not a verdict; obol-api maps it to 504); a worker crash counts as a failed check. Deposit and builder checks go through `depositBlsCheck` / `builderBlsCheck` → `verifyBlsChecksParallel` (each signature verified once); the lock's one `signature_aggregate` is checked with `verifyAggregateParallel`. `deposits.verifyDepositData` uses the same pool.
-
-**When changing validation logic**, read **`PARALLEL_VALIDATION_PLAN.md`** first. **Do not** add `blst` or opt-in profiling without an explicit product decision.
+- **Levels.** `full` (default) runs everything. `attested` skips the BLS work Charon did in the DKG before the nodes signed `lock_hash` (share binding, `signature_aggregate`) and checks the deposit / builder BLS signatures of the validators in `signatures` only. `deposits.fromLock` uses `attested` with the validators it returns.
+- **One thread, no workers.** Everything runs on the calling thread and awaits `tick()` (`src/internal/yielder.ts`) between units of work: it yields (`setImmediate`, else `setTimeout(0)`) once half of `yieldMs` (default 50) has passed. Long loops (lock / definition hashing per validator, share binding, signature batches, node signatures) must keep calling `tick`. There are no time limits or concurrency limits; servers apply their own around the call.
+- **BLS backend.** `BlsBackend` (`src/cluster/blsBackend.ts`) is the injectable interface (`decodePublicKey`, `aggregatePublicKeys`, `onPolynomial`, `verify`, `createBatch`); `nobleBls` is the default. The SDK never imports a native module. The `@chainsafe/blst` adapter in its TSDoc is also `test/helpers/blstBackend.ts`; `test/cluster/blstCrossCheck.spec.ts` checks both backends agree (`@chainsafe/blst` is a test-only devDependency).
+- **Share binding (step 5).** Y0 = group key, Yj = share j: they lie on one polynomial of degree < t iff every t-th forward difference is the identity (point subtractions only). Only Y0 … Y(t-1) are subgroup-checked; later points are then integer combinations of them. Identity points are rejected. `test/internal/shareBinding.spec.ts` compares it with Lagrange recovery.
+- **Signatures (steps 6, 7, `verifyDepositData`).** `firstInvalidSignature` checks batches of 32 with random 64-bit weights per signature (subgroup-checked points), so a batch passes only if each signature is valid on its own; a failing batch is rechecked one by one to report the first invalid validator. Never replace this with a plain aggregate check: invalid signatures can cancel out in a sum (`test/cluster/verifyLockSynthetic.spec.ts` has the cases).
+- **Cost** (one thread): pure JS about 25 ms per signature, so a 1k-validator lock with 3 signatures each is about 80 s `full`, 0.3 s `attested`; 10k `attested` about 2 s. With the blst adapter, 1k `full` about 1.3 s.
 
 ### Supported Chains (`src/chains.ts`)
 
@@ -259,20 +251,16 @@ This keeps the SDK in sync with the API and ensures external developers always h
 
 Tests are in `test/`, one directory per module. Key conventions:
 
-- **Chain and API**: use `fakeChain()` / `fakeApi()` from `test/helpers/fakeChain.ts` (an EIP-1193 fake behind a real viem `PublicClient`, with fake contracts and logs) instead of mocking viem. `fakeChain().context(api)` gives a `Context`.
+- **Chain and API**: use `fakeChain()` / `fakeApi()` from `test/helpers/fakeChain.ts` (an EIP-1193 fake behind a real viem `PublicClient`, with fake contracts and logs) instead of mocking viem. `fakeChain().context(api)` gives a `Context`. `fakeApi` answers `POST /v1/validators/:network/deposit-status` with a 404 unless a test serves it (the route is not deployed yet).
 - **Wallets**: `test/cluster/wallet.ts` has local accounts (`KEYS`, `localWallet`, `withWallet`).
 - **Errors**: assert on `code` (and `details`), not on messages.
 - **Vectors**: `test/vectors/` runs `spec/vectors/*.json` and the vendored distributed-validator-specs vectors; a rule change updates the vector first.
-- **ESM mocks**: `jest.unstable_mockModule('../../src/...js', ...)` before a dynamic `import()` of the module under test (see `test/cluster/verifyLockTimeout.spec.ts`).
+- **ESM mocks**: `jest.unstable_mockModule('../../src/...js', ...)` before a dynamic `import()` of the module under test.
+- **Locks with real keys**: `syntheticLock(validators, operators, threshold, amounts)` in `test/helpers/syntheticLock.ts` builds a valid lock; its `seal` re-signs an edited copy so only the edited check fails.
 
 ## Environment Variables
 
-```bash
-# Max concurrent cluster.verifyLock calls per process (default 2, 0 = no limit; tests use 0)
-OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS=2
-```
-
-The SDK reads no other environment variables; RPCs come from the viem clients the caller passes.
+The SDK reads no environment variables; RPCs come from the viem clients the caller passes.
 
 ## Code Style
 
@@ -290,6 +278,7 @@ The SDK reads no other environment variables; RPCs come from the viem clients th
 | `@noble/curves` | BLS12-381 and secp256k1 (bundled) |
 | `@chainsafe/ssz` | SSZ hashing of cluster files, deposits and exits |
 | `@chainsafe/enr` | Ethereum Node Record parsing (bundled; ESM-only) |
+| `@chainsafe/blst` (dev only) | Native BLS, to cross-check the pure-JS backend in tests; never imported by `src/` |
 
 ## Dependencies policy
 
@@ -346,6 +335,7 @@ Factories are checked by code hash (`EXPECTED_CODE_HASHES` in `src/splits/chain.
 - Do not skip schema decoding — every input is decoded before API/contract calls
 - Do not add ethers (or any second Ethereum library); use viem
 - Do not use `jest.mock()` — use `jest.unstable_mockModule()` for ESM compatibility
+- Do not import native modules (`@chainsafe/blst`, …) or `worker_threads` from `src/`; native speed comes in through a caller's `BlsBackend`
 - Do not publish to npm from local — always use the GitHub Actions workflow
 
 ## Related products
@@ -362,7 +352,6 @@ Factories are checked by code hash (`EXPECTED_CODE_HASHES` in `src/splits/chain.
 ## Key docs
 
 - **v3 spec**: `spec/DESIGN.md`, `spec/operations.md`, `spec/errors.md`, `spec/lifecycles.md`, `spec/vectors/` (in this repo)
-- **Lock validation performance / workers**: `PARALLEL_VALIDATION_PLAN.md` (in this repo)
 - SDK TypeDoc reference: https://obolnetwork.github.io/obol-sdk
 - Obol SDK quickstart: https://docs.obol.org/docs/advanced/quickstart-sdk
 - Charon CLI reference: https://docs.obol.org/docs/charon/charon-cli-reference

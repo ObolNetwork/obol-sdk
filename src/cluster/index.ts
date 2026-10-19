@@ -20,7 +20,11 @@ import {
   type DefinitionVerification,
   type VerifyOptions,
 } from './verifyDefinition.js';
-import { verifyLock, type LockVerification } from './verifyLock.js';
+import {
+  verifyLock,
+  type LockVerification,
+  type VerifyLockOptions,
+} from './verifyLock.js';
 import { watch, type ClusterEvent, type WatchOptions } from './watch.js';
 
 export {
@@ -36,6 +40,7 @@ export {
   verifyLock,
   watch,
 };
+export { nobleBls, type BlsBackend, type BlsBatch } from './blsBackend.js';
 export {
   creatorConfigHashTypedData,
   enrTypedData,
@@ -58,6 +63,7 @@ export type {
 export type {
   LockStep,
   LockVerification,
+  LockVerificationLevel,
   VerifyLockOptions,
 } from './verifyLock.js';
 export type { ClusterEvent, WatchOptions } from './watch.js';
@@ -65,7 +71,7 @@ export type { ClusterEvent, WatchOptions } from './watch.js';
 /**
  * The cluster module bound to a client context. `verifyDefinition` defaults
  * `chainId` to the client chain, and both verifiers use the client's
- * `publicClient` for contract-wallet signatures.
+ * `publicClient` for contract-wallet signatures unless the options pass one.
  */
 export interface ClusterModule {
   computeConfigHash: typeof computeConfigHash;
@@ -92,7 +98,10 @@ export interface ClusterModule {
     input: { definition: unknown; configHash?: Hex; chainId?: number },
     options?: VerifyOptions,
   ) => Promise<DefinitionVerification>;
-  verifyLock: (lock: unknown) => Promise<LockVerification>;
+  verifyLock: (
+    lock: unknown,
+    options?: VerifyLockOptions,
+  ) => Promise<LockVerification>;
 }
 
 export const createClusterModule = (ctx: Context): ClusterModule => ({
@@ -118,6 +127,6 @@ export const createClusterModule = (ctx: Context): ClusterModule => ({
       { ...input, chainId: input.chainId ?? ctx.chain.id },
       { ...options, publicClient: options.publicClient ?? ctx.publicClient },
     ),
-  verifyLock: async (lock: unknown) =>
-    await verifyLock(lock, { publicClient: ctx.publicClient }),
+  verifyLock: async (lock: unknown, options: VerifyLockOptions = {}) =>
+    await verifyLock(lock, { publicClient: ctx.publicClient, ...options }),
 });

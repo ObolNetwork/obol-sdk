@@ -24,6 +24,19 @@ checks, reads and returns, and every error code, is specified in [`spec/`](spec/
 - Inputs are validated with TypeBox schemas instead of AJV.
 - Incentive claims, EOA withdrawals and OWR reads carry over as `incentives.prepareClaim`,
   `withdrawals.prepareEoaWithdraw` and `legacy.getOwrTranches`.
+- `cluster.verifyLock` is faster on one thread: every point is decoded once, share binding uses finite differences
+  (point subtractions; only the first `threshold` points are subgroup-checked), `signature_aggregate` reuses the
+  decoded shares, and deposit and builder signatures are checked in randomised batches of 32 with a one-by-one
+  fallback. Its result has `level` and, for a per-validator failure, `validator`. A 1k-validator lock: about 80 s
+  instead of 2 minutes in pure JS.
+- `cluster.verifyLock` yields to the event loop every `yieldMs` (default 50) instead of using worker threads.
+- `deposits.fromLock` verifies at level `attested` plus the BLS signatures of the validators it returns
+  (`verify: 'full'` for every check), so a 10k-validator lock takes seconds plus about 25 ms per checked signature;
+  `LOCK_INVALID` carries the failing validator as `index`.
+- `deposits.status` reads `POST /v1/validators/:network/deposit-status` (every queued deposit with its own
+  credentials) and no longer needs `lockHash`; until that route is deployed it falls back to `/v1/state/:lockHash`
+  (with `lockHash`) or the beacon node.
+- `deposits.prepareDeposit`: a queued deposit with all-zero credentials (a top-up) is not a `DEPOSIT_CONFLICT`.
 
 **New**
 
@@ -35,12 +48,20 @@ checks, reads and returns, and every error code, is specified in [`spec/`](spec/
 - `exits.aggregate` does threshold (Lagrange) aggregation and checks the result against the group key (2.x summed the
   partials); exit domains come from the chain table (EIP-7044), with no beacon node needed.
 - JSON test vectors in `spec/vectors/`, plus the distributed-validator-specs vectors.
+- `cluster.verifyLock` options `level` (`'attested'` | `'full'`), `signatures` (which validators' BLS signatures
+  `attested` checks), `yieldMs` and `bls`: an injectable `BlsBackend` (default `cluster.nobleBls`, pure JS). The TSDoc
+  has a ~30-line adapter over `@chainsafe/blst` for Node servers; the SDK never imports a native module.
+- `deposits.fromLock` option `validators` (indexes or group pubkeys) and result field `validators`.
+- `deposits.status` option `expectedWithdrawalAddress` and per-pubkey `credentialsMatch`.
 
 **Removed**
 
 - ethers support, and with it `@safe-global/*`, `@metamask/eth-sig-util`, AJV, `semver` and `uuid`.
 - The 2.x `Client` and all its methods and sub-modules (`splits`, `eoa`, `incentives`, `exit`), the standalone
   `validateClusterLock` and the whole-lock validation worker, and creation of OWR / SplitMain contracts.
+- The lock verification chunk workers (`lockWorker.js` bundle), the per-process concurrency limit
+  (`OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS`) and the `LOCK_VERIFICATION_TIMEOUT` / `LOCK_VERIFICATION_BUSY` codes.
+  A server that needs a deadline or a limit applies it around the call.
 
 **Fixed**
 

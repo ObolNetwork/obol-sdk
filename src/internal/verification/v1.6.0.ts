@@ -21,6 +21,7 @@ import {
   ContainerType,
   ListCompositeType,
   fromHexString,
+  type ValueOf,
 } from '@chainsafe/ssz';
 import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container.js';
 import { type ClusterDefinition, type ClusterLock } from '../types.js';
@@ -127,7 +128,7 @@ export const hashClusterDefinitionV1X6 = (
 
 // cluster lock
 
-const dvContainerTypeV1X6 = new ContainerType({
+export const dvContainerTypeV1X6 = new ContainerType({
   distributed_public_key: new ByteVectorType(48),
   public_shares: new ListCompositeType(new ByteVectorType(48), 256),
   pubkey: new ByteVectorType(48),
@@ -151,6 +152,24 @@ const clusterLockContainerTypeV1X6 = (): LockContainerTypeV1X6 => {
   });
 };
 
+/** SSZ value of one distributed validator. */
+export const dvValueV1X6 = (
+  dValidator: ClusterLock['distributed_validators'][number],
+): ValueOf<typeof dvContainerTypeV1X6> => {
+  return {
+    distributed_public_key: fromHexString(dValidator.distributed_public_key),
+    public_shares: listOrEmpty(dValidator.public_shares).map(publicShare =>
+      fromHexString(publicShare),
+    ),
+    pubkey: fromHexString(dValidator.deposit_data?.pubkey as string),
+    withdrawal_credentials: fromHexString(
+      dValidator.deposit_data?.withdrawal_credentials as string,
+    ),
+    amount: toUint64(dValidator.deposit_data?.amount as string),
+    signature: fromHexString(dValidator.deposit_data?.signature as string),
+  };
+};
+
 /**
  * @param cluster The published cluster lock
  * @returns The lock hash in of the corresponding cluster
@@ -166,22 +185,7 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
     false,
   );
   val.distributed_validators = listOrEmpty(cluster.distributed_validators).map(
-    dValidator => {
-      return {
-        distributed_public_key: fromHexString(
-          dValidator.distributed_public_key,
-        ),
-        public_shares: listOrEmpty(dValidator.public_shares).map(publicShare =>
-          fromHexString(publicShare),
-        ),
-        pubkey: fromHexString(dValidator.deposit_data?.pubkey as string),
-        withdrawal_credentials: fromHexString(
-          dValidator.deposit_data?.withdrawal_credentials as string,
-        ),
-        amount: toUint64(dValidator.deposit_data?.amount as string),
-        signature: fromHexString(dValidator.deposit_data?.signature as string),
-      };
-    },
+    dvValueV1X6,
   );
 
   return '0x' + Buffer.from(lockType.hashTreeRoot(val).buffer).toString('hex');

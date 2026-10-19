@@ -304,6 +304,22 @@ describe('deposits.prepareDeposit', () => {
       });
     });
 
+    it('does not count a queued zero-credential top-up as a conflict', async () => {
+      restore = mockBeacon(
+        [
+          {
+            pubkey: PUBKEY,
+            withdrawal_credentials: `0x${'00'.repeat(32)}`,
+            amount: '1000000000',
+          },
+        ],
+        [],
+      );
+      expect(codes((await run({}))[0].checks)).toEqual([
+        'DEPOSIT_ALREADY_QUEUED',
+      ]);
+    });
+
     it('notes DEPOSIT_ALREADY_QUEUED for same-credential queued deposits', async () => {
       restore = mockBeacon(
         [

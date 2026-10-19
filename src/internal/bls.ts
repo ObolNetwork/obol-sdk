@@ -1,4 +1,5 @@
 import { bls12_381 } from '@noble/curves/bls12-381.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 
 // ETH2 BLS uses G1 public keys (48 bytes) and G2 signatures (96 bytes) — longSignatures mode.
 // The Ethereum consensus spec uses the POP (Proof of Possession) DST, not the noble/curves NUL default.
@@ -6,21 +7,116 @@ const { longSignatures: ls } = bls12_381;
 const ETH2_DST = 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_';
 const G1 = bls12_381.G1.Point;
 const G2 = bls12_381.G2.Point;
-type G1Point = typeof G1.BASE;
+const { Fp, Fp12 } = bls12_381.fields;
+export type G1Point = typeof G1.BASE;
 type G2Point = typeof G2.BASE;
+type LineCoefficients = ReturnType<
+  typeof bls12_381.utils.calcPairingPrecomputes
+>;
+type PairingInput = [LineCoefficients, bigint, bigint];
 
-// Decode with full validation (on-curve and prime-order subgroup, done by
-// noble's fromBytes) and reject the identity point, which fromBytes accepts.
-function decodePubkey(bytes: Uint8Array): G1Point {
-  const point = G1.fromBytes(bytes);
-  if (point.is0()) throw new Error('public key is the point at infinity');
+const precomputes = (point: G2Point): LineCoefficients =>
+  bls12_381.utils.calcPairingPrecomputes(point);
+
+const HALF_P = (Fp.ORDER - BigInt(1)) / BigInt(2);
+const NEG_G1 = G1.BASE.negate().toAffine();
+
+/**
+ * Decodes a compressed G1 point (ZCash encoding) without the prime-order
+ * subgroup check: one square root, so the point is on the curve by
+ * construction. Throws for a bad length or flags, an x outside the field, an
+ * x with no curve point, and the point at infinity.
+ */
+export function decodeG1Unchecked(bytes: Uint8Array): G1Point {
+  if (bytes.length !== 48) throw new Error('G1 point: expected 48 bytes');
+  const flags = bytes[0];
+  if ((flags & 0x80) === 0) throw new Error('G1 point: not compressed');
+  if ((flags & 0x40) !== 0) throw new Error('G1 point: point at infinity');
+  const xBytes = bytes.slice();
+  xBytes[0] &= 0x1f;
+  const x = bytesToNumberBE(xBytes);
+  if (x >= Fp.ORDER) throw new Error('G1 point: x not in the field');
+  // y² = x³ + 4; Fp.sqrt throws when x is not on the curve.
+  let y = Fp.sqrt(Fp.add(Fp.mul(Fp.sqr(x), x), BigInt(4)));
+  const yIsLarger = y > HALF_P;
+  if (yIsLarger !== ((flags & 0x20) !== 0)) y = Fp.neg(y);
+  return G1.fromAffine({ x, y });
+}
+
+/**
+ * Decodes a G1 public key. With `subgroupCheck`, the point must be in the
+ * prime-order subgroup (noble's full validation); the identity is always
+ * rejected.
+ */
+export function decodeG1(bytes: Uint8Array, subgroupCheck: boolean): G1Point {
+  const point = subgroupCheck ? G1.fromBytes(bytes) : decodeG1Unchecked(bytes);
+  if (point.is0()) throw new Error('G1 point: point at infinity');
   return point;
 }
 
+/** Decodes a G2 signature: on the curve, in the subgroup, not the identity. */
 function decodeSignature(bytes: Uint8Array): G2Point {
   const point = ls.Signature.fromBytes(bytes);
   if (point.is0()) throw new Error('signature is the point at infinity');
   return point;
+}
+
+/** Σ points (the identity for an empty list). */
+export function sumG1(points: G1Point[]): G1Point {
+  let sum = G1.ZERO;
+  for (const point of points) sum = sum.add(point);
+  return sum;
+}
+
+/**
+ * Whether `points[x]` (x = 0..n) are the values of one polynomial of degree
+ * below `threshold`: every `threshold`-th forward difference of the sequence
+ * is the identity. Uses only point subtraction, which is exact group
+ * arithmetic on the curve whether or not a point is in the subgroup.
+ *
+ * With `points[0]` the group key and `points[j]` the public share at index j,
+ * this accepts exactly when recovering the key from the first `threshold`
+ * shares, and from any `threshold - 1` of them plus each further share, gives
+ * the group key.
+ */
+export function onPolynomial(points: G1Point[], threshold: number): boolean {
+  if (!Number.isSafeInteger(threshold) || threshold < 1) return false;
+  if (points.length < threshold + 1) return false;
+  let differences = points;
+  for (let order = 0; order < threshold; order++) {
+    const next = new Array<G1Point>(differences.length - 1);
+    for (let k = 0; k < next.length; k++) {
+      next[k] = differences[k + 1].subtract(differences[k]);
+    }
+    differences = next;
+  }
+  return differences.every(point => point.is0());
+}
+
+const pairingIsOne = (pairs: PairingInput[]): boolean =>
+  Fp12.eql(Fp12.finalExponentiate(bls12_381.millerLoopBatch(pairs)), Fp12.ONE);
+
+/**
+ * Verifies one signature against a decoded public key (not the identity):
+ * e(pk, H(m)) · e(-G1, S) == 1.
+ */
+export function verifyDecoded(
+  publicKey: G1Point,
+  message: Uint8Array,
+  signature: Uint8Array,
+): boolean {
+  try {
+    if (publicKey.is0()) return false;
+    const S = decodeSignature(signature);
+    const H = ls.hash(message, ETH2_DST);
+    const pk = publicKey.toAffine();
+    return pairingIsOne([
+      [precomputes(H), pk.x, pk.y],
+      [precomputes(S), NEG_G1.x, NEG_G1.y],
+    ]);
+  } catch {
+    return false;
+  }
 }
 
 export function blsVerify(
@@ -29,43 +125,7 @@ export function blsVerify(
   signature: Uint8Array,
 ): boolean {
   try {
-    return ls.verify(signature, ls.hash(message, ETH2_DST), pubkey);
-  } catch {
-    return false;
-  }
-}
-
-export function blsAggregatePublicKeys(pubkeys: Uint8Array[]): Uint8Array {
-  if (pubkeys.length === 0) {
-    throw new Error('cannot aggregate empty pubkey set');
-  }
-  return ls.aggregatePublicKeys(pubkeys).toBytes() as Uint8Array;
-}
-
-export function blsVerifyAggregate(
-  pubkeys: Uint8Array[],
-  message: Uint8Array,
-  signature: Uint8Array,
-): boolean {
-  try {
-    return ls.verify(
-      signature,
-      ls.hash(message, ETH2_DST),
-      ls.aggregatePublicKeys(pubkeys),
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Verify when the pubkey set is already aggregated to a single G1 key. */
-export function blsVerifyWithAggregatedPubkey(
-  aggregatedPubkey: Uint8Array,
-  message: Uint8Array,
-  signature: Uint8Array,
-): boolean {
-  try {
-    return ls.verify(signature, ls.hash(message, ETH2_DST), aggregatedPubkey);
+    return verifyDecoded(decodeG1(pubkey, true), message, signature);
   } catch {
     return false;
   }
@@ -78,6 +138,17 @@ function randomWeight(): bigint {
   const [hi, lo] = crypto.getRandomValues(new Uint32Array(2));
   const weight = (BigInt(hi) << BigInt(32)) | BigInt(lo);
   return weight === BigInt(0) ? BigInt(1) : weight;
+}
+
+/** [k]P for k below 2^64 by double-and-add (no precomputed table). */
+function mulSmall(point: G1Point, k: bigint): G1Point {
+  let acc = G1.ZERO;
+  const bits = k.toString(2);
+  for (let i = 0; i < bits.length; i++) {
+    acc = acc.double();
+    if (bits[i] === '1') acc = acc.add(point);
+  }
+  return acc;
 }
 
 /**
@@ -110,65 +181,71 @@ function sumWeightedSignatures(points: G2Point[], weights: bigint[]): G2Point {
   return sum;
 }
 
-/**
- * Checks that every `signatures[i]` is a valid signature of `messages[i]`
- * under `pubkeys[i]`, with one batched pairing check: for fresh random
- * non-zero 64-bit weights rᵢ,
- *
- *   e(G1, Σ rᵢ·Sᵢ) == Π e(rᵢ·PKᵢ, H(mᵢ)).
- *
- * Every point is checked to be in the prime-order subgroup and not the
- * identity, so if any signature is invalid on its own the check fails except
- * with probability at most 2^-63 over the weights.
- */
-export function blsVerifyEach(
-  pubkeys: Uint8Array[],
-  messages: Uint8Array[],
-  signatures: Uint8Array[],
-): boolean {
-  try {
-    if (
-      pubkeys.length !== messages.length ||
-      pubkeys.length !== signatures.length
-    ) {
-      return false;
-    }
-    if (pubkeys.length === 0) return true;
-    const weights = pubkeys.map(randomWeight);
-    const items = pubkeys.map((pubkey, i) => ({
-      message: ls.hash(messages[i], ETH2_DST),
-      publicKey: decodePubkey(pubkey).multiplyUnsafe(weights[i]),
-    }));
-    const weightedSignature = sumWeightedSignatures(
-      signatures.map(decodeSignature),
-      weights,
-    );
-    return ls.verifyBatch(weightedSignature, items);
-  } catch {
-    return false;
-  }
-}
+/** Signatures per group of Miller loops inside a batch (keeps `add` short). */
+const GROUP = 2;
 
 /**
- * Verifies one aggregate signature (the plain sum of the signers' signatures)
- * over distinct (pubkey, message) pairs. This proves only that the sum is
- * valid, not that each signer's own signature is; use {@link blsVerifyEach}
- * to check a set of individual signatures.
+ * Randomised batch verification. For fresh random non-zero 64-bit weights rᵢ
+ * (drawn when each signature is added, after its inputs are fixed) it checks
+ *
+ *   Π e(rᵢ·PKᵢ, H(mᵢ)) · e(-G1, Σ rᵢ·Sᵢ) == 1.
+ *
+ * Every public key is a decoded subgroup point (not the identity) and every
+ * signature is checked to be in the prime-order subgroup and not the
+ * identity, so if any signature is invalid on its own the check fails except
+ * with probability at most 2^-63 over the weights.
+ *
+ * The work is done as signatures are added (hashing, Miller loops in groups
+ * of two); `verify` adds one Miller loop and the final exponentiation.
  */
-export function blsVerifyMultiple(
-  pubkeys: Uint8Array[],
-  messages: Uint8Array[],
-  signature: Uint8Array,
-): boolean {
-  try {
-    if (pubkeys.length !== messages.length) return false;
-    const items = messages.map((msg, i) => ({
-      message: ls.hash(msg, ETH2_DST),
-      publicKey: pubkeys[i],
-    }));
-    return ls.verifyBatch(signature, items);
-  } catch {
-    return false;
+export class NobleSignatureBatch {
+  private accumulated = Fp12.ONE;
+  private weightedSum = G2.ZERO;
+  private pairs: PairingInput[] = [];
+  private signatures: G2Point[] = [];
+  private weights: bigint[] = [];
+  private count = 0;
+
+  add(publicKey: G1Point, message: Uint8Array, signature: Uint8Array): void {
+    if (publicKey.is0()) throw new Error('public key is the point at infinity');
+    const S = decodeSignature(signature);
+    const weight = randomWeight();
+    const H = ls.hash(message, ETH2_DST);
+    const weighted = mulSmall(publicKey, weight).toAffine();
+    this.pairs.push([precomputes(H), weighted.x, weighted.y]);
+    this.signatures.push(S);
+    this.weights.push(weight);
+    this.count++;
+    if (this.pairs.length >= GROUP) this.flush();
+  }
+
+  private flush(): void {
+    if (this.pairs.length === 0) return;
+    this.accumulated = Fp12.mul(
+      this.accumulated,
+      bls12_381.millerLoopBatch(this.pairs),
+    );
+    this.weightedSum = this.weightedSum.add(
+      sumWeightedSignatures(this.signatures, this.weights),
+    );
+    this.pairs = [];
+    this.signatures = [];
+    this.weights = [];
+  }
+
+  verify(): boolean {
+    this.flush();
+    if (this.count === 0) return true;
+    // Σ rᵢ·Sᵢ is the identity only with negligible probability for valid
+    // signatures; noble cannot pair the identity.
+    if (this.weightedSum.is0()) return false;
+    const last = bls12_381.millerLoopBatch([
+      [precomputes(this.weightedSum), NEG_G1.x, NEG_G1.y],
+    ]);
+    return Fp12.eql(
+      Fp12.finalExponentiate(Fp12.mul(this.accumulated, last)),
+      Fp12.ONE,
+    );
   }
 }
 
@@ -186,23 +263,6 @@ function lagrangeCoeffAtZero(shareIndex: bigint, indices: bigint[]): bigint {
     den = Fr.mul(den, Fr.sub(shareIndex, j));
   }
   return Fr.mul(num, Fr.inv(den));
-}
-
-function blsRecoverWithIndices(
-  shares: Uint8Array[],
-  indices: bigint[],
-): Uint8Array | null {
-  try {
-    let recovered = bls12_381.G1.Point.ZERO;
-    for (let i = 0; i < shares.length; i++) {
-      const point = bls12_381.G1.Point.fromBytes(shares[i]);
-      const coeff = lagrangeCoeffAtZero(indices[i], indices);
-      recovered = recovered.add(point.multiply(coeff));
-    }
-    return recovered.toBytes() as Uint8Array;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -241,53 +301,4 @@ export function blsThresholdAggregateSignatures(
     i++;
   }
   return ls.Signature.toBytes(aggregate) as Uint8Array;
-}
-
-// Recover validator distributed pubkey from threshold public shares using
-// Lagrange interpolation in G1 at x=0. Shares are assumed to be at 1-based
-// consecutive positions (index 1, 2, ..., threshold).
-export function blsRecoverDistributedPubkeyFromShares(
-  pubshares: Uint8Array[],
-  threshold: number,
-): Uint8Array | null {
-  if (threshold <= 0 || pubshares.length < threshold) return null;
-  const selected = pubshares.slice(0, threshold);
-  const indices = selected.map((_, i) => BigInt(i + 1));
-  return blsRecoverWithIndices(selected, indices);
-}
-
-// Verify that every share beyond the first threshold lies on the same
-// polynomial as the first threshold shares. Replaces the last share of the
-// threshold subset with the extra share (keeping its real 1-based index) and
-// checks the reconstruction still produces the same distributed key.
-export function blsVerifyExtraShares(
-  pubshares: Uint8Array[],
-  threshold: number,
-  distributedPubkey: Uint8Array,
-): boolean {
-  // Don't trust the caller — refuse to vacuously pass when there aren't
-  // enough shares to even form a threshold-sized subset.
-  if (threshold <= 0 || pubshares.length < threshold) return false;
-  try {
-    const baseShares = pubshares.slice(0, threshold - 1);
-    const baseIndices = baseShares.map((_, i) => BigInt(i + 1));
-    for (let i = threshold; i < pubshares.length; i++) {
-      const shares = [...baseShares, pubshares[i]];
-      const indices = [...baseIndices, BigInt(i + 1)];
-      const recovered = blsRecoverWithIndices(shares, indices);
-      // Length guard before .every() — Uint8Array#every only iterates the
-      // shorter array's indices, so a shorter `recovered` would pass
-      // vacuously without this check.
-      if (
-        !recovered ||
-        recovered.length !== distributedPubkey.length ||
-        !recovered.every((b, j) => b === distributedPubkey[j])
-      ) {
-        return false;
-      }
-    }
-    return true;
-  } catch {
-    return false;
-  }
 }

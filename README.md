@@ -71,12 +71,33 @@ Failures throw `ObolError` (or `ObolApiError` for API responses) with a stable `
 import { isObolError } from '@obolnetwork/obol-sdk';
 
 try {
-  await obol.cluster.verifyLock(lock);
+  await obol.deposits.fromLock(lock);
 } catch (error) {
-  if (isObolError(error, 'LOCK_VERIFICATION_BUSY')) {
-    // retry with backoff
+  if (isObolError(error, 'LOCK_INVALID')) {
+    // do not deposit: error.details.step says which check failed
   }
 }
+```
+
+### Lock verification
+
+`cluster.verifyLock` runs on the calling thread and yields to the event loop every `yieldMs` (default 50), so pages
+and servers stay responsive. `level: 'full'` (default) runs every check; `level: 'attested'` relies on the node
+signatures over `lock_hash` for the BLS checks Charon ran during the DKG and checks the deposit signatures of the
+validators you name, which is what `deposits.fromLock` does for the deposits it returns:
+
+```typescript
+const result = await obol.cluster.verifyLock(lock, { level: 'attested', signatures: [0, 1] });
+// { ok: false, level: 'attested', step: 'deposit_data_invalid', issue: 'signature_invalid', validator: 1 }
+```
+
+BLS is pure JavaScript by default (about 25 ms per signature). A Node server can pass a native backend instead, for
+example an adapter over `@chainsafe/blst` (the adapter is in the TSDoc of `BlsBackend`):
+
+```typescript
+import { blstBackend } from './blstBackend'; // your adapter; the SDK never imports a native module
+
+await obol.cluster.verifyLock(lock, { bls: blstBackend }); // 1k validators, full: about 1 s instead of a minute
 ```
 
 ## Specification

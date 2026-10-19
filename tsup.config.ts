@@ -1,12 +1,8 @@
 import { defineConfig } from 'tsup';
 
-// The chunk worker is its own bundle next to the entry's internal/ tree:
-// parallelPool's getWorkerPath looks for it at
-// <dist>/{cjs,esm}/src/internal/verification/lockWorker.js.
-const nodeEntries = {
-  index: 'src/index.ts',
-  'internal/verification/lockWorker': 'src/internal/verification/lockWorker.ts',
-};
+// One entry per build. Lock verification runs on the calling thread (it
+// yields to the event loop), so there is no worker bundle.
+const nodeEntries = { index: 'src/index.ts' };
 
 // Bundle ESM-only deps and @noble/curves (avoids ESM resolution issues in CJS consumers)
 const noExternal = ['@chainsafe/enr', '@noble/curves', '@noble/hashes'];

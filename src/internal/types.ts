@@ -62,13 +62,6 @@ export type BuilderRegistration = {
   signature: string;
 };
 
-/** Pubkey + message + signature checked together in batch BLS verification. */
-export type BlsSignatureCheck = {
-  pubkey: Uint8Array;
-  message: Uint8Array;
-  signature: Uint8Array;
-};
-
 /** Deposit data of a distributed validator (amount in gwei). */
 export type DepositData = {
   pubkey: string;

@@ -5,7 +5,6 @@ import {
   creatorConfigHashTypedData,
   verifyLock,
 } from '../../src/cluster/index.js';
-import { ObolError } from '../../src/errors.js';
 import {
   charonCreateClusterLockV1X10,
   charonCreateDkgLockV1X10,
@@ -39,7 +38,7 @@ describe('cluster.verifyLock', () => {
     ['v1.10.0 charon create cluster', charonCreateClusterLockV1X10],
     ['v1.10.0 charon create dkg', charonCreateDkgLockV1X10],
   ])('passes every step: %s', async (_name, lock) => {
-    expect(await verifyLock(copy(lock))).toEqual({ ok: true });
+    expect(await verifyLock(copy(lock))).toEqual({ ok: true, level: 'full' });
   });
 
   it('step 1: definition_flow_unknown', async () => {
@@ -58,6 +57,7 @@ describe('cluster.verifyLock', () => {
       lock.cluster_definition.operators[0].config_signature;
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'definition_signature_invalid',
       issue: 'operators[1] config_signature',
     });
@@ -97,7 +97,7 @@ describe('cluster.verifyLock', () => {
         await verifyLock(copy(clusterLockV1X11), {
           publicClient: chain.publicClient,
         }),
-      ).toEqual({ ok: true });
+      ).toEqual({ ok: true, level: 'full' });
     });
 
     it('fails when the contract refuses it', async () => {
@@ -131,6 +131,7 @@ describe('cluster.verifyLock', () => {
     edit(lock);
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'hash_mismatch',
       issue,
     });
@@ -141,6 +142,7 @@ describe('cluster.verifyLock', () => {
     lock.cluster_definition.version = 'v1.9.0';
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'hash_mismatch',
       issue: 'version_unsupported',
     });
@@ -153,8 +155,10 @@ describe('cluster.verifyLock', () => {
     });
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'share_layout_invalid',
       issue: 'duplicate_share',
+      validator: 0,
     });
   });
 
@@ -185,8 +189,10 @@ describe('cluster.verifyLock', () => {
     });
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'deposit_data_invalid',
       issue: 'signature_invalid',
+      validator: 0,
     });
   });
 
@@ -197,8 +203,10 @@ describe('cluster.verifyLock', () => {
     });
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'deposit_data_invalid',
       issue: 'deposit_fields',
+      validator: 0,
     });
   });
 
@@ -208,8 +216,10 @@ describe('cluster.verifyLock', () => {
     });
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'builder_registration_invalid',
       issue: 'signature_invalid',
+      validator: 0,
     });
   });
 
@@ -229,8 +239,10 @@ describe('cluster.verifyLock', () => {
       lock.lock_hash = computeLockHash(lock);
       expect(await verifyLock(lock)).toEqual({
         ok: false,
+        level: 'full',
         step,
         issue: 'signature_invalid',
+        validator: 0,
       });
     },
   );
@@ -240,6 +252,7 @@ describe('cluster.verifyLock', () => {
     lock.node_signatures = [...lock.node_signatures].reverse();
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'lock_signature_invalid',
       issue: 'node_signature_invalid',
     });
@@ -251,6 +264,7 @@ describe('cluster.verifyLock', () => {
       lock.distributed_validators[0].builder_registration.signature;
     expect(await verifyLock(lock)).toEqual({
       ok: false,
+      level: 'full',
       step: 'lock_signature_invalid',
       issue: 'signature_aggregate_invalid',
     });
@@ -260,28 +274,6 @@ describe('cluster.verifyLock', () => {
     await expect(verifyLock({ lock_hash: 1 })).rejects.toMatchObject({
       code: 'PAYLOAD_INVALID',
     });
-  });
-
-  it('throws LOCK_VERIFICATION_BUSY above the concurrency limit', async () => {
-    const previous = process.env.OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS;
-    process.env.OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS = '1';
-    try {
-      const results = await Promise.allSettled([
-        verifyLock(copy(clusterLockV1X10)),
-        verifyLock(copy(clusterLockV1X10)),
-      ]);
-      expect(results[0].status).toBe('fulfilled');
-      const rejected = results[1] as PromiseRejectedResult;
-      expect(rejected.reason).toBeInstanceOf(ObolError);
-      expect(rejected.reason.code).toBe('LOCK_VERIFICATION_BUSY');
-      expect(rejected.reason.details.maxConcurrent).toBe(1);
-    } finally {
-      if (previous === undefined) {
-        delete process.env.OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS;
-      } else {
-        process.env.OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS = previous;
-      }
-    }
   });
 
   it('keeps hashes lowercase hex', () => {

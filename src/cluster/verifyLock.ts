@@ -3,15 +3,15 @@
  * Use", plus the Obol definition and deposit rules, as numbered steps; the
  * first failing step is reported.
  *
- * The BLS work runs through the internal parallel helpers, which use worker
- * threads for large locks in the CommonJS Node build and run inline
- * elsewhere. They throw LOCK_VERIFICATION_TIMEOUT / LOCK_VERIFICATION_BUSY
- * themselves.
+ * Everything runs on the calling thread and yields to the event loop every
+ * `yieldMs`. The BLS work goes through a {@link BlsBackend} (pure JS by
+ * default): every point is decoded once, share binding uses finite
+ * differences, and signatures are checked in randomised batches.
  */
 import { fromHexString } from '@chainsafe/ssz';
-import { type PublicClient } from 'viem';
+import { Type } from '@sinclair/typebox';
+import type { PublicClient } from 'viem';
 import type {
-  BlsSignatureCheck,
   ClusterDefinition as LegacyDefinition,
   ClusterLock as LegacyLock,
   DepositData,
@@ -19,23 +19,27 @@ import type {
 } from '../internal/types.js';
 import { DefinitionFlow, definitionFlow } from '../internal/definitionFlow.js';
 import {
-  builderBlsCheck,
   builderDomainForFork,
-  depositBlsCheck,
+  builderFieldsMatch,
+  builderSigningRoot,
+  clusterConfigOrDefinitionHashSliced,
+  clusterLockHashSliced,
   depositDomainForFork,
+  depositFieldsMatch,
+  depositSigningRoot,
   verifyNodeSignatures,
 } from '../internal/verification/common.js';
+import { bindShares } from '../internal/verification/shareBinding.js';
 import {
-  verifyAggregateParallel,
-  verifyBlsChecksParallel,
-  verifySharesBinding,
-} from '../internal/verification/parallelPool.js';
+  firstInvalidSignature,
+  type SignatureItem,
+} from '../internal/verification/signatureBatch.js';
 import { toUint64 } from '../internal/verification/sszTypes.js';
-import { withLockValidationConcurrency } from '../internal/verification/validationConcurrency.js';
+import { createTick, type Tick } from '../internal/yielder.js';
 import { chainIdForForkVersion } from '../chains.js';
-import { isObolError } from '../errors.js';
-import { decode } from '../schema.js';
-import { definitionHash, isSupportedVersion, lockHash } from './hash.js';
+import { decode, invalid, T } from '../schema.js';
+import { nobleBls, type BlsBackend } from './blsBackend.js';
+import { isSupportedVersion } from './hash.js';
 import { LockSchema, type ClusterLock } from './schema.js';
 import { invalidDefinitionSignatures } from './verifyDefinition.js';
 
@@ -49,33 +53,85 @@ export type LockStep =
   | 'builder_registration_invalid'
   | 'lock_signature_invalid';
 
+/**
+ * - `full`: every step, every BLS check.
+ * - `attested`: the checks that need no BLS work: definition flow and
+ *   signatures, hashes, share layout, deposit and builder registration
+ *   fields, node signatures; plus the BLS signatures of the deposits and
+ *   builder registrations of the validators in `signatures`. Charon verifies
+ *   every BLS signature during the DKG before each node signs `lock_hash`, so
+ *   valid node signatures over a matching `lock_hash` attest to them.
+ */
+export type LockVerificationLevel = 'attested' | 'full';
+
 export interface LockVerification {
   ok: boolean;
+  /** The level that was run. */
+  level: LockVerificationLevel;
   /** The first failing step. */
   step?: LockStep;
   /** Detail of the failure within the step. */
   issue?: string;
+  /** Index of the failing validator, for a per-validator failure. */
+  validator?: number;
 }
 
 export interface VerifyLockOptions {
   /** Needed to check contract-wallet (EIP-1271) definition signatures; must be on the lock's chain. */
   publicClient?: PublicClient;
+  /** Default `full`. */
+  level?: LockVerificationLevel;
+  /**
+   * Validators (indexes in the lock) whose deposit and builder registration
+   * BLS signatures `attested` checks: `all`, `none` (default) or a list.
+   * `full` checks all of them (only `all` is accepted with it).
+   */
+  signatures?: 'all' | 'none' | number[];
+  /**
+   * Longest stretch of work, in ms, between yields to the event loop
+   * (default 50; 0 = never yield). A stretch can overrun it by one unit of
+   * work (one signature, about 25 ms with the default backend).
+   */
+  yieldMs?: number;
+  /** BLS backend (default {@link nobleBls}, pure JavaScript). */
+  bls?: BlsBackend;
 }
+
+const DEFAULT_YIELD_MS = 50;
+
+const OptionsSchema = Type.Object({
+  level: Type.Optional(
+    Type.Union([Type.Literal('attested'), Type.Literal('full')]),
+  ),
+  signatures: Type.Optional(
+    Type.Union([Type.Literal('all'), Type.Literal('none'), Type.Array(T.Uint)]),
+  ),
+  yieldMs: Type.Optional(T.Uint),
+});
+
+const BACKEND_METHODS = [
+  'decodePublicKey',
+  'aggregatePublicKeys',
+  'onPolynomial',
+  'verify',
+  'createBatch',
+] as const;
 
 class StepFailed extends Error {
   constructor(
     readonly step: LockStep,
     readonly issue: string,
+    readonly validator?: number,
   ) {
     super(`${step}: ${issue}`);
   }
 }
 
-const fail = (step: LockStep, issue: string): never => {
-  throw new StepFailed(step, issue);
+const fail = (step: LockStep, issue: string, validator?: number): never => {
+  throw new StepFailed(step, issue, validator);
 };
 
-/** Runs `fn`; any error other than a worker timeout fails `step`. */
+/** Runs `fn`; any error other than a step failure fails `step` with `issue`. */
 const guarded = async <R>(
   step: LockStep,
   issue: string,
@@ -84,12 +140,7 @@ const guarded = async <R>(
   try {
     return await fn();
   } catch (error) {
-    if (
-      error instanceof StepFailed ||
-      isObolError(error, 'LOCK_VERIFICATION_TIMEOUT')
-    ) {
-      throw error;
-    }
+    if (error instanceof StepFailed) throw error;
     return fail(step, issue);
   }
 };
@@ -97,6 +148,20 @@ const guarded = async <R>(
 type Layout = 'v1.6' | 'v1.7' | 'v1.8+';
 const layoutOf = (version: string): Layout =>
   version === 'v1.6.0' ? 'v1.6' : version === 'v1.7.0' ? 'v1.7' : 'v1.8+';
+
+interface Run {
+  lock: ClusterLock;
+  layout: Layout;
+  level: LockVerificationLevel;
+  /** Validators whose deposit and builder signatures are checked, ascending. */
+  selected: number[];
+  bls: BlsBackend;
+  tick: Tick;
+  publicClient?: PublicClient;
+  /** Step 5 (full): decoded group keys, and the sum of every public share. */
+  groupKeys?: unknown[];
+  sharesSum?: unknown;
+}
 
 const checkFlow = (lock: ClusterLock): DefinitionFlow => {
   const flow = definitionFlow(
@@ -106,12 +171,11 @@ const checkFlow = (lock: ClusterLock): DefinitionFlow => {
 };
 
 const checkDefinitionSignatures = async (
-  lock: ClusterLock,
+  run: Run,
   flow: DefinitionFlow,
-  options: VerifyLockOptions,
 ): Promise<void> => {
   if (flow === DefinitionFlow.Charon) return;
-  const definition = lock.cluster_definition;
+  const definition = run.lock.cluster_definition;
   const chainId = chainIdForForkVersion(definition.fork_version);
   if (chainId === null) {
     fail('definition_signature_invalid', 'fork_version_unknown');
@@ -122,234 +186,333 @@ const checkDefinitionSignatures = async (
     flow === DefinitionFlow.Solo
       ? { ...definition, operators: [] }
       : definition;
-  const failures = await invalidDefinitionSignatures(signed, chainId, options, {
-    creator: true,
-    operators: true,
-  });
+  const failures = await invalidDefinitionSignatures(
+    signed,
+    chainId,
+    run.publicClient !== undefined ? { publicClient: run.publicClient } : {},
+    { creator: true, operators: true },
+  );
   if (failures.length > 0) {
     fail('definition_signature_invalid', failures[0]);
   }
 };
 
-const checkHashes = (lock: ClusterLock): void => {
+const checkHashes = async (run: Run): Promise<void> => {
+  const { lock } = run;
   const definition = lock.cluster_definition;
   if (!isSupportedVersion(definition.version)) {
     fail('hash_mismatch', 'version_unsupported');
   }
   const same = (a: string, b: string | undefined): boolean =>
-    a === (b ?? '').toLowerCase();
-  const computed = (what: string, fn: () => string): string => {
+    a.toLowerCase() === (b ?? '').toLowerCase();
+  const computed = async (
+    what: string,
+    fn: () => string | Promise<string>,
+  ): Promise<string> => {
     try {
-      return fn();
+      return await fn();
     } catch {
       return fail('hash_mismatch', what);
     }
   };
-  if (
-    !same(
-      computed('config_hash', () => definitionHash(definition, true)),
-      definition.config_hash,
-    )
-  ) {
+  const configHash = await computed(
+    'config_hash',
+    async () =>
+      await clusterConfigOrDefinitionHashSliced(
+        definition as unknown as LegacyDefinition,
+        true,
+        run.tick,
+      ),
+  );
+  if (!same(configHash, definition.config_hash)) {
     fail('hash_mismatch', 'config_hash');
   }
-  if (
-    !same(
-      computed('definition_hash', () => definitionHash(definition, false)),
-      definition.definition_hash,
-    )
-  ) {
+  const definitionRoot = await computed(
+    'definition_hash',
+    async () =>
+      await clusterConfigOrDefinitionHashSliced(
+        definition as unknown as LegacyDefinition,
+        false,
+        run.tick,
+      ),
+  );
+  if (!same(definitionRoot, definition.definition_hash)) {
     fail('hash_mismatch', 'definition_hash');
   }
-  if (
-    !same(
-      computed('lock_hash', () => lockHash(lock)),
-      lock.lock_hash,
-    )
-  ) {
-    fail('hash_mismatch', 'lock_hash');
-  }
+  // The lock hashes the definition by its root, checked just above.
+  const lockRoot = await computed(
+    'lock_hash',
+    async () =>
+      await clusterLockHashSliced(
+        lock as unknown as LegacyLock,
+        fromHexString(definitionRoot),
+        run.tick,
+      ),
+  );
+  if (!same(lockRoot, lock.lock_hash)) fail('hash_mismatch', 'lock_hash');
 };
 
-const checkShareLayout = (lock: ClusterLock): void => {
+const checkShareLayout = async (run: Run): Promise<void> => {
+  const { lock } = run;
   const operators = (lock.cluster_definition.operators ?? []).length;
   const validators = lock.distributed_validators;
   if (validators.length === 0) fail('share_layout_invalid', 'no_validators');
   if (validators.length !== (lock.cluster_definition.validators ?? []).length) {
     fail('share_layout_invalid', 'validator_count');
   }
-  const keys = new Set(
-    validators.map(v => v.distributed_public_key.toLowerCase()),
-  );
-  if (keys.size !== validators.length) {
-    fail('share_layout_invalid', 'duplicate_group_key');
-  }
-  for (const validator of validators) {
+  const keys = new Set<string>();
+  for (const [i, validator] of validators.entries()) {
+    const key = validator.distributed_public_key.toLowerCase();
+    if (keys.has(key)) fail('share_layout_invalid', 'duplicate_group_key', i);
+    keys.add(key);
     if (validator.public_shares.length !== operators) {
-      fail('share_layout_invalid', 'share_count');
+      fail('share_layout_invalid', 'share_count', i);
     }
     const shares = new Set(validator.public_shares.map(s => s.toLowerCase()));
     if (shares.size !== validator.public_shares.length) {
-      fail('share_layout_invalid', 'duplicate_share');
+      fail('share_layout_invalid', 'duplicate_share', i);
     }
+    await run.tick();
   }
 };
 
-const checkShareReconstruction = async (lock: ClusterLock): Promise<void> => {
-  const ok = await guarded(
-    'share_reconstruction_failed',
-    'malformed_share',
-    async () =>
-      await verifySharesBinding(
-        lock.distributed_validators.map(v => v.public_shares),
-        lock.distributed_validators.map(v => v.distributed_public_key),
-        lock.cluster_definition.threshold,
-      ),
-  );
-  if (!ok) fail('share_reconstruction_failed', 'share_reconstruction_failed');
+/** Step 5 for every validator (see `bindShares`). */
+const checkShareReconstruction = async (run: Run): Promise<void> => {
+  const { bls, lock } = run;
+  const threshold = lock.cluster_definition.threshold;
+  const groupKeys: unknown[] = [];
+  let sharesSum: unknown;
+  for (const [i, validator] of lock.distributed_validators.entries()) {
+    const binding = await guarded(
+      'share_reconstruction_failed',
+      'malformed_share',
+      () =>
+        bindShares(
+          bls,
+          fromHexString(validator.distributed_public_key),
+          validator.public_shares.map(s => fromHexString(s)),
+          threshold,
+        ),
+    );
+    if (!binding.ok) fail('share_reconstruction_failed', binding.issue, i);
+    else {
+      groupKeys.push(binding.groupKey);
+      sharesSum = bls.aggregatePublicKeys(
+        sharesSum === undefined
+          ? binding.shares
+          : [sharesSum, ...binding.shares],
+      );
+    }
+    await run.tick();
+  }
+  run.groupKeys = groupKeys;
+  run.sharesSum = sharesSum;
 };
 
-const checkDeposits = async (
-  lock: ClusterLock,
-  layout: Layout,
+/** A selected validator's group key: decoded in step 5, or now. */
+const groupKey = (run: Run, i: number): unknown => {
+  if (run.groupKeys !== undefined) return run.groupKeys[i];
+  try {
+    return run.bls.decodePublicKey(
+      fromHexString(run.lock.distributed_validators[i].distributed_public_key),
+      true,
+    );
+  } catch {
+    return null;
+  }
+};
+
+const checkSignatures = async (
+  run: Run,
+  step: LockStep,
+  items: Array<SignatureItem<unknown> & { validator: number }>,
 ): Promise<void> => {
+  const first = await guarded(
+    step,
+    'signature_invalid',
+    async () => await firstInvalidSignature(run.bls, items, run.tick),
+  );
+  if (first !== -1) fail(step, 'signature_invalid', items[first].validator);
+};
+
+const depositsOf = (
+  run: Run,
+  i: number,
+): Array<Partial<DepositData>> | undefined => {
+  const validator = run.lock.distributed_validators[i];
+  const deposits =
+    run.layout === 'v1.8+'
+      ? validator.partial_deposit_data
+      : validator.deposit_data !== undefined
+        ? [validator.deposit_data]
+        : undefined;
+  return deposits === null || deposits === undefined
+    ? undefined
+    : (deposits as Array<Partial<DepositData>>);
+};
+
+const checkDeposits = async (run: Run): Promise<void> => {
+  const step = 'deposit_data_invalid';
+  const { lock, layout } = run;
   const definition = lock.cluster_definition;
-  const forkVersion = definition.fork_version;
-  const checks = await guarded('deposit_data_invalid', 'malformed', () => {
-    const domain = depositDomainForFork(forkVersion);
+  const compounding =
+    layout === 'v1.8+' ? definition.compounding === true : false;
+  await guarded(step, 'malformed', async () => {
     const amounts = [
       ...new Set(
         (definition.deposit_amounts ?? []).map(a => toUint64(a).toString()),
       ),
     ];
-    const result: BlsSignatureCheck[] = [];
-    lock.distributed_validators.forEach((validator, i) => {
+    for (const [i, validator] of lock.distributed_validators.entries()) {
+      const deposits = depositsOf(run, i);
+      if (deposits === undefined) fail(step, 'deposit_data_missing', i);
       const withdrawal = (definition.validators ?? [])[i].withdrawal_address;
-      const deposits =
-        layout === 'v1.8+'
-          ? validator.partial_deposit_data
-          : validator.deposit_data !== undefined
-            ? [validator.deposit_data]
-            : undefined;
-      if (deposits === undefined || deposits === null) {
-        fail('deposit_data_invalid', 'deposit_data_missing');
-        return;
-      }
       if (layout === 'v1.8+') {
         const present = new Set(
-          deposits.map(d => toUint64(d.amount ?? '').toString()),
+          (deposits ?? []).map(d => toUint64(d.amount ?? '').toString()),
         );
         if (!amounts.every(a => present.has(a))) {
-          fail('deposit_data_invalid', 'deposit_amount_missing');
+          fail(step, 'deposit_amount_missing', i);
         }
       }
-      for (const deposit of deposits) {
-        const check = depositBlsCheck(
+      for (const deposit of deposits ?? []) {
+        const matches = depositFieldsMatch(
           validator.distributed_public_key,
-          deposit as Partial<DepositData>,
+          deposit,
           withdrawal,
-          forkVersion,
-          layout === 'v1.8+' ? definition.compounding : undefined,
-          domain,
+          compounding,
         );
-        if (check === null) fail('deposit_data_invalid', 'deposit_fields');
-        else result.push(check);
+        if (!matches) fail(step, 'deposit_fields', i);
       }
-    });
+      await run.tick();
+    }
+  });
+  const items = await guarded(step, 'malformed', async () => {
+    const domain = depositDomainForFork(definition.fork_version);
+    const result: Array<SignatureItem<unknown> & { validator: number }> = [];
+    for (const i of run.selected) {
+      const publicKey = groupKey(run, i);
+      for (const deposit of depositsOf(run, i) ?? []) {
+        result.push({
+          validator: i,
+          publicKey,
+          message: depositSigningRoot(deposit, domain),
+          signature: fromHexString(deposit.signature ?? ''),
+        });
+      }
+      await run.tick();
+    }
     return result;
   });
-  const ok = await guarded(
-    'deposit_data_invalid',
-    'signature_invalid',
-    async () => await verifyBlsChecksParallel(checks),
-  );
-  if (!ok) fail('deposit_data_invalid', 'signature_invalid');
+  await checkSignatures(run, step, items);
 };
 
-const checkBuilderRegistrations = async (lock: ClusterLock): Promise<void> => {
-  const definition = lock.cluster_definition;
-  const checks = await guarded(
-    'builder_registration_invalid',
-    'malformed',
-    () => {
-      const domain = builderDomainForFork(definition.fork_version);
-      return lock.distributed_validators.map((validator, i) => {
-        const check = builderBlsCheck(
-          validator as unknown as DistributedValidator,
-          (definition.validators ?? [])[i].fee_recipient_address,
-          definition.fork_version,
-          domain,
-        );
-        return (
-          check ??
-          fail('builder_registration_invalid', 'builder_registration_fields')
-        );
+const checkBuilderRegistrations = async (run: Run): Promise<void> => {
+  const step = 'builder_registration_invalid';
+  const definition = run.lock.cluster_definition;
+  const validators = run.lock.distributed_validators;
+  await guarded(step, 'malformed', async () => {
+    for (const [i, validator] of validators.entries()) {
+      const matches = builderFieldsMatch(
+        validator as unknown as DistributedValidator,
+        (definition.validators ?? [])[i].fee_recipient_address,
+      );
+      if (!matches) fail(step, 'builder_registration_fields', i);
+      await run.tick();
+    }
+  });
+  const items = await guarded(step, 'malformed', async () => {
+    const domain = builderDomainForFork(definition.fork_version);
+    const result: Array<SignatureItem<unknown> & { validator: number }> = [];
+    for (const i of run.selected) {
+      // Present: checked by builderFieldsMatch above.
+      const registration = validators[i].builder_registration as NonNullable<
+        ClusterLock['distributed_validators'][number]['builder_registration']
+      >;
+      result.push({
+        validator: i,
+        publicKey: groupKey(run, i),
+        message: builderSigningRoot(registration.message, domain),
+        signature: fromHexString(registration.signature),
       });
-    },
-  );
-  const ok = await guarded(
-    'builder_registration_invalid',
-    'signature_invalid',
-    async () => await verifyBlsChecksParallel(checks),
-  );
-  if (!ok) fail('builder_registration_invalid', 'signature_invalid');
+      await run.tick();
+    }
+    return result;
+  });
+  await checkSignatures(run, step, items);
 };
 
-const checkLockSignatures = async (
-  lock: ClusterLock,
-  layout: Layout,
-): Promise<void> => {
-  if (layout !== 'v1.6') {
+const checkLockSignatures = async (run: Run): Promise<void> => {
+  const step = 'lock_signature_invalid';
+  const { lock } = run;
+  if (run.layout !== 'v1.6') {
     const nodeOk = await guarded(
-      'lock_signature_invalid',
+      step,
       'node_signature_invalid',
-      () => verifyNodeSignatures(lock as unknown as LegacyLock),
+      async () =>
+        await verifyNodeSignatures(lock as unknown as LegacyLock, run.tick),
     );
-    if (!nodeOk) fail('lock_signature_invalid', 'node_signature_invalid');
+    if (!nodeOk) fail(step, 'node_signature_invalid');
   }
-  const aggregateOk = await guarded(
-    'lock_signature_invalid',
-    'signature_aggregate_invalid',
-    async () =>
-      await verifyAggregateParallel(
-        lock.distributed_validators.flatMap(v =>
-          v.public_shares.map(s => fromHexString(s)),
-        ),
-        fromHexString(lock.lock_hash),
-        fromHexString(lock.signature_aggregate),
-      ),
+  if (run.level !== 'full') return;
+  const aggregateOk = await guarded(step, 'signature_aggregate_invalid', () =>
+    run.bls.verify(
+      run.sharesSum,
+      fromHexString(lock.lock_hash),
+      fromHexString(lock.signature_aggregate),
+    ),
   );
-  if (!aggregateOk) {
-    fail('lock_signature_invalid', 'signature_aggregate_invalid');
-  }
+  if (!aggregateOk) fail(step, 'signature_aggregate_invalid');
 };
 
-const runSteps = async (
-  lock: ClusterLock,
-  options: VerifyLockOptions,
-): Promise<LockVerification> => {
+const runSteps = async (run: Run): Promise<LockVerification> => {
+  const { level } = run;
   try {
-    const layout = layoutOf(lock.cluster_definition.version);
-    const flow = checkFlow(lock);
-    await checkDefinitionSignatures(lock, flow, options);
-    checkHashes(lock);
-    checkShareLayout(lock);
-    await checkShareReconstruction(lock);
-    await checkDeposits(lock, layout);
-    if (layout !== 'v1.6') await checkBuilderRegistrations(lock);
-    await checkLockSignatures(lock, layout);
-    return { ok: true };
+    const flow = checkFlow(run.lock);
+    await checkDefinitionSignatures(run, flow);
+    await checkHashes(run);
+    await checkShareLayout(run);
+    if (level === 'full') await checkShareReconstruction(run);
+    await checkDeposits(run);
+    if (run.layout !== 'v1.6') await checkBuilderRegistrations(run);
+    await checkLockSignatures(run);
+    return { ok: true, level };
   } catch (error) {
     if (error instanceof StepFailed) {
-      return { ok: false, step: error.step, issue: error.issue };
+      return {
+        ok: false,
+        level,
+        step: error.step,
+        issue: error.issue,
+        ...(error.validator !== undefined
+          ? { validator: error.validator }
+          : {}),
+      };
     }
     throw error;
   }
 };
 
+const selectedValidators = (
+  signatures: 'all' | 'none' | number[],
+  count: number,
+): number[] => {
+  if (signatures === 'all') return [...Array(count).keys()];
+  if (signatures === 'none') return [];
+  signatures.forEach((index, i) => {
+    if (index >= count) {
+      throw invalid(
+        `options.signatures[${i}]`,
+        `is not a validator index of the lock (${count} validators)`,
+      );
+    }
+  });
+  return [...new Set(signatures)].sort((a, b) => a - b);
+};
+
 /**
  * Verifies a cluster lock before use. Steps, in order (the first failure is
- * reported as `step`):
+ * reported as `step`, with `validator` for a per-validator one):
  *
  * 1. the definition flow is group, solo or Charon (`definition_flow_unknown`);
  * 2. the definition signatures the flow needs are valid
@@ -359,27 +522,67 @@ const runSteps = async (
  *    (`hash_mismatch`);
  * 4. one public share per operator, unique group keys, no repeated share
  *    (`share_layout_invalid`);
- * 5. the shares reconstruct each group key, every share checked
+ * 5. `full`: the shares and group key of each validator lie on one
+ *    polynomial of degree below the threshold, every share checked
  *    (`share_reconstruction_failed`);
  * 6. deposit data: amounts, group pubkey, `0x01` / `0x02` credentials to the
- *    withdrawal address, BLS signatures (`deposit_data_invalid`);
- * 7. builder registrations: group pubkey, fee recipient, BLS signatures
- *    (`builder_registration_invalid`; from v1.7.0);
+ *    withdrawal address; BLS signatures for the checked validators
+ *    (`deposit_data_invalid`);
+ * 7. builder registrations: group pubkey, fee recipient; BLS signatures for
+ *    the checked validators (`builder_registration_invalid`; from v1.7.0);
  * 8. node signatures by each operator's ENR key over `lock_hash` (from
- *    v1.7.0) and `signature_aggregate` over `lock_hash` against all public
- *    shares (`lock_signature_invalid`).
+ *    v1.7.0) and, `full`, `signature_aggregate` over `lock_hash` against all
+ *    public shares (`lock_signature_invalid`).
  *
- * @throws PAYLOAD_INVALID for a malformed lock; LOCK_VERIFICATION_TIMEOUT
- *   when a verification worker exceeds its time limit (not a verdict);
- *   LOCK_VERIFICATION_BUSY when too many verifications run at once
- *   (`OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS`, default 2, `0` = no limit).
+ * `level: 'attested'` skips the BLS work of steps 5 and 8 and checks the
+ * step 6 / 7 signatures of the validators in `signatures` only (a 10k
+ * validator lock: a few seconds, plus about 25 ms per checked signature with
+ * the default backend). `full` (default) checks everything.
+ *
+ * @throws PAYLOAD_INVALID for a malformed lock or options.
  */
 export const verifyLock = async (
   input: unknown,
   options: VerifyLockOptions = {},
 ): Promise<LockVerification> => {
   const lock = decode(LockSchema, input, 'lock');
-  return await withLockValidationConcurrency(
-    async () => await runSteps(lock, options),
+  const scalars = decode(
+    OptionsSchema,
+    {
+      ...(options.level !== undefined ? { level: options.level } : {}),
+      ...(options.signatures !== undefined
+        ? { signatures: options.signatures }
+        : {}),
+      ...(options.yieldMs !== undefined ? { yieldMs: options.yieldMs } : {}),
+    },
+    'options',
   );
+  const level = scalars.level ?? 'full';
+  const signatures = scalars.signatures ?? (level === 'full' ? 'all' : 'none');
+  if (level === 'full' && signatures !== 'all') {
+    throw invalid(
+      'options.signatures',
+      "level 'full' checks every signature; pass level 'attested' to choose validators",
+    );
+  }
+  const bls = options.bls ?? nobleBls;
+  for (const method of BACKEND_METHODS) {
+    if (typeof bls[method] !== 'function') {
+      throw invalid(`options.bls.${method}`, 'must be a function');
+    }
+  }
+  return await runSteps({
+    lock,
+    layout: layoutOf(lock.cluster_definition.version),
+    level,
+    selected: selectedValidators(
+      signatures as 'all' | 'none' | number[],
+      lock.distributed_validators.length,
+    ),
+    bls,
+    tick: createTick(scalars.yieldMs ?? DEFAULT_YIELD_MS),
+    ...(options.publicClient !== undefined
+      ? { publicClient: options.publicClient }
+      : {}),
+  });
 };

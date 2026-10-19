@@ -152,7 +152,9 @@ Endpoints v3 relies on (existing unless marked):
   split params of its recipients (from `SplitCreated` / `SplitUpdated`), the validators whose credentials point at
   it (any cluster, with status), and `principalOnBeaconChain` (ETH the beacon chain credited to those validators minus
   principal paid out), to reconcile against `amountOfPrincipalStake`;
-- **new:** deposit status by pubkey with credentials (registry + queue), for `deposits.status` and deposit checks;
+- **new:** deposit status by pubkey with credentials (registry + queue), for `deposits.status` and deposit checks:
+  `POST /v1/validators/:network/deposit-status` (`{ pubkeys }`, at most 1000; wei amounts, every queued deposit with
+  its own credentials). Until it is deployed the SDK falls back to `/v1/state/:lockHash` when given a `lockHash`;
 - Etherscan proxies (`/v1/eth/contract-creation`, `/v1/eth/logs`) as interim sources until the above exist.
 
 Values that move money are re-read on-chain inside `prepareX` even when the API supplied them for display.
@@ -176,6 +178,10 @@ spec/
   vendored in 2.15). The SDK suites could later move into that repo as an SDK section.
 - Lock verification follows the spec's "Verifying a Lock Before Use" sequence in full (hashes, one share per operator
   and no repeats, every share reconstructs the group key, both signature sets).
+- Lock verification has two levels. `full` runs every check. `attested` skips the BLS work that Charon has already
+  done in the DKG (each node signs `lock_hash` only after it has verified every deposit and builder registration
+  signature) and checks the signatures of the deposits a caller is about to send: `deposits.fromLock` uses it, so a
+  10k-validator lock is seconds, not hours.
 
 ## Packaging
 
@@ -183,6 +189,11 @@ spec/
 - Peer dependency: `viem@^2`. Bundled: `@noble/curves`, `@chainsafe/ssz`. No ethers (the launchpad uses wagmi / viem;
   the ethers adapter was dropped).
 - Node ≥ 20, browsers via the ESM build.
+- No native modules and no worker threads: BLS is pure JS (`@noble/curves`), and long verifications run on the
+  calling thread, yielding to the event loop every `yieldMs`. Speed comes from the algorithms (each point decoded
+  once, share binding by finite differences, randomised batch signature checks) rather than from threads. A Node
+  server that wants native speed passes a `BlsBackend` adapter (for example over `@chainsafe/blst`, about 30 lines,
+  documented on the type); the SDK itself never imports one.
 
 ## Migration from 2.x
 
@@ -202,7 +213,9 @@ routing and previews, the consolidation fee helper, and the Hoodi checks of each
 2. ~~ethers adapter~~: dropped.
 3. Where the SDK vector suites live long-term (this repo vs distributed-validator-specs).
 4. Gnosis and Sepolia: cluster files only (kept for existing deployments).
-5. Exact shape of the new obol-api OVM and deposit-status endpoints (to design with obol-api).
+5. Exact shape of the new obol-api OVM endpoint (to design with obol-api). Deposit status:
+   `POST /v1/validators/:network/deposit-status` (see `operations.md`), with `/v1/state/:lockHash` as the fallback
+   until it is deployed.
 6. Lido CSM preset addresses and roles per chain.
 
 ## Milestones

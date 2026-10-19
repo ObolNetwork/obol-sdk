@@ -5,15 +5,18 @@
 import { fromHexString } from '@chainsafe/ssz';
 import { Type } from '@sinclair/typebox';
 import { bytesToHex, type Hex } from 'viem';
-import { blsVerify } from '../internal/bls.js';
-import type { BlsSignatureCheck } from '../internal/types.js';
 import {
   computeDepositMsgRoot,
   depositDomainForFork,
   signingRoot,
 } from '../internal/verification/common.js';
-import { verifyBlsChecksParallel } from '../internal/verification/parallelPool.js';
+import {
+  firstInvalidSignature,
+  type SignatureItem,
+} from '../internal/verification/signatureBatch.js';
 import { depositDataContainer } from '../internal/verification/sszTypes.js';
+import { createTick } from '../internal/yielder.js';
+import { nobleBls, type BlsBackend } from '../cluster/blsBackend.js';
 import { CHAINS } from '../chains.js';
 import { ObolError } from '../errors.js';
 import { decode, T } from '../schema.js';
@@ -45,6 +48,7 @@ const VerifyDepositDataSchema = Type.Object({
       Type.Union([Type.Literal('deposit'), Type.Literal('topUp')]),
     ),
     expectedWithdrawalAddress: Type.Optional(T.Address),
+    yieldMs: Type.Optional(T.Uint),
   }),
 });
 
@@ -52,6 +56,10 @@ export interface VerifyDepositDataOptions {
   chainId: number;
   kind?: DepositKind;
   expectedWithdrawalAddress?: string;
+  /** Longest stretch of signature work between event-loop yields, ms (default 50; 0 = never). */
+  yieldMs?: number;
+  /** BLS backend (default `cluster.nobleBls`). */
+  bls?: BlsBackend;
 }
 
 /** SSZ hash_tree_root of DepositData; `amountGwei` as on the wire. */
@@ -172,21 +180,30 @@ const checkDeposit = (
   }
 };
 
-const signatureCheck = (
+const signatureItem = (
+  bls: BlsBackend,
   deposit: Deposit,
   domain: Uint8Array,
-): BlsSignatureCheck => ({
-  pubkey: fromHexString(deposit.pubkey),
-  message: signingRoot(
-    domain,
-    computeDepositMsgRoot({
-      pubkey: deposit.pubkey,
-      withdrawal_credentials: deposit.withdrawalCredentials,
-      amount: (deposit.amount / GWEI).toString(),
-    }),
-  ),
-  signature: fromHexString(deposit.signature),
-});
+): SignatureItem<unknown> => {
+  let publicKey: unknown = null;
+  try {
+    publicKey = bls.decodePublicKey(fromHexString(deposit.pubkey), true);
+  } catch {
+    // Not a valid public key: the item is invalid.
+  }
+  return {
+    publicKey,
+    message: signingRoot(
+      domain,
+      computeDepositMsgRoot({
+        pubkey: deposit.pubkey,
+        withdrawal_credentials: deposit.withdrawalCredentials,
+        amount: (deposit.amount / GWEI).toString(),
+      }),
+    ),
+    signature: fromHexString(deposit.signature),
+  };
+};
 
 /**
  * Checks deposits before ETH is sent, in order for each deposit, then the
@@ -203,8 +220,9 @@ const signatureCheck = (
  *    credentials;
  * 6. `depositDataRoot` is the SSZ root of the deposit;
  * 7. for `kind: 'deposit'`, every BLS signature is valid in the deposit
- *    domain of the chain's genesis fork (batch-verified; the first invalid
- *    index is reported).
+ *    domain of the chain's genesis fork (randomised batches of 32, each
+ *    signature must be valid on its own; the first invalid index is
+ *    reported). The work yields to the event loop every `yieldMs`.
  *
  * @throws PAYLOAD_INVALID; DEPOSIT_LOOKS_LIKE_TOP_UP (`index`);
  *   DEPOSIT_INVALID (`index`, `issue`); UNSUPPORTED_CHAIN when signatures
@@ -234,19 +252,18 @@ export const verifyDepositData = async (
     );
   }
   const domain = depositDomainForFork(forkVersion);
-  const checks = args.deposits.map(d => signatureCheck(d as Deposit, domain));
-  let valid = false;
-  try {
-    valid = await verifyBlsChecksParallel(checks);
-  } catch {
-    // A signature or pubkey that is not a curve point: found below.
-  }
-  if (valid) return;
-  const bad = checks.findIndex(
-    c => !blsVerify(c.pubkey, c.message, c.signature),
+  const bls = options.bls ?? nobleBls;
+  const items = args.deposits.map(d =>
+    signatureItem(bls, d as Deposit, domain),
   );
+  const bad = await firstInvalidSignature(
+    bls,
+    items,
+    createTick(args.options.yieldMs ?? 50),
+  );
+  if (bad === -1) return;
   throw depositInvalid(
-    bad === -1 ? 0 : bad,
+    bad,
     'signature_invalid',
     `invalid deposit signature for chain ${chainId}`,
   );

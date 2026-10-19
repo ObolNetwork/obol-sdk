@@ -280,6 +280,54 @@
   resolved "https://registry.yarnpkg.com/@chainsafe/as-sha256/-/as-sha256-0.4.2.tgz#21ad1371e2245e430c1a554a05f10d333c6f42cc"
   integrity sha512-HJ8GZBRjLeWtRsAXf3EbNsNzmTGpzTFjfpSf4yHkLYC+E52DhT6hwz+7qpj6I/EmFzSUm5tYYvT9K8GZokLQCQ==
 
+"@chainsafe/blst-darwin-arm64@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst-darwin-arm64/-/blst-darwin-arm64-2.2.0.tgz#0ab9083805c308106c2f2107df1e6376d9190b1b"
+  integrity sha512-BOOy2KHbV028cioPWaAMqHdLRKd6/3XyEmUEcQC2E/SpyYLdNcaKiBUYIU4pT9CrWBbJJxX68UI+3vZVg0M8/w==
+
+"@chainsafe/blst-darwin-x64@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst-darwin-x64/-/blst-darwin-x64-2.2.0.tgz#231943a7736f3f89d35e03fec890b7809c98ff1a"
+  integrity sha512-jG64cwIdPT7u/haRrW26tWCpfMfHBQCfGY169mFQifCwO4VEwvaiVBPOh5olFis6LjpcmD+O0jpM8GqrnsmUHQ==
+
+"@chainsafe/blst-linux-arm64-gnu@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst-linux-arm64-gnu/-/blst-linux-arm64-gnu-2.2.0.tgz#721aeec63e8e02aba3358a0084c095403a5438fa"
+  integrity sha512-L8xV2uuLn8we76vdzfryS9ePdheuZrmY6yArGUFaF1Uzcwml6V1/VvyPl9/uooo/YfVRIrvF/D+lQfI2GFAnhw==
+
+"@chainsafe/blst-linux-arm64-musl@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst-linux-arm64-musl/-/blst-linux-arm64-musl-2.2.0.tgz#dbbabaab93156548c86e2b2b3a1d27160b715000"
+  integrity sha512-0Vn0luxLYVgC3lvWT1MapFHSAoz99PldqjhilXTGv0AcAk/X5LXPH2RC9Dp2KJGqthyUkpbk1j47jUBfBI+BIg==
+
+"@chainsafe/blst-linux-x64-gnu@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst-linux-x64-gnu/-/blst-linux-x64-gnu-2.2.0.tgz#9f8ab825621b75227c75bb75d369d3d42e91fa74"
+  integrity sha512-gEY/z2SDBA7kXtFEI9VNhWTJAIjx16jdeAyCaS2k4ACGurWZaWk+Ee4KniTsr4WieSqeuNTUr7Pdja0Sr4EKNQ==
+
+"@chainsafe/blst-linux-x64-musl@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst-linux-x64-musl/-/blst-linux-x64-musl-2.2.0.tgz#11e99ac12b0f83cad68da56f4e9cfc4aa403a2e6"
+  integrity sha512-58GKtiUmtVSuerRzPEcMNQZpICPboBKFnL7+1Wo+PSuajkvbae7tEFrFTtWeMoKIPgOEsPMnk96LF+0yNgavUg==
+
+"@chainsafe/blst-win32-x64-msvc@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst-win32-x64-msvc/-/blst-win32-x64-msvc-2.2.0.tgz#f32b164721ff5edc279f6d6cd0fffde0ad2fe16c"
+  integrity sha512-UFrZshl4dfX5Uh2zeKXAZtrkQ+otczHMON2tsrapQNICWmfHZrzE6pKuBL+9QeGAbgflwpbz7+D5nQRDpiuHxQ==
+
+"@chainsafe/blst@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@chainsafe/blst/-/blst-2.2.0.tgz#ced8b861b94934e3c1c53e173c3e1205d775d93b"
+  integrity sha512-VBaQoNE2a9d9+skAjQKv3Suk0yGKqp3mZM0YWYJNPj/Ae/f6lAyeVSgKqo2LrsNQBzD/LqrJLKUY8rJT3vDKLA==
+  optionalDependencies:
+    "@chainsafe/blst-darwin-arm64" "2.2.0"
+    "@chainsafe/blst-darwin-x64" "2.2.0"
+    "@chainsafe/blst-linux-arm64-gnu" "2.2.0"
+    "@chainsafe/blst-linux-arm64-musl" "2.2.0"
+    "@chainsafe/blst-linux-x64-gnu" "2.2.0"
+    "@chainsafe/blst-linux-x64-musl" "2.2.0"
+    "@chainsafe/blst-win32-x64-msvc" "2.2.0"
+
 "@chainsafe/enr@6.0.1":
   version "6.0.1"
   resolved "https://registry.yarnpkg.com/@chainsafe/enr/-/enr-6.0.1.tgz#540524363be1ab9065bf6fb6934cc2ddb9f48e0a"

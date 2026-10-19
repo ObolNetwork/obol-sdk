@@ -22,6 +22,7 @@ import {
   ContainerType,
   ListCompositeType,
   fromHexString,
+  type ValueOf,
 } from '@chainsafe/ssz';
 import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container.js';
 import { type ClusterDefinition, type ClusterLock } from '../types.js';
@@ -128,7 +129,7 @@ export const hashClusterDefinitionV1X7 = (
 
 // cluster lock
 
-const dvContainerTypeV1X7 = new ContainerType({
+export const dvContainerTypeV1X7 = new ContainerType({
   distributed_public_key: new ByteVectorType(48),
   public_shares: new ListCompositeType(new ByteVectorType(48), 256),
   deposit_data: depositDataContainer,
@@ -150,6 +151,41 @@ const clusterLockContainerTypeV1X7 = (): LockContainerTypeV1X7 => {
   });
 };
 
+/** SSZ value of one distributed validator. */
+export const dvValueV1X7 = (
+  dValidator: ClusterLock['distributed_validators'][number],
+): ValueOf<typeof dvContainerTypeV1X7> => {
+  return {
+    distributed_public_key: fromHexString(dValidator.distributed_public_key),
+    public_shares: listOrEmpty(dValidator.public_shares).map(publicShare =>
+      fromHexString(publicShare),
+    ),
+    deposit_data: {
+      pubkey: fromHexString(dValidator.deposit_data?.pubkey as string),
+      withdrawal_credentials: fromHexString(
+        dValidator.deposit_data?.withdrawal_credentials as string,
+      ),
+      amount: toUint64(dValidator.deposit_data?.amount as string),
+      signature: fromHexString(dValidator.deposit_data?.signature as string),
+    },
+    builder_registration: {
+      message: {
+        fee_recipient: fromHexString(
+          dValidator.builder_registration?.message.fee_recipient as string,
+        ),
+        gas_limit: dValidator.builder_registration?.message.gas_limit as number,
+        timestamp: dValidator.builder_registration?.message.timestamp as number,
+        pubkey: fromHexString(
+          dValidator.builder_registration?.message.pubkey as string,
+        ),
+      },
+      signature: fromHexString(
+        dValidator.builder_registration?.signature as string,
+      ),
+    },
+  };
+};
+
 /**
  * @param cluster The published cluster lock
  * @returns The lock hash in of the corresponding cluster
@@ -165,43 +201,7 @@ export const hashClusterLockV1X7 = (cluster: ClusterLock): string => {
     false,
   );
   val.distributed_validators = listOrEmpty(cluster.distributed_validators).map(
-    dValidator => {
-      return {
-        distributed_public_key: fromHexString(
-          dValidator.distributed_public_key,
-        ),
-        public_shares: listOrEmpty(dValidator.public_shares).map(publicShare =>
-          fromHexString(publicShare),
-        ),
-        deposit_data: {
-          pubkey: fromHexString(dValidator.deposit_data?.pubkey as string),
-          withdrawal_credentials: fromHexString(
-            dValidator.deposit_data?.withdrawal_credentials as string,
-          ),
-          amount: toUint64(dValidator.deposit_data?.amount as string),
-          signature: fromHexString(
-            dValidator.deposit_data?.signature as string,
-          ),
-        },
-        builder_registration: {
-          message: {
-            fee_recipient: fromHexString(
-              dValidator.builder_registration?.message.fee_recipient as string,
-            ),
-            gas_limit: dValidator.builder_registration?.message
-              .gas_limit as number,
-            timestamp: dValidator.builder_registration?.message
-              .timestamp as number,
-            pubkey: fromHexString(
-              dValidator.builder_registration?.message.pubkey as string,
-            ),
-          },
-          signature: fromHexString(
-            dValidator.builder_registration?.signature as string,
-          ),
-        },
-      };
-    },
+    dvValueV1X7,
   );
 
   return '0x' + Buffer.from(lockType.hashTreeRoot(val).buffer).toString('hex');

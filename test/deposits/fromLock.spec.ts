@@ -4,6 +4,9 @@ import { fromLock } from '../../src/deposits/fromLock.js';
 import { verifyDepositData } from '../../src/deposits/verifyDepositData.js';
 import type { ObolError } from '../../src/errors.js';
 import { charonCreateClusterLockV1X10, clusterLockV1X10 } from '../fixtures.js';
+import { fromHexString } from '@chainsafe/ssz';
+import { bls12_381 } from '@noble/curves/bls12-381.js';
+import { hex, syntheticLock } from '../helpers/syntheticLock.js';
 
 const copy = <T>(value: T): any => JSON.parse(JSON.stringify(value));
 const rejection = async (promise: Promise<unknown>): Promise<ObolError> =>
@@ -78,9 +81,87 @@ describe('deposits.fromLock', () => {
     const lock = copy(clusterLockV1X10);
     lock.signature_aggregate =
       lock.distributed_validators[0].builder_registration.signature;
-    const error = await rejection(fromLock(lock));
+    // signature_aggregate is a full-level check.
+    expect((await fromLock(copy(lock))).deposits).toHaveLength(
+      lock.distributed_validators.length,
+    );
+    const error = await rejection(fromLock(lock, { verify: 'full' }));
     expect(error.code).toBe('LOCK_INVALID');
-    expect(error.details).toMatchObject({ step: 'lock_signature_invalid' });
+    expect(error.details).toMatchObject({
+      step: 'lock_signature_invalid',
+      issue: 'signature_aggregate_invalid',
+    });
+  });
+
+  describe('verification of the returned validators', () => {
+    const G2 = bls12_381.G2.Point;
+    const ls = bls12_381.longSignatures;
+    const { lock: base, seal } = syntheticLock(4, 4, 3);
+    /** The lock with a bad deposit signature for validator 2, resealed. */
+    const badDeposit = (): any => {
+      const lock = structuredClone(base);
+      const d = lock.distributed_validators[2].partial_deposit_data[0];
+      d.signature = hex(
+        ls.Signature.toBytes(
+          ls.Signature.fromBytes(fromHexString(d.signature)).add(G2.BASE),
+        ),
+      );
+      return seal(lock);
+    };
+
+    it('checks the deposit signatures of the validators it returns', async () => {
+      const error = await rejection(fromLock(badDeposit()));
+      expect(error.code).toBe('LOCK_INVALID');
+      expect(error.details).toEqual({
+        step: 'deposit_data_invalid',
+        issue: 'signature_invalid',
+        index: 2,
+      });
+      const pubkey = base.distributed_validators[2].distributed_public_key;
+      expect(
+        (await rejection(fromLock(badDeposit(), { validators: [pubkey] })))
+          .details,
+      ).toMatchObject({ step: 'deposit_data_invalid', index: 2 });
+    });
+
+    it('returns only the requested validators, in lock order', async () => {
+      const lock = badDeposit();
+      const keys = lock.distributed_validators.map(
+        (v: any) => v.distributed_public_key,
+      );
+      const result = await fromLock(lock, {
+        validators: [3, keys[0].toUpperCase().replace('0X', '0x'), 3],
+      });
+      expect(result.validators).toEqual([0, 3]);
+      expect(result.deposits?.map(d => d.pubkey)).toEqual([keys[0], keys[3]]);
+    });
+
+    it("verify: 'full' runs every check", async () => {
+      const lock = structuredClone(base);
+      const shares = lock.distributed_validators[1].public_shares;
+      [shares[0], shares[1]] = [shares[1], shares[0]];
+      seal(lock);
+      expect((await fromLock(structuredClone(lock))).validators).toEqual([
+        0, 1, 2, 3,
+      ]);
+      const error = await rejection(fromLock(lock, { verify: 'full' }));
+      expect(error.details).toMatchObject({
+        step: 'share_reconstruction_failed',
+        index: 1,
+      });
+    });
+
+    it('rejects a validator that is not in the lock', async () => {
+      for (const validators of [[4], [`0x${'ab'.repeat(48)}`]]) {
+        const error = await rejection(
+          fromLock(structuredClone(base), { validators: validators as any }),
+        );
+        expect(error.code).toBe('PAYLOAD_INVALID');
+        expect(error.details.issues).toEqual([
+          expect.objectContaining({ issue: 'not_in_lock' }),
+        ]);
+      }
+    });
   });
 
   it('checks the fork version against the chain (LOCK_INVALID)', async () => {

@@ -5,6 +5,7 @@ import {
   canReadStatus,
   getDepositStatus,
   statusFromBeacon,
+  statusIfAvailable,
 } from '../../src/deposits/status.js';
 import { fakeApi, fakeChain } from '../helpers/fakeChain.js';
 import {
@@ -80,6 +81,259 @@ describe('deposits.status', () => {
     expect(statusFromBeacon('exited_unslashed')).toBe('exited');
     expect(statusFromBeacon('withdrawal_done')).toBe('exited');
     expect(statusFromBeacon('sleeping')).toBeNull();
+  });
+
+  describe('from the Obol API (POST /v1/validators/:network/deposit-status)', () => {
+    const ROUTE = 'POST /v1/validators/hoodi/deposit-status';
+    const ZERO = `0x${'00'.repeat(32)}` as Hex;
+    const OTHER = '0x3000000000000000000000000000000000000003';
+    const wei = (amount: bigint): string => amount.toString();
+    const registry = (pubkey: Hex, extra: object = {}): object => ({
+      pubkey,
+      status: 'active',
+      beaconStatus: 'active_ongoing',
+      index: 7,
+      balance: wei(32n * ETH + 5n * GWEI),
+      effectiveBalance: wei(32n * ETH),
+      withdrawalCredentials: CREDS,
+      pendingDeposits: [],
+      ...extra,
+    });
+    const queued = (pubkey: Hex, deposits: Array<[bigint, Hex]>): object => ({
+      pubkey,
+      status: 'queued',
+      beaconStatus: 'pending_deposit',
+      index: null,
+      balance: null,
+      effectiveBalance: null,
+      withdrawalCredentials: deposits[0][1],
+      pendingDeposits: deposits.map(([amount, credentials]) => ({
+        amount: wei(amount),
+        withdrawalCredentials: credentials,
+      })),
+    });
+    const fresh = (pubkey: Hex): object => ({
+      pubkey,
+      status: 'new',
+      beaconStatus: null,
+      index: null,
+      balance: null,
+      effectiveBalance: null,
+      withdrawalCredentials: null,
+      pendingDeposits: [],
+    });
+    const serving = (answer: (pubkeys: Hex[]) => unknown[]) =>
+      fakeApi({
+        [ROUTE]: body => ({
+          validators: answer((body as { pubkeys: Hex[] }).pubkeys),
+        }),
+      });
+
+    it('maps registry, queue-only and new pubkeys; no lockHash needed', async () => {
+      const api = serving(() => [
+        registry(PUBKEY_A, {
+          pendingDeposits: [{ amount: wei(ETH), withdrawalCredentials: ZERO }],
+        }),
+        queued(PUBKEY_B, [
+          [32n * ETH, CREDS],
+          [ETH, OTHER_CREDS],
+        ]),
+        fresh(PUBKEY_C),
+      ]);
+      const ctx = fakeChain().context(api);
+      expect(canReadStatus(ctx, {})).toBe(true);
+      const [a, b, c, a2] = await getDepositStatus(ctx, [
+        PUBKEY_A,
+        PUBKEY_B.toUpperCase().replace('0X', '0x') as Hex,
+        PUBKEY_C,
+        PUBKEY_A,
+      ]);
+      expect(api.calls).toEqual([
+        {
+          method: 'POST',
+          endpoint: '/v1/validators/hoodi/deposit-status',
+          body: { pubkeys: [PUBKEY_A, PUBKEY_B, PUBKEY_C] },
+        },
+      ]);
+      expect(a).toEqual({
+        pubkey: PUBKEY_A,
+        status: 'active',
+        source: 'api',
+        beaconStatus: 'active_ongoing',
+        validatorIndex: 7,
+        withdrawalCredentials: CREDS,
+        balance: 32n * ETH + 5n * GWEI,
+        effectiveBalance: 32n * ETH,
+        pendingDeposits: [{ amount: ETH, withdrawalCredentials: ZERO }],
+      });
+      expect(a2).toEqual(a);
+      expect(b).toEqual({
+        pubkey: PUBKEY_B,
+        status: 'queued',
+        source: 'api',
+        beaconStatus: 'pending_deposit',
+        withdrawalCredentials: CREDS,
+        pendingDeposits: [
+          { amount: 32n * ETH, withdrawalCredentials: CREDS },
+          { amount: ETH, withdrawalCredentials: OTHER_CREDS },
+        ],
+      });
+      expect(c).toEqual({
+        pubkey: PUBKEY_C,
+        status: 'new',
+        source: 'api',
+        pendingDeposits: [],
+      });
+    });
+
+    it('asks for at most 1000 pubkeys per request', async () => {
+      const pubkeys = Array.from(
+        { length: 1001 },
+        (_, i) => `0x${i.toString(16).padStart(96, '0')}` as Hex,
+      );
+      const api = serving(requested => requested.map(fresh));
+      const statuses = await getDepositStatus(
+        fakeChain().context(api),
+        pubkeys,
+      );
+      expect(statuses).toHaveLength(1001);
+      expect(
+        api.calls.map(c => (c.body as { pubkeys: Hex[] }).pubkeys.length),
+      ).toEqual([1000, 1]);
+    });
+
+    it.each<[string, (pubkeys: Hex[]) => unknown[]]>([
+      ['a pubkey left out', p => p.slice(1).map(fresh)],
+      ['a pubkey twice', p => [...p.map(fresh), fresh(p[0])]],
+      ['a pubkey not asked for', p => [...p.map(fresh), fresh(PUBKEY_C)]],
+      ['an unknown status', p => [registry(p[0], { status: 'gone' })]],
+      [
+        'a status that is not the beacon status',
+        p => [registry(p[0], { status: 'exited' })],
+      ],
+      ['a malformed index', p => [registry(p[0], { index: '7' })]],
+      ['a balance in ETH', p => [registry(p[0], { balance: '32.5' })]],
+      [
+        'malformed credentials',
+        p => [registry(p[0], { withdrawalCredentials: '0x01' })],
+      ],
+      [
+        'a queued status without deposits',
+        p => [
+          { ...(queued(p[0], [[ETH, CREDS]]) as object), pendingDeposits: [] },
+        ],
+      ],
+      [
+        'a new pubkey with deposits',
+        p => [
+          {
+            ...(fresh(p[0]) as object),
+            pendingDeposits: [{ amount: '1', withdrawalCredentials: CREDS }],
+          },
+        ],
+      ],
+    ])('throws STATUS_UNAVAILABLE for %s', async (_name, answer) => {
+      const error = await caught(
+        getDepositStatus(fakeChain().context(serving(answer)), [
+          PUBKEY_A,
+          PUBKEY_B,
+        ]),
+      );
+      expect(error.code).toBe('STATUS_UNAVAILABLE');
+    });
+
+    it('falls back to /v1/state/:lockHash while the route answers 404', async () => {
+      const api = apiWith({});
+      const [a] = await getDepositStatus(fakeChain().context(api), [PUBKEY_A], {
+        lockHash: LOCK,
+      });
+      expect(a).toMatchObject({ status: 'new', source: 'api' });
+      expect(api.calls.map(c => c.endpoint)).toEqual([
+        '/v1/validators/hoodi/deposit-status',
+        `/v1/lock/${LOCK}`,
+        `/v1/state/${LOCK}`,
+      ]);
+    });
+
+    it('falls back to the beacon node for a 404 without lockHash, or an API failure', async () => {
+      mockBeacon([], [registryRow(PUBKEY_A, 'active_ongoing')]);
+      const [a] = await getDepositStatus(
+        fakeChain().context(fakeApi({})),
+        [PUBKEY_A],
+        { beaconUrl: BEACON },
+      );
+      expect(a).toMatchObject({ status: 'active', source: 'chain' });
+      const down = fakeApi({
+        [ROUTE]: () => {
+          throw new ObolApiError('API_ERROR', 'down', {
+            status: 502,
+            endpoint: '/v1/validators/hoodi/deposit-status',
+            method: 'POST',
+          });
+        },
+      });
+      const [b] = await getDepositStatus(
+        fakeChain().context(down),
+        [PUBKEY_A],
+        {
+          beaconUrl: BEACON,
+        },
+      );
+      expect(b).toMatchObject({ source: 'chain' });
+      expect(
+        (await caught(getDepositStatus(fakeChain().context(down), [PUBKEY_A])))
+          .code,
+      ).toBe('API_ERROR');
+    });
+
+    it('treats an API without the route and no fallback as no source for writes', async () => {
+      const ctx = fakeChain().context(fakeApi({}));
+      expect(await statusIfAvailable(ctx, [PUBKEY_A], {})).toBeNull();
+      const broken = fakeChain().context(serving(() => []));
+      expect(
+        (await caught(statusIfAvailable(broken, [PUBKEY_A], {}))).code,
+      ).toBe('STATUS_UNAVAILABLE');
+    });
+
+    it('sets credentialsMatch with expectedWithdrawalAddress', async () => {
+      const pubkeys = [
+        PUBKEY_A,
+        PUBKEY_B,
+        PUBKEY_C,
+        `0x${'d4'.repeat(48)}` as Hex,
+      ];
+      const api = serving(() => [
+        registry(PUBKEY_A),
+        // A queued zero-credential top-up does not set the credentials.
+        queued(PUBKEY_B, [
+          [ETH, ZERO],
+          [32n * ETH, OTHER_CREDS],
+        ]),
+        fresh(PUBKEY_C),
+        registry(pubkeys[3], { withdrawalCredentials: credentials('00', OVM) }),
+      ]);
+      const ctx = fakeChain().context(api);
+      const statuses = await getDepositStatus(ctx, pubkeys, {
+        expectedWithdrawalAddress: OVM,
+      });
+      expect(statuses.map(s => s.credentialsMatch)).toEqual([
+        true,
+        true,
+        null,
+        false,
+      ]);
+      const other = await getDepositStatus(ctx, pubkeys, {
+        expectedWithdrawalAddress: OTHER,
+      });
+      expect(other.map(s => s.credentialsMatch)).toEqual([
+        false,
+        false,
+        null,
+        false,
+      ]);
+      const without = await getDepositStatus(ctx, pubkeys);
+      expect(without[0]).not.toHaveProperty('credentialsMatch');
+    });
   });
 
   describe('from the Obol API (/v1/state/:lockHash)', () => {
@@ -454,12 +708,12 @@ describe('deposits.status', () => {
       );
     });
 
-    it('asks for a lockHash with the API on and no beaconUrl', async () => {
+    it('asks for a lockHash or beaconUrl while the API lacks deposit-status', async () => {
       const error = await caught(
         getDepositStatus(fakeChain().context(fakeApi({})), [PUBKEY_A]),
       );
-      expect(error.code).toBe('PAYLOAD_INVALID');
-      expect(error.details.issues[0].path).toBe('options.lockHash');
+      expect(error.code).toBe('STATUS_UNAVAILABLE');
+      expect(error.details).toEqual({ reason: 'endpoint_unavailable' });
     });
 
     it('rejects malformed pubkeys', async () => {

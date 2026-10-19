@@ -40,6 +40,7 @@ describe('vectors cluster_hashing', () => {
     const lock = suite.lock.find((c: any) => c.name === 'real_keys_3_of_4');
     expect(await verifyLock(lock.input)).toEqual({
       ok: false,
+      level: 'full',
       step: 'definition_signature_invalid',
       issue: 'creator config_signature',
     });

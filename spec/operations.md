@@ -149,8 +149,18 @@ message }[] }`; `cluster.accept` throws `DEFINITION_INVALID` with these issues.
 
 ### cluster.verifyLock
 
-Tag: `pure` (`chain` when a definition signer is a contract wallet: EIP-1271 call). Input: a lock. Output:
-`{ ok: bool, step: string?, issue: string? }`.
+Tag: `pure` (`chain` when a definition signer is a contract wallet: EIP-1271 call). Inputs: a lock,
+
+```
+{ level: "attested" | "full" (default "full"),
+  signatures: "all" | "none" | uint[],   # attested only (default "none"): validators whose step 6 / 7 BLS signatures are checked
+  yieldMs: uint (default 50),            # 0 = never yield
+  bls: BlsBackend?,                      # default: pure JS (@noble/curves)
+  publicClient: PublicClient? }
+```
+
+Output: `{ ok: bool, level, step: string?, issue: string?, validator: uint? }`; `validator` is the index of the
+failing validator when the failing check is per validator (steps 4–7).
 
 The full "Verifying a Lock Before Use" sequence of distributed-validator-specs, plus the Obol definition and deposit
 rules, in this order (first failure is reported as `step`):
@@ -161,19 +171,44 @@ rules, in this order (first failure is reported as `step`):
 3. Recomputed `config_hash`, `definition_hash` and `lock_hash` equal the stored values. `hash_mismatch`. (spec step 1)
 4. Every validator has exactly one public share per operator, no two validators share a group key, no validator
    repeats a share (case-insensitive). `share_layout_invalid`. (spec step 2)
-5. The shares reconstruct the group key, checking every share: recover from the first `threshold`, then once per
-   remaining share substituted in. `share_reconstruction_failed`. (spec step 3)
+5. `full`: the shares bind to the group key. With Y0 the group key and Yj the share at index j (1-based, file order),
+   the points Y0 … Yn lie on one polynomial of degree below `threshold`: every `threshold`-th forward difference is
+   the identity. This accepts exactly what "recover from the first `threshold`, then once per remaining share
+   substituted in" accepts. Y0 … Y(threshold-1) are checked to be in the prime-order subgroup; the later points are
+   then integer combinations of them. No point may be the identity. `share_reconstruction_failed` (issue
+   `malformed_share` for a point that does not decode). (spec step 3)
 6. For v1.8.0+: every amount in `deposit_amounts` appears in each validator's `partial_deposit_data`; each deposit has
    the validator's group pubkey, credentials `0x01` (or `0x02` with `compounding`) + 11 zero bytes + the validator's
-   withdrawal address, and a valid BLS signature in the deposit domain of the fork. `deposit_data_invalid`. (2.15)
-7. Each builder registration has the group pubkey and the definition's fee recipient, and a valid signature in the
-   builder domain. `builder_registration_invalid`. (2.15; distributed-validator-specs leaves it out of scope)
+   withdrawal address (issues `deposit_data_missing`, `deposit_amount_missing`, `deposit_fields`, every validator);
+   then, for the checked validators (all with `full`), a valid BLS signature in the deposit domain of the fork
+   (`signature_invalid`). `deposit_data_invalid`. (2.15)
+7. Each builder registration has the group pubkey and the definition's fee recipient (`builder_registration_fields`,
+   every validator), and, for the checked validators, a valid signature in the builder domain (`signature_invalid`).
+   `builder_registration_invalid`. (2.15; distributed-validator-specs leaves it out of scope)
 8. One node signature per operator, each a valid secp256k1 signature over `lock_hash` by the operator's ENR key;
-   `signature_aggregate` verifies over `lock_hash` against all public shares in file order (plain aggregate).
+   `full`: `signature_aggregate` verifies over `lock_hash` against the sum of all public shares (plain aggregate).
    `lock_signature_invalid`. (spec step 4)
 
-Large locks run the share, BLS and aggregate checks in worker chunks (Node CJS build); exceeding the time limit throws `LOCK_VERIFICATION_TIMEOUT` (not a verdict), too
-many concurrent runs throw `LOCK_VERIFICATION_BUSY`. (2.15) Vectors: the `cluster_hashing.json` hash cases. (`real_keys_3_of_4` has placeholder EIP-712, deposit and builder
+Levels. `full` runs everything. `attested` runs the steps that need no BLS work (1–4, the field checks of 6 and 7,
+the node signatures of 8) plus the step 6 / 7 signatures of the validators in `signatures`. Charon verifies every
+deposit and builder signature during the DKG before each node signs `lock_hash`, so valid node signatures over a
+matching `lock_hash` attest to them; a depositor still checks the signatures of the deposits it sends.
+`level: "full"` with `signatures` other than `"all"`, or an index outside the lock: `PAYLOAD_INVALID`.
+
+BLS signature checks (steps 6, 7 and `deposits.verifyDepositData`) run in batches of 32: each signature is weighted
+by a fresh secret random 64-bit scalar and every point is checked to be in the prime-order subgroup and not the
+identity, so a batch passes only if every signature in it is valid on its own (a plain sum would accept invalid
+signatures that cancel out). A failing batch is checked one signature at a time, and the first invalid one is
+reported.
+
+Everything runs on the calling thread, with no workers and no time limit: the work yields to the event loop at
+least every `yieldMs` (it yields once half of it has passed, and one signature is about 25 ms of pure JS work), so a
+caller stays responsive; a caller that needs a deadline races the promise itself. Cost, measured on one thread
+(Node 24) with synthetic locks of 3 signatures per validator: with the default backend, 1k validators `full` about
+80 s (signatures about 25 ms each; share binding 5 s) and `attested` 0.3 s, 10k validators `attested` 1.8 s; with
+an adapter over `@chainsafe/blst` (see the TSDoc of `BlsBackend`), `full` 1.3 s for 1k and 12 s for 10k.
+
+Vectors: the `cluster_hashing.json` hash cases. (`real_keys_3_of_4` has placeholder EIP-712, deposit and builder
 signatures, so it stops at `definition_signature_invalid`; it is not a full-pass fixture.)
 
 ### cluster.get / cluster.getLock
@@ -214,23 +249,32 @@ Deposit data amounts are wei in the SDK and gwei on the wire. Constants: minimum
 
 ### deposits.fromLock
 
-Tag: `pure`. Inputs: `lock`, `{ amount: bigint?, verify: bool? (true) }`. Output:
+Tag: `pure`. Inputs: `lock`, `{ amount: bigint?, verify: bool | "attested" | "full" (true), validators: (uint |
+Pubkey)[]?, yieldMs: uint?, bls: BlsBackend? }`. Output:
 
 ```
-{ lockHash: Hash32, amounts: bigint[] (ascending), depositsByAmount: map bigint -> Deposit[], deposits: Deposit[]? }
+{ lockHash: Hash32, validators: uint[] (lock indexes, ascending), amounts: bigint[] (ascending),
+  depositsByAmount: map bigint -> Deposit[], deposits: Deposit[]? }
 ```
+
+`validators` picks the validators to return, by index in the lock or group pubkey (default all; one that is not in
+the lock: `PAYLOAD_INVALID`, issue `not_in_lock`). Results stay in lock order.
 
 Checks:
 
-1. With `verify`, `cluster.verifyLock` must pass, else `LOCK_INVALID` (with `step`). (2.15 `getDepositData`)
-2. The lock has at least one validator; each has `partial_deposit_data` (v1.8.0+) or `deposit_data`. Else
-   `LOCK_INVALID` (issue `deposit_data_missing`). (2.15)
+1. With `verify` (`true` = `"attested"`): `cluster.verifyLock` at level `attested` with `signatures` = the returned
+   validators, or at level `full` for `"full"`, must pass, else `LOCK_INVALID` (with `step`, `issue` and `index`
+   for a per-validator step). A 10k-validator lock costs about 2 s plus about 25 ms per signature checked (the
+   deposits and the builder registration of each returned validator).
+   (2.15 `getDepositData` ran the full verification)
+2. The lock has at least one validator; each returned one has `partial_deposit_data` (v1.8.0+) or `deposit_data`.
+   Else `LOCK_INVALID` (issue `deposit_data_missing`). (2.15)
 3. Each deposit: pubkey, credentials, signature are well-formed hex of the right length, `amount` is a positive
    integer (gwei); the pubkey equals the validator's `distributed_public_key`; a present `deposit_data_root` equals the
    recomputed root (an absent one is computed). Else `LOCK_INVALID` (issue `deposit_data_invalid`). (2.15)
 4. Duplicate amounts for one validator keep the first. (2.15)
-5. With `amount`, every validator has a deposit of that amount, else `DEPOSIT_AMOUNT_NOT_IN_LOCK` (lists the available
-   amounts). Without `amount`, `deposits` is set only when the lock has one amount. (2.15)
+5. With `amount`, every returned validator has a deposit of that amount, else `DEPOSIT_AMOUNT_NOT_IN_LOCK` (lists the
+   available amounts). Without `amount`, `deposits` is set only when the returned validators have one amount. (2.15)
 
 The lock's `fork_version` must match the client chain when called through the client (`LOCK_INVALID`, issue
 `fork_version_mismatch`). (2.15 `getDepositData`)
@@ -254,38 +298,60 @@ For each deposit in order, then the signatures (vectors `deposit_checks.json`):
    (`root_mismatch`). (2.15)
 7. `kind` is `deposit`: the chain must have a known genesis fork (`UNSUPPORTED_CHAIN`); every signature verifies
    against the pubkey over `DepositMessage{pubkey, withdrawal_credentials, amount_gwei}` in the deposit domain
-   (`DOMAIN_DEPOSIT 0x03000000`, genesis fork version, zero genesis validators root). Batch-verified with random
-   weights, so each signature must be valid on its own; on failure the first invalid index is reported (`signature_invalid`; a signature that is not a curve point also counts). (2.15)
+   (`DOMAIN_DEPOSIT 0x03000000`, genesis fork version, zero genesis validators root). Batch-verified as in
+   `cluster.verifyLock` (random weights, so each signature must be valid on its own); on failure the first invalid
+   index is reported (`signature_invalid`; a signature or pubkey that is not a valid point also counts). Options
+   `yieldMs` and `bls` as for `verifyLock`. (2.15)
 
 Failures 2–7 are `DEPOSIT_INVALID` with `issue` and `index`.
 
 ### deposits.status
 
-Tag: `api+chain`. Inputs: `pubkeys: Pubkey[]`, `{ beaconUrl: string?, lockHash: Hash32? }`. Output per pubkey:
+Tag: `api+chain`. Inputs: `pubkeys: Pubkey[]`, `{ beaconUrl: string?, lockHash: Hash32?, expectedWithdrawalAddress:
+Address? }`. Output per pubkey:
 
 ```
 { pubkey, status: "new" | "queued" | "active" | "exited", source: Source,
   beaconStatus: string?,      # the raw beacon name: "pending_deposit" (EIP-6110 queue only), "pending_initialized", "active_ongoing", ...
   validatorIndex: uint?, withdrawalCredentials: Hex32?, balance: bigint?, effectiveBalance: bigint?,
-  pendingDeposits: { amount: bigint, withdrawalCredentials: Hex32 }[] }
+  pendingDeposits: { amount: bigint, withdrawalCredentials: Hex32 }[],
+  credentialsMatch: bool | null }   # only with expectedWithdrawalAddress
 ```
 
 Mapping (beacon names): no registry entry and no pending deposit → `new`; a pending deposit (EIP-6110
 `pending_deposits`) and no registry entry, or a registry entry in `pending_initialized` / `pending_queued` → `queued`;
 `active_*` → `active`; `exited_*` / `withdrawal_*` → `exited`.
 
-Sources: API (a by-pubkey endpoint is planned, design "API enrichment"; until then `GET /v1/state/:lockHash` with
-`pending_deposit`, which answers by lock: `lockHash` is required with the API, the lock is fetched first, a pubkey
-not in it is `PAYLOAD_INVALID` (issue `not_in_lock`), and a pubkey the lock has but `/state` leaves out is `new`); chain
-fallback with `beaconUrl`: `POST /eth/v1/beacon/states/head/validators` and
-`GET /eth/v1/beacon/states/head/pending_deposits`, pending queue read before the registry so a deposit moving from
-the queue to the registry is not missed (2.16 `existingDeposits.ts`). Without API and `beaconUrl`: `API_DISABLED`.
-A malformed or incomplete answer (missing pubkey, duplicate result, bad credentials) or a failed beacon request is
-`STATUS_UNAVAILABLE`, never a guessed `new`. (2.16)
+`credentialsMatch`: the credentials the validator has (registry), or will get (queue only: the first queued deposit
+with non-zero credentials, since a zero-credential top-up has no valid signature for a new validator), are `0x01` /
+`0x02` + 11 zero bytes + `expectedWithdrawalAddress` (case-insensitive); `null` when there are none yet (`new`).
+
+Sources, in order:
+
+1. API: `POST /v1/validators/:network/deposit-status` with `{ pubkeys }`, at most 1000 distinct pubkeys per request
+   (larger inputs are batched). Answer `{ validators: [{ pubkey, status, beaconStatus, index, balance,
+   effectiveBalance, withdrawalCredentials, pendingDeposits: [{ amount, withdrawalCredentials }] }] }`, one entry per
+   requested pubkey, amounts and balances as wei decimal strings, `null` where there is nothing. Every requested
+   pubkey must be answered exactly once, `status` must be the mapping of `beaconStatus`, a registry entry needs an
+   index, credentials and balances, a queue-only entry at least one queued deposit, a `new` one none.
+2. While that route answers 404 (not deployed yet): with `lockHash`, the interim `GET /v1/state/:lockHash` (with
+   `pending_deposit`), which answers by lock: the lock is fetched first, a pubkey not in it is `PAYLOAD_INVALID` (issue
+   `not_in_lock`), a pubkey the lock has but `/state` leaves out is `new`, and a registry validator's queued top-ups
+   come as one amount without credentials. Without `lockHash` and without `beaconUrl`: `STATUS_UNAVAILABLE` (details
+   `reason: "endpoint_unavailable"`, hint: pass `lockHash` or `beaconUrl`).
+3. Chain fallback with `beaconUrl`, when the API is off, fails (any other API error) or lacks the route without
+   `lockHash`: `POST /eth/v1/beacon/states/head/validators` and `GET /eth/v1/beacon/states/head/pending_deposits`,
+   pending queue read before the registry so a deposit moving from the queue to the registry is not missed (2.16
+   `existingDeposits.ts`).
+
+Without API and `beaconUrl`: `API_DISABLED`. A malformed or incomplete answer (missing pubkey, duplicate result, bad
+credentials, unknown status) or a failed beacon request is `STATUS_UNAVAILABLE`, never a guessed `new`. (2.16)
 
 The writes that read status (`prepareDeposit`, `prepareWithdraw`, `prepareConsolidate`, `prepareEoaWithdraw`) take
 the same `beaconUrl` / `lockHash` options. A source that is configured and fails makes the write throw; the status
-checks are skipped (with `DEPOSIT_EXISTENCE_UNCHECKED` for deposits) only when there is no source at all.
+checks are skipped (with `DEPOSIT_EXISTENCE_UNCHECKED` for deposits) only when there is no source at all, which
+includes an API without the deposit-status route and neither `lockHash` nor `beaconUrl` (`reason:
+"endpoint_unavailable"` above).
 
 `queued` is deliberately broad; `beaconStatus` tells the cases apart. They behave differently for a second deposit:
 a registry `pending_initialized` / `pending_queued` validator can still take the rest of a chunked activation deposit,
@@ -316,7 +382,8 @@ Checks:
    rewards unless the owner calls `setAmountOfPrincipalStake`. (new; from `ObolValidatorManager.deposit`)
 5. Existence, when `deposits.status` can answer (API or `beaconUrl`; else Finding `DEPOSIT_EXISTENCE_UNCHECKED`,
    info):
-   - a pending deposit for the pubkey has different or unknown credentials → `DEPOSIT_CONFLICT` (2.16);
+   - a pending deposit for the pubkey has different or unknown credentials → `DEPOSIT_CONFLICT` (2.16); a queued
+     deposit with all-zero credentials (a top-up, which cannot create the validator) is not a conflict;
    - `kind: "topUp"` and the pubkey is `new` → `DEPOSIT_TOP_UP_TARGET_MISSING` (new);
    - `kind: "deposit"` and the validator exists → Finding `DEPOSIT_IS_TOP_UP` (warning: credentials are ignored, the
      validator keeps its own) (2.16 message);

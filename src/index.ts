@@ -22,6 +22,7 @@ export { isAddressInput } from './schema.js';
 export { send, waitForContractWalletExecution } from './send.js';
 export type { Sent, WaitOptions } from './send.js';
 export type { Context } from './context.js';
+export type { BlsBackend, BlsBatch } from './cluster/blsBackend.js';
 
 export * as cluster from './cluster/index.js';
 export * as deposits from './deposits/index.js';

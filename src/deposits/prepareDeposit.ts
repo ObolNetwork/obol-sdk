@@ -24,6 +24,7 @@ import { readOvmCore, requireRole, requireSender } from '../ovm/read.js';
 import { requireObolOvm, verifyOvm } from '../ovm/verify.js';
 import {
   DepositStatusOptionsSchema,
+  effectiveCredentials,
   statusIfAvailable,
   type DepositStatus,
 } from './status.js';
@@ -93,14 +94,15 @@ const existenceChecks = (
 
   if (!registered && status.pendingDeposits.length > 0) {
     // The first processed deposit fixes the credentials. A top-up with
-    // all-zero credentials does not care which ones they are.
+    // all-zero credentials does not care which ones they are, and a queued
+    // one (no valid signature for a new validator) does not fix them.
     const checkCredentials =
       kind === 'deposit' || credentials !== ZERO_CREDENTIALS;
-    const other = status.pendingDeposits.find(
-      p =>
-        p.withdrawalCredentials === undefined ||
-        p.withdrawalCredentials.toLowerCase() !== credentials,
-    );
+    const other = status.pendingDeposits.find(p => {
+      if (p.withdrawalCredentials === undefined) return true;
+      const queued = p.withdrawalCredentials.toLowerCase();
+      return queued !== credentials && queued !== ZERO_CREDENTIALS;
+    });
     if (checkCredentials && other !== undefined) {
       throw new ObolError(
         'DEPOSIT_CONFLICT',
@@ -157,8 +159,9 @@ const existenceChecks = (
       ),
     );
   }
-  const effectiveCredentials = status.withdrawalCredentials ?? credentials;
-  const prefix = credentialsPrefix(effectiveCredentials as Hex);
+  const prefix = credentialsPrefix(
+    (effectiveCredentials(status) ?? credentials) as Hex,
+  );
   if (status.status !== 'exited' && (prefix === '0x00' || prefix === '0x01')) {
     const after =
       (status.balance ?? 0n) +
@@ -282,7 +285,9 @@ export const prepareDeposit = async (
         'DEPOSIT_EXISTENCE_UNCHECKED',
         'info',
         `No deposit status source, so kind "${kind}" was trusted`,
-        { hint: 'Enable the API with lockHash, or pass beaconUrl' },
+        {
+          hint: 'Enable the API (with lockHash until it serves deposit status by pubkey), or pass beaconUrl',
+        },
       ),
     );
   } else {

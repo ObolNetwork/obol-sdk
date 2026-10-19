@@ -5,10 +5,10 @@
  * guessed `new`.
  */
 import { Type } from '@sinclair/typebox';
-import { parseEther, type Hex } from 'viem';
+import { parseEther, type Address, type Hex } from 'viem';
 import { requireContracts } from '../chains.js';
 import type { Context } from '../context.js';
-import { ObolApiError, ObolError } from '../errors.js';
+import { ObolApiError, ObolError, isObolError } from '../errors.js';
 import { decode, invalid, T } from '../schema.js';
 import type { Source } from '../types.js';
 import { gweiToWei } from '../units.js';
@@ -18,8 +18,9 @@ export type DepositStatusName = 'new' | 'queued' | 'active' | 'exited';
 export interface PendingDeposit {
   amount: bigint;
   /**
-   * Absent when the source does not report them: the interim API gives only
-   * the sum of top-ups queued for a registry validator.
+   * Absent when the source does not report them: the interim
+   * `/v1/state/:lockHash` answer gives only the sum of top-ups queued for a
+   * registry validator.
    */
   withdrawalCredentials?: Hex;
 }
@@ -36,6 +37,13 @@ export interface DepositStatus {
   balance?: bigint;
   effectiveBalance?: bigint;
   pendingDeposits: PendingDeposit[];
+  /**
+   * With `expectedWithdrawalAddress`: whether the credentials the validator
+   * has (or, queued only, will get from its first queued deposit with
+   * non-zero credentials) are `0x01` / `0x02` for that address; null when
+   * there are none yet.
+   */
+  credentialsMatch?: boolean | null;
 }
 
 export const DepositStatusOptionsSchema = Type.Object(
@@ -47,12 +55,22 @@ export const DepositStatusOptionsSchema = Type.Object(
      * lock (`GET /v1/state/:lockHash`) until the by-pubkey endpoint exists.
      */
     lockHash: Type.Optional(T.Hash32),
+    /** Sets `credentialsMatch` on each status. */
+    expectedWithdrawalAddress: Type.Optional(T.Address),
   },
   { additionalProperties: false },
 );
 export interface DepositStatusOptions {
+  /** Beacon node REST URL, for the chain fallback. */
   beaconUrl?: string;
+  /**
+   * The cluster lock of the pubkeys: only needed while the Obol API does not
+   * serve `POST /v1/validators/:network/deposit-status` (then the interim
+   * `GET /v1/state/:lockHash` answers by lock).
+   */
   lockHash?: Hex;
+  /** Sets `credentialsMatch` on each status. */
+  expectedWithdrawalAddress?: Address;
 }
 
 export const PENDING_DEPOSIT = 'pending_deposit';
@@ -74,9 +92,39 @@ export const statusFromBeacon = (
 export const canReadStatus = (
   ctx: Context,
   options: DepositStatusOptions,
-): boolean =>
-  options.beaconUrl !== undefined ||
-  (ctx.api !== null && options.lockHash !== undefined);
+): boolean => options.beaconUrl !== undefined || ctx.api !== null;
+
+const ZERO_CREDENTIALS = `0x${'0'.repeat(64)}`;
+
+/**
+ * The credentials a validator has, or (no registry entry yet) will get: the
+ * first queued deposit with non-zero credentials (a zero-credential top-up
+ * has no valid signature for a new validator, so it is skipped).
+ */
+export const effectiveCredentials = (
+  status: DepositStatus,
+): Hex | undefined => {
+  if (status.validatorIndex !== undefined) return status.withdrawalCredentials;
+  return status.pendingDeposits.find(
+    p =>
+      p.withdrawalCredentials !== undefined &&
+      p.withdrawalCredentials.toLowerCase() !== ZERO_CREDENTIALS,
+  )?.withdrawalCredentials;
+};
+
+const credentialsMatch = (
+  credentials: Hex | undefined,
+  address: string,
+): boolean | null => {
+  if (credentials === undefined) return null;
+  const c = credentials.toLowerCase();
+  const prefix = c.slice(0, 4);
+  return (
+    (prefix === '0x01' || prefix === '0x02') &&
+    c.slice(4, 26) === '0'.repeat(22) &&
+    c.slice(-40) === address.toLowerCase().slice(2)
+  );
+};
 
 const PUBKEY = /^0x[0-9a-f]{96}$/;
 const CREDENTIALS = /^0x[0-9a-f]{64}$/;
@@ -91,6 +139,140 @@ const unavailable = (message: string, cause?: unknown): ObolError =>
 
 const lowerString = (value: unknown): string | undefined =>
   typeof value === 'string' ? value.toLowerCase() : undefined;
+
+/* ------------------------------------------------------------------------ */
+/* Obol API: POST /v1/validators/:network/deposit-status                     */
+/* ------------------------------------------------------------------------ */
+
+/** Pubkeys per deposit-status request (the API's limit). */
+const DEPOSIT_STATUS_BATCH = 1000;
+const STATUS_NAMES = new Set<string>(['new', 'queued', 'active', 'exited']);
+
+const weiString = (value: unknown, what: string, pubkey: string): bigint => {
+  if (typeof value !== 'string' || !DECIMAL.test(value)) {
+    throw unavailable(
+      `The Obol API returned a malformed ${what} for ${pubkey}`,
+    );
+  }
+  return BigInt(value);
+};
+
+const depositStatusEntry = (raw: unknown): DepositStatus => {
+  const entry = (raw ?? {}) as Record<string, unknown>;
+  const pubkey = lowerString(entry.pubkey);
+  if (pubkey === undefined || !PUBKEY.test(pubkey)) {
+    throw unavailable('The Obol API returned a malformed pubkey');
+  }
+  const bad = (what: string): never => {
+    throw unavailable(`The Obol API returned ${what} for ${pubkey}`);
+  };
+  const status = entry.status;
+  if (typeof status !== 'string' || !STATUS_NAMES.has(status)) {
+    return bad('an unknown status');
+  }
+  if (!Array.isArray(entry.pendingDeposits)) {
+    return bad('malformed pending deposits');
+  }
+  const pendingDeposits = (entry.pendingDeposits as unknown[]).map(item => {
+    const deposit = (item ?? {}) as Record<string, unknown>;
+    const credentials = lowerString(deposit.withdrawalCredentials);
+    const amount = weiString(deposit.amount, 'pending deposit amount', pubkey);
+    if (credentials === undefined || !CREDENTIALS.test(credentials)) {
+      return bad('malformed pending deposit credentials');
+    }
+    return { amount, withdrawalCredentials: credentials as Hex };
+  });
+  if (status === 'new') {
+    if (
+      entry.beaconStatus !== null ||
+      entry.index !== null ||
+      pendingDeposits.length > 0
+    ) {
+      return bad('an inconsistent new status');
+    }
+    return { pubkey: pubkey as Hex, status, source: 'api', pendingDeposits };
+  }
+  const beaconStatus = entry.beaconStatus;
+  if (
+    typeof beaconStatus !== 'string' ||
+    statusFromBeacon(beaconStatus) !== status
+  ) {
+    return bad(`a beacon status that is not ${status}`);
+  }
+  const credentials = lowerString(entry.withdrawalCredentials);
+  if (credentials === undefined || !CREDENTIALS.test(credentials)) {
+    return bad('malformed withdrawal credentials');
+  }
+  if (beaconStatus === PENDING_DEPOSIT) {
+    if (entry.index !== null || pendingDeposits.length === 0) {
+      return bad('a queued status without a queued deposit');
+    }
+    return {
+      pubkey: pubkey as Hex,
+      status: 'queued',
+      source: 'api',
+      beaconStatus,
+      withdrawalCredentials: credentials as Hex,
+      pendingDeposits,
+    };
+  }
+  const index = entry.index;
+  if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0) {
+    return bad('a malformed validator index');
+  }
+  return {
+    pubkey: pubkey as Hex,
+    status: status as DepositStatusName,
+    source: 'api',
+    beaconStatus,
+    validatorIndex: index,
+    withdrawalCredentials: credentials as Hex,
+    balance: weiString(entry.balance, 'balance', pubkey),
+    effectiveBalance: weiString(
+      entry.effectiveBalance,
+      'effective balance',
+      pubkey,
+    ),
+    pendingDeposits,
+  };
+};
+
+const fromDepositStatusApi = async (
+  ctx: Context,
+  pubkeys: Hex[],
+): Promise<Map<string, DepositStatus>> => {
+  const api = ctx.api;
+  if (api === null) throw new Error('unreachable: API disabled');
+  const found = new Map<string, DepositStatus>();
+  for (let i = 0; i < pubkeys.length; i += DEPOSIT_STATUS_BATCH) {
+    const chunk = pubkeys.slice(i, i + DEPOSIT_STATUS_BATCH);
+    const body = await api.request<{ validators?: unknown }>(
+      `/v1/validators/${ctx.chain.network}/deposit-status`,
+      { method: 'POST', body: { pubkeys: chunk } },
+    );
+    if (!Array.isArray(body?.validators)) {
+      throw unavailable('The Obol API returned a malformed deposit status');
+    }
+    const requested = new Set<string>(chunk);
+    for (const raw of body.validators as unknown[]) {
+      const status = depositStatusEntry(raw);
+      if (!requested.has(status.pubkey)) {
+        throw unavailable(
+          `The Obol API returned ${status.pubkey}, which was not requested`,
+        );
+      }
+      if (found.has(status.pubkey)) {
+        throw unavailable(`The Obol API returned ${status.pubkey} twice`);
+      }
+      found.set(status.pubkey, status);
+    }
+  }
+  const missing = pubkeys.find(p => !found.has(p));
+  if (missing !== undefined) {
+    throw unavailable(`The Obol API left out ${missing}`);
+  }
+  return found;
+};
 
 /* ------------------------------------------------------------------------ */
 /* Obol API (interim: GET /v1/state/:lockHash)                               */
@@ -398,15 +580,69 @@ const fromBeacon = async (
 
 /* ------------------------------------------------------------------------ */
 
+/** Thrown when the API has neither endpoint for this call and no beaconUrl. */
+const ENDPOINT_UNAVAILABLE = 'endpoint_unavailable';
+
+/** An API failure falls back to the beacon node when there is one. */
+const apiOrBeacon = async (
+  read: () => Promise<Map<string, DepositStatus>>,
+  beaconUrl: string | undefined,
+): Promise<Map<string, DepositStatus> | undefined> => {
+  try {
+    return await read();
+  } catch (error) {
+    if (!(error instanceof ObolApiError) || beaconUrl === undefined) {
+      throw error;
+    }
+    return undefined;
+  }
+};
+
+const fromApiSources = async (
+  ctx: Context,
+  pubkeys: Hex[],
+  opts: { beaconUrl?: string; lockHash?: string },
+): Promise<Map<string, DepositStatus> | undefined> => {
+  try {
+    return await fromDepositStatusApi(ctx, pubkeys);
+  } catch (error) {
+    // 404: an API without the deposit-status route (not deployed yet).
+    if (!isObolError(error, 'API_NOT_FOUND')) {
+      if (error instanceof ObolApiError && opts.beaconUrl !== undefined) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+  if (opts.lockHash !== undefined) {
+    return await apiOrBeacon(
+      async () => await fromApi(ctx, pubkeys, opts.lockHash as Hex),
+      opts.beaconUrl,
+    );
+  }
+  if (opts.beaconUrl !== undefined) return undefined;
+  throw new ObolError(
+    'STATUS_UNAVAILABLE',
+    'The Obol API does not serve deposit status by pubkey yet',
+    {
+      hint: 'Pass lockHash (the lock of the pubkeys) or a beaconUrl',
+      details: { reason: ENDPOINT_UNAVAILABLE },
+    },
+  );
+};
+
 /**
  * deposits.status (`api+chain`): one status per input pubkey, in input order.
  *
- * Sources: the Obol API when enabled and `lockHash` is given (the pubkeys
- * must belong to that lock: `PAYLOAD_INVALID` / `not_in_lock`); else, or if
- * the API request fails, the beacon node at `beaconUrl` (pending queue read
+ * Sources: the Obol API (`POST /v1/validators/:network/deposit-status`, up
+ * to 1000 pubkeys per request); while that route answers 404, the interim
+ * `GET /v1/state/:lockHash` when `lockHash` is given (the pubkeys must
+ * belong to that lock: `PAYLOAD_INVALID` / `not_in_lock`). Else, or if the
+ * API request fails, the beacon node at `beaconUrl` (pending queue read
  * before the registry). Neither: `API_DISABLED` (API off) or
- * `PAYLOAD_INVALID` (API on, no `lockHash`). A malformed, duplicate or
- * unknown answer is `STATUS_UNAVAILABLE`.
+ * `STATUS_UNAVAILABLE` (API without the route). A malformed, duplicate,
+ * incomplete or unknown answer is `STATUS_UNAVAILABLE`. With
+ * `expectedWithdrawalAddress`, each status has `credentialsMatch`.
  */
 export const getDepositStatus = async (
   ctx: Context,
@@ -420,50 +656,46 @@ export const getDepositStatus = async (
 
   let found: Map<string, DepositStatus> | undefined;
   let source: Source = 'api';
-  if (ctx.api !== null && opts.lockHash !== undefined) {
-    try {
-      found = await fromApi(ctx, unique, opts.lockHash as Hex);
-    } catch (error) {
-      // An API failure falls back to the beacon node when there is one.
-      if (!(error instanceof ObolApiError) || opts.beaconUrl === undefined) {
-        throw error;
-      }
-    }
+  if (ctx.api !== null) {
+    found = await fromApiSources(ctx, unique, opts);
   }
   if (found === undefined) {
     if (opts.beaconUrl === undefined) {
-      if (ctx.api === null) {
-        throw new ObolError(
-          'API_DISABLED',
-          'deposits.status needs the Obol API or a beaconUrl, and the client was built with api: false',
-          { hint: 'Enable the API, or pass beaconUrl' },
-        );
-      }
-      throw invalid(
-        'options.lockHash',
-        'pass the lock hash of the pubkeys (the Obol API answers by cluster lock), or a beaconUrl',
+      throw new ObolError(
+        'API_DISABLED',
+        'deposits.status needs the Obol API or a beaconUrl, and the client was built with api: false',
+        { hint: 'Enable the API, or pass beaconUrl' },
       );
     }
     found = await fromBeacon(unique, opts.beaconUrl);
     source = 'chain';
   }
+  const expected = opts.expectedWithdrawalAddress;
   return input.map(raw => {
     const pubkey = raw.toLowerCase() as Hex;
-    return (
-      found?.get(pubkey) ?? {
-        pubkey,
-        status: 'new',
-        source,
-        pendingDeposits: [],
-      }
-    );
+    const status: DepositStatus = found?.get(pubkey) ?? {
+      pubkey,
+      status: 'new',
+      source,
+      pendingDeposits: [],
+    };
+    return expected === undefined
+      ? status
+      : {
+          ...status,
+          credentialsMatch: credentialsMatch(
+            effectiveCredentials(status),
+            expected,
+          ),
+        };
   });
 };
 
 /**
  * `getDepositStatus` when a source is available (see `canReadStatus`),
- * keyed by lowercase pubkey; null when there is none. Errors from an
- * available source are thrown, not turned into "unchecked".
+ * keyed by lowercase pubkey; null when there is none, including an Obol API
+ * without the deposit-status route and no `lockHash` / `beaconUrl`. Errors
+ * from an available source are thrown, not turned into "unchecked".
  */
 export const statusIfAvailable = async (
   ctx: Context,
@@ -471,6 +703,16 @@ export const statusIfAvailable = async (
   options: DepositStatusOptions,
 ): Promise<Map<string, DepositStatus> | null> => {
   if (!canReadStatus(ctx, options)) return null;
-  const statuses = await getDepositStatus(ctx, pubkeys, options);
-  return new Map(statuses.map(s => [s.pubkey, s]));
+  try {
+    const statuses = await getDepositStatus(ctx, pubkeys, options);
+    return new Map(statuses.map(s => [s.pubkey, s]));
+  } catch (error) {
+    if (
+      isObolError(error, 'STATUS_UNAVAILABLE') &&
+      error.details.reason === ENDPOINT_UNAVAILABLE
+    ) {
+      return null;
+    }
+    throw error;
+  }
 };

@@ -23,7 +23,8 @@ Notes:
   ENR re-signs; the API decides whether that is allowed (409 → `API_CONFLICT`).
 - The solo flow (creator signs, operators carry ENRs only) and the Charon flow (nothing signed) are created outside
   `cluster.create`; their definitions are `definition ready` as soon as they exist.
-- A published lock is not trusted until `cluster.verifyLock` passes. `deposits.fromLock` verifies by default.
+- A published lock is not trusted until `cluster.verifyLock` passes. `deposits.fromLock` verifies by default (level
+  `attested` plus the signatures of the deposits it returns; `verify: 'full'` for every check).
 - The DKG itself and a failed DKG are not visible to the SDK: the cluster stays `definition ready`.
 
 ## Transaction
