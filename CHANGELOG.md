@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### [v3.0.0-rc.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v3.0.0-rc.1)
+#### [v3.0.0-rc.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v3.0.0-rc.2)
 
 > 19 October 2026
 
@@ -41,6 +41,11 @@ checks, reads and returns, and every error code, is specified in [`spec/`](spec/
 - ethers support, and with it `@safe-global/*`, `@metamask/eth-sig-util`, AJV, `semver` and `uuid`.
 - The 2.x `Client` and all its methods and sub-modules (`splits`, `eoa`, `incentives`, `exit`), the standalone
   `validateClusterLock` and the whole-lock validation worker, and creation of OWR / SplitMain contracts.
+
+**Fixed**
+
+- Batched BLS checks (lock deposit and builder registration signatures, deposit data) require each signature to be
+  valid on its own; batches are checked with random weights. The same fix ships in 2.15.1.
 
 #### [v2.15.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.14.0...v2.15.0)
 
