@@ -16,6 +16,7 @@ import {
   nullDepositAmountsClusterLockV1X8,
 } from '../fixtures.js';
 import { fakeChain } from '../helpers/fakeChain.js';
+import { offsetSignaturePair } from '../helpers/blsSignatures.js';
 
 jest.setTimeout(60_000);
 
@@ -211,6 +212,28 @@ describe('cluster.verifyLock', () => {
       issue: 'signature_invalid',
     });
   });
+
+  // Each signature is invalid; their sum equals the sum of the valid ones.
+  it.each<[string, (validator: any) => { signature: string }, string]>([
+    ['deposit', v => v.partial_deposit_data[0], 'deposit_data_invalid'],
+    ['builder', v => v.builder_registration, 'builder_registration_invalid'],
+  ])(
+    'steps 6-7: each %s signature must be valid on its own',
+    async (_name, signed, step) => {
+      const lock = copy(nullDepositAmountsClusterLockV1X8);
+      const [first, second] = lock.distributed_validators.map(signed);
+      [first.signature, second.signature] = offsetSignaturePair(
+        first.signature,
+        second.signature,
+      );
+      lock.lock_hash = computeLockHash(lock);
+      expect(await verifyLock(lock)).toEqual({
+        ok: false,
+        step,
+        issue: 'signature_invalid',
+      });
+    },
+  );
 
   it('step 8: lock_signature_invalid (node signature)', async () => {
     const lock = copy(clusterLockV1X10);

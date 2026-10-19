@@ -19,6 +19,7 @@ import {
   registryRow,
   type OvmChainOptions,
 } from '../ovm/ovmFixture.js';
+import { offsetDepositPair } from '../helpers/blsSignatures.js';
 
 const vectors = JSON.parse(
   readFileSync('spec/vectors/deposit_checks.json', 'utf8'),
@@ -109,6 +110,21 @@ describe('deposits.prepareDeposit', () => {
       ).toMatchObject({
         code: 'DEPOSIT_INVALID',
         details: { issue: 'root_mismatch' },
+      });
+    });
+
+    it('requires each deposit signature to be valid on its own', async () => {
+      expect(
+        await caught(
+          prepareDeposit(chainWith().context(), {
+            deposits: offsetDepositPair(DEPOSIT),
+            via: { ovm: OVM },
+            from: OWNER,
+          }),
+        ),
+      ).toMatchObject({
+        code: 'DEPOSIT_INVALID',
+        details: { index: 0, issue: 'signature_invalid' },
       });
     });
 

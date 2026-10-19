@@ -2,7 +2,7 @@
 //
 // Two modes (dispatched on workerData.mode):
 //   'shareBinding' — Lagrange + extra-share verification for a validator chunk.
-//   'verifyBatch'  — blsVerifyMultiple on a (pubkeys, messages, aggregateSig)
+//   'verifyBatch'  — blsVerifyEach on a (pubkeys, messages, signatures)
 //                    chunk of the deposit+builder batch.
 //   'aggregatePubkeys' — partial G1 aggregate of a pubkey chunk (for lock sig).
 //
@@ -12,10 +12,9 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { fromHexString } from '@chainsafe/ssz';
 import {
   blsAggregatePublicKeys,
-  blsAggregateSignatures,
   blsRecoverDistributedPubkeyFromShares,
+  blsVerifyEach,
   blsVerifyExtraShares,
-  blsVerifyMultiple,
 } from '../bls.js';
 
 export interface ShareBindingInput {
@@ -69,11 +68,7 @@ function verifyShareBindingChunk(input: ShareBindingInput): boolean {
 }
 
 function verifyBatchChunk(input: VerifyBatchInput): boolean {
-  return blsVerifyMultiple(
-    input.pubkeys,
-    input.messages,
-    blsAggregateSignatures(input.signatures),
-  );
+  return blsVerifyEach(input.pubkeys, input.messages, input.signatures);
 }
 
 function dispatch(input: WorkerInput): WorkerResult {

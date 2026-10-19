@@ -254,8 +254,8 @@ For each deposit in order, then the signatures (vectors `deposit_checks.json`):
    (`root_mismatch`). (2.15)
 7. `kind` is `deposit`: the chain must have a known genesis fork (`UNSUPPORTED_CHAIN`); every signature verifies
    against the pubkey over `DepositMessage{pubkey, withdrawal_credentials, amount_gwei}` in the deposit domain
-   (`DOMAIN_DEPOSIT 0x03000000`, genesis fork version, zero genesis validators root). Batch-verified; on failure the
-   first invalid index is reported (`signature_invalid`; a signature that is not a curve point also counts). (2.15)
+   (`DOMAIN_DEPOSIT 0x03000000`, genesis fork version, zero genesis validators root). Batch-verified with random
+   weights, so each signature must be valid on its own; on failure the first invalid index is reported (`signature_invalid`; a signature that is not a curve point also counts). (2.15)
 
 Failures 2–7 are `DEPOSIT_INVALID` with `issue` and `index`.
 

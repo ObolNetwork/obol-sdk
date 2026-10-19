@@ -4,6 +4,24 @@ import { bls12_381 } from '@noble/curves/bls12-381.js';
 // The Ethereum consensus spec uses the POP (Proof of Possession) DST, not the noble/curves NUL default.
 const { longSignatures: ls } = bls12_381;
 const ETH2_DST = 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_';
+const G1 = bls12_381.G1.Point;
+const G2 = bls12_381.G2.Point;
+type G1Point = typeof G1.BASE;
+type G2Point = typeof G2.BASE;
+
+// Decode with full validation (on-curve and prime-order subgroup, done by
+// noble's fromBytes) and reject the identity point, which fromBytes accepts.
+function decodePubkey(bytes: Uint8Array): G1Point {
+  const point = G1.fromBytes(bytes);
+  if (point.is0()) throw new Error('public key is the point at infinity');
+  return point;
+}
+
+function decodeSignature(bytes: Uint8Array): G2Point {
+  const point = ls.Signature.fromBytes(bytes);
+  if (point.is0()) throw new Error('signature is the point at infinity');
+  return point;
+}
 
 export function blsVerify(
   pubkey: Uint8Array,
@@ -53,6 +71,90 @@ export function blsVerifyWithAggregatedPubkey(
   }
 }
 
+const WEIGHT_BITS = 64;
+
+/** Random non-zero 64-bit weight from a cryptographically secure RNG. */
+function randomWeight(): bigint {
+  const [hi, lo] = crypto.getRandomValues(new Uint32Array(2));
+  const weight = (BigInt(hi) << BigInt(32)) | BigInt(lo);
+  return weight === BigInt(0) ? BigInt(1) : weight;
+}
+
+/**
+ * Σ weights[i]·points[i] for weights below 2^64, by the bucket method. Noble's
+ * generic multi-scalar multiplication walks all 255 scalar bits.
+ */
+function sumWeightedSignatures(points: G2Point[], weights: bigint[]): G2Point {
+  // Window size dividing WEIGHT_BITS; larger windows pay off for more points.
+  const windowBits = points.length < 16 ? 2 : points.length < 512 ? 4 : 8;
+  const mask = BigInt((1 << windowBits) - 1);
+  let sum = G2.ZERO;
+  for (let shift = WEIGHT_BITS - windowBits; shift >= 0; shift -= windowBits) {
+    for (let k = 0; k < windowBits; k++) sum = sum.double();
+    const buckets = new Array<G2Point | undefined>(1 << windowBits);
+    for (let i = 0; i < points.length; i++) {
+      const digit = Number((weights[i] >> BigInt(shift)) & mask);
+      if (digit !== 0) {
+        const bucket = buckets[digit];
+        buckets[digit] = bucket ? bucket.add(points[i]) : points[i];
+      }
+    }
+    // Σ digit·bucket[digit] via running sums.
+    let running = G2.ZERO;
+    for (let digit = buckets.length - 1; digit > 0; digit--) {
+      const bucket = buckets[digit];
+      if (bucket) running = running.add(bucket);
+      sum = sum.add(running);
+    }
+  }
+  return sum;
+}
+
+/**
+ * Checks that every `signatures[i]` is a valid signature of `messages[i]`
+ * under `pubkeys[i]`, with one batched pairing check: for fresh random
+ * non-zero 64-bit weights rᵢ,
+ *
+ *   e(G1, Σ rᵢ·Sᵢ) == Π e(rᵢ·PKᵢ, H(mᵢ)).
+ *
+ * Every point is checked to be in the prime-order subgroup and not the
+ * identity, so if any signature is invalid on its own the check fails except
+ * with probability at most 2^-63 over the weights.
+ */
+export function blsVerifyEach(
+  pubkeys: Uint8Array[],
+  messages: Uint8Array[],
+  signatures: Uint8Array[],
+): boolean {
+  try {
+    if (
+      pubkeys.length !== messages.length ||
+      pubkeys.length !== signatures.length
+    ) {
+      return false;
+    }
+    if (pubkeys.length === 0) return true;
+    const weights = pubkeys.map(randomWeight);
+    const items = pubkeys.map((pubkey, i) => ({
+      message: ls.hash(messages[i], ETH2_DST),
+      publicKey: decodePubkey(pubkey).multiplyUnsafe(weights[i]),
+    }));
+    const weightedSignature = sumWeightedSignatures(
+      signatures.map(decodeSignature),
+      weights,
+    );
+    return ls.verifyBatch(weightedSignature, items);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verifies one aggregate signature (the plain sum of the signers' signatures)
+ * over distinct (pubkey, message) pairs. This proves only that the sum is
+ * valid, not that each signer's own signature is; use {@link blsVerifyEach}
+ * to check a set of individual signatures.
+ */
 export function blsVerifyMultiple(
   pubkeys: Uint8Array[],
   messages: Uint8Array[],

@@ -16,8 +16,8 @@ const toDeposit = (d: any) => ({
 });
 
 describe('vectors deposit_checks', () => {
-  it('has 30 cases', () => {
-    expect(suite.cases).toHaveLength(30);
+  it('has 31 cases', () => {
+    expect(suite.cases).toHaveLength(31);
   });
 
   it.each<[string, any]>(suite.cases.map((c: any) => [c.name, c]))(

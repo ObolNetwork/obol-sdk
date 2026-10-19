@@ -5,6 +5,11 @@ import {
   hoodiCompoundingDepositPayload,
   mainnetDepositPayload,
 } from '../fixtures.js';
+import {
+  offsetDepositPair,
+  signatureOutsideSubgroup,
+  withSignature,
+} from '../helpers/blsSignatures.js';
 
 const rejection = async (promise: Promise<unknown>): Promise<ObolError> =>
   await promise.then(
@@ -68,6 +73,33 @@ describe('deposits.verifyDepositData', () => {
       index: 1,
       issue: 'credentials_prefix_unknown',
     });
+  });
+
+  it('requires each signature to be valid on its own', async () => {
+    // Each signature is invalid; their sum is the sum of two valid ones.
+    const [first, second] = offsetDepositPair(mainnet);
+    expect(
+      (await rejection(verifyDepositData([first, second], { chainId: 1 })))
+        .details,
+    ).toEqual({ index: 0, issue: 'signature_invalid' });
+    expect(
+      (
+        await rejection(
+          verifyDepositData([mainnet, second, first], { chainId: 1 }),
+        )
+      ).details,
+    ).toEqual({ index: 1, issue: 'signature_invalid' });
+  });
+
+  it('rejects a signature outside the prime-order subgroup', async () => {
+    const deposit = withSignature(
+      mainnet,
+      signatureOutsideSubgroup(mainnet.signature),
+    );
+    expect(
+      (await rejection(verifyDepositData([mainnet, deposit], { chainId: 1 })))
+        .details,
+    ).toEqual({ index: 1, issue: 'signature_invalid' });
   });
 
   it.each<[string, unknown, unknown]>([

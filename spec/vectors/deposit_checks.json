@@ -1,11 +1,11 @@
 {
   "suite": "deposit_checks",
-  "description": "Outcome of the pure deposit checks run by verifyDepositData and prepareDeposit, in order per deposit: (1) kind deposit and all-zero signature -> DEPOSIT_LOOKS_LIKE_TOP_UP; (2) amount is whole gwei, >= 1 ETH; (3) credentials prefix 0x00/0x01/0x02, 0x01/0x02 with 11 zero bytes; (4) amount <= 32 ETH (0x00/0x01) or 2048 ETH (0x02, and any top-up); (5) credentials point at expectedWithdrawalAddress (0x01/0x02, case-insensitive), except all-zero credentials on a top-up; (6) deposit_data_root equals the SSZ hash_tree_root of DepositData; then (7) BLS signatures for kind deposit, batch-verified, reporting the first invalid index. Amounts are wei (decimal strings). The first failing deposit and rule is reported.",
+  "description": "Outcome of the pure deposit checks run by verifyDepositData and prepareDeposit, in order per deposit: (1) kind deposit and all-zero signature -> DEPOSIT_LOOKS_LIKE_TOP_UP; (2) amount is whole gwei, >= 1 ETH; (3) credentials prefix 0x00/0x01/0x02, 0x01/0x02 with 11 zero bytes; (4) amount <= 32 ETH (0x00/0x01) or 2048 ETH (0x02, and any top-up); (5) credentials point at expectedWithdrawalAddress (0x01/0x02, case-insensitive), except all-zero credentials on a top-up; (6) deposit_data_root equals the SSZ hash_tree_root of DepositData; then (7) BLS signatures for kind deposit, each valid on its own (batch-verified with random weights), reporting the first invalid index. Amounts are wei (decimal strings). The first failing deposit and rule is reported.",
   "provenance": {
     "source": "sdk",
     "sdk_ref": "obol-sdk feat/sdk-v3 b9355ef (trimmed 2.15)",
     "generated_by": "scratch generator running src/verification/depositPayload.ts verifyDepositPayloads",
-    "note": "Deposits come from test/fixtures.ts (mainnetDepositPayload from nullDepositAmountsClusterLockV1X8, hoodiCompoundingDepositPayload from clusterLockSoloV1X10, and depositDataFromLock(clusterLockV1X10)). Cases mirror test/verification/depositPayload.spec.ts and test/deposits/depositFlow.spec.ts. 2.15 throws Error(\"Invalid deposit at index N: <reason>\"); issue is the slug of <reason>, reason the v3 error code."
+    "note": "Deposits come from test/fixtures.ts (mainnetDepositPayload from nullDepositAmountsClusterLockV1X8, hoodiCompoundingDepositPayload from clusterLockSoloV1X10, and depositDataFromLock(clusterLockV1X10)). Cases mirror test/verification/depositPayload.spec.ts and test/deposits/depositFlow.spec.ts. 2.15 throws Error(\"Invalid deposit at index N: <reason>\"); issue is the slug of <reason>, reason the v3 error code. signatures_valid_only_in_sum was built with test/helpers/blsSignatures.ts offsetDepositPair and its outcome checked against the per-signature rule (operations.md deposits.verifyDepositData check 7)."
   },
   "cases": [
     {
@@ -226,6 +226,35 @@
       "reason": "DEPOSIT_INVALID",
       "issue": "signature_invalid",
       "index": 1
+    },
+    {
+      "name": "signatures_valid_only_in_sum",
+      "input": {
+        "chainId": 1,
+        "kind": "deposit",
+        "expectedWithdrawalAddress": null,
+        "deposits": [
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0x94fc833274b693e3f9add5889d266f988d06e9ec7551544629e24980b7e61e7d6576dbae195f6ec345e9a72701429b650c78fbcdd6b91a396f6ef7662541a88bbd91dd85a8b70ae062b29a78af2195621cb58657d0b99dc45c2b133444d1a41e",
+            "deposit_data_root": "0xb14a928dbac1c6940bae4e4a9725b77811cbacc18ed3bf778e1db345c41f410f",
+            "amount": "32000000000000000000"
+          },
+          {
+            "pubkey": "0x81bfe823b95a9f8799de07f6ae6accf1d7dc8f454be5e049f4e46d4dbd557269d3139ea7ede545c71517d099dc5da90a",
+            "withdrawal_credentials": "0x01000000000000000000000086b8145c98e5bd25ba722645b15ed65f024a87ec",
+            "signature": "0xa70b71b356456941c65bf2c36ffc9aa3e1069de7042d047b4f3c9b6049290cae891ce3d2bcac046b3d281cf803d7fbf614b7d8544ae50bbc960a389d2931cfb57966b67f19ab9f8d1ac36e89c0ee9198bd15bf5cb43c10aca70ed962901b93dd",
+            "deposit_data_root": "0x4388be8a901a872b98bcea2078370b5149dbcb6928d012ffb56e90df96ca2928",
+            "amount": "32000000000000000000"
+          }
+        ]
+      },
+      "accepted": false,
+      "reason": "DEPOSIT_INVALID",
+      "issue": "signature_invalid",
+      "index": 0,
+      "notes": "Each signature is invalid on its own (the valid signature plus and minus the same G2 point); their sum equals the sum of two valid signatures. Every signature must verify on its own."
     },
     {
       "name": "signature_not_a_curve_point",
