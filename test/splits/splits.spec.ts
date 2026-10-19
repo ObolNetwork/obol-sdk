@@ -8,6 +8,7 @@ import {
 } from '../../src/types.js';
 // import { CHAIN_CONFIGURATION } from '../../src/constants.js';
 import { TEST_ADDRESSES, mainnetDepositPayload } from '../fixtures.js';
+import { offsetDepositPair } from '../blsTestUtils.js';
 
 // Mock splitHelpers using unstable_mockModule
 // @ts-expect-error - ESM mocking requires top-level await
@@ -583,6 +584,16 @@ describe('deposit', () => {
     ],
   ])('rejects %s before sending', async (_label, payload, message) => {
     await expect(client.splits.deposit(payload)).rejects.toThrow(message);
+    expect(mockdepositOVM).not.toHaveBeenCalled();
+  });
+
+  it('requires each deposit signature to be valid on its own', async () => {
+    await expect(
+      client.splits.deposit({
+        ovmAddress: mockOVMAddress,
+        deposits: offsetDepositPair(mainnetDepositPayload.deposit),
+      }),
+    ).rejects.toThrow('Invalid deposit at index 0: invalid deposit signature');
     expect(mockdepositOVM).not.toHaveBeenCalled();
   });
 

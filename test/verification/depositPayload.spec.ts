@@ -4,6 +4,11 @@ import {
   hoodiCompoundingDepositPayload,
   mainnetDepositPayload,
 } from '../fixtures';
+import {
+  offsetDepositPair,
+  signatureOutsideSubgroup,
+  withSignature,
+} from '../blsTestUtils';
 
 const ETH = BigInt('1000000000000000000');
 
@@ -55,6 +60,31 @@ describe('verifyDepositPayloads', () => {
     // The second deposit is signed for Hoodi.
     await expect(
       verifyDepositPayloads([mainnet.deposit, hoodi.deposit], { chainId: 1 }),
+    ).rejects.toThrow('Invalid deposit at index 1: invalid deposit signature');
+  });
+
+  it('requires each signature to be valid on its own', async () => {
+    // Each signature is invalid; their sum is the sum of two valid ones.
+    const [first, second] = offsetDepositPair(mainnet.deposit);
+    await expect(
+      verifyDepositPayloads([first, second], { chainId: mainnet.chainId }),
+    ).rejects.toThrow('Invalid deposit at index 0: invalid deposit signature');
+    await expect(
+      verifyDepositPayloads([mainnet.deposit, second, first], {
+        chainId: mainnet.chainId,
+      }),
+    ).rejects.toThrow('Invalid deposit at index 1: invalid deposit signature');
+  });
+
+  it('rejects a signature outside the prime-order subgroup', async () => {
+    const deposit = withSignature(
+      mainnet.deposit,
+      signatureOutsideSubgroup(mainnet.deposit.signature),
+    );
+    await expect(
+      verifyDepositPayloads([mainnet.deposit, deposit], {
+        chainId: mainnet.chainId,
+      }),
     ).rejects.toThrow('Invalid deposit at index 1: invalid deposit signature');
   });
 

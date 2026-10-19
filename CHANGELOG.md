@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix(verification): require each signature in a batched BLS check (cluster lock deposit and builder registration signatures, deposit payloads) to be valid on its own; batches are now checked with random weights
+
 #### [v2.15.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.14.0...v2.15.0)
 
 - feat: SDK 2.15 hardening [`#244`](https://github.com/ObolNetwork/obol-sdk/pull/244)
