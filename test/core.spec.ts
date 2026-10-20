@@ -75,7 +75,7 @@ describe('v3 core', () => {
                 ? undefined
                 : BigInt(c.input.requestedFee),
             count: c.input.requestCount,
-            multiplier: BigInt(c.input.defaultMultiplier ?? '2'),
+            defaultTo: c.input.default,
           });
         if (c.accepted) {
           expect(run().toString()).toBe(c.value);

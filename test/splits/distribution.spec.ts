@@ -144,6 +144,32 @@ describe('splits.prepareDistribution', () => {
     expect(byAddress[HOODI.rafRecipient].skipReason).toBeUndefined();
   });
 
+  it('separates what this distribution credits from what reaches the wallet', async () => {
+    // A already had 100 wei in the Warehouse before this distribution.
+    const chain = scenario({
+      ovmBalance: parseEther('1'),
+      warehouse: { [A]: 100n },
+    });
+    const { preview } = await prepareDistribution(chain.context(), {
+      ovm: OVM,
+      ...both,
+      from: SENDER,
+    });
+    for (const r of preview.recipients) {
+      expect(r.fromThisDistribution).toBe(
+        r.fromOvm +
+          r.fromRewardSplit +
+          r.fromPrincipalSplit +
+          r.distributorReward,
+      );
+    }
+    const a = preview.recipients.find(r => r.address === A)!;
+    expect(a.fromThisDistribution).toBeGreaterThan(0n);
+    expect(a.warehouseBalance).toBe(100n);
+    // The withdrawal takes the whole Warehouse balance, prior wei included.
+    expect(a.toWallet).toBe(a.fromThisDistribution + a.warehouseBalance - 1n);
+  });
+
   it('includes a leg at exactly minWithdraw', async () => {
     const chain = scenario({ warehouse: { [A]: 101n } });
     const prepared = await prepareDistribution(chain.context(), {

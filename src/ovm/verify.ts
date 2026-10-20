@@ -16,6 +16,7 @@ import { requireContracts, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, sameAddress, T } from '../schema.js';
 import type { Source } from '../types.js';
+import { fetchOvmApiRecord, type OvmApiRecord } from './apiRecord.js';
 import { encodeEventTopics } from 'viem';
 
 export interface OvmVerification {
@@ -31,6 +32,82 @@ interface ContractCreationRecord {
   contractCreator?: string;
   contractFactory?: string;
 }
+
+interface ApiProvenance {
+  status: 'obol' | 'notObol';
+  reason: string;
+  creationTxHash?: Hash;
+}
+
+/**
+ * Step 2: the API OVM record's `provenance`, trusted only when the record is
+ * for this address and names this chain's factory (if it names one);
+ * `unknown` defers to the chain. Without the endpoint (or on an API error),
+ * the interim creation record, trusted only when its `contractAddress` is
+ * this address. Anything else: undefined (step 3).
+ */
+const provenanceFromApi = async (
+  ctx: Context,
+  ovm: Address,
+  factoryAddress: Address,
+): Promise<ApiProvenance | undefined> => {
+  const api = ctx.api;
+  if (api === null) return undefined;
+  let record: OvmApiRecord | undefined;
+  try {
+    record = await fetchOvmApiRecord(ctx, ovm);
+  } catch {
+    // Not deployed yet (404) or unavailable: the interim record below.
+  }
+  if (record !== undefined) {
+    const provenance = record.provenance;
+    if (
+      record.address === undefined ||
+      !sameAddress(record.address, ovm) ||
+      provenance === undefined ||
+      provenance.status === 'unknown' ||
+      (provenance.factoryAddress !== undefined &&
+        !sameAddress(provenance.factoryAddress, factoryAddress))
+    ) {
+      return undefined;
+    }
+    return {
+      status: provenance.status,
+      reason:
+        provenance.reason !== ''
+          ? provenance.reason
+          : provenance.status === 'obol'
+            ? 'Created by the OVM factory'
+            : 'Not created by the OVM factory',
+      ...(provenance.status === 'obol' &&
+      provenance.creationTxHash !== undefined
+        ? { creationTxHash: provenance.creationTxHash }
+        : {}),
+    };
+  }
+  try {
+    const creation = await api.request<ContractCreationRecord>(
+      `/v1/eth/contract-creation/${ctx.chain.network}/${ovm}`,
+    );
+    if (
+      typeof creation?.contractAddress !== 'string' ||
+      !sameAddress(creation.contractAddress, ovm) ||
+      typeof creation.contractFactory !== 'string' ||
+      creation.contractFactory === ''
+    ) {
+      return undefined;
+    }
+    return sameAddress(creation.contractFactory, factoryAddress)
+      ? { status: 'obol', reason: 'Created by the OVM factory' }
+      : {
+          status: 'notObol',
+          reason: `Created by another factory (${creation.contractFactory})`,
+        };
+  } catch {
+    // No record, or the API is unavailable: the factory logs.
+    return undefined;
+  }
+};
 
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -77,32 +154,15 @@ export const verifyOvm = async (
     );
   }
 
-  // 2. API creation record (interim Etherscan proxy).
-  if (ctx.api !== null) {
-    try {
-      const creation = await ctx.api.request<ContractCreationRecord>(
-        `/v1/eth/contract-creation/${ctx.chain.network}/${ovm}`,
-      );
-      const forThisAddress =
-        creation?.contractAddress === undefined ||
-        creation.contractAddress === '' ||
-        sameAddress(creation.contractAddress, ovm);
-      if (
-        forThisAddress &&
-        typeof creation?.contractFactory === 'string' &&
-        creation.contractFactory !== ''
-      ) {
-        return sameAddress(creation.contractFactory, factoryAddress)
-          ? result('obol', 'api', 'Created by the OVM factory')
-          : result(
-              'notObol',
-              'api',
-              `Created by another factory (${creation.contractFactory})`,
-            );
-      }
-    } catch {
-      // No record, or the API is unavailable: fall back to the factory logs.
-    }
+  // 2. API: the OVM record's provenance, else the interim creation record.
+  const fromApi = await provenanceFromApi(ctx, ovm, factoryAddress);
+  if (fromApi !== undefined) {
+    return result(
+      fromApi.status,
+      'api',
+      fromApi.reason,
+      fromApi.creationTxHash,
+    );
   }
 
   // 3. Factory CreateObolValidatorManager logs with topic1 = ovm.

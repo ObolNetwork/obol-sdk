@@ -4,7 +4,7 @@
  */
 import { encodeEventTopics, getAddress, type Address, type Hex } from 'viem';
 import { ovmAbi, rolesUpdatedEvent } from '../abi.js';
-import { requireContracts } from '../chains.js';
+import { publicForwarder, requireContracts } from '../chains.js';
 import {
   finding,
   latestBlockNumber,
@@ -20,54 +20,66 @@ import {
   statusFromBeacon,
   type DepositStatusName,
 } from '../deposits/status.js';
+import { fetchOvmApiRecord, type OvmApiRecord } from './apiRecord.js';
 import { readMany, type ReadCall } from './multicall.js';
-import { ovmReadFailed, readOvmCore, readPullBalances } from './read.js';
+import { ovmReadFailed, readOvmCore } from './read.js';
 import { ovmRouting, roleNames, type OvmRoleName } from './routing.js';
 
-/* ------------------------------------------------------------------------ */
-/* New Obol API OVM endpoint: GET /v1/ovm/:network/:address                  */
-/* ------------------------------------------------------------------------ */
-
-/**
- * The fields of `GET /v1/ovm/:network/:address` the SDK reads (design "API
- * enrichment"). The endpoint is not deployed yet; every field is optional
- * and checked before use.
- */
-export interface OvmApiRecord {
-  address?: unknown;
-  blockNumber?: unknown;
-  /** wei, decimal string */
-  principalOnBeaconChain?: unknown;
-  validators?: unknown;
-}
-
-const fetchOvmRecord = async (
-  ctx: Context,
-  ovm: Address,
-): Promise<OvmApiRecord> => {
-  const api = requireApi(ctx, 'ovm');
-  const record = await api.request<OvmApiRecord>(
-    `/v1/ovm/${ctx.chain.network}/${ovm}`,
-  );
-  if (record === null || typeof record !== 'object') {
-    throw new ObolError(
-      'API_RESPONSE_MISMATCH',
-      `The Obol API returned no OVM record for ${ovm}`,
-      { hint: 'Report it; do not use the answer' },
-    );
-  }
-  if (typeof record.address === 'string' && !sameAddress(record.address, ovm)) {
-    throw new ObolError(
-      'API_RESPONSE_MISMATCH',
-      `The Obol API returned the record of ${record.address} for ${ovm}`,
-      { hint: 'Report it; do not use the answer' },
-    );
-  }
-  return record;
-};
+export type {
+  OvmApiProvenance,
+  OvmApiProvenanceStatus,
+  OvmApiRecord,
+  OvmApiRoleHolder,
+  OvmApiSplit,
+} from './apiRecord.js';
 
 const weiString = (value: unknown): bigint | undefined =>
   typeof value === 'string' && /^\d+$/.test(value) ? BigInt(value) : undefined;
+
+/* ------------------------------------------------------------------------ */
+/* Public forwarders                                                         */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * PUBLIC_FORWARDER_HOLDS_ROLE (warning) when the owner or a role holder is
+ * one of the chain's public forwarders (Multicall3 and the like): anyone can
+ * call the role-gated functions through it.
+ */
+export const publicForwarderFindings = (
+  chainId: number,
+  holders: ReadonlyArray<{ address: Address; roles: bigint; isOwner: boolean }>,
+): Finding[] => {
+  const exposed = holders.flatMap(h => {
+    const forwarder = publicForwarder(chainId, h.address);
+    if (forwarder === undefined || (!h.isOwner && h.roles === 0n)) return [];
+    return [{ ...h, name: forwarder.name, roleNames: roleNames(h.roles) }];
+  });
+  if (exposed.length === 0) return [];
+  const describe = (h: (typeof exposed)[number]): string =>
+    `${h.name} ${h.address} (${[
+      ...(h.isOwner ? ['owner'] : []),
+      ...h.roleNames,
+    ].join(', ')})`;
+  return [
+    finding(
+      'PUBLIC_FORWARDER_HOLDS_ROLE',
+      'warning',
+      `${exposed.map(describe).join('; ')}: anyone can call the role-gated functions through it`,
+      {
+        hint: 'Revoke the roles (or transfer ownership) from the forwarder now',
+        details: {
+          holders: exposed.map(h => ({
+            address: h.address,
+            name: h.name,
+            roles: h.roles,
+            roleNames: h.roleNames,
+            isOwner: h.isOwner,
+          })),
+        },
+      },
+    ),
+  ];
+};
 
 /* ------------------------------------------------------------------------ */
 /* getState                                                                  */
@@ -101,8 +113,10 @@ const MISMATCH_TOLERANCE = ETH;
 
 /**
  * ovm.getState (`api+chain`): the OVM getters, balance and block number in
- * one Multicall3 read, the recipients' pull balances at that block, and the
- * routing `distributeFunds()` would apply now. With the API, compares
+ * one Multicall3 read, the recipients' pull balances (and the chain's public
+ * forwarders' `rolesOf`) at that block, and the routing `distributeFunds()`
+ * would apply now. PUBLIC_FORWARDER_HOLDS_ROLE when a public forwarder is
+ * the owner or holds a role. With the API, compares
  * `amountOfPrincipalStake` with the API's `principalOnBeaconChain` and adds
  * `PRINCIPAL_STAKE_MISMATCH` when they differ by more than 1 ETH. Does not
  * check provenance (use `verify`). OVM_READ_FAILED if a getter fails.
@@ -112,28 +126,51 @@ export const getOvmState = async (
   input: Address,
 ): Promise<OvmState> => {
   const ovm = checksum(decode(T.Address, input, 'ovm'));
-  requireContracts(ctx.chain.id, 'ovm.getState');
+  const { publicForwarders } = requireContracts(ctx.chain.id, 'ovm.getState');
   const core = await readOvmCore(ctx, ovm);
-  const [principalPull, rewardPull] = await readPullBalances(
+  // Pull balances and the public forwarders' roles in one read at that block.
+  const read = (functionName: string, account: Address): ReadCall => ({
+    address: ovm,
+    abi: ovmAbi,
+    functionName,
+    args: [account],
+  });
+  const results = await readMany(
     ctx,
-    ovm,
-    [core.principalRecipient, core.rewardRecipient],
-    core.blockNumber,
+    [
+      read('getPullBalance', core.principalRecipient),
+      read('getPullBalance', core.rewardRecipient),
+      ...publicForwarders.map(f => read('rolesOf', f.address)),
+    ],
     'ovm.getState',
+    core.blockNumber,
   );
+  const [principalPull, rewardPull] = results.slice(0, 2).map(r => {
+    if (!r.ok) throw ovmReadFailed(ovm, 'getPullBalance');
+    return r.value as bigint;
+  });
   const routing = ovmRouting(core);
 
   let principalOnBeaconChain: bigint | undefined;
   if (ctx.api !== null) {
     try {
-      principalOnBeaconChain = weiString(
-        (await fetchOvmRecord(ctx, ovm)).principalOnBeaconChain,
-      );
+      principalOnBeaconChain = (await fetchOvmApiRecord(ctx, ovm))
+        .principalOnBeaconChain;
     } catch {
       // Display enrichment only: without it the value is absent.
     }
   }
-  const findings: Finding[] = [];
+  const findings: Finding[] = publicForwarderFindings(
+    ctx.chain.id,
+    publicForwarders.map((f, i) => {
+      const r = results[i + 2];
+      return {
+        address: f.address,
+        roles: r.ok ? (r.value as bigint) : 0n,
+        isOwner: sameAddress(f.address, core.owner),
+      };
+    }),
+  );
   if (principalOnBeaconChain !== undefined) {
     const diff = core.amountOfPrincipalStake - principalOnBeaconChain;
     if (diff > MISMATCH_TOLERANCE || -diff > MISMATCH_TOLERANCE) {
@@ -192,6 +229,8 @@ export interface OvmRoleHolders {
   holders: OvmRoleHolder[];
   source: Source;
   blockNumber: bigint;
+  /** PUBLIC_FORWARDER_HOLDS_ROLE when the owner or a holder is a public forwarder. */
+  findings: Finding[];
 }
 
 /** obol-api `GET /v1/eth/logs/:network` (Etherscan proxy). */
@@ -207,20 +246,27 @@ const [ROLES_UPDATED_TOPIC] = encodeEventTopics({
 });
 
 /**
- * ovm.getRoleHolders (`api+chain`): candidates from the OVM's `RolesUpdated`
- * events (the API's log index plus an RPC scan of the last 50,000 blocks, or
- * a full chunked RPC scan when the API has no complete answer), then
+ * ovm.getRoleHolders (`api+chain`): candidates from the API OVM record's
+ * `roles`, else the OVM's `RolesUpdated` events (the API's log index), plus
+ * an RPC scan of the last 50,000 blocks; a full chunked RPC scan when the API
+ * has no complete answer. The chain's public forwarders are always
+ * candidates. Then
  * `owner()` and `rolesOf` of each candidate in one Multicall3 read. The
  * owner is always first; other candidates without roles are dropped. Roles
  * come from `rolesOf`, never from the events. OVM_ROLE_EVENTS_UNAVAILABLE
  * if no source served the events; OVM_READ_FAILED if `owner()` fails.
+ * `findings`: PUBLIC_FORWARDER_HOLDS_ROLE when the owner or a holder is a
+ * public forwarder.
  */
 export const getOvmRoleHolders = async (
   ctx: Context,
   input: Address,
 ): Promise<OvmRoleHolders> => {
   const ovm = checksum(decode(T.Address, input, 'ovm'));
-  const { ovmFactory } = requireContracts(ctx.chain.id, 'ovm.getRoleHolders');
+  const { ovmFactory, publicForwarders } = requireContracts(
+    ctx.chain.id,
+    'ovm.getRoleHolders',
+  );
   const deployBlock = ovmFactory.deployBlock;
   let head: bigint;
   try {
@@ -256,6 +302,21 @@ export const getOvmRoleHolders = async (
 
   let source: Source = 'chain';
   if (ctx.api !== null) {
+    // The API OVM record lists the holders it found; its roles are re-read.
+    let record: OvmApiRecord | undefined;
+    try {
+      record = await fetchOvmApiRecord(ctx, ovm);
+    } catch {
+      // Not deployed or unavailable: the interim log index below.
+    }
+    if (record?.roles !== undefined) {
+      for (const { address } of record.roles) {
+        candidates.set(address.toLowerCase(), address);
+      }
+      source = 'api';
+    }
+  }
+  if (ctx.api !== null && source === 'chain') {
     try {
       const response = await ctx.api.request<EthLogsResponse>(
         `/v1/eth/logs/${ctx.chain.network}?address=${ovm}&topic0=${ROLES_UPDATED_TOPIC}&fromBlock=${deployBlock}`,
@@ -303,6 +364,10 @@ export const getOvmRoleHolders = async (
     }
   }
 
+  // The public forwarders are always checked, whatever the event sources saw.
+  for (const { address } of publicForwarders) {
+    candidates.set(address.toLowerCase(), address);
+  }
   const accounts = [...candidates.values()];
   const calls: ReadCall[] = [
     { address: ovm, abi: ovmAbi, functionName: 'owner' },
@@ -336,7 +401,13 @@ export const getOvmRoleHolders = async (
     const roles = rolesAt(i);
     if (roles !== 0n) holders.push(holder(account, roles));
   });
-  return { owner, holders, source, blockNumber: head };
+  return {
+    owner,
+    holders,
+    source,
+    blockNumber: head,
+    findings: publicForwarderFindings(ctx.chain.id, holders),
+  };
 };
 
 /* ------------------------------------------------------------------------ */
@@ -412,16 +483,12 @@ export const getOvmValidators = async (
   const ovm = checksum(decode(T.Address, input, 'ovm'));
   requireApi(ctx, 'ovm.getValidators');
   requireContracts(ctx.chain.id, 'ovm.getValidators');
-  const record = await fetchOvmRecord(ctx, ovm);
-  if (!Array.isArray(record.validators)) {
+  const record = await fetchOvmApiRecord(ctx, ovm);
+  if (record.validators === undefined) {
     throw statusUnavailable('The Obol API OVM record has no validators list');
   }
   const validators = record.validators.map(parseValidator);
-  const block = record.blockNumber;
-  const blockNumber =
-    typeof block === 'number' && Number.isSafeInteger(block) && block >= 0
-      ? BigInt(block)
-      : weiString(block);
+  const blockNumber = record.blockNumber;
   return {
     validators,
     ...(blockNumber !== undefined ? { blockNumber } : {}),

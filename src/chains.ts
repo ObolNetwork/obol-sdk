@@ -14,6 +14,17 @@ export interface ChainContracts {
   obolToken: Address;
   splitMain: Address;
   owrFactory: Address;
+  /**
+   * Contracts on this chain that make calls as themselves for any caller
+   * (Multicall `aggregate` and the like). A role or ownership held by one of
+   * them is usable by everyone. Each entry has on-chain code.
+   */
+  publicForwarders: readonly PublicForwarder[];
+}
+
+export interface PublicForwarder {
+  address: Address;
+  name: string;
 }
 
 export interface ObolChain {
@@ -33,6 +44,10 @@ const PULL_SPLIT_FACTORY = getAddress(
   '0x5cbA88D55Cec83caD5A105Ad40C8c9aF20bE21d1',
 );
 const MULTICALL3 = getAddress('0xcA11bde05977b3631167028862bE2a173976CA11');
+const MULTICALL3_FORWARDER: PublicForwarder = {
+  address: MULTICALL3,
+  name: 'Multicall3',
+};
 const WITHDRAWAL_REQUEST = getAddress(
   '0x00000961Ef480Eb55e80D19ad83579A64c007002',
 );
@@ -64,6 +79,17 @@ export const CHAINS: Record<number, ObolChain> = {
       obolToken: getAddress('0x0B010000b7624eb9B3DfBC279673C76E9D29D5F7'),
       splitMain: getAddress('0x2ed6c4B5dA6378c7897AC67Ba9e43102Feb694EE'),
       owrFactory: getAddress('0x119acd7844cbdd5fc09b1c6a4408f490c8f7f522'),
+      publicForwarders: [
+        MULTICALL3_FORWARDER,
+        {
+          address: getAddress('0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696'),
+          name: 'Multicall2',
+        },
+        {
+          address: getAddress('0xeefBa1e63905eF1D7ACbA5a8513c70307C1cE441'),
+          name: 'Multicall',
+        },
+      ],
     },
   },
   560048: {
@@ -89,6 +115,8 @@ export const CHAINS: Record<number, ObolChain> = {
       obolToken: getAddress('0x6407a4f5cfa1ccb0ef9e6cfb9ee12bf9756262c3'),
       splitMain: getAddress('0xc05ae267291705ac16F75283572294ed2a91CBc7'),
       owrFactory: getAddress('0x9ff0c649d0bf5fe7efa4d72e94bed7302ed5c8d7'),
+      // Multicall2 and Multicall have no code on Hoodi.
+      publicForwarders: [MULTICALL3_FORWARDER],
     },
   },
   100: {
@@ -140,6 +168,15 @@ export const requireContracts = (
   }
   return contracts;
 };
+
+/** The public forwarder at `address` on this chain, if it is one. */
+export const publicForwarder = (
+  chainId: number,
+  address: string,
+): PublicForwarder | undefined =>
+  CHAINS[chainId]?.contracts?.publicForwarders.find(
+    f => f.address.toLowerCase() === address.toLowerCase(),
+  );
 
 export const chainIdForForkVersion = (forkVersion: string): number | null => {
   const lower = forkVersion.toLowerCase();

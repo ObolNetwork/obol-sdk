@@ -2,7 +2,11 @@
 import { Type } from '@sinclair/typebox';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { pullSplitFactoryAbi } from '../abi.js';
-import { chainReadFailed, prepared } from '../chainUtils.js';
+import {
+  chainReadFailed,
+  prepared,
+  refusePublicForwarders,
+} from '../chainUtils.js';
 import { requireContracts, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, T, ZERO_ADDRESS } from '../schema.js';
@@ -93,6 +97,22 @@ export interface CreateSplitInput {
  * factory has the expected code (CONTRACT_NOT_AVAILABLE); the split does not
  * exist yet (SPLIT_ALREADY_EXISTS, with its `address`).
  */
+/** Split owner and recipients must not be public forwarders. */
+export const refuseSplitForwarders = (
+  chainId: number,
+  params: SplitParams,
+  owner: Address,
+): void => {
+  refusePublicForwarders(chainId, [
+    { path: 'owner', address: owner, kind: 'owner' as const },
+    ...params.recipients.map((address, i) => ({
+      path: `recipients[${i}]`,
+      address,
+      kind: 'recipient' as const,
+    })),
+  ]);
+};
+
 export const prepareCreateSplit = async (
   ctx: Context,
   input: CreateSplitInput,
@@ -105,6 +125,7 @@ export const prepareCreateSplit = async (
   const owner =
     decoded.owner !== undefined ? checksum(decoded.owner) : ZERO_ADDRESS;
   const salt = (decoded.salt as Hex | undefined) ?? DEFAULT_SPLIT_SALT;
+  refuseSplitForwarders(ctx.chain.id, params, owner);
   const { pullSplitFactory } = requireContracts(
     ctx.chain.id,
     'splits.prepareCreateSplit',

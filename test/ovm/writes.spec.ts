@@ -166,6 +166,92 @@ describe('ovm role writes', () => {
     expect(other.checks).toEqual([]);
   });
 
+  describe('public forwarders', () => {
+    const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
+    const MULTICALL2 = '0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696';
+    const MULTICALL = '0xeefBa1e63905eF1D7ACbA5a8513c70307C1cE441';
+
+    it('grantRoles refuses Multicall3 (any case) before reading the chain', async () => {
+      const chain = ovmChain();
+      const error = await caught(
+        createOvmModule(chain.context()).prepareGrantRoles({
+          ovm: OVM,
+          user: MULTICALL3.toLowerCase() as Address,
+          roles: OVM_ROLES.WITHDRAWAL | OVM_ROLES.DEPOSIT,
+          from: OWNER,
+        }),
+      );
+      expect(error).toMatchObject({
+        code: 'ROLE_TO_PUBLIC_FORWARDER',
+        details: {
+          user: MULTICALL3,
+          roles: OVM_ROLES.WITHDRAWAL | OVM_ROLES.DEPOSIT,
+        },
+      });
+      expect(error.details.reason).toMatch(/Multicall3/);
+      expect(chain.requests).toEqual([]);
+    });
+
+    it('grantRoles refuses Multicall2 and Multicall on mainnet, where they have code', async () => {
+      for (const user of [MULTICALL2, MULTICALL] as Address[]) {
+        const error = await caught(
+          ovmFor({ chainId: 1 }).prepareGrantRoles({
+            ovm: OVM,
+            user,
+            roles: 1n,
+            from: OWNER,
+          }),
+        );
+        expect(error.code).toBe('ROLE_TO_PUBLIC_FORWARDER');
+      }
+      // On Hoodi they have no code: an ordinary grant.
+      const hoodi = await ovmFor().prepareGrantRoles({
+        ovm: OVM,
+        user: MULTICALL2 as Address,
+        roles: 1n,
+        from: OWNER,
+      });
+      expect(hoodi.checks).toEqual([]);
+    });
+
+    it('transfer and completeOwnershipHandover refuse a forwarder as owner', async () => {
+      expect(
+        await caught(
+          ovmFor().prepareTransfer({
+            ovm: OVM,
+            newBeneficiary: OTHER,
+            newOwner: MULTICALL3 as Address,
+            from: OWNER,
+          }),
+        ),
+      ).toMatchObject({
+        code: 'OWNER_TO_PUBLIC_FORWARDER',
+        details: { newOwner: MULTICALL3 },
+      });
+      expect(
+        (
+          await caught(
+            ovmFor({
+              state: { handoverExpiresAt: { [MULTICALL3]: 2n ** 40n } },
+            }).prepareCompleteOwnershipHandover({
+              ovm: OVM,
+              pendingOwner: MULTICALL3 as Address,
+              from: OWNER,
+            }),
+          )
+        ).code,
+      ).toBe('OWNER_TO_PUBLIC_FORWARDER');
+      // Multicall3 as the new beneficiary is not an ownership change.
+      const transfer = await ovmFor().prepareTransfer({
+        ovm: OVM,
+        newBeneficiary: MULTICALL3 as Address,
+        newOwner: OTHER,
+        from: OWNER,
+      });
+      expect(call(transfer.request.data).functionName).toBe('transfer');
+    });
+  });
+
   it.each([
     ['zero roles', { roles: 0n }],
     ['unknown bits', { roles: 0x40n }],

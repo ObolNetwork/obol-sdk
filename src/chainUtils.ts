@@ -9,6 +9,7 @@ import {
   type PublicClient,
   type RpcLog,
 } from 'viem';
+import { publicForwarder } from './chains.js';
 import type { Context } from './context.js';
 import { ObolError } from './errors.js';
 import type { Finding, Prepared } from './types.js';
@@ -181,29 +182,33 @@ export const readRequestFee = async (
 };
 
 /**
- * Total fee for `count` requests. Default: `multiplier` × current × count
- * (2 where the excess is refunded, 1 for direct EIP-7002 requests). A given
- * total must be in [current × count, max(10 × current, 1 gwei) × count].
+ * Total fee for `count` requests. A given total must be in
+ * [current × count, max(10 × current, 1 gwei) × count]. Without one:
+ * `defaultTo: 'cap'` uses the top of that range (OVM requests: the OVM
+ * refunds the excess to `excessFeeRecipient`), `'minimum'` exactly
+ * current × count (direct requests: the predeploy keeps any excess).
  */
 export const resolveRequestFee = ({
   currentFee,
   requestedFee,
   count,
-  multiplier,
+  defaultTo,
 }: {
   currentFee: bigint;
   requestedFee?: bigint;
   count: number;
-  multiplier: bigint;
+  defaultTo: 'cap' | 'minimum';
 }): bigint => {
   const n = BigInt(count);
-  if (requestedFee === undefined) return currentFee * multiplier * n;
   const minimum = currentFee * n;
   const cap =
     currentFee * MAX_FEE_MULTIPLIER > MAX_FEE_FLOOR
       ? currentFee * MAX_FEE_MULTIPLIER
       : MAX_FEE_FLOOR;
   const maximum = cap * n;
+  if (requestedFee === undefined) {
+    return defaultTo === 'cap' ? maximum : minimum;
+  }
   if (requestedFee < minimum || requestedFee > maximum) {
     throw new ObolError(
       'FEE_OUT_OF_RANGE',
@@ -215,4 +220,43 @@ export const resolveRequestFee = ({
     );
   }
   return requestedFee;
+};
+
+/**
+ * A public forwarder (a contract that makes calls as itself for any caller,
+ * such as Multicall3) must not own an OVM or split, nor receive funds from
+ * one: anyone could use its ownership, or move ETH it holds.
+ * OWNER_TO_PUBLIC_FORWARDER / RECIPIENT_IS_PUBLIC_FORWARDER.
+ */
+export const refusePublicForwarders = (
+  chainId: number,
+  entries: Array<{
+    path: string;
+    address: Address;
+    kind: 'owner' | 'recipient';
+  }>,
+): void => {
+  for (const { path, address, kind } of entries) {
+    const forwarder = publicForwarder(chainId, address);
+    if (forwarder === undefined) continue;
+    const reason = `${forwarder.name} makes calls as itself for any caller`;
+    if (kind === 'owner') {
+      throw new ObolError(
+        'OWNER_TO_PUBLIC_FORWARDER',
+        `Refusing to make ${address} (${path}) an owner: ${reason}, so anyone could use the ownership`,
+        {
+          hint: 'Use the account or Safe that will manage the contract',
+          details: { path, newOwner: address, reason },
+        },
+      );
+    }
+    throw new ObolError(
+      'RECIPIENT_IS_PUBLIC_FORWARDER',
+      `Refusing ${address} (${path}) as a recipient: ${reason}, so anyone could move ETH sent to it`,
+      {
+        hint: 'Use the account, Safe or split that should receive the funds',
+        details: { path, recipient: address, reason },
+      },
+    );
+  }
 };

@@ -1,4 +1,17 @@
+import { mkdir, writeFile } from 'node:fs/promises';
 import { defineConfig } from 'tsup';
+
+// The package has no "type" field, so Node reads `.js` as CommonJS. The ESM
+// builds get their own package.json marking their `.js` files as modules
+// (no MODULE_TYPELESS_PACKAGE_JSON reparse warning). It sits one level above
+// `src/` so it covers everything under the build directory.
+const markAsModule = (dir: string) => async (): Promise<void> => {
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    `${dir}/package.json`,
+    `${JSON.stringify({ type: 'module' }, null, 2)}\n`,
+  );
+};
 
 // One entry per build. Lock verification runs on the calling thread (it
 // yields to the event loop), so there is no worker bundle.
@@ -34,6 +47,7 @@ export default defineConfig([
     esbuildOptions(options) {
       options.platform = 'node';
     },
+    onSuccess: markAsModule('dist/esm'),
   },
   // Browser ESM build
   {
@@ -52,5 +66,6 @@ export default defineConfig([
         'global': 'globalThis'
       };
     },
+    onSuccess: markAsModule('dist/browser'),
   },
 ]);

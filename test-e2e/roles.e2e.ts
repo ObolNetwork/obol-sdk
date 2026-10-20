@@ -10,6 +10,7 @@ import {
   codes,
   describeFork,
   expectCode,
+  HOODI,
   makeDeposit,
   publicClient,
   randomAddress,
@@ -182,6 +183,65 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
       await sendAndWait(owner.obol, prepared);
       expect((await stake()) - current).toBe(prepared.preview.delta);
     }
+  });
+
+  test('roles and ownership for Multicall3 are refused; a role it already holds is flagged', async () => {
+    const multicall3 = HOODI.multicall3;
+    await expectCode(
+      async () =>
+        await owner.obol.ovm.prepareGrantRoles({
+          ovm: d.ovm,
+          user: multicall3,
+          roles: OVM_ROLES.WITHDRAWAL,
+        }),
+      'ROLE_TO_PUBLIC_FORWARDER',
+    );
+    await expectCode(
+      async () =>
+        await owner.obol.ovm.prepareTransfer({
+          ovm: d.ovm,
+          newBeneficiary: randomAddress(),
+          newOwner: multicall3,
+        }),
+      'OWNER_TO_PUBLIC_FORWARDER',
+    );
+    await expectCode(
+      async () =>
+        await owner.obol.ovm.prepareCompleteOwnershipHandover({
+          ovm: d.ovm,
+          pendingOwner: multicall3,
+        }),
+      'OWNER_TO_PUBLIC_FORWARDER',
+    );
+
+    // Granted without the SDK: both reads flag it, then the owner revokes it.
+    const hash = await owner.walletClient.writeContract({
+      account: owner.account,
+      chain: owner.walletClient.chain,
+      address: d.ovm,
+      abi: ovmAbi,
+      functionName: 'grantRoles',
+      args: [multicall3, OVM_ROLES.SET_REWARD],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    const holders = await owner.obol.ovm.getRoleHolders(d.ovm);
+    expect(holders.holders.map(h => h.address)).toContain(multicall3);
+    expect(holders.findings).toEqual([
+      expect.objectContaining({
+        code: 'PUBLIC_FORWARDER_HOLDS_ROLE',
+        severity: 'warning',
+      }),
+    ]);
+    const state = await owner.obol.ovm.getState(d.ovm);
+    expect(codes(state.findings)).toEqual(['PUBLIC_FORWARDER_HOLDS_ROLE']);
+    const revoke = await owner.obol.ovm.prepareRevokeRoles({
+      ovm: d.ovm,
+      user: multicall3,
+      roles: OVM_ROLES.SET_REWARD,
+    });
+    await sendAndWait(owner.obol, revoke);
+    expect(await rolesOf(multicall3)).toBe(0n);
+    expect((await owner.obol.ovm.getRoleHolders(d.ovm)).findings).toEqual([]);
   });
 
   test('revoke and renounce: getRoleHolders follows rolesOf', async () => {

@@ -1,25 +1,25 @@
 {
   "suite": "request_fees",
-  "description": "Fee (wei, total for all requests) sent with EIP-7002 withdrawal and EIP-7251 consolidation requests. Without a requested fee: currentFee * defaultMultiplier * requestCount (multiplier 2 where the OVM refunds the excess, 1 for a direct request to the predeploy). With a requested total: accepted unchanged when currentFee * requestCount <= requested <= max(10 * currentFee, 1 gwei) * requestCount, else FEE_OUT_OF_RANGE. The per-request maximum passed to the OVM (maxFeePerWithdrawal / maxFeePerConsolidation) is floor(value / requestCount).",
+  "description": "Fee (wei, total for all requests) sent with EIP-7002 withdrawal and EIP-7251 consolidation requests. Accepted range for requestCount requests: currentFee * requestCount <= value <= max(10 * currentFee, 1 gwei) * requestCount; a requested total outside it is FEE_OUT_OF_RANGE, one inside is used unchanged. Without a requested fee, `default` picks the value: \"cap\" (the top of the range; OVM withdraw and consolidate, where the OVM refunds the excess to excessFeeRecipient) or \"minimum\" (exactly currentFee * requestCount; a direct request to the predeploy, which keeps any excess). The per-request maximum passed to the OVM (maxFeePerWithdrawal / maxFeePerConsolidation) is floor(value / requestCount).",
   "provenance": {
     "source": "sdk",
-    "sdk_ref": "obol-sdk feat/sdk-v3 b9355ef (trimmed 2.15)",
+    "sdk_ref": "obol-sdk feat/sdk-v3-package 3.0.0-rc.3 (bounds cases from feat/sdk-v3 b9355ef, trimmed 2.15)",
     "generated_by": "scratch generator running src/withdrawalFee.ts resolveWithdrawalFee",
-    "note": "Cases mirror test/eoa/withdrawalFee.spec.ts plus at/over boundary pairs. currentFee is what an empty-calldata eth_call to the predeploy returns (0x00000961Ef480Eb55e80D19ad83579A64c007002 for withdrawals, 0x0000BBdDc7CE488642fb579F8B00f3a590007251 for consolidations). The 2.16 consolidate path reuses the same function."
+    "note": "Bounds cases mirror test/eoa/withdrawalFee.spec.ts of 2.15 plus at/over boundary pairs. 3.0.0-rc.3 changed the OVM default from 2 x currentFee to the top of the range (\"cap\"); the default cases were recomputed with src/chainUtils.ts resolveRequestFee. currentFee is what an empty-calldata eth_call to the predeploy returns (0x00000961Ef480Eb55e80D19ad83579A64c007002 for withdrawals, 0x0000BBdDc7CE488642fb579F8B00f3a590007251 for consolidations)."
   },
   "cases": [
     {
-      "name": "default_ovm_twice_current",
+      "name": "default_ovm_cap_floor",
       "input": {
         "currentFee": "5",
         "requestedFee": null,
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
-      "value": "10",
-      "notes": "OVM and consolidation default: 2x, the OVM refunds the excess to excessFeeRecipient."
+      "value": "1000000000",
+      "notes": "OVM withdraw / consolidate default: the top of the range, here the 1 gwei floor of the cap; the OVM refunds the excess to excessFeeRecipient."
     },
     {
       "name": "default_ovm_three_requests",
@@ -27,11 +27,49 @@
         "currentFee": "5",
         "requestedFee": null,
         "requestCount": 3,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
-      "value": "30"
+      "value": "3000000000"
+    },
+    {
+      "name": "default_ovm_one_wei_fee",
+      "input": {
+        "currentFee": "1",
+        "requestedFee": null,
+        "requestCount": 1,
+        "default": "cap"
+      },
+      "accepted": true,
+      "reason": null,
+      "value": "1000000000"
+    },
+    {
+      "name": "default_ovm_ten_x_at_floor",
+      "input": {
+        "currentFee": "100000000",
+        "requestedFee": null,
+        "requestCount": 1,
+        "default": "cap"
+      },
+      "accepted": true,
+      "reason": null,
+      "value": "1000000000",
+      "notes": "10 x 0.1 gwei equals the 1 gwei floor."
+    },
+    {
+      "name": "default_ovm_ten_x",
+      "input": {
+        "currentFee": "1000000000",
+        "requestedFee": null,
+        "requestCount": 2,
+        "default": "cap"
+      },
+      "accepted": true,
+      "reason": null,
+      "value": "20000000000",
+      "notes": "Above the floor the cap is 10 x the current fee."
     },
     {
       "name": "default_eip7002_direct_exact",
@@ -39,7 +77,7 @@
         "currentFee": "5",
         "requestedFee": null,
         "requestCount": 1,
-        "defaultMultiplier": "1"
+        "default": "minimum"
       },
       "accepted": true,
       "reason": null,
@@ -47,16 +85,16 @@
       "notes": "Direct EIP-7002 request: the predeploy keeps any excess, so no headroom."
     },
     {
-      "name": "default_one_wei_floor",
+      "name": "default_eip7002_direct_congested",
       "input": {
-        "currentFee": "1",
+        "currentFee": "123456789012345",
         "requestedFee": null,
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "minimum"
       },
       "accepted": true,
       "reason": null,
-      "value": "2"
+      "value": "123456789012345"
     },
     {
       "name": "requested_launchpad_100_wei",
@@ -64,7 +102,7 @@
         "currentFee": "1",
         "requestedFee": "100",
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
@@ -77,7 +115,7 @@
         "currentFee": "50",
         "requestedFee": "50",
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
@@ -89,7 +127,7 @@
         "currentFee": "50",
         "requestedFee": "49",
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": false,
       "reason": "FEE_OUT_OF_RANGE",
@@ -102,7 +140,7 @@
         "currentFee": "50",
         "requestedFee": "99",
         "requestCount": 2,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": false,
       "reason": "FEE_OUT_OF_RANGE",
@@ -115,7 +153,7 @@
         "currentFee": "50",
         "requestedFee": "100",
         "requestCount": 2,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
@@ -127,7 +165,7 @@
         "currentFee": "1",
         "requestedFee": "1000000000",
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
@@ -140,7 +178,7 @@
         "currentFee": "1",
         "requestedFee": "1000000001",
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": false,
       "reason": "FEE_OUT_OF_RANGE",
@@ -153,7 +191,7 @@
         "currentFee": "1000000000",
         "requestedFee": "10000000000",
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
@@ -165,7 +203,7 @@
         "currentFee": "1000000000",
         "requestedFee": "10000000001",
         "requestCount": 1,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": false,
       "reason": "FEE_OUT_OF_RANGE",
@@ -178,7 +216,7 @@
         "currentFee": "1000000000",
         "requestedFee": "30000000000",
         "requestCount": 3,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
@@ -190,7 +228,7 @@
         "currentFee": "1000000000",
         "requestedFee": "30000000001",
         "requestCount": 3,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": false,
       "reason": "FEE_OUT_OF_RANGE",
@@ -203,11 +241,11 @@
         "currentFee": "123456789012345",
         "requestedFee": null,
         "requestCount": 2,
-        "defaultMultiplier": "2"
+        "default": "cap"
       },
       "accepted": true,
       "reason": null,
-      "value": "493827156049380"
+      "value": "2469135780246900"
     }
   ]
 }

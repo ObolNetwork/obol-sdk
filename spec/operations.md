@@ -422,6 +422,17 @@ Planning top-ups (how much each validator needs to reach the next whole-ETH effe
 ObolValidatorManager (`obol-splits/src/ovm`). Factories: mainnet `0x2c26B5A373294CaccBd3DE817D9B7C6aea7De584`
 (deployed at block 23919948), Hoodi `0x5754C8665B7e7BF15E83fCdF6d9636684B782b12` (block 1735335).
 
+The API OVM record (`GET /v1/ovm/:network/:address`, type `OvmApiRecord`) carries `address`, `network`,
+`blockNumber`, `provenance` (`status`, `factoryAddress`, `creationTxHash`, `creationBlock`, `reason`), `owner`,
+`principalRecipient`, `rewardRecipient`, `principalThreshold`, `amountOfPrincipalStake`, `fundsPendingWithdrawal`,
+`balance`, `version`, `pullBalances`, `roles` (`address`, `roles`, `roleNames`, `isOwner`), `splits` (`address`,
+`kind`, `splitHash`, `recipients`, `allocations`, `totalAllocation`, `distributionIncentive`, `source`),
+`validators`, `principalOnBeaconChain` and `notes`. Wei values are decimal strings; a null, missing or malformed field
+is left out (a malformed entry drops its whole list). A record whose `address` or `network` is not the one asked for
+is `API_RESPONSE_MISMATCH`. The SDK uses `provenance` (`verify`), `roles` as candidates (`getRoleHolders`),
+`validators` (`getValidators`) and `principalOnBeaconChain` (`getState`); everything a `prepare*` acts on is read on
+chain.
+
 ### ovm.OVM_ROLES / ovm.expectedWithdrawalCredentials
 
 Tag: `pure`. `OVM_ROLES = { WITHDRAWAL: 0x01, CONSOLIDATION: 0x02, SET_BENEFICIARY: 0x04, RECOVER_FUNDS: 0x08,
@@ -435,9 +446,13 @@ factoryAddress: Address, reason: string, creationTxHash: Hash32? }`. (2.16 `OVM.
 
 1. `getCode(ovm)`: a read error → `unknown` / chain. Empty code, or an EIP-7702 delegation (`0xef0100…`) → `notObol` /
    chain.
-2. API creation record (new `GET /v1/ovm/:network/:address`; interim `GET /v1/eth/contract-creation/:network/:address`):
-   if it is for this address and names a creating factory, `obol` / api when it equals the chain's OVM factory, else
-   `notObol` / api. No record or an API error → step 3.
+2. API, the OVM record `GET /v1/ovm/:network/:address`: its `provenance` is used only when the record's `address` is
+   this address and `provenance.factoryAddress` (when present) is the chain's OVM factory: `obol` / api (with
+   `creationTxHash`) or `notObol` / api, with the API's `reason`; `unknown`, a record for another address or no
+   `provenance` → step 3. When that endpoint fails (404 while it is not deployed, or any other API error), the interim
+   `GET /v1/eth/contract-creation/:network/:address`: used only when its `contractAddress` is present and equals this
+   address (case-insensitive) and it names a creating factory: `obol` / api when that is the chain's OVM factory, else
+   `notObol` / api. A record without `contractAddress`, no record or an API error → step 3.
 3. Chain: `eth_getLogs` on the factory for `CreateObolValidatorManager(address indexed ovm, address indexed owner,
    address beneficiary, address rewardRecipient, uint64 principalThreshold)` with `topic1 = ovm`, from the factory
    deployment block to head in 50,000-block chunks (a few at a time), stopping at the first match: found → `obol` /
@@ -461,8 +476,10 @@ Tag: `api+chain` (money values always `chain`). Input: `ovm`. Output:
 
 Chain read: one Multicall3 `aggregate3` of `owner`, `principalRecipient`, `rewardRecipient`, `amountOfPrincipalStake`,
 `fundsPendingWithdrawal`, `principalThreshold` (gwei → wei), `version` (may fail: `null`), `getEthBalance(ovm)`,
-`getBlockNumber`; then `getPullBalance` of both recipients at that block. Any required getter failing →
-`OVM_READ_FAILED`. Does not check provenance; call `verify`. (2.16)
+`getBlockNumber`; then `getPullBalance` of both recipients and `rolesOf` of each of the chain's public forwarders (see
+"Public forwarders" below) at that block. Any required getter failing → `OVM_READ_FAILED`. Does not check provenance;
+call `verify`. (2.16) When a public forwarder is the owner or holds a role, `findings` has `PUBLIC_FORWARDER_HOLDS_ROLE`
+(warning) naming it and its roles: anyone can call the role-gated functions through it. (new)
 
 `distributable`, `principalPayout` and `rewardPayout` follow `ObolValidatorManager._distributeFunds` (vectors
 `distribution.json` `routing`): `distributable = balance − fundsPendingWithdrawal`; if `distributable ≥
@@ -481,22 +498,38 @@ Without the API both are absent.
 
 Tag: `api`. Input: `ovm`. Output: `{ validators: { pubkey, lockHash: Hash32?, status, beaconStatus, balance: bigint?,
 withdrawalCredentials: Hex32 }[], blockNumber }`: every validator, in any cluster, whose credentials (or queued
-deposit's credentials) point at the OVM. Source: the new `GET /v1/ovm/:network/:address` (`validators`). Statuses as
-`deposits.status`.
+deposit's credentials) point at the OVM, plus undeposited validators of locks for it. Source: the new `GET
+/v1/ovm/:network/:address` (`validators`). Statuses as `deposits.status`; a `new` entry (in a lock, no deposit seen)
+has `beaconStatus: null`, which the output leaves out. A record for another address or network →
+`API_RESPONSE_MISMATCH`.
 
 ### ovm.getRoleHolders
 
 Tag: `api+chain`. Input: `ovm`. Output: `{ owner, holders: { address, roles: uint, roleNames: string[], isOwner:
 bool }[], source, blockNumber }`.
 
-1. Candidates from `RolesUpdated(address indexed user, uint256 indexed roles)` logs of the OVM from the factory deployment
-   block: API (new OVM endpoint; interim `GET /v1/eth/logs/:network?address&topic0&fromBlock`, used only if
-   `status = "1"` and not truncated) plus an RPC scan of the last 50,000 blocks; else a full chunked RPC scan. A failed
-   full scan → `OVM_ROLE_EVENTS_UNAVAILABLE`. (2.16)
+1. Candidates: the API OVM record's `roles` addresses (`GET /v1/ovm/:network/:address`, when it answers with a
+   `roles` list), else `RolesUpdated(address indexed user, uint256 indexed roles)` logs of the OVM from the factory
+   deployment block from the interim `GET /v1/eth/logs/:network?address&topic0&fromBlock` (used only if `status = "1"`
+   and not truncated); with either, plus an RPC scan of the last 50,000 blocks. Without an API answer, a full chunked
+   RPC scan; a failed full scan → `OVM_ROLE_EVENTS_UNAVAILABLE`. The chain's public forwarders are always candidates.
+   `source` is `api` when an API list was used. (2.16)
 2. `owner()` and `rolesOf(candidate)` in one `aggregate3` at head; `owner()` failing → `OVM_READ_FAILED`.
 3. The owner is always the first holder (with its roles, possibly 0); other candidates with roles 0 are dropped.
+4. `findings`: `PUBLIC_FORWARDER_HOLDS_ROLE` (warning) when the owner or a holder is a public forwarder, naming its
+   roles. (new)
 
-Roles shown come from `rolesOf`, never from the events alone.
+Output also has `findings: Finding[]`. Roles shown come from `rolesOf`, never from the API or the events alone.
+
+### Public forwarders
+
+A public forwarder is a contract on the chain that makes calls as itself for any caller, so the OVM sees it as
+`msg.sender`: a role or ownership it holds is usable by everyone. The chain table (`ChainContracts.publicForwarders`)
+lists the ones with code on each chain: mainnet Multicall3 `0xcA11bde05977b3631167028862bE2a173976CA11`, Multicall2
+`0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696` and Multicall `0xeefBa1e63905eF1D7ACbA5a8513c70307C1cE441`; Hoodi
+Multicall3 only (the other two have no code there). The Warehouse and the splits are not forwarders. Writes refuse to
+give one a role (`ROLE_TO_PUBLIC_FORWARDER`) or ownership (`OWNER_TO_PUBLIC_FORWARDER`, also when creating an OVM or split), nor make one an OVM or split recipient (`RECIPIENT_IS_PUBLIC_FORWARDER`, in `setup.prepareCreateOvm`, `prepareOvmWithSplits` and `splits.prepareCreateSplit`); `getState` and
+`getRoleHolders` flag one that already has them (`PUBLIC_FORWARDER_HOLDS_ROLE`). (new)
 
 ### ovm.prepareWithdraw
 
@@ -512,8 +545,11 @@ Checks:
 3. `ovm.verify`: `notObol` → `OVM_NOT_OBOL`; `unknown` → Finding `PROVENANCE_UNKNOWN` (warning). (new)
 4. Sender is owner or holds `WITHDRAWAL` (`OVM_ROLE_MISSING`). (new)
 5. Fee: read the EIP-7002 fee (`eth_call` to `0x00000961Ef480Eb55e80D19ad83579A64c007002` with empty data; empty or
-   failed → `FEE_READ_FAILED`), then resolve the total: default `2 × fee × n` (the OVM refunds excess); a given `fee`
-   must be in `[fee × n, max(10 × fee, 1 gwei) × n]`, else `FEE_OUT_OF_RANGE`. Vectors `request_fees.json`. (2.15)
+   failed → `FEE_READ_FAILED`), then resolve the total. The accepted range is `[fee × n, max(10 × fee, 1 gwei) × n]`; a
+   given `fee` outside it → `FEE_OUT_OF_RANGE`. The default is the top of the range, `max(10 × fee, 1 gwei) × n`: the
+   OVM forwards the current fee per request to the predeploy and refunds the rest to `excessFeeRecipient`, so the
+   headroom costs nothing and keeps the transaction valid if the fee rises before it is mined. Vectors
+   `request_fees.json` (`default: "cap"`). (2.15 range; default changed in 3.0.0-rc.3, was `2 × fee × n`)
 6. With `deposits.status` available, per pubkey (Findings, warning): credentials do not point at the OVM →
    `WITHDRAW_CREDENTIALS_NOT_OVM` (the request is ignored, the fee is kept); `amount > 0` and credentials are not
    `0x02` → `WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING`; validator not `active` → `WITHDRAW_VALIDATOR_NOT_ACTIVE`. (new)
@@ -564,18 +600,19 @@ not a `Prepared`, so it cannot be sent by mistake.
 ### ovm role and ownership writes
 
 Tag: `chain`. Thin wrappers; each returns `Prepared<{ function, args }>` calling the OVM function of the same name.
-Shared checks: `ovm` provenance as `prepareWithdraw` 3; the sender's authority as below (`OVM_ROLE_MISSING` /
-`NOT_OVM_OWNER`), read on-chain. (2.16 wrappers; authority checks new)
+Shared checks, in order: the input checks of the table (the public forwarder checks need no chain read); `ovm`
+provenance as `prepareWithdraw` 3; the sender's authority as below (`OVM_ROLE_MISSING` / `NOT_OVM_OWNER`), read
+on-chain. (2.16 wrappers; authority and forwarder checks new)
 
 | Operation | Contract call | Authority | Input checks |
 |---|---|---|---|
-| `prepareGrantRoles` | `grantRoles(user, roles)` | owner | `user` non-zero; `roles` non-zero subset of `OVM_ROLES` |
+| `prepareGrantRoles` | `grantRoles(user, roles)` | owner | `user` non-zero and not a public forwarder (`ROLE_TO_PUBLIC_FORWARDER`); `roles` non-zero subset of `OVM_ROLES` |
 | `prepareRevokeRoles` | `revokeRoles(user, roles)` | owner | same |
 | `prepareRenounceRoles` | `renounceRoles(roles)` | sender holds them | `roles` as above |
 | `prepareRequestOwnershipHandover` | `requestOwnershipHandover()` | anyone (the new owner) | – |
 | `prepareCancelOwnershipHandover` | `cancelOwnershipHandover()` | requester | – |
-| `prepareCompleteOwnershipHandover` | `completeOwnershipHandover(pendingOwner)` | owner | `pendingOwner` non-zero; `ownershipHandoverExpiresAt(pendingOwner)` > now, else `OWNERSHIP_HANDOVER_NOT_PENDING` |
-| `prepareTransfer` | `transfer(newBeneficiary, newOwner)` | owner | both non-zero |
+| `prepareCompleteOwnershipHandover` | `completeOwnershipHandover(pendingOwner)` | owner | `pendingOwner` non-zero and not a public forwarder (`OWNER_TO_PUBLIC_FORWARDER`); `ownershipHandoverExpiresAt(pendingOwner)` > now, else `OWNERSHIP_HANDOVER_NOT_PENDING` |
+| `prepareTransfer` | `transfer(newBeneficiary, newOwner)` | owner | both non-zero; `newOwner` not a public forwarder (`OWNER_TO_PUBLIC_FORWARDER`) |
 | `prepareSetBeneficiary` | `setBeneficiary(newBeneficiary)` | owner or `SET_BENEFICIARY` | non-zero |
 | `prepareSetRewardRecipient` | `setRewardRecipient(newRewardRecipient)` | owner or `SET_REWARD` | non-zero |
 | `prepareSetAmountOfPrincipalStake` | `setAmountOfPrincipalStake(amount)` | owner or `SET_BENEFICIARY` | `amount` uint256 wei |
@@ -712,9 +749,15 @@ listed in the preview with a `skipReason`.
 Preview: `{ blockNumber, ovm?: { address, distributable, principalPayout, rewardPayout, principalRecipient,
 rewardRecipient, skipReason? }, splits: { address, kind, distributable, distributorReward, skipReason? }[],
 recipients: { address, fromOvm, fromRewardSplit, fromPrincipalSplit, distributorReward, warehouseBalance,
-splitMainBalance, withdraw: bool, skipReason?, toWallet }[] }`. A recipient's `distributorReward` is the split
-distribution incentives credited to it as the distributor (the sum of the included splits' `distributorReward`), 0
-for every other row. (new) `skipReason` is set exactly when a leg is left out: `"nothing"` (0 after the 1 wei
+splitMainBalance, withdraw: bool, skipReason?, fromThisDistribution, toWallet }[] }`. A recipient's
+`distributorReward` is the split distribution incentives credited to it as the distributor (the sum of the included
+splits' `distributorReward`), 0 for every other row. (new) `fromThisDistribution = fromOvm + fromRewardSplit +
+fromPrincipalSplit + distributorReward`: what this distribution credits the recipient, withdrawn or not. (new)
+`toWallet` is the ETH the transaction sends to the recipient's wallet: `fromOvm`, plus, when its withdrawal is
+included, its whole Warehouse balance after the split distributions (`warehouseBalance`, which includes what it
+already had there from any split, plus this distribution's credits, minus the 1 wei kept) and its SplitMain v1
+balance minus 1 wei. It can therefore exceed `fromThisDistribution`; a page showing "earned by this distribution"
+uses `fromThisDistribution`. `skipReason` is set exactly when a leg is left out: `"nothing"` (0 after the 1 wei
 kept), `"dust"` (positive but below `minWithdraw`) or `"paused"` (recipients only: Warehouse withdrawals paused and
 the sender cannot bypass it). Each split
 recipient gets `floor((distributable − distributorReward) × allocation / totalAllocation)`, with `distributorReward =
@@ -1076,7 +1119,8 @@ accepted and the fee paid, not what the beacon chain does with it.
 Tag: `chain`. A withdrawal request sent by the validator's withdrawal address directly to the EIP-7002 predeploy.
 Inputs: `{ pubkey, amount: bigint (wei, whole gwei; 0 = full exit), fee: bigint?, acknowledgeFullExit: true? }`.
 
-1. Fee as `ovm.prepareWithdraw` 5 with default multiplier **1**: the predeploy keeps any excess. (2.15)
+1. Fee range as `ovm.prepareWithdraw` 5, but the default is exactly `fee` (the bottom of the range): the predeploy keeps
+   any excess. Vectors `request_fees.json` (`default: "minimum"`). (2.15)
 2. With status: credentials must point at the sender (`0x01`/`0x02` + sender), else Finding
    `WITHDRAW_CREDENTIALS_NOT_SENDER` (warning; the request is ignored and the fee kept). (new)
 3. Full exit (`acknowledgeFullExit`) and partial rules as `prepareWithdraw` 1 and 6.

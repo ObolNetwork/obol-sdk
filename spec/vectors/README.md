@@ -10,7 +10,7 @@ verification and BLS threshold aggregation are not here: they use the distribute
 |---|---|---|---|
 | `split_shares.json` | `percent()` parsing; reward / total split parameters with the RAF share and Split Everything spreading; address order | `splits.percent`, `splits.splitParams`, setup presets | `percent` 14, `ovm_split_params` 18 |
 | `distribution.json` | OVM `distributeFunds` routing; PullSplit distribution amounts; the calls and per-recipient preview of a distribution | `ovm.prepareDistribute`, `splits.prepareDistribution` | `routing` 8, `split_distribution` 4, `prepare` 12 |
-| `request_fees.json` | EIP-7002 / EIP-7251 fee default and bounds | `ovm.prepareWithdraw`, `ovm.prepareConsolidate`, `eoaWithdraw` | `cases` 16 |
+| `request_fees.json` | EIP-7002 / EIP-7251 fee default and bounds | `ovm.prepareWithdraw`, `ovm.prepareConsolidate`, `withdrawals.prepareEoaWithdraw` | `cases` 19 |
 | `deposit_checks.json` | Outcome and reason of the pure deposit checks: valid, wrong credentials, bad root, zero signature as deposit vs top-up, amount bounds, signature for another chain, signatures valid only in sum | `deposits.verifyDepositData`, `deposits.prepareDeposit` 1 | `cases` 31 |
 
 Not yet written (design: "setup calldata"): `setup_calldata.json` for `prepareCreateSplit` / `prepareOvmWithSplits`
@@ -46,7 +46,8 @@ Encoding inside the files:
 
 - `request_fees.json` and `deposit_checks.json`: the trimmed 2.15 code on `feat/sdk-v3` (`src/withdrawalFee.ts`
   `resolveWithdrawalFee`, `src/verification/depositPayload.ts` `verifyDepositPayloads`), with the deposits of
-  `test/fixtures.ts`. Error messages were mapped to the v3 `reason` / `issue`.
+  `test/fixtures.ts`. Error messages were mapped to the v3 `reason` / `issue`. The `request_fees.json` default cases
+  were recomputed with the v3 `resolveRequestFee` when 3.0.0-rc.3 moved the OVM default to the top of the range.
 - `split_shares.json` and `distribution.json`: the shelved 2.16 work (`src/splits/splitShares.ts`,
   `src/splits/distribution.ts`), unreleased. The `prepare` cases ran `prepareDistribution` against a fake provider that
   answers like `test/splits/distribution.spec.ts` `makeChain`, so the chain state in each `input` is exactly what the

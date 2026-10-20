@@ -40,7 +40,7 @@ describe('ovm.prepareWithdraw', () => {
     });
     expect(result.request).toMatchObject({
       to: OVM,
-      value: 28n,
+      value: 2n * GWEI,
       chainId: 560048,
     });
     expect(result.blockNumber).toBe(2_000_000n);
@@ -50,9 +50,17 @@ describe('ovm.prepareWithdraw', () => {
       data: result.request.data,
     });
     expect(functionName).toBe('withdraw');
-    expect(args).toEqual([[PUBKEY_A, PUBKEY_B], [2n * GWEI, 1n], 14n, OWNER]);
-    expect(result.preview.totalFee).toBe(28n);
-    expect(result.preview.maxFeePerRequest).toBe(14n);
+    // Default: the top of the range, max(10 × 7 wei, 1 gwei) per request.
+    expect(args).toEqual([[PUBKEY_A, PUBKEY_B], [2n * GWEI, 1n], GWEI, OWNER]);
+    expect(result.preview.totalFee).toBe(2n * GWEI);
+    expect(result.preview.maxFeePerRequest).toBe(GWEI);
+  });
+
+  it('defaults to 10 × the current fee above the 1 gwei floor', async () => {
+    const chain = ovmChain({ withdrawalFee: 3n * GWEI });
+    const result = await prepareWithdraw(chain.context(), base);
+    expect(result.request.value).toBe(30n * GWEI);
+    expect(result.preview.maxFeePerRequest).toBe(30n * GWEI);
   });
 
   it('previews routing of the arriving ETH', async () => {
@@ -270,7 +278,8 @@ describe('ovm.prepareConsolidate', () => {
   it('encodes OVM.consolidate with the fee over all sources', async () => {
     const chain = ovmChain({ consolidationFee: 5n });
     const result = await prepareConsolidate(chain.context(), base);
-    expect(result.request.value).toBe(20n);
+    // Default: the top of the range, max(10 × 5 wei, 1 gwei) per source.
+    expect(result.request.value).toBe(2n * GWEI);
     const { functionName, args } = decodeFunctionData({
       abi: ovmAbi,
       data: result.request.data,
@@ -278,13 +287,13 @@ describe('ovm.prepareConsolidate', () => {
     expect(functionName).toBe('consolidate');
     expect(args).toEqual([
       [{ srcPubKeys: [PUBKEY_A, PUBKEY_B], targetPubKey: PUBKEY_C }],
-      10n,
+      GWEI,
       OWNER,
     ]);
     expect(result.preview).toEqual({
       requests: [{ sources: [PUBKEY_A, PUBKEY_B], target: PUBKEY_C }],
-      totalFee: 20n,
-      maxFeePerRequest: 10n,
+      totalFee: 2n * GWEI,
+      maxFeePerRequest: GWEI,
     });
   });
 

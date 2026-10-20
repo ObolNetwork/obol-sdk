@@ -161,6 +161,7 @@ export const PrepareWithdrawInputSchema = Type.Object(
 export interface PrepareWithdrawInput {
   ovm: Address;
   requests: Array<{ pubkey: Hex; amount: bigint }>;
+  /** Total fee in wei; default max(10 × current fee, 1 gwei) × n (the OVM refunds the excess to `excessFeeRecipient`). */
   fee?: bigint;
   excessFeeRecipient?: Address;
   from?: Address;
@@ -212,8 +213,9 @@ const routeArrival = (
  * needs `acknowledgeFullExit: true` (FULL_EXIT_NOT_ACKNOWLEDGED); a non-zero
  * `excessFeeRecipient`; provenance (OVM_NOT_OBOL, or a PROVENANCE_UNKNOWN
  * warning); the sender is owner or holds WITHDRAWAL (OVM_ROLE_MISSING); the
- * fee (FEE_READ_FAILED, FEE_OUT_OF_RANGE; default 2 × fee × n, the OVM
- * refunds the excess); with a status source, per-pubkey warnings
+ * fee (FEE_READ_FAILED, FEE_OUT_OF_RANGE; default the top of the accepted
+ * range, max(10 × fee, 1 gwei) × n: the OVM refunds the excess to
+ * `excessFeeRecipient`); with a status source, per-pubkey warnings
  * (WITHDRAW_CREDENTIALS_NOT_OVM, WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING,
  * WITHDRAW_VALIDATOR_NOT_ACTIVE).
  */
@@ -258,7 +260,7 @@ export const prepareWithdraw = async (
     currentFee,
     requestedFee: args.fee,
     count: n,
-    multiplier: 2n,
+    defaultTo: 'cap',
   });
   const maxFeePerRequest = totalFee / BigInt(n);
 
@@ -333,6 +335,7 @@ export interface PrepareConsolidateInput {
   ovm: Address;
   requests: Array<{ sources: Hex[]; target: Hex }>;
   acknowledgeStakeMovesToTarget: true;
+  /** Total fee in wei; default max(10 × current fee, 1 gwei) × total sources (the OVM refunds the excess). */
   fee?: bigint;
   excessFeeRecipient?: Address;
   from?: Address;
@@ -351,7 +354,8 @@ export interface ConsolidatePreview {
  * `OVM.consolidate`. Checks, in order: `acknowledgeStakeMovesToTarget` is
  * exactly true (CONSOLIDATION_NOT_ACKNOWLEDGED, before anything else);
  * 1–63 sources per request; provenance; the sender is owner or holds
- * CONSOLIDATION; the fee over all sources (EIP-7251 predeploy); with a
+ * CONSOLIDATION; the fee over all sources (EIP-7251 predeploy; default as
+ * prepareWithdraw, the top of the accepted range); with a
  * status source, warnings CONSOLIDATION_TARGET_NOT_COMPOUNDING and
  * CONSOLIDATION_CREDENTIALS_DIFFER (withdrawal addresses compared).
  */
@@ -406,7 +410,7 @@ export const prepareConsolidate = async (
     currentFee,
     requestedFee: args.fee,
     count: n,
-    multiplier: 2n,
+    defaultTo: 'cap',
   });
   const maxFeePerRequest = totalFee / BigInt(n);
 

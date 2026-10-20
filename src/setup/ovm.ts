@@ -7,7 +7,13 @@ import {
   type Hex,
 } from 'viem';
 import { createOvmEvent, ovmFactoryAbi } from '../abi.js';
-import { codeKind, chainReadFailed, finding, prepared } from '../chainUtils.js';
+import {
+  codeKind,
+  chainReadFailed,
+  finding,
+  prepared,
+  refusePublicForwarders,
+} from '../chainUtils.js';
 import { requireContracts, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import {
@@ -85,6 +91,26 @@ export const checkOvmInput = (input: CreateOvmInput): CheckedOvmInput => {
   };
 };
 
+/** Owner and recipients must not be public forwarders. */
+export const refuseOvmForwarders = (
+  chainId: number,
+  checked: CheckedOvmInput,
+): void => {
+  refusePublicForwarders(chainId, [
+    { path: 'owner', address: checked.owner, kind: 'owner' },
+    {
+      path: 'principalRecipient',
+      address: checked.principalRecipient,
+      kind: 'recipient',
+    },
+    {
+      path: 'rewardRecipient',
+      address: checked.rewardRecipient,
+      kind: 'recipient',
+    },
+  ]);
+};
+
 export const encodeCreateOvm = (input: CheckedOvmInput): Hex =>
   encodeFunctionData({
     abi: ovmFactoryAbi,
@@ -145,6 +171,7 @@ export const prepareCreateOvm = async (
   input: CreateOvmInput,
 ): Promise<Prepared<{ factory: Address }>> => {
   const checked = checkOvmInput(input);
+  refuseOvmForwarders(ctx.chain.id, checked);
   const { ovmFactory } = requireContracts(
     ctx.chain.id,
     'setup.prepareCreateOvm',

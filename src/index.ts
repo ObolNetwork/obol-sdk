@@ -17,7 +17,7 @@ export type {
   SplitParams,
 } from './types.js';
 export { CHAINS, getObolChain } from './chains.js';
-export type { ChainContracts, ObolChain } from './chains.js';
+export type { ChainContracts, ObolChain, PublicForwarder } from './chains.js';
 export { isAddressInput } from './schema.js';
 export { send, waitForContractWalletExecution } from './send.js';
 export type { Sent, WaitOptions } from './send.js';

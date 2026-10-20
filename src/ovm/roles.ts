@@ -6,7 +6,7 @@
 import { Type } from '@sinclair/typebox';
 import { encodeFunctionData, type Address } from 'viem';
 import { ovmAbi } from '../abi.js';
-import { requireContracts } from '../chains.js';
+import { publicForwarder, requireContracts } from '../chains.js';
 import { finding, prepared } from '../chainUtils.js';
 import type { Context } from '../context.js';
 import { ObolError } from '../errors.js';
@@ -30,7 +30,7 @@ import {
   requireSender,
   type OvmCore,
 } from './read.js';
-import { OVM_ALL_ROLES, OVM_ROLES } from './routing.js';
+import { OVM_ALL_ROLES, OVM_ROLES, roleNames } from './routing.js';
 import { getOvmRoleHolders } from './state.js';
 
 const MAX_UINT256 = 2n ** 256n - 1n;
@@ -68,6 +68,39 @@ const toRoles = (value: bigint | number): bigint => {
     throw invalid('roles', 'must be a non-zero combination of OVM_ROLES');
   }
   return roles;
+};
+
+/**
+ * A role or ownership given to a public forwarder (a contract that makes
+ * calls as itself for any caller, such as Multicall3) is usable by anyone:
+ * ROLE_TO_PUBLIC_FORWARDER / OWNER_TO_PUBLIC_FORWARDER.
+ */
+const refusePublicForwarder = (
+  ctx: Context,
+  address: Address,
+  grant: { roles: bigint } | { owner: true },
+): void => {
+  const forwarder = publicForwarder(ctx.chain.id, address);
+  if (forwarder === undefined) return;
+  const reason = `${forwarder.name} makes calls as itself for any caller, so anyone could use what it holds`;
+  if ('roles' in grant) {
+    throw new ObolError(
+      'ROLE_TO_PUBLIC_FORWARDER',
+      `Refusing to grant ${roleNames(grant.roles).join(', ')} to ${address}: ${reason}`,
+      {
+        hint: 'Grant the roles to the account or Safe that will send the calls',
+        details: { user: address, roles: grant.roles, reason },
+      },
+    );
+  }
+  throw new ObolError(
+    'OWNER_TO_PUBLIC_FORWARDER',
+    `Refusing to make ${address} the owner: ${reason}`,
+    {
+      hint: 'Transfer ownership to the account or Safe that will manage the OVM',
+      details: { newOwner: address, reason },
+    },
+  );
 };
 
 interface Setup {
@@ -184,6 +217,8 @@ export interface GrantRolesInput {
 /**
  * ovm.prepareGrantRoles (`chain`): `grantRoles(user, roles)`, owner only
  * (NOT_OVM_OWNER). `user` non-zero; `roles` a non-zero subset of OVM_ROLES.
+ * `user` must not be one of the chain's public forwarders (Multicall3 and
+ * the like): anyone could use the roles through it (ROLE_TO_PUBLIC_FORWARDER).
  * Warns ROLE_GRANT_CONSOLIDATION when granting CONSOLIDATION, and
  * ROLE_GRANT_DEPOSIT_TO_PRINCIPAL when granting DEPOSIT to the principal
  * recipient.
@@ -195,6 +230,7 @@ export const prepareGrantRoles = async (
   const args = decode(GrantRolesInputSchema, raw);
   const user = nonZero(args.user, 'user');
   const roles = toRoles(args.roles);
+  refusePublicForwarder(ctx, user, { roles });
   const { ovm, checks } = await setup(ctx, args.ovm, 'ovm.prepareGrantRoles');
   const { core, from } = await withSender(
     ctx,
@@ -347,7 +383,8 @@ export interface CompleteOwnershipHandoverInput {
  * ovm.prepareCompleteOwnershipHandover (`chain`):
  * `completeOwnershipHandover(pendingOwner)`, owner only. `pendingOwner`
  * non-zero with an unexpired request (`ownershipHandoverExpiresAt` after the
- * block's timestamp), else OWNERSHIP_HANDOVER_NOT_PENDING. Adds
+ * block's timestamp), else OWNERSHIP_HANDOVER_NOT_PENDING; not a public
+ * forwarder (OWNER_TO_PUBLIC_FORWARDER). Adds
  * ROLES_SURVIVE_TRANSFER / ROLE_HOLDERS_UNCHECKED.
  */
 export const prepareCompleteOwnershipHandover = async (
@@ -356,6 +393,7 @@ export const prepareCompleteOwnershipHandover = async (
 ): Promise<Prepared<OvmWritePreview>> => {
   const args = decode(CompleteOwnershipHandoverInputSchema, raw);
   const pendingOwner = nonZero(args.pendingOwner, 'pendingOwner');
+  refusePublicForwarder(ctx, pendingOwner, { owner: true });
   const operation = 'ovm.prepareCompleteOwnershipHandover';
   const { ovm, checks } = await setup(ctx, args.ovm, operation);
   const { core, from } = await withSender(ctx, ovm, args.from, operation);
@@ -435,7 +473,9 @@ export interface TransferInput {
 
 /**
  * ovm.prepareTransfer (`chain`): `transfer(newBeneficiary, newOwner)`, owner
- * only; both non-zero. Adds ROLES_SURVIVE_TRANSFER / ROLE_HOLDERS_UNCHECKED.
+ * only; both non-zero; `newOwner` not a public forwarder
+ * (OWNER_TO_PUBLIC_FORWARDER). Adds ROLES_SURVIVE_TRANSFER /
+ * ROLE_HOLDERS_UNCHECKED.
  */
 export const prepareTransfer = async (
   ctx: Context,
@@ -444,6 +484,7 @@ export const prepareTransfer = async (
   const args = decode(TransferInputSchema, raw);
   const newBeneficiary = nonZero(args.newBeneficiary, 'newBeneficiary');
   const newOwner = nonZero(args.newOwner, 'newOwner');
+  refusePublicForwarder(ctx, newOwner, { owner: true });
   const { ovm, checks } = await setup(ctx, args.ovm, 'ovm.prepareTransfer');
   const { core, from } = await withSender(
     ctx,

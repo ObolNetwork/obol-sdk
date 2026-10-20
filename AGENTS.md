@@ -143,6 +143,8 @@ Key build notes:
 - `@noble/curves`, `@noble/hashes` and `@chainsafe/enr` (ESM-only) are bundled; `@chainsafe/ssz` and `@sinclair/typebox` are dependencies.
 - Browser build defines `process.env` as empty and `global` as `globalThis`.
 - One entry per build (`src/index.ts`); no worker bundle and no `worker_threads` / native imports in `dist`.
+- The ESM builds get `dist/esm/package.json` and `dist/browser/package.json` (`{ "type": "module" }`, written by tsup
+  `onSuccess`): the root package has no `type`, so without them Node would warn `MODULE_TYPELESS_PACKAGE_JSON`.
 
 ## Architecture
 

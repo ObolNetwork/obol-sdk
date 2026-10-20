@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.3](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.2...v3.0.0-rc.3)
+
+> 21 October 2026
+
+Fixes from the Launchpad integration of rc.2.
+
+**Changed**
+
+- `ovm.prepareWithdraw` and `ovm.prepareConsolidate` default the fee to the top of the accepted range,
+  `max(10 × current fee, 1 gwei) × n`, instead of `2 × current fee × n`. The OVM refunds the excess to
+  `excessFeeRecipient`, so a fee rise before the transaction is mined no longer makes it revert.
+  `withdrawals.prepareEoaWithdraw` keeps exactly the current fee (the predeploy keeps any excess). Vectors
+  `request_fees.json` now give the default as `default: "cap" | "minimum"`.
+- `ovm.verify` reads `provenance` from the Obol API OVM record (`GET /v1/ovm/:network/:address`): `obol` / `notObol`
+  are trusted only for a record of this address (and this chain's factory), `unknown` defers to the chain. When the
+  endpoint is unavailable, the interim `/v1/eth/contract-creation` record is trusted only when its `contractAddress`
+  is present and equals the OVM; otherwise the factory logs decide.
+- `ovm.getRoleHolders` takes candidates from the OVM record's `roles` (re-read with `rolesOf`), falling back to the
+  interim log index, and always checks the chain's public forwarders.
+- `OvmApiRecord` is typed and parsed: `network`, `provenance`, `owner`, `principalRecipient`, `rewardRecipient`,
+  `principalThreshold`, `amountOfPrincipalStake`, `fundsPendingWithdrawal`, `balance`, `version`, `pullBalances`,
+  `roles`, `splits` (with `splitHash`), `validators`, `principalOnBeaconChain` and `notes`; malformed fields are left
+  out, and a record for another address or network is `API_RESPONSE_MISMATCH`. Money values used by `prepare*` are
+  still read on chain. `ovm.getValidators` accepts `new` entries with `beaconStatus: null`.
+- The ESM builds ship `dist/esm/package.json` and `dist/browser/package.json` with `{ "type": "module" }`, so Node
+  loads them as ES modules without the `MODULE_TYPELESS_PACKAGE_JSON` warning.
+
+**Added**
+
+- Public forwarders: `ChainContracts.publicForwarders` (mainnet Multicall3, Multicall2 and Multicall; Hoodi
+  Multicall3). `ovm.prepareGrantRoles` refuses to grant a role to one (`ROLE_TO_PUBLIC_FORWARDER`), and
+  `ovm.prepareTransfer` / `ovm.prepareCompleteOwnershipHandover` refuse one as the new owner
+  (`OWNER_TO_PUBLIC_FORWARDER`): anyone can make calls through them. Creating an OVM or split with a public forwarder as owner or recipient is refused too (`OWNER_TO_PUBLIC_FORWARDER`, `RECIPIENT_IS_PUBLIC_FORWARDER`). `ovm.getState` and `ovm.getRoleHolders` (new
+  `findings` field) warn `PUBLIC_FORWARDER_HOLDS_ROLE` when one already owns the OVM or holds a role.
+- `splits.prepareDistribution` / `previewDistribution`: each recipient row has `fromThisDistribution` (`fromOvm +
+  fromRewardSplit + fromPrincipalSplit + distributorReward`). `toWallet` is documented precisely: it includes the
+  Warehouse (and SplitMain) balance the recipient already had, from any split, when its withdrawal is included.
+
 #### [v3.0.0-rc.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v3.0.0-rc.2)
 
 > 19 October 2026

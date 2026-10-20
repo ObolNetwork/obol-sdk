@@ -23,6 +23,8 @@ import {
   rolesLog,
 } from './ovmFixture.js';
 
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
+
 const routing = JSON.parse(
   readFileSync('spec/vectors/distribution.json', 'utf8'),
 ).routing as any[];
@@ -92,6 +94,45 @@ describe('ovm.getState', () => {
     ).toMatchObject({
       code: 'PAYLOAD_INVALID',
     });
+  });
+
+  it('flags a public forwarder that holds a role or owns the OVM', async () => {
+    const chain = ovmChain({
+      state: { roles: { [MULTICALL3_ADDRESS]: 0x11n } },
+    });
+    const state = await getOvmState(chain.context(), OVM);
+    expect(state.findings).toEqual([
+      expect.objectContaining({
+        code: 'PUBLIC_FORWARDER_HOLDS_ROLE',
+        severity: 'warning',
+        details: {
+          holders: [
+            {
+              address: MULTICALL3_ADDRESS,
+              name: 'Multicall3',
+              roles: 0x11n,
+              roleNames: ['WITHDRAWAL', 'SET_REWARD'],
+              isOwner: false,
+            },
+          ],
+        },
+      }),
+    ]);
+    // Still two eth_calls: the forwarder's rolesOf rides with the pull balances.
+    expect(chain.requests.filter(r => r.method === 'eth_call')).toHaveLength(2);
+
+    const owned = await getOvmState(
+      ovmChain({ state: { owner: MULTICALL3_ADDRESS } }).context(),
+      OVM,
+    );
+    expect(owned.findings).toEqual([
+      expect.objectContaining({
+        code: 'PUBLIC_FORWARDER_HOLDS_ROLE',
+        details: {
+          holders: [expect.objectContaining({ isOwner: true, roles: 0n })],
+        },
+      }),
+    ]);
   });
 
   describe('principalOnBeaconChain', () => {
@@ -232,6 +273,95 @@ describe('ovm.getRoleHolders', () => {
     expect(result.holders.map(h => h.address)).toEqual([OWNER, HOLDER]);
   });
 
+  it('uses the API OVM record roles as candidates, re-read with rolesOf', async () => {
+    const chain = ovmChain({
+      state: { roles: { [HOLDER]: 0x04n, [OTHER]: 0n } },
+      getLogsError: filter =>
+        BigInt(filter.fromBlock) < 1_950_000n &&
+        filter.address.toLowerCase() === OVM.toLowerCase()
+          ? new Error('range too wide')
+          : undefined,
+    });
+    const api = fakeApi({
+      [`/v1/ovm/hoodi/${OVM}`]: () => ({
+        address: OVM,
+        network: 'hoodi',
+        blockNumber: 1_999_990,
+        roles: [
+          { address: OWNER, roles: 0, roleNames: [], isOwner: true },
+          // The API's roles are stale: OTHER was revoked since.
+          {
+            address: OTHER,
+            roles: 1,
+            roleNames: ['WITHDRAWAL'],
+            isOwner: false,
+          },
+          {
+            address: HOLDER.toLowerCase(),
+            roles: 4,
+            roleNames: ['SET_BENEFICIARY'],
+            isOwner: false,
+          },
+        ],
+      }),
+    });
+    const result = await getOvmRoleHolders(chain.context(api), OVM);
+    expect(result.source).toBe('api');
+    expect(result.holders).toEqual([
+      { address: OWNER, roles: 0n, roleNames: [], isOwner: true },
+      {
+        address: HOLDER,
+        roles: 0x04n,
+        roleNames: ['SET_BENEFICIARY'],
+        isOwner: false,
+      },
+    ]);
+    expect(result.findings).toEqual([]);
+    // The interim log index was not asked.
+    expect(api.calls.map(c => c.endpoint)).toEqual([`/v1/ovm/hoodi/${OVM}`]);
+  });
+
+  it('falls back to the interim log index when the OVM record has no roles', async () => {
+    const chain = ovmChain({ logs, state: { roles: { [HOLDER]: 1n } } });
+    const api = fakeApi({
+      [`/v1/ovm/hoodi/${OVM}`]: () => ({ address: OVM, roles: null }),
+      [`/v1/eth/logs/hoodi?address=${OVM}&topic0=${logs[0].topics[0]}&fromBlock=1735335`]:
+        () => ({ status: '1', logs: [logs[0]] }),
+    });
+    const result = await getOvmRoleHolders(chain.context(api), OVM);
+    expect(result.source).toBe('api');
+    expect(result.holders.map(h => h.address)).toEqual([OWNER, HOLDER]);
+  });
+
+  it('always checks the public forwarders and flags one with roles', async () => {
+    // No RolesUpdated event names Multicall3, yet it holds DEPOSIT.
+    const chain = ovmChain({
+      state: { roles: { [MULTICALL3_ADDRESS]: 0x20n } },
+    });
+    const result = await getOvmRoleHolders(chain.context(), OVM);
+    expect(result.holders.map(h => h.address)).toEqual([
+      OWNER,
+      MULTICALL3_ADDRESS,
+    ]);
+    expect(result.findings).toEqual([
+      expect.objectContaining({
+        code: 'PUBLIC_FORWARDER_HOLDS_ROLE',
+        severity: 'warning',
+        details: {
+          holders: [
+            {
+              address: MULTICALL3_ADDRESS,
+              name: 'Multicall3',
+              roles: 0x20n,
+              roleNames: ['DEPOSIT'],
+              isOwner: false,
+            },
+          ],
+        },
+      }),
+    ]);
+  });
+
   it('throws OVM_ROLE_EVENTS_UNAVAILABLE when the scan fails', async () => {
     const chain = ovmChain({
       getLogsError: filter =>
@@ -305,6 +435,53 @@ describe('ovm.getValidators', () => {
       status: 'queued',
       withdrawalCredentials: validator.withdrawalCredentials,
     });
+  });
+
+  it("parses a 'new' validator with beaconStatus null", async () => {
+    const api = fakeApi({
+      [`/v1/ovm/hoodi/${OVM}`]: () => ({
+        address: OVM,
+        network: 'hoodi',
+        blockNumber: '123',
+        validators: [
+          {
+            pubkey: PUBKEY_A,
+            index: null,
+            status: 'new',
+            beaconStatus: null,
+            balance: null,
+            effectiveBalance: null,
+            withdrawalCredentials: credentials('02', OVM),
+            lockHash: `0x${'bb'.repeat(32)}`,
+          },
+        ],
+      }),
+    });
+    const result = await getOvmValidators(ovmChain().context(api), OVM);
+    expect(result).toEqual({
+      blockNumber: 123n,
+      validators: [
+        {
+          pubkey: PUBKEY_A,
+          lockHash: `0x${'bb'.repeat(32)}`,
+          status: 'new',
+          withdrawalCredentials: credentials('02', OVM),
+        },
+      ],
+    });
+  });
+
+  it('throws API_RESPONSE_MISMATCH for another network', async () => {
+    const api = fakeApi({
+      [`/v1/ovm/hoodi/${OVM}`]: () => ({
+        address: OVM,
+        network: 'mainnet',
+        validators: [],
+      }),
+    });
+    expect(
+      await caught(getOvmValidators(ovmChain().context(api), OVM)),
+    ).toMatchObject({ code: 'API_RESPONSE_MISMATCH' });
   });
 
   it('throws STATUS_UNAVAILABLE for a malformed validator', async () => {

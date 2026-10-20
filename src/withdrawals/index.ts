@@ -76,7 +76,7 @@ export const prepareEoaWithdraw = async (
     currentFee,
     requestedFee: args.fee,
     count: 1,
-    multiplier: 1n,
+    defaultTo: 'minimum',
   });
 
   const pubkey = args.pubkey.toLowerCase() as Hex;

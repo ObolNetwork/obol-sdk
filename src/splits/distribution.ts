@@ -116,7 +116,20 @@ export interface DistributionPreview {
     /** The recipient is in the withdrawal set; `skipReason` says if its withdrawal is left out. */
     withdraw: boolean;
     skipReason?: SkipReason;
-    /** What this transaction sends to the recipient's wallet (wei). */
+    /**
+     * What this distribution credits the recipient (wei): `fromOvm +
+     * fromRewardSplit + fromPrincipalSplit + distributorReward`, whether or
+     * not it is withdrawn in this transaction.
+     */
+    fromThisDistribution: bigint;
+    /**
+     * ETH this transaction sends to the recipient's wallet (wei): `fromOvm`,
+     * plus, when its withdrawal is included, its whole Warehouse balance
+     * (what it already had there, from any split, plus this distribution's
+     * split credits, minus the 1 wei kept) and its whole SplitMain v1
+     * balance (minus 1 wei). So it can exceed `fromThisDistribution`; use
+     * that for "earned by this distribution".
+     */
     toWallet: bigint;
   }>;
 }
@@ -683,6 +696,8 @@ const buildDistribution = async (
         splitMainBalance,
         withdraw,
         ...(skipReason !== undefined ? { skipReason } : {}),
+        fromThisDistribution:
+          fromOvm + fromSplits.reward + fromSplits.principal + fromSplits.other,
         toWallet,
       };
     },

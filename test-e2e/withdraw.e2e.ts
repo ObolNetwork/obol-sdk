@@ -52,6 +52,12 @@ const requestLogs = (receipt: TransactionReceipt, predeploy: Address): Hex[] =>
 
 const uint64be = (value: bigint): Hex => numberToHex(value, { size: 8 });
 
+const GWEI = 1_000_000_000n;
+
+/** The OVM default fee: the top of the accepted range, max(10 × fee, 1 gwei) per request. */
+const capPerRequest = (fee: bigint): bigint =>
+  10n * fee > GWEI ? 10n * fee : GWEI;
+
 describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
   let s: Signer;
   let d: DeployedOvm;
@@ -73,6 +79,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
   test('partial withdrawal: the predeploy queues it, charges the current fee and the OVM refunds the rest', async () => {
     const fee = await currentFee(HOODI.withdrawalRequest);
     expect(fee).toBeGreaterThan(0n);
+    const cap = capPerRequest(fee);
     const excessFeeRecipient = randomAddress();
     const prepared = await s.obol.ovm.prepareWithdraw({
       ovm: d.ovm,
@@ -81,7 +88,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
     });
     expect(prepared.request).toMatchObject({
       to: d.ovm,
-      value: 2n * fee,
+      value: cap,
     });
     expect(prepared.checks).toEqual([]);
     expect(prepared.preview).toEqual({
@@ -95,8 +102,8 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
           rewardPart: parseEther('1'),
         },
       ],
-      totalFee: 2n * fee,
-      maxFeePerRequest: 2n * fee,
+      totalFee: cap,
+      maxFeePerRequest: cap,
     });
 
     const countBefore = await queued(HOODI.withdrawalRequest);
@@ -109,7 +116,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
     expect((await balanceOf(HOODI.withdrawalRequest)) - predeployBefore).toBe(
       fee,
     );
-    expect(await balanceOf(excessFeeRecipient)).toBe(fee);
+    expect(await balanceOf(excessFeeRecipient)).toBe(cap - fee);
     expect(await balanceOf(d.ovm)).toBe(0n);
   });
 
@@ -121,12 +128,13 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
     });
     const before = await balanceOf(s.address);
     const receipt = await sendAndWait(s.obol, prepared);
-    // Net cost: one fee plus gas; the second fee came back.
+    // Net cost: one fee plus gas; the excess came back.
     expect(before - (await balanceOf(s.address))).toBe(fee + gasCost(receipt));
   });
 
   test('two requests in one call: two queue entries, the fee twice', async () => {
     const fee = await currentFee(HOODI.withdrawalRequest);
+    const cap = capPerRequest(fee);
     const other = blsPubkey(randomBlsSecret());
     const excessFeeRecipient = randomAddress();
     const prepared = await s.obol.ovm.prepareWithdraw({
@@ -137,8 +145,8 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       ],
       excessFeeRecipient,
     });
-    expect(prepared.preview.totalFee).toBe(4n * fee);
-    expect(prepared.preview.maxFeePerRequest).toBe(2n * fee);
+    expect(prepared.preview.totalFee).toBe(2n * cap);
+    expect(prepared.preview.maxFeePerRequest).toBe(cap);
     const countBefore = await queued(HOODI.withdrawalRequest);
     const receipt = await sendAndWait(s.obol, prepared);
     expect(requestLogs(receipt, HOODI.withdrawalRequest)).toEqual([
@@ -146,7 +154,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       concat([d.ovm.toLowerCase() as Hex, other, uint64be(3_000_000_000n)]),
     ]);
     expect(await queued(HOODI.withdrawalRequest)).toBe(countBefore + 2n);
-    expect(await balanceOf(excessFeeRecipient)).toBe(2n * fee);
+    expect(await balanceOf(excessFeeRecipient)).toBe(2n * (cap - fee));
   });
 
   test('a full exit needs acknowledgeFullExit, then queues amount 0', async () => {
@@ -227,11 +235,12 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
     const snapshot = await testClient.snapshot();
     try {
       // Raise the predeploy's excess counter (slot 0) so the fee exceeds
-      // maxFeePerWithdrawal (2× the fee at prepare time).
+      // maxFeePerWithdrawal (max(10 × fee, 1 gwei) at prepare time):
+      // fee = e^(excess / 17) wei, about 6e12 wei at 500.
       await testClient.setStorageAt({
         address: HOODI.withdrawalRequest,
         index: '0x0',
-        value: toHex(100n, { size: 32 }),
+        value: toHex(500n, { size: 32 }),
       });
       const newFee = await currentFee(HOODI.withdrawalRequest);
       expect(newFee).toBeGreaterThan(prepared.preview.maxFeePerRequest);
@@ -273,6 +282,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       'CONSOLIDATION_NOT_ACKNOWLEDGED',
     );
     const fee = await currentFee(HOODI.consolidationRequest);
+    const cap = capPerRequest(fee);
     const target = blsPubkey(randomBlsSecret());
     const excessFeeRecipient = randomAddress();
     const prepared = await s.obol.ovm.prepareConsolidate({
@@ -281,11 +291,11 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       acknowledgeStakeMovesToTarget: true,
       excessFeeRecipient,
     });
-    expect(prepared.request.value).toBe(2n * fee);
+    expect(prepared.request.value).toBe(cap);
     expect(prepared.preview).toEqual({
       requests: [{ sources: [pubkey], target }],
-      totalFee: 2n * fee,
-      maxFeePerRequest: 2n * fee,
+      totalFee: cap,
+      maxFeePerRequest: cap,
     });
     const countBefore = await queued(HOODI.consolidationRequest);
     const receipt = await sendAndWait(s.obol, prepared);
@@ -293,7 +303,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       concat([d.ovm.toLowerCase() as Hex, pubkey, target]),
     ]);
     expect(await queued(HOODI.consolidationRequest)).toBe(countBefore + 1n);
-    expect(await balanceOf(excessFeeRecipient)).toBe(fee);
+    expect(await balanceOf(excessFeeRecipient)).toBe(cap - fee);
   });
 
   test('withdrawals.prepareEoaWithdraw sends straight to the predeploy with exactly the fee', async () => {

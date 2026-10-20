@@ -22,12 +22,14 @@ import {
   DEFAULT_SPLIT_SALT,
   encodeCreateSplit,
   predictSplit,
+  refuseSplitForwarders,
 } from '../splits/create.js';
 import { splitParams, type ShareRecipient } from '../splits/shares.js';
 import {
   checkOvmInput,
   encodeCreateOvm,
   recipientCodeFindings,
+  refuseOvmForwarders,
 } from './ovm.js';
 
 const SplitSpecSchema = Type.Object({
@@ -132,6 +134,7 @@ export const prepareOvmWithSplits = async (
         ? checksum(side.split.owner)
         : ZERO_ADDRESS;
     const salt = (side.split.salt as Hex | undefined) ?? DEFAULT_SPLIT_SALT;
+    refuseSplitForwarders(ctx.chain.id, p, owner);
     const { address, exists } = await predictSplit(
       ctx,
       { params: p, owner, salt },
@@ -160,6 +163,7 @@ export const prepareOvmWithSplits = async (
       ? { principalThreshold: d.principalThreshold }
       : {}),
   });
+  refuseOvmForwarders(ctx.chain.id, ovmInput);
   await requireExpectedCode(
     ctx,
     contracts.ovmFactory.address,
