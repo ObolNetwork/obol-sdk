@@ -72,6 +72,12 @@ const receipt = await wait({ onReplaced })              // viem waitForTransacti
 
   `send` re-checks the chain and returns as soon as the wallet returns a hash, so the caller always has it before
   waiting. Errors from `wait` carry the hash.
+- **Simulate before signing.** `simulate(prepared, { from })` runs the request on the node without sending it
+  (`eth_simulateV1`, else `debug_traceCall`, else `eth_call` only, detected once per client) and returns the decoded
+  revert or the balance changes, events, state changes, deterministic `summary` lines and a comparison with the
+  preview (`matchesPreview`; a difference is an SDK bug). `prepareX` stays pure and never simulates on its own: the
+  pattern is prepare → simulate → show the summary → send. A Safe is simulated as `msg.sender`; its own signature
+  checks are not.
 - **Safe.** A Safe over WalletConnect returns a `safeTxHash` that never appears on-chain. `send` detects a
   contract-wallet account (code at the address) and `wait` then follows the Safe's `ExecutionSuccess` /
   `ExecutionFailure` log for that hash, chain-only, as 2.15 did. That is the only Safe-specific code; apps that send

@@ -15,6 +15,10 @@ export const merkleDistributorAbi = parseAbi([
   'function merkleRoot() view returns (bytes32)',
   'function token() view returns (address)',
   'function endTime() view returns (uint256)',
+  'event Claimed(uint256 index, address account, uint256 amount)',
+  'error AlreadyClaimed()',
+  'error InvalidProof()',
+  'error ClaimWindowFinished()',
 ]);
 
 /**

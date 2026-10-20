@@ -6,7 +6,7 @@ code it comes from; `(new)` marks a check neither had.
 
 Contents: [Shared types](#shared-types) · [Client](#client) · [cluster](#cluster) · [deposits](#deposits) ·
 [ovm](#ovm) · [splits](#splits) · [setup](#setup) · [incentives](#incentives) · [exits](#exits) · [terms](#terms) ·
-[send](#send) · [Not placed in the module table](#not-placed-in-the-module-table) · [Open questions](#open-questions)
+[send](#send) · [simulate](#simulate) · [Not placed in the module table](#not-placed-in-the-module-table) · [Open questions](#open-questions)
 
 ## Shared types
 
@@ -711,8 +711,10 @@ listed in the preview with a `skipReason`.
 
 Preview: `{ blockNumber, ovm?: { address, distributable, principalPayout, rewardPayout, principalRecipient,
 rewardRecipient, skipReason? }, splits: { address, kind, distributable, distributorReward, skipReason? }[],
-recipients: { address, fromOvm, fromRewardSplit, fromPrincipalSplit, warehouseBalance, splitMainBalance, withdraw:
-bool, skipReason?, toWallet }[] }`. `skipReason` is set exactly when a leg is left out: `"nothing"` (0 after the 1 wei
+recipients: { address, fromOvm, fromRewardSplit, fromPrincipalSplit, distributorReward, warehouseBalance,
+splitMainBalance, withdraw: bool, skipReason?, toWallet }[] }`. A recipient's `distributorReward` is the split
+distribution incentives credited to it as the distributor (the sum of the included splits' `distributorReward`), 0
+for every other row. (new) `skipReason` is set exactly when a leg is left out: `"nothing"` (0 after the 1 wei
 kept), `"dust"` (positive but below `minWithdraw`) or `"paused"` (recipients only: Warehouse withdrawals paused and
 the sender cannot bypass it). Each split
 recipient gets `floor((distributable − distributorReward) × allocation / totalAllocation)`, with `distributorReward =
@@ -940,6 +942,130 @@ Safe-specific code. (2.15 waited for `ExecutionSuccess` the same way)
 same rule for apps that send through their own wallet layer (wagmi) and only need the waiting part.
 
 See [`lifecycles.md`](lifecycles.md#transaction).
+
+## simulate
+
+### simulate
+
+Tag: `chain`. Bound as `obol.simulate(prepared, options?)`; also a plain export `simulate(ctx, prepared, options?)`.
+Runs `prepared.request` as sent by `from`, without sending anything, and says what it would do. `prepareX` stays pure:
+the pattern is prepare → simulate → show `summary` → send.
+
+Input: `Prepared` and `{ from: Address?, blockNumber: bigint | 'latest'?, backend: 'auto' | 'eth_simulateV1' |
+'debug_traceCall' | 'eth_call'? }`.
+
+1. `prepared` as `send` 1–2 (`PREPARED_INVALID`, `CHAIN_MISMATCH`); options decoded (`PAYLOAD_INVALID`).
+2. G2: a chain with Obol contracts, else `UNSUPPORTED_CHAIN`.
+3. A sender: `from`, else the wallet account, else `PAYLOAD_INVALID`.
+4. The block simulated on top of: `blockNumber` (pass `prepared.blockNumber` to pin the state the preview read),
+   else the latest block, so the answer is "what happens if sent now". A node that no longer has the state of a
+   pinned block answers with an error: `SIMULATION_FAILED`.
+5. The sender has contract code that is not an EIP-7702 delegation: Finding `SIMULATION_CONTRACT_WALLET`. The call is
+   simulated with the contract wallet (a Safe) as `msg.sender` and `tx.origin`; its own signature, owner, threshold
+   and nonce checks are not simulated.
+6. The backend. In `auto`, `eth_simulateV1`, then `debug_traceCall`, then `eth_call`: a backend the node lacks, or
+   whose request it answers with any JSON-RPC error (rejected parameters, an option it does not support), is skipped
+   for the next one. A node answering "method not found" / "not supported" / "invalid params" is not asked for that
+   method again (per `PublicClient`); other error answers are retried on the next call. A transport failure (no
+   JSON-RPC answer) is `SIMULATION_FAILED`.
+   - `eth_simulateV1` with `traceTransfers: true`, `validation: false`: the call, then (after success) one more
+     simulated block of `[reads, call, reads]` for the before / after values. ETH moved inside the call comes from the
+     synthetic transfer logs (`0xeeee…eeee`); those logs are not reported as events.
+   - `debug_traceCall`: `callTracer` with `withLog: true` (success, gas, logs of frames that did not revert, the first
+     failing inner call) and `prestateTracer` with `diffMode: true` (accounts whose ETH balance changes); before
+     values with `eth_call`, after values with `eth_call` and the post-state diff as state overrides (a slot in `pre`
+     and not in `post` was cleared).
+   - `eth_call`: success or revert only; the result is `limited: true` with Finding `SIMULATION_UNAVAILABLE` naming
+     each skipped backend and why (unless `eth_call` was forced). An `eth_call` error that is not an execution failure
+     (a revert, out of gas, insufficient funds) is `SIMULATION_FAILED`, not a revert.
+   A forced backend that the node lacks or that fails is `SIMULATION_FAILED`. No gas is charged in any backend, so
+   balance changes exclude gas fees.
+7. A revert is not an error: `success: false`, `revertReason` and Finding `SIMULATION_REVERTED`. Revert data is
+   decoded with the custom errors of the OVM (and solady `Ownable` / `SafeTransferLib`), the OVM factory, the
+   PullSplit factory, the split wallet, the Warehouse and the Merkle distributor, plus `Error(string)` and
+   `Panic(uint256)`. For a Multicall3 `aggregate3` batch, `revertReason.inner` is the first required call that failed
+   (`eth_simulateV1`: the calls simulated one by one from Multicall3; `debug_traceCall`: the failing frame).
+8. Reads, before and after, through Multicall3 (each read may fail): the ETH balance of `from`, `to` and every address
+   ETH moved to or from; the Warehouse native-token balance of every address in a native-token `Transfer`
+   (ERC-6909: deposits, split distributions, withdrawals); `amountOfPrincipalStake` and `fundsPendingWithdrawal` of
+   every OVM the call touches (an OVM event emitter, or an OVM write in the request or in a batch); `rolesOf` before,
+   for each `RolesUpdated`.
+9. Trusted emitters. Only events from an address with a known role in this transaction are interpreted (reads,
+   state changes, summary lines, the comparison): the chain's OVM and PullSplit factories, Warehouse, SplitMain,
+   Multicall3, batch deposit contract, OBOL token, the deposit contract, the EIP-7002 / EIP-7251 predeploys; the
+   request's `to` and, for a Multicall3 batch, each call's target; the addresses the preview names (the OVM, its
+   principal and reward recipients, the splits, a predicted split, the factory, the claim contract); contracts a
+   trusted factory created in this transaction (`CreateObolValidatorManager`, `SplitCreated`). Every event is still
+   listed in `events`, with `trusted`. A decoded event from any other address produces only a neutral last summary
+   line, `Unrecognised contract 0x1234…abcd emitted Withdraw(…)`, and Finding `SIMULATION_UNTRUSTED_EVENT`. ETH
+   balance changes do not depend on events: they come from the trace.
+10. The comparison with `preview` (below); a difference is Finding `SIMULATION_PREVIEW_MISMATCH`. When the simulated
+   block is not `prepared.blockNumber`, its message says the state moved since prepare and to prepare again
+   (`details.stateMoved`).
+
+Output (`limited: false`, backends `eth_simulateV1` / `debug_traceCall`):
+
+```ts
+{
+  limited: false; backend; from; blockNumber; success: boolean; revertReason?: RevertReason; gasUsed: bigint;
+  balanceChanges: { address, asset: 'ETH' | 'WAREHOUSE_ETH', label?, before, after, delta }[];
+  events: { address, name, args, known }[];
+  stateChanges: StateChange[];
+  summary: string[];
+  matchesPreview: { ok: boolean, differences: string[], compared: string[] };
+  findings: Finding[];
+}
+type RevertReason = { message, name?, args?, data?, inner?: { index, target, reason: RevertReason } }
+```
+
+With `limited: true` (`eth_call`): `{ limited, backend: 'eth_call', from, blockNumber, success, revertReason?,
+findings, summary }`.
+
+- `balanceChanges`: only non-zero deltas; ETH first (the sender first, then by address), then Warehouse balances
+  labelled `warehouse:<address>`. Other labels name known addresses: `sender`, `OVM`, `new OVM`, `new split`,
+  `Warehouse`, `deposit contract`, `EIP-7002 predeploy`, `EIP-7251 predeploy`, `Obol RAF`, and from the preview
+  `principal recipient`, `reward recipient`, `reward split`, `principal split`, `split recipient`,
+  `excess fee recipient`.
+- `events`: every log of the call in order, each `{ address, name, args, known, trusted }`, decoded with the ABIs above, the deposit contract (`DepositEvent`), the
+  PullSplit proxy `ReceiveETH`, ERC-20 `Transfer` and Merkle `Claimed`; the EIP-7002 / EIP-7251 system contracts emit
+  an anonymous log per request, decoded as `WithdrawalRequest { sourceAddress, validatorPubkey, amountGwei }` /
+  `ConsolidationRequest { sourceAddress, sourcePubkey, targetPubkey }`. Anything else is `name: 'Unknown'` with
+  `topics` and `data`.
+- `stateChanges`, in this order: requests sent straight to a predeploy (from calldata); `created` contracts (an OVM
+  from the chain's OVM factory `CreateObolValidatorManager`, a split from the PullSplit factory `SplitCreated`);
+  then from events in order: `withdrawalRequest` / `consolidationRequest` (OVM events, with the fee), `deposit` (the
+  deposit contract's `DepositEvent`, little-endian amount), `ownership`, `ownershipHandover`, `recipient`
+  (`BeneficiaryUpdated` = principal, `RewardRecipientUpdated` = reward), `splitUpdated`, `paused` (events of a
+  contract created in the call are not changes); then `roles` per OVM and user (`before` from `rolesOf`, `after` the
+  last `RolesUpdated`, `granted` / `revoked` role names); then `value` changes of `amountOfPrincipalStake` and
+  `fundsPendingWithdrawal`.
+- `summary`: one line per state change (created contracts, `Validator 0xabcd1234…ef01 full exit requested
+  (irreversible)`, consolidations, deposits, `Role CONSOLIDATION granted to 0x…`, ownership, recipients, values), the
+  excess fee refunded by an OVM withdraw / consolidate, then `0x1234…abcd (label) receives 3.200000 ETH` / `pays …`
+  per ETH change and `… is credited … in the Warehouse` per Warehouse change. Amounts have 6 decimals (rounded half
+  up), below 0.000001 ETH in wei. Deterministic for a given result; no LLM. A revert is one line: `Reverts: <reason>`.
+- `matchesPreview` compares where the preview says the same thing as the simulation; `compared` names each check,
+  `differences` the failures (`<what>: preview <x>, simulation <y>`); a preview with nothing comparable compares
+  nothing (`ok: true`, `compared: []`); a revert is `ok: false`.
+
+  | Operation (recognised by the preview's shape and the call) | Compared |
+  |---|---|
+  | `ovm.prepareDistribute` | `DistributeFunds` payouts; `amountOfPrincipalStake` change; push: ETH to each recipient; pull: `fundsPendingWithdrawal` change |
+  | `splits.prepareDistribution` | the OVM payouts; each split's `SplitDistributed` amount (none when skipped); each recipient's Warehouse credit from each split (plus its incentive when it is the distributor), its `distributorReward`, and ETH received (`toWallet`) |
+  | `ovm.prepareWithdraw` / `prepareConsolidate` | requests (pubkeys, amounts, sources and targets) in order; `value = totalFee`; no request above `maxFeePerRequest`; fees received by the predeploy; the refund received by `excessFeeRecipient` |
+  | `deposits.prepareDeposit` | deposits (pubkeys in order, total); the deposit contract's ETH change; via the OVM: `amountOfPrincipalStake` change |
+  | `withdrawals.prepareEoaWithdraw` | the request from calldata; the fee received by the predeploy |
+  | OVM role and ownership writes | grant / revoke / renounce: the roles after; `setAmountOfPrincipalStake`: before and after; `withdrawPullBalance`: ETH received; `setBeneficiary` / `setRewardRecipient` / `transfer` / `completeOwnershipHandover`: the new recipient and owner; `sweep`: the `Swept` amount |
+  | `setup.prepareOvmWithSplits` / `prepareCreateOvm` / `prepareCreateSplit` | the OVM created and its recipients; the splits created are exactly those the preview marks `created` |
+  | `incentives.prepareClaim` | the `Claimed` amount |
+
+Limitations: an untrusted event is shown, not believed; a trusted contract can still behave unexpectedly, which the
+balance changes (from the trace) show. A simulation is of one block's state; anything that changes before the transaction is mined (another
+distribution, a fee change, a role change) changes the outcome, so simulate just before sending. No gas fees. A Safe
+sender is simulated as the Safe calling, not as its `execTransaction`. A Multicall3 batch's inner revert is found by
+replaying its calls from Multicall3, where `tx.origin` is Multicall3 instead of the sender (it matters only for the
+Warehouse pause bypass). EIP-7002 / EIP-7251 requests are queued, not processed: the simulation says the request is
+accepted and the fee paid, not what the beacon chain does with it.
 
 ## Not placed in the module table
 

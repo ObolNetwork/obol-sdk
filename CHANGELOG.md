@@ -53,6 +53,17 @@ checks, reads and returns, and every error code, is specified in [`spec/`](spec/
   has a ~30-line adapter over `@chainsafe/blst` for Node servers; the SDK never imports a native module.
 - `deposits.fromLock` option `validators` (indexes or group pubkeys) and result field `validators`.
 - `deposits.status` option `expectedWithdrawalAddress` and per-pubkey `credentialsMatch`.
+- `simulate(prepared, { from })` (bound as `obol.simulate`): runs any `Prepared` request on the node without sending
+  it (`eth_simulateV1`, else `debug_traceCall`, else `eth_call` only) and returns success or the decoded revert
+  (custom errors of the OVM, factories, splits and Warehouse; the failing call of a Multicall3 batch), gas, ETH and
+  Warehouse balance changes, decoded events, state changes (roles, ownership, recipients, created contracts,
+  `amountOfPrincipalStake` / `fundsPendingWithdrawal`, withdrawal / consolidation requests, deposits), plain-language
+  `summary` lines and `matchesPreview`, a comparison with the operation's own preview. New codes
+  `SIMULATION_FAILED`, `SIMULATION_UNAVAILABLE`, `SIMULATION_REVERTED`, `SIMULATION_PREVIEW_MISMATCH`,
+  `SIMULATION_CONTRACT_WALLET`, `SIMULATION_UNTRUSTED_EVENT`. It simulates on the latest block by default and only
+  interprets events from contracts with a known role in the transaction.
+- `splits.prepareDistribution` / `previewDistribution` recipient rows carry `distributorReward` (the incentives the
+  distributor is credited; 0 for other rows).
 
 **Removed**
 

@@ -138,7 +138,11 @@ export const waitForContractWalletExecution = async ({
   }
 };
 
-const assertPrepared = (ctx: Context, prepared: Prepared<unknown>): void => {
+/** PREPARED_INVALID unless `prepared` looks like a prepareX result; CHAIN_MISMATCH for another chain. */
+export const assertPrepared = (
+  ctx: Context,
+  prepared: Prepared<unknown>,
+): void => {
   const request = (prepared as Partial<Prepared<unknown>>)?.request;
   const ok =
     request !== undefined &&

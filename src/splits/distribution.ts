@@ -109,6 +109,8 @@ export interface DistributionPreview {
     fromOvm: bigint;
     fromRewardSplit: bigint;
     fromPrincipalSplit: bigint;
+    /** Split distribution incentives credited to this address as the distributor (wei); 0 for others. */
+    distributorReward: bigint;
     warehouseBalance: bigint;
     splitMainBalance: bigint;
     /** The recipient is in the withdrawal set; `skipReason` says if its withdrawal is left out. */
@@ -676,6 +678,7 @@ const buildDistribution = async (
         fromOvm,
         fromRewardSplit: fromSplits.reward,
         fromPrincipalSplit: fromSplits.principal,
+        distributorReward: fromSplits.other,
         warehouseBalance,
         splitMainBalance,
         withdraw,

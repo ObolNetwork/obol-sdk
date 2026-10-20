@@ -29,6 +29,7 @@ describe('createObolClient', () => {
         'ovm',
         'send',
         'setup',
+        'simulate',
         'splits',
         'terms',
         'withdrawals',

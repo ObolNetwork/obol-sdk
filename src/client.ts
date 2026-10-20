@@ -16,6 +16,7 @@ import type { Context } from './context.js';
 import { ObolError } from './errors.js';
 import { decode } from './schema.js';
 import { send } from './send.js';
+import { simulate, type SimulateOptions } from './simulate/index.js';
 import type { Prepared } from './types.js';
 import { createClusterModule } from './cluster/index.js';
 import { createDepositsModule } from './deposits/index.js';
@@ -114,6 +115,8 @@ export const createObolClient = (config: ObolClientConfig) => {
     withdrawals: createWithdrawalsModule(ctx),
     legacy: createLegacyModule(ctx),
     send: async (prepared: Prepared<unknown>) => await send(ctx, prepared),
+    simulate: async (prepared: Prepared<unknown>, options?: SimulateOptions) =>
+      await simulate(ctx, prepared, options),
   };
 };
 

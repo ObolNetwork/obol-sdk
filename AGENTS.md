@@ -91,6 +91,7 @@ src/
 ├── abi.ts            # Contract ABIs (viem `as const`)
 ├── chainUtils.ts     # Chain read helpers (CHAIN_READ_FAILED)
 ├── send.ts           # send + waitForContractWalletExecution (Safe)
+├── simulate/         # simulate: backends (eth_simulateV1, debug_traceCall, eth_call), decoding, analysis, preview comparison
 ├── cluster/          # Definitions and locks: hashing, EIP-712, prepare/create/accept, verifyLock (+ BlsBackend), watch
 ├── deposits/         # fromLock, verifyDepositData, status, prepareDeposit
 ├── ovm/              # OVM reads (verify, state, roles, validators), routing, withdraw / consolidate / distribute, role writes
@@ -159,6 +160,7 @@ const obol = createObolClient({
 
 obol.cluster.*  obol.deposits.*  obol.ovm.*  obol.splits.*  obol.setup.*
 obol.incentives.*  obol.exits.*  obol.terms.*  obol.withdrawals.*  obol.legacy.*
+obol.simulate(prepared, { from })   // what it will do, before signing
 obol.send(prepared)
 ```
 
@@ -181,6 +183,8 @@ type Finding = { code: string; severity: 'warning' | 'info'; message: string; hi
 ```
 
 `send(prepared)` checks the wallet chain, sends `request` and returns `{ hash, contractWallet, wait }`; for a Safe, `wait` follows the Safe's `ExecutionSuccess`. Callers with their own wallet layer send `request` directly.
+
+`simulate(prepared, { from })` (`src/simulate/`) runs `request` on the node without sending it: `eth_simulateV1`, else `debug_traceCall` (callTracer + prestateTracer diff), else `eth_call` (`limited: true`), detected once per client. It returns the decoded revert or balance changes (ETH, Warehouse), events, state changes, `summary` lines and `matchesPreview` (the preview compared with the simulation; a difference is an SDK bug). `prepare*` never simulates on its own. Tests replay JSON-RPC exchanges recorded on an anvil Hoodi fork (`test/simulate/fixtures`); `test/simulate/e2e.spec.ts` (opt-in, `SIMULATE_E2E=1`) re-records them with `SIMULATE_RECORD=1`.
 
 ### Modules
 
@@ -252,7 +256,8 @@ This keeps the SDK in sync with the API and ensures external developers always h
 
 - **Jest 29** with `ts-jest/presets/default-esm`
 - ESM module support via `NODE_OPTIONS=--experimental-vm-modules`
-- `yarn test` runs every `test/**/*.spec.ts`; no network
+- `yarn test` runs every `test/**/*.spec.ts` without network; the one exception, `test/simulate/e2e.spec.ts`, is skipped
+  unless `SIMULATE_E2E=1` (it needs an anvil Hoodi fork at `SIMULATE_RPC_URL`)
 - `yarn test:e2e` runs `test-e2e/*.e2e.ts` against an anvil fork of Hoodi at head (public RPC, or `RPC_HOODI`; it
   must serve `eth_getLogs` over 50,000 blocks). It sends each `prepare*` result and compares the preview and findings
   with what was mined (balances, logs, contract state). CI runs it non-blocking (`.github/workflows/e2e.yml`). Run

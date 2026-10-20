@@ -32,8 +32,9 @@ const params = (s: any): SplitParams & { address?: Address } => ({
   distributionIncentive: s.distributionIncentive,
 });
 
-// v3 adds `skipReason` (and `blockNumber`) to the preview; the vectors pin the
-// fields 2.16 had, so those two are left out of the comparison.
+// v3 adds `skipReason`, `blockNumber` and the recipients' `distributorReward`
+// to the preview; the vectors pin the fields 2.16 had, so those are left out
+// of the comparison.
 const withoutV3Fields = (preview: any): unknown => {
   const { blockNumber: _b, ...rest } = preview;
   const strip = ({ skipReason: _s, ...o }: any) => o;
@@ -41,7 +42,9 @@ const withoutV3Fields = (preview: any): unknown => {
     ...rest,
     ...(rest.ovm !== undefined ? { ovm: strip(rest.ovm) } : {}),
     splits: rest.splits.map(strip),
-    recipients: rest.recipients.map(strip),
+    recipients: rest.recipients.map(({ distributorReward: _d, ...o }: any) =>
+      strip(o),
+    ),
   };
 };
 

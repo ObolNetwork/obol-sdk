@@ -65,6 +65,27 @@ for (const tx of prepared) {
 }
 ```
 
+To show what a transaction will do before the user signs it, simulate it. `simulate` runs the request on the node
+without sending it and returns the balance changes, events, state changes, plain-language `summary` lines and a
+comparison with the operation's own `preview`:
+
+```typescript
+const prepared = await obol.ovm.prepareDistribute({ ovm: ovmAddress });
+const sim = await obol.simulate(prepared, { from: account });
+
+if (!sim.success) throw new Error(sim.summary[0]); // "Reverts: Unauthorized()"
+sim.summary.forEach(line => console.log(line));
+// 0x1234…abcd (principal recipient) receives 32.000000 ETH
+// 0x5678…ef01 (reward recipient) receives 1.200000 ETH
+if (!sim.limited && !sim.matchesPreview.ok) console.warn(sim.matchesPreview.differences);
+
+await obol.send(prepared);
+```
+
+It uses `eth_simulateV1` (geth, Nethermind, Erigon, Reth, anvil and most public RPCs), else `debug_traceCall`; on a
+node with neither, the result is `limited` (success or revert only). A Safe is simulated as the Safe calling; its own
+signature checks are not. Simulate just before sending: the state can change before the transaction is mined.
+
 Failures throw `ObolError` (or `ObolApiError` for API responses) with a stable `code`, a `hint` and `details`:
 
 ```typescript

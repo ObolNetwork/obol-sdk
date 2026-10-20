@@ -38,11 +38,42 @@ export const ovmAbi = parseAbi([
   'function recoverFunds(address nonOVMToken, address recipient)',
   'event RolesUpdated(address indexed user, uint256 indexed roles)',
   'event DistributeFunds(uint256 principalPayout, uint256 rewardPayout, uint256 pullOrPush)',
+  'event BeneficiaryUpdated(address indexed newBeneficiary)',
+  'event RewardRecipientUpdated(address indexed newRewardRecipient)',
+  'event PrincipalStakeAmountUpdated(uint256 newPrincipalStakeAmount, uint256 oldPrincipalStakeAmount)',
+  'event Swept(address indexed beneficiary, uint256 indexed amount)',
+  'event RecoverNonOVMFunds(address indexed nonOVMToken, address indexed recipient, uint256 amount)',
+  'event PullBalanceWithdrawn(address indexed account, uint256 amount)',
+  'event ConsolidationRequested(bytes srcPubKey, bytes targetPubKey, uint256 indexed fee)',
+  'event WithdrawalRequested(bytes pubKey, uint64 indexed amount, uint256 indexed fee)',
+  'event UnsentExcessFee(address indexed excessFeeRecipient, uint256 indexed excessFee)',
+  'event Transferred(address indexed newBeneficiary, address indexed newOwner)',
+  // solady Ownable / OwnableRoles
+  'event OwnershipTransferred(address indexed oldOwner, address indexed newOwner)',
+  'event OwnershipHandoverRequested(address indexed pendingOwner)',
+  'event OwnershipHandoverCanceled(address indexed pendingOwner)',
+  'error InvalidRequest_Params()',
+  'error InvalidRequest_SystemGetFee()',
+  'error InvalidRequest_NotEnoughFee()',
+  'error InvalidConsolidation_Failed()',
+  'error InvalidWithdrawal_Failed()',
+  'error InvalidDistribution_TooLarge()',
+  'error Unauthorized()',
+  'error NewOwnerIsZeroAddress()',
+  'error NoHandoverRequest()',
+  'error AlreadyInitialized()',
+  // solady SafeTransferLib
+  'error ETHTransferFailed()',
+  'error TransferFailed()',
 ]);
 
 export const ovmFactoryAbi = parseAbi([
   'function createObolValidatorManager(address owner, address beneficiary, address rewardRecipient, uint64 principalThreshold) returns (address ovm)',
   'event CreateObolValidatorManager(address indexed ovm, address indexed owner, address beneficiary, address rewardRecipient, uint64 principalThreshold)',
+  'error Invalid_Owner()',
+  'error Invalid__Recipients()',
+  'error Invalid__ZeroThreshold()',
+  'error Invalid__ThresholdTooLarge()',
 ]);
 
 export const createOvmEvent = parseAbiItem(
@@ -62,6 +93,10 @@ export const pullSplitFactoryAbi = parseAbi([
   `function isDeployed(${SPLIT} _splitParams, address _owner, bytes32 _salt) view returns (address split, bool exists)`,
   `event SplitCreated(address indexed split, ${SPLIT} splitParams, address owner, address creator, bytes32 salt)`,
   `event SplitCreated(address indexed split, ${SPLIT} splitParams, address owner, address creator)`,
+  `event SplitCreated(address indexed split, ${SPLIT} splitParams, address owner, address creator, uint256 nonce)`,
+  'error DeploymentFailed()',
+  'error InvalidSplit_TotalAllocationMismatch()',
+  'error InvalidSplit_LengthMismatch()',
 ]);
 
 export const splitCreatedEvents = [
@@ -83,6 +118,18 @@ export const splitWalletAbi = parseAbi([
   'function owner() view returns (address)',
   'function getSplitBalance(address _token) view returns (uint256 splitBalance, uint256 warehouseBalance)',
   `function distribute(${SPLIT} _split, address _token, address _distributor)`,
+  `event SplitUpdated(${SPLIT} _split)`,
+  'event SplitDistributed(address indexed token, address indexed distributor, uint256 amount)',
+  'event SetPaused(bool paused)',
+  // emitted by the split's minimal proxy when it receives ETH without calldata
+  'event ReceiveETH(uint256 amount)',
+  'event OwnershipTransferred(address indexed oldOwner, address indexed newOwner)',
+  'error InvalidSplit()',
+  'error UnauthorizedInitializer()',
+  'error Paused()',
+  'error Unauthorized()',
+  'error InvalidSplit_TotalAllocationMismatch()',
+  'error InvalidSplit_LengthMismatch()',
 ]);
 
 export const warehouseAbi = parseAbi([
@@ -90,6 +137,13 @@ export const warehouseAbi = parseAbi([
   'function withdrawConfig(address owner) view returns (uint16 incentive, bool paused)',
   'function withdraw(address _owner, address _token)',
   'event Withdraw(address indexed owner, address indexed token, address indexed withdrawer, uint256 amount, uint256 reward)',
+  // ERC6909: mint (sender 0), burn (receiver 0) and transfers of Warehouse balances
+  'event Transfer(address caller, address indexed sender, address indexed receiver, uint256 indexed id, uint256 amount)',
+  'event WithdrawConfigUpdated(address indexed owner, (uint16 incentive, bool paused) config)',
+  'error InvalidAmount()',
+  'error LengthMismatch()',
+  'error WithdrawalPaused(address owner)',
+  'error Overflow()',
 ]);
 
 /** 0xSplits native token marker. */
@@ -114,6 +168,19 @@ export const batchDepositAbi = parseAbi([
   'struct Deposit { bytes pubKey; bytes withdrawalCredentials; bytes signature; uint256 amount; }',
   'function batchDeposit(Deposit[] _deposits) payable',
 ]);
+
+/** The beacon chain deposit contract (same address on mainnet and Hoodi). */
+export const DEPOSIT_CONTRACT =
+  '0x00000000219ab540356cBB839Cbe05303d7705Fa' as const;
+
+export const depositContractAbi = parseAbi([
+  'event DepositEvent(bytes pubkey, bytes withdrawal_credentials, bytes amount, bytes signature, bytes index)',
+]);
+
+/** ERC-20 transfers (OBOL incentive claims, recovered tokens). */
+export const erc20TransferEvent = parseAbiItem(
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+);
 
 export const owrAbi = parseAbi([
   'function getTranches() view returns (address principalRecipient, address rewardRecipient, uint256 amountOfPrincipalStake)',

@@ -21,6 +21,20 @@ export type { ChainContracts, ObolChain } from './chains.js';
 export { isAddressInput } from './schema.js';
 export { send, waitForContractWalletExecution } from './send.js';
 export type { Sent, WaitOptions } from './send.js';
+export { simulate, formatEth } from './simulate/index.js';
+export type {
+  BalanceChange,
+  FullSimulation,
+  LimitedSimulation,
+  OvmValueName,
+  PreviewComparison,
+  RevertReason,
+  SimulatedEvent,
+  SimulateOptions,
+  Simulation,
+  SimulationBackend,
+  StateChange,
+} from './simulate/index.js';
 export type { Context } from './context.js';
 export type { BlsBackend, BlsBatch } from './cluster/blsBackend.js';
 

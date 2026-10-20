@@ -117,11 +117,12 @@ All exit errors were plain `Error`s in 2.15.
 
 | Code | Meaning | Thrown by | Caller should | 2.15 |
 |---|---|---|---|---|
-| `PREPARED_INVALID` | `send` got a malformed `Prepared`. | `send` | pass the value `prepareX` returned | 2.16 `InvalidArgumentError` |
+| `PREPARED_INVALID` | `send` or `simulate` got a malformed `Prepared`. | `send`, `simulate` | pass the value `prepareX` returned | 2.16 `InvalidArgumentError` |
 | `TX_REJECTED` | The wallet refused or failed before returning a hash; nothing was sent. | `send` | retry if the user wants | new |
 | `TX_REVERTED` | Mined with `status = 0`; nothing moved. Fields: `hash`, `receipt`. | `wait` | retry is safe; read the revert reason | `TX_FAILED_AFTER_SEND` with `pendingStatus: "reverted"` |
 | `TX_REPLACED` | A different transaction was mined with the nonce (viem `cancelled` / `replaced`). Fields: `hash`, `replacement`. | `wait` | retry is safe for this call | new |
 | `TX_UNCONFIRMED` | No receipt within the timeout (for a contract wallet: no Safe execution log); it may still be mined or executed. Fields: `hash`, `contractWallet`. | `wait` | watch the hash before retrying, so nothing is sent twice | `TX_FAILED_AFTER_SEND` with `pendingStatus: "unconfirmed"` |
+| `SIMULATION_FAILED` | The node failed to simulate (a transport error, a block it no longer has state for, an `eth_call` error that is not an execution failure), or a forced `backend` is not supported or fails. A revert is not this error: it is `success: false`. Fields: `backend`. | `simulate` | retry, simulate at the latest block, or use another RPC | new |
 
 ## Findings
 
@@ -150,6 +151,11 @@ All exit errors were plain `Error`s in 2.15.
 | `RECIPIENT_WITHDRAW_PAUSED` [info] | A recipient paused Warehouse withdrawals and the sender cannot bypass it; its withdrawal is left out. | `prepareDistribution` | the recipient withdraws itself |
 | `SPLIT_REUSED` [info] | A split already exists at the predicted address and is reused, not created. | `prepareOvmWithSplits` | none |
 | `RECIPIENT_NOT_CONTRACT` [info] | An OVM recipient has no code (an EOA, or a split not created yet). | `prepareCreateOvm` | if it should be a split, create it first or use `prepareOvmWithSplits` |
+| `SIMULATION_UNAVAILABLE` [info] | Neither `eth_simulateV1` nor `debug_traceCall` could simulate the request (the node lacks them or rejected the request); only success or revert was checked (`eth_call`), and the result is `limited`. Fields: `tried`, `skipped: { backend, reason }[]`. | `simulate` | use an RPC with `eth_simulateV1` to see balance changes and events |
+| `SIMULATION_REVERTED` [warning] | The request reverts when simulated. Fields: `revertReason`. | `simulate` | do not send it; prepare again, or check the sender and state |
+| `SIMULATION_PREVIEW_MISMATCH` [warning] | The simulation differs from the operation's `preview`. When the simulated block is not the prepared one, the message says the state moved since prepare. Fields: `differences`, `stateMoved`, `preparedBlockNumber?`, `blockNumber`. | `simulate` | prepare again and simulate the new transaction; if it persists at the same block, report it (an SDK bug) |
+| `SIMULATION_UNTRUSTED_EVENT` [warning] | A contract with no known role in this transaction emitted a decodable event; it was listed (`trusted: false`) but not interpreted. Fields: `events: { address, name }[]`. | `simulate` | do not rely on it; the balance changes come from the trace |
+| `SIMULATION_CONTRACT_WALLET` [info] | The sender is a contract wallet (a Safe): the call was simulated with it as `msg.sender`; its own signature, owner, threshold and nonce checks were not. Fields: `from`. | `simulate` | check the Safe transaction in the Safe app as well |
 
 Incentive claim issues (`INCENTIVES_PREFLIGHT_FAILED.issues`, and `incentives.preflight`), all from 2.15:
 `NO_INCENTIVES`, `INCENTIVES_NOT_FOUND`, `INCENTIVES_FETCH_FAILED`, `OPERATOR_ADDRESS_MISMATCH`,
