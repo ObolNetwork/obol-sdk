@@ -1,7 +1,13 @@
 /** incentives: Obol incentive claims from Merkle distributors (spec "incentives"). */
 import { Type } from '@sinclair/typebox';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
-import { chainReadFailed, codeKind, finding, prepared } from '../chainUtils.js';
+import {
+  chainReadFailed,
+  codeKind,
+  finding,
+  latestBlockNumber,
+  prepared,
+} from '../chainUtils.js';
 import { requireApi, requireContracts, type Context } from '../context.js';
 import { isObolError, ObolApiError, ObolError } from '../errors.js';
 import { checksum, decode, isAddressInput, sameAddress, T } from '../schema.js';
@@ -272,7 +278,7 @@ const runChecks = async (
   let blockNumber: bigint;
   let reads: unknown[];
   try {
-    blockNumber = await ctx.publicClient.getBlockNumber();
+    blockNumber = await latestBlockNumber(ctx.publicClient);
     const target = {
       address: data.contractAddress,
       abi: merkleDistributorAbi,

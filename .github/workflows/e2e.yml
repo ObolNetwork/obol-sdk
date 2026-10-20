@@ -1,0 +1,39 @@
+name: 'E2E (Hoodi fork)'
+
+# End-to-end tests against an anvil fork of Hoodi (yarn test:e2e). Not
+# blocking: they depend on a public RPC, which can rate-limit or be down.
+# Set the RPC_HOODI secret or variable to use another Hoodi RPC (it must serve
+# eth_getLogs over 50,000 blocks).
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+
+    env:
+      RPC_HOODI: ${{ secrets.RPC_HOODI || vars.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com' }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24.x
+          cache: yarn
+
+      - name: Install Foundry (anvil)
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: v1.7.1
+
+      - name: Install SDK dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run e2e tests
+        run: yarn test:e2e

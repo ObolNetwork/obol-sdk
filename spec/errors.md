@@ -85,7 +85,7 @@ server that needs a deadline or a limit applies it around the call.
 | `SPLIT_PARAMS_MISMATCH` | Split params do not hash to the split's on-chain `splitHash`, or reward and principal params differ for one address. Fields: `address`. | `getSplit`, `prepareDistribution` | pass the exact params the split was created with | `InvalidArgumentError` |
 | `SPLIT_PARAMS_REQUIRED` | An OVM recipient is a SplitV2 split but no params were given; its funds would stay undistributed. Fields: `address`, `kind`. | `prepareDistribution` | pass its params as `rewardSplit` / `principalSplit` | `InvalidArgumentError` |
 | `SPLIT_NOT_OVM_RECIPIENT` | A given split address is not the OVM's recipient of that kind. | `prepareDistribution` | omit the address or fix it | `InvalidArgumentError` |
-| `SPLIT_PAUSED` | A split with funds to distribute is paused and the sender is not its owner. | `prepareDistribution` | ask the owner to unpause it | `SPLIT_PAUSED` |
+| `SPLIT_PAUSED` | A split with funds to distribute is paused and the sender is not its owner, or is its owner but a contract (through Multicall3 only an EOA owner passes the pause). | `prepareDistribution` | ask the owner to unpause it | `SPLIT_PAUSED` |
 | `NOTHING_TO_DISTRIBUTE` | No call would move anything (zero balances, dust only). | `prepareDistribution`, `ovm.prepareDistribute`, `prepareWithdrawPullBalance` | prepare again later | `NOTHING_TO_DISTRIBUTE` (at send) |
 | `OVM_CREATE_EVENT_MISSING` | No `CreateObolValidatorManager` log from the chain's factory in the receipt. | `setup.ovmFromReceipt` | check the receipt is the create transaction | plain `Error` |
 | `OVM_CREATE_EVENT_AMBIGUOUS` | More than one such log. | `setup.ovmFromReceipt` | read the addresses from the logs yourself | new |

@@ -1,5 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { parseAbi, type Address, type Hex } from 'viem';
+import {
+  concat,
+  pad,
+  parseAbi,
+  toEventSelector,
+  type Address,
+  type Hex,
+} from 'viem';
 import { Type } from '@sinclair/typebox';
 import { ObolError } from '../src/errors.js';
 import { decode, isAddressInput, T } from '../src/schema.js';
@@ -8,7 +15,10 @@ import {
   readRequestFee,
   resolveRequestFee,
 } from '../src/chainUtils.js';
-import { send } from '../src/send.js';
+import { send, waitForContractWalletExecution } from '../src/send.js';
+import { headBlock } from '../src/splits/chain.js';
+import { verifyOvm } from '../src/ovm/verify.js';
+import { ovmCreatedLog } from './splits/helpers.js';
 import { fakeChain, MULTICALL3 } from './helpers/fakeChain.js';
 
 const caught = (fn: () => unknown): ObolError => {
@@ -168,6 +178,114 @@ describe('v3 core', () => {
       await expect(send(chain.context(), prepared)).rejects.toMatchObject({
         code: 'CHAIN_MISMATCH',
       });
+    });
+  });
+
+  describe('block number reads skip the client cache', () => {
+    // viem caches getBlockNumber for cacheTime (default: the polling
+    // interval, 4 s); reads pinned to a cached number miss the latest block.
+    it('headBlock returns a block mined after the last read', async () => {
+      const chain = fakeChain();
+      const ctx = chain.context();
+      expect(await headBlock(ctx)).toBe(2_000_000n);
+      chain.setBlockNumber(2_000_005n);
+      expect(await headBlock(ctx)).toBe(2_000_005n);
+    });
+
+    it('ovm.verify finds a creation log in a block mined after the last read', async () => {
+      const ovm = '0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f' as Address;
+      const chain = fakeChain({
+        code: { [ovm]: '0x6080604052' },
+        logs: [{ ...ovmCreatedLog(ovm), blockNumber: 2_000_005n }],
+      });
+      const ctx = chain.context();
+      await ctx.publicClient.getBlockNumber();
+      chain.setBlockNumber(2_000_005n);
+      expect((await verifyOvm(ctx, ovm)).status).toBe('obol');
+    });
+  });
+
+  describe('waitForContractWalletExecution', () => {
+    const safe = '0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe' as Address;
+    const safeTxHash = `0x${'5a'.repeat(32)}` as Hex;
+    const execTx = `0x${'e1'.repeat(32)}` as Hex;
+    const SUCCESS = toEventSelector('ExecutionSuccess(bytes32,uint256)');
+    const FAILURE = toEventSelector('ExecutionFailure(bytes32,uint256)');
+    const payment = pad('0x00', { size: 32 });
+    const receipt = {
+      blockHash: `0x${'ab'.repeat(32)}`,
+      blockNumber: '0x1e8481',
+      contractAddress: null,
+      cumulativeGasUsed: '0x5208',
+      effectiveGasPrice: '0x1',
+      from: '0x1111111111111111111111111111111111111111',
+      gasUsed: '0x5208',
+      logs: [],
+      logsBloom: `0x${'00'.repeat(256)}`,
+      status: '0x1',
+      to: safe,
+      transactionHash: execTx,
+      transactionIndex: '0x0',
+      type: '0x2',
+    };
+    const wait = async (
+      logs: Array<{ topics: Hex[]; data: Hex }>,
+      timeoutMs = 1_000,
+    ) => {
+      const chain = fakeChain({
+        logs: logs.map(l => ({
+          ...l,
+          address: safe,
+          blockNumber: 2_000_001n,
+          transactionHash: execTx,
+        })),
+        blockNumber: 2_000_001n,
+        receipts: { [execTx]: receipt },
+      });
+      return await waitForContractWalletExecution({
+        publicClient: chain.publicClient,
+        account: safe,
+        safeTxHash,
+        fromBlock: 2_000_000n,
+        timeoutMs,
+        pollMs: 1,
+      });
+    };
+
+    it('finds ExecutionSuccess with an indexed txHash (Safe 1.4.1+)', async () => {
+      const result = await wait([
+        { topics: [SUCCESS, safeTxHash], data: payment },
+      ]);
+      expect(result.transactionHash).toBe(execTx);
+    });
+
+    it('finds ExecutionSuccess with txHash in the data (Safe 1.3.0)', async () => {
+      const result = await wait([
+        { topics: [SUCCESS], data: concat([safeTxHash, payment]) },
+      ]);
+      expect(result.transactionHash).toBe(execTx);
+    });
+
+    it('reports an indexed ExecutionFailure as TX_REVERTED', async () => {
+      await expect(
+        wait([{ topics: [FAILURE, safeTxHash], data: payment }]),
+      ).rejects.toMatchObject({
+        code: 'TX_REVERTED',
+        details: { hash: safeTxHash, contractWallet: true },
+      });
+    });
+
+    it('ignores executions of other Safe transactions', async () => {
+      const other = `0x${'77'.repeat(32)}` as Hex;
+      await expect(
+        wait(
+          [
+            { topics: [SUCCESS, other], data: payment },
+            { topics: [SUCCESS], data: concat([other, payment]) },
+          ],
+          0,
+        ),
+      ).rejects.toMatchObject({ code: 'TX_UNCONFIRMED' });
     });
   });
 });

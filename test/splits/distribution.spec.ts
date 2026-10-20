@@ -214,6 +214,35 @@ describe('splits.prepareDistribution', () => {
     ]);
   });
 
+  it('throws SPLIT_PAUSED for a paused split owned by a contract sender (Multicall3 is msg.sender)', async () => {
+    const safe = addr(0x5afe);
+    const chain = scenario({
+      rewardSplit: { paused: true, owner: safe, balance: parseEther('1') },
+      code: { [safe]: '0x6080604052' },
+    });
+    const error = await caught(
+      prepareDistribution(chain.context(), {
+        rewardSplit: { ...rewardParams, address: REWARD },
+        from: safe,
+      }),
+    );
+    expect(error.code).toBe('SPLIT_PAUSED');
+    expect(error.details).toMatchObject({ address: REWARD, owner: safe });
+  });
+
+  it('lets an EOA owner distribute its paused split (tx.origin)', async () => {
+    const chain = scenario({
+      rewardSplit: { paused: true, owner: SENDER, balance: parseEther('1') },
+    });
+    const prepared = await prepareDistribution(chain.context(), {
+      rewardSplit: { ...rewardParams, address: REWARD },
+      from: SENDER,
+    });
+    expect(
+      decodeDistributionCalls(prepared.request.data, OVM).map(c => c.op),
+    ).toContain('split.distribute');
+  });
+
   it('lets an EOA sender withdraw its own paused balance (tx.origin)', async () => {
     const chain = scenario({
       warehouse: { [SENDER]: 50n },

@@ -6,16 +6,18 @@
 import {
   isAddress,
   isHex,
-  parseAbiItem,
+  slice,
+  toEventSelector,
   type Address,
   type Hash,
+  type Hex,
   type PublicClient,
   type ReplacementReturnType,
   type TransactionReceipt,
   WaitForTransactionReceiptTimeoutError,
   TransactionReceiptNotFoundError,
 } from 'viem';
-import { getCodeKind } from './chainUtils.js';
+import { getCodeKind, latestBlockNumber } from './chainUtils.js';
 import { accountAddress, requireWallet, type Context } from './context.js';
 import { ObolError } from './errors.js';
 import type { Prepared } from './types.js';
@@ -33,12 +35,26 @@ export interface Sent {
   wait: (options?: WaitOptions) => Promise<TransactionReceipt>;
 }
 
-const SAFE_EXECUTION_SUCCESS = parseAbiItem(
-  'event ExecutionSuccess(bytes32 txHash, uint256 payment)',
+// Safe 1.3.0 emits `ExecutionSuccess(bytes32 txHash, uint256 payment)` (txHash
+// in the data); 1.4.0 and later index txHash (topic 1). The topic 0 is the
+// same, so logs are matched by topic 0 and txHash read from either place.
+const SAFE_EXECUTION_SUCCESS = toEventSelector(
+  'ExecutionSuccess(bytes32,uint256)',
 );
-const SAFE_EXECUTION_FAILURE = parseAbiItem(
-  'event ExecutionFailure(bytes32 txHash, uint256 payment)',
+const SAFE_EXECUTION_FAILURE = toEventSelector(
+  'ExecutionFailure(bytes32,uint256)',
 );
+
+/** The Safe txHash of an ExecutionSuccess / ExecutionFailure log, either version. */
+const safeExecutionTxHash = (log: {
+  topics: readonly Hex[];
+  data: Hex;
+}): string | undefined => {
+  if (log.topics.length >= 2) return log.topics[1]?.toLowerCase();
+  return log.data.length >= 66
+    ? slice(log.data, 0, 32).toLowerCase()
+    : undefined;
+};
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_CONTRACT_WALLET_TIMEOUT_MS = 30 * 60_000;
@@ -71,22 +87,26 @@ export const waitForContractWalletExecution = async ({
   const wanted = safeTxHash.toLowerCase();
   let from = fromBlock;
   for (;;) {
-    const head = await publicClient.getBlockNumber();
+    const head = await latestBlockNumber(publicClient);
     if (head >= from) {
       const logs = await publicClient.getLogs({
         address: account,
-        events: [SAFE_EXECUTION_SUCCESS, SAFE_EXECUTION_FAILURE],
         fromBlock: from,
         toBlock: head,
       });
-      const match = logs.find(
-        log => (log.args.txHash ?? '').toLowerCase() === wanted,
-      );
-      if (match !== undefined) {
+      const match = logs.find(log => {
+        const topic = log.topics[0]?.toLowerCase();
+        return (
+          (topic === SAFE_EXECUTION_SUCCESS ||
+            topic === SAFE_EXECUTION_FAILURE) &&
+          safeExecutionTxHash(log) === wanted
+        );
+      });
+      if (match?.transactionHash != null) {
         const receipt = await publicClient.getTransactionReceipt({
           hash: match.transactionHash,
         });
-        if (match.eventName === 'ExecutionFailure') {
+        if (match.topics[0]?.toLowerCase() === SAFE_EXECUTION_FAILURE) {
           throw new ObolError(
             'TX_REVERTED',
             `The Safe executed ${safeTxHash} and the inner call failed (transaction ${match.transactionHash})`,
@@ -158,7 +178,7 @@ export const send = async (
   const from = accountAddress(account);
   const [kind, startBlock] = await Promise.all([
     getCodeKind(ctx.publicClient, from),
-    ctx.publicClient.getBlockNumber(),
+    latestBlockNumber(ctx.publicClient),
   ]);
   const contractWallet = kind === 'contract';
   let hash: Hash;

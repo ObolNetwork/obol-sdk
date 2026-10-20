@@ -6,7 +6,12 @@
 import { Type } from '@sinclair/typebox';
 import type { Address, Hash } from 'viem';
 import { createOvmEvent } from '../abi.js';
-import { addressTopic, codeKind, scanLogs } from '../chainUtils.js';
+import {
+  addressTopic,
+  codeKind,
+  latestBlockNumber,
+  scanLogs,
+} from '../chainUtils.js';
 import { requireContracts, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, sameAddress, T } from '../schema.js';
@@ -102,7 +107,7 @@ export const verifyOvm = async (
 
   // 3. Factory CreateObolValidatorManager logs with topic1 = ovm.
   try {
-    const head = await ctx.publicClient.getBlockNumber();
+    const head = await latestBlockNumber(ctx.publicClient);
     const [topic0] = encodeEventTopics({
       abi: [createOvmEvent],
       eventName: 'CreateObolValidatorManager',

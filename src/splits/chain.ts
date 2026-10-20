@@ -8,7 +8,7 @@ import {
   type ContractFunctionParameters,
   type Hex,
 } from 'viem';
-import { chainReadFailed } from '../chainUtils.js';
+import { chainReadFailed, latestBlockNumber } from '../chainUtils.js';
 import type { Context } from '../context.js';
 import { ObolError } from '../errors.js';
 
@@ -69,7 +69,7 @@ export const requireExpectedCode = async (
 /** The latest block number; CHAIN_READ_FAILED on error. */
 export const headBlock = async (ctx: Context): Promise<bigint> => {
   try {
-    return await ctx.publicClient.getBlockNumber();
+    return await latestBlockNumber(ctx.publicClient);
   } catch (cause) {
     throw chainReadFailed('the block number', cause);
   }

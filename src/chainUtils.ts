@@ -44,6 +44,15 @@ export const getCodeKind = async (
     }),
   );
 
+/**
+ * The chain head, bypassing the viem client's block-number cache
+ * (`cacheTime`, by default the polling interval): reads pinned to a cached
+ * number would miss a transaction the caller has just mined.
+ */
+export const latestBlockNumber = async (
+  client: PublicClient,
+): Promise<bigint> => await client.getBlockNumber({ cacheTime: 0 });
+
 export const addressTopic = (address: Address): Hex =>
   pad(address.toLowerCase() as Hex, { size: 32 });
 

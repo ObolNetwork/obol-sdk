@@ -24,6 +24,9 @@ Deposit = { pubkey: Pubkey, withdrawalCredentials: Hex32, signature: Hex96, depo
 ```
 
 - `request.chainId` is the client chain. `request.value` is `0` unless stated.
+- The head block an operation pins its reads to (and scans logs up to) is read with the viem client's block-number
+  cache bypassed (`cacheTime: 0`): a cached number (viem keeps it for the polling interval, 4 s by default) would miss
+  a transaction the caller has just mined, e.g. `ovm.verify` would report a just-created OVM as `notObol`.
 - A `Prepared` is a snapshot checked at `blockNumber`. `send` does not refuse an old one: the writes are safe when
   stale (a distribution pays what is there at execution; fees have a maximum), and the UI re-prepares on confirm. A
   caller that shows a preview for long should prepare again before sending.
@@ -682,7 +685,9 @@ and balances. Vectors `distribution.json` (`routing`, `split_distribution`, `pre
 5. An OVM recipient that is a SplitV2 split (as `getSplit` 1–2) and has no params from the input → params from
    `getSplit` 3; none → `SPLIT_PARAMS_REQUIRED` (its funds would stay undistributed).
 6. Each split's on-chain `splitHash` equals the params hash, else `SPLIT_PARAMS_MISMATCH`.
-7. A split with something to distribute that is `paused` and not owned by the sender → `SPLIT_PAUSED`.
+7. A split with something to distribute that is `paused` and not owned by the sender → `SPLIT_PAUSED`. Also when the
+   owner is the sender but a contract (a Safe): through Multicall3 the split sees Multicall3 as `msg.sender`, so only
+   an EOA owner passes the pause, as `tx.origin` (as for Warehouse withdrawals below).
 8. Splits with a non-zero `distributionIncentive` need `distributor` (default the sender), else `PAYLOAD_INVALID`.
 9. No calls result → `NOTHING_TO_DISTRIBUTE`. (2.16 threw this at send)
 
@@ -924,8 +929,9 @@ never appears on-chain, and waiting for a receipt would time out silently. `send
 with `getCode`: non-empty code that is not an EIP-7702 delegation means a contract wallet, and the result has
 `contractWallet: true`. For a contract wallet, `wait` does not look for a receipt of `hash`: it watches the account for
 the Safe `ExecutionSuccess(bytes32 txHash, uint256 payment)` / `ExecutionFailure(bytes32 txHash, uint256 payment)` log
-with `txHash = hash`, from the block `send` returned at, and resolves with the receipt of the transaction that emitted
-it (`ExecutionFailure` → `TX_REVERTED`; nothing within `timeoutMs`, default 30 minutes for contract wallets →
+with `txHash = hash` (in the data for Safe 1.3.0, indexed as topic 1 for Safe 1.4.0 and later; logs are matched by
+topic 0, which is the same for both), from the block `send` returned at, and resolves with the receipt of the
+transaction that emitted it (`ExecutionFailure` → `TX_REVERTED`; nothing within `timeoutMs`, default 30 minutes for contract wallets →
 `TX_UNCONFIRMED` with `contractWallet: true`). A contract wallet that is not a Safe never emits these, so it ends in
 `TX_UNCONFIRMED`; its app tracks execution itself. This is chain-only (no Safe Transaction Service) and is the only
 Safe-specific code. (2.15 waited for `ExecutionSuccess` the same way)

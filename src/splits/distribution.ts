@@ -472,6 +472,23 @@ const buildDistribution = async (
     'the split and recipient balances',
   );
 
+  // Through Multicall3 the splits and the Warehouse see Multicall3 as
+  // msg.sender, so their owner exemptions (a paused split's owner, a paused
+  // Warehouse owner) can only match tx.origin: the sender, if it is an EOA (an
+  // EIP-7702 delegated account still signs as an EOA). A contract sender (a
+  // Safe) never gets them.
+  let senderEoa: Promise<boolean> | undefined;
+  const senderIsOrigin = async (): Promise<boolean> => {
+    if (sender === null) return false;
+    senderEoa ??= hasContractCode(ctx, sender, blockNumber).then(c => !c);
+    return await senderEoa;
+  };
+  const ownsPausedSplit = splits.some((_, i) => {
+    const [, paused, owner] = results.slice(i * 4, i * 4 + 4);
+    return paused === true && typeof owner === 'string' && isSender(owner);
+  });
+  const splitOwnerBypass = ownsPausedSplit && (await senderIsOrigin());
+
   const calls: Call3[] = [];
   if (ovmIncluded && ovmAddress !== undefined) {
     calls.push({
@@ -525,16 +542,23 @@ const buildDistribution = async (
       );
       const included = distributable >= minWithdraw;
       if (included) {
-        if (
-          paused === true &&
-          !(typeof owner === 'string' && isSender(owner))
-        ) {
+        const ownedBySender = typeof owner === 'string' && isSender(owner);
+        if (paused === true && !(ownedBySender && splitOwnerBypass)) {
           throw new ObolError(
             'SPLIT_PAUSED',
-            `The ${split.kind} split ${split.address} is paused`,
+            ownedBySender
+              ? `The ${split.kind} split ${split.address} is paused, and its owner ${owner} is a contract: through Multicall3 only an EOA owner passes the pause`
+              : `The ${split.kind} split ${split.address} is paused`,
             {
-              hint: 'Only its owner can distribute a paused split; ask the owner to unpause it',
-              details: { address: split.address },
+              hint: ownedBySender
+                ? "Unpause it first, or call the split's distribute directly from the owner"
+                : 'Only its owner can distribute a paused split; ask the owner to unpause it',
+              details: {
+                address: split.address,
+                ...(typeof owner === 'string'
+                  ? { owner: checksum(owner) }
+                  : {}),
+              },
             },
           );
         }
@@ -565,17 +589,15 @@ const buildDistribution = async (
   );
 
   // Warehouse.withdraw skips the pause check when msg.sender or tx.origin is
-  // the owner. Through Multicall3 only tx.origin can match: the sender, if it
-  // is an EOA (an EIP-7702 delegated account still signs as an EOA).
+  // the owner; through Multicall3 only tx.origin can match (above).
   const balanceResults = results.slice(splits.length * 4);
   const pausedAt = (i: number): boolean =>
     (
       balanceResults[i * 3 + 1] as readonly [number, boolean] | undefined
     )?.[1] === true;
-  const senderIsOrigin =
-    sender !== null &&
+  const warehouseOwnerBypass =
     addresses.some((a, i) => isSender(a) && pausedAt(i)) &&
-    !(await hasContractCode(ctx, sender, blockNumber));
+    (await senderIsOrigin());
 
   const recipients: DistributionPreview['recipients'] = addresses.map(
     (address, i) => {
@@ -604,7 +626,7 @@ const buildDistribution = async (
       if (withdraw) {
         const blocked =
           pausedAt(i) &&
-          !(isSender(address) && senderIsOrigin) &&
+          !(isSender(address) && warehouseOwnerBypass) &&
           warehouseAmount >= minWithdraw;
         let included = false;
         if (warehouseAmount >= minWithdraw && !blocked) {
@@ -697,7 +719,8 @@ const buildDistribution = async (
  * params (SPLIT_PARAMS_MISMATCH); an OVM recipient that is a split without
  * findable params (SPLIT_PARAMS_REQUIRED); a distributor for splits with an
  * incentive (PAYLOAD_INVALID); each split's `splitHash` (SPLIT_PARAMS_MISMATCH);
- * a paused split not owned by the sender (SPLIT_PAUSED); something to move
+ * a paused split unless the sender is its owner and an EOA (through Multicall3
+ * only tx.origin passes the pause; SPLIT_PAUSED); something to move
  * (NOTHING_TO_DISTRIBUTE). Legs below `minWithdraw` are left out with a
  * `skipReason`; recipients whose paused Warehouse withdrawals the sender cannot
  * bypass get a RECIPIENT_WITHDRAW_PAUSED finding.

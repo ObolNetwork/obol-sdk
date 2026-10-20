@@ -17,6 +17,7 @@
     "build": "npm-run-all build:clean build:tsup",
     "build:tsup": "tsup && tsc -b ./tsconfig.types.json",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --testPathPattern='/test/.*\\.spec\\.ts$'",
+    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest -c jest.e2e.config.cjs --runInBand",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "npm:publish:next": "npm publish --tag next",

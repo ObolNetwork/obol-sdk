@@ -51,6 +51,9 @@ yarn build
 # Run unit tests (everything under test/)
 yarn test
 
+# End-to-end tests on an anvil fork of Hoodi (needs anvil; RPC_HOODI overrides the RPC)
+yarn test:e2e
+
 # Watch mode during development
 yarn test --watch
 
@@ -119,6 +122,10 @@ test/
 ├── helpers/          # fakeChain / fakeApi (EIP-1193 fake chain and API), syntheticLock (real-key locks), blstBackend (test-only adapter)
 ├── vectors/          # spec/vectors and distributed-validator-specs suites
 └── <module>/         # One directory per src module (cluster, deposits, ovm, splits, setup, ...)
+
+test-e2e/             # yarn test:e2e: anvil fork of Hoodi (jest.e2e.config.cjs, *.e2e.ts)
+├── globalSetup.cjs   # Starts anvil on a free port (skips every suite if anvil or the RPC is missing)
+└── helpers/          # Clients and funded signers on the fork, BLS deposits, OVM deploy, a Safe wallet
 ```
 
 ## Build System
@@ -245,7 +252,11 @@ This keeps the SDK in sync with the API and ensures external developers always h
 
 - **Jest 29** with `ts-jest/presets/default-esm`
 - ESM module support via `NODE_OPTIONS=--experimental-vm-modules`
-- `yarn test` runs every `test/**/*.spec.ts`; there are no network or E2E tests
+- `yarn test` runs every `test/**/*.spec.ts`; no network
+- `yarn test:e2e` runs `test-e2e/*.e2e.ts` against an anvil fork of Hoodi at head (public RPC, or `RPC_HOODI`; it
+  must serve `eth_getLogs` over 50,000 blocks). It sends each `prepare*` result and compares the preview and findings
+  with what was mined (balances, logs, contract state). CI runs it non-blocking (`.github/workflows/e2e.yml`). Run
+  one e2e job at a time: it spawns anvil and makes many RPC requests.
 
 ### Unit Test Patterns
 

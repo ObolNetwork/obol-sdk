@@ -10,5 +10,5 @@
     "moduleResolution":"node",
     "baseUrl": "./"
   },
-  "exclude": ["node_modules", "dist", "test"]
+  "exclude": ["node_modules", "dist", "test", "test-e2e"]
 }

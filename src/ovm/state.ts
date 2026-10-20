@@ -5,7 +5,12 @@
 import { encodeEventTopics, getAddress, type Address, type Hex } from 'viem';
 import { ovmAbi, rolesUpdatedEvent } from '../abi.js';
 import { requireContracts } from '../chains.js';
-import { finding, LOG_CHUNK_SIZE, scanLogs } from '../chainUtils.js';
+import {
+  finding,
+  latestBlockNumber,
+  LOG_CHUNK_SIZE,
+  scanLogs,
+} from '../chainUtils.js';
 import { requireApi, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, sameAddress, T } from '../schema.js';
@@ -219,7 +224,7 @@ export const getOvmRoleHolders = async (
   const deployBlock = ovmFactory.deployBlock;
   let head: bigint;
   try {
-    head = await ctx.publicClient.getBlockNumber();
+    head = await latestBlockNumber(ctx.publicClient);
   } catch (cause) {
     throw new ObolError(
       'CHAIN_READ_FAILED',
