@@ -1,7 +1,7 @@
 // Helpers that build invalid BLS signatures for the batch verification tests.
 import { fromHexString, toHexString } from '@chainsafe/ssz';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
 import { depositDataContainer } from '../src/verification/sszTypes.js';
 import type { ClusterLock, ValidatorDeposit } from '../src/types.js';
 
@@ -94,4 +94,26 @@ export const offsetDepositPair = (
 ): [ValidatorDeposit, ValidatorDeposit] => {
   const [a, b] = offsetSignaturePair(deposit.signature, deposit.signature);
   return [withSignature(deposit, a), withSignature(deposit, b)];
+};
+
+/**
+ * Re-encoding of a compressed G1 (48-byte) or G2 (96-byte) point with p added
+ * to the 48-byte field element at `offset` (0: x for G1, x.c1 for G2; 48:
+ * x.c0 for G2), keeping the flag bits. The result is not a canonical encoding.
+ * Returns null when the sum does not fit in the 381 bits of the element.
+ */
+export const addFieldModulus = (
+  encoding: string,
+  offset: 0 | 48,
+): string | null => {
+  const bytes = fromHexString(encoding);
+  const element = bytes.slice(offset, offset + 48);
+  const flags = offset === 0 ? element[0] & 0xe0 : 0;
+  element[0] &= 0x1f;
+  const sum = bytesToNumberBE(element) + Fp.ORDER;
+  if (sum >= BigInt(1) << BigInt(381)) return null;
+  const encoded = numberToBytesBE(sum, 48);
+  encoded[0] |= flags;
+  bytes.set(encoded, offset);
+  return toHexString(bytes);
 };
