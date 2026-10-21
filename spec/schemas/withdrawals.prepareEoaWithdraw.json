@@ -35,6 +35,22 @@
       "pattern": "^0x[0-9a-fA-F]{64}$",
       "type": "string"
     },
+    "pendingRetry": {
+      "additionalProperties": false,
+      "properties": {
+        "delayMs": {
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tries": {
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "pubkey": {
       "description": "BLS public key (48 bytes)",
       "pattern": "^0x[0-9a-fA-F]{96}$",

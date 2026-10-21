@@ -20,6 +20,7 @@ import {
   type OvmChainOptions,
 } from '../ovm/ovmFixture.js';
 import { offsetDepositPair } from '../helpers/blsSignatures.js';
+import { fakeApi } from '../helpers/fakeChain.js';
 
 const vectors = JSON.parse(
   readFileSync('spec/vectors/deposit_checks.json', 'utf8'),
@@ -416,6 +417,212 @@ describe('deposits.prepareDeposit', () => {
     it('fails closed when the status source is malformed', async () => {
       restore = mockBeacon([], [{ nope: true }]);
       expect((await caught(run({}))).code).toBe('STATUS_UNAVAILABLE');
+    });
+  });
+
+  describe('existence from the Obol API queued deposit signatures', () => {
+    const ROUTE = 'POST /v1/validators/hoodi/deposit-status';
+    const ZERO = `0x${'00'.repeat(32)}` as Hex;
+    const MINE = DEPOSIT.withdrawalCredentials.toLowerCase() as Hex;
+    const THEIRS = credentials('01', OTHER);
+    type Queued = Array<[Hex, boolean | null]>;
+    const entry = (deposits: Queued, extra: object = {}): object => {
+      const valid = deposits.filter(([, v]) => v === true);
+      const distinct = new Set(valid.map(([c]) => c).filter(c => c !== ZERO));
+      return {
+        pubkey: PUBKEY,
+        status: 'queued',
+        beaconStatus: 'pending_deposit',
+        index: null,
+        balance: null,
+        effectiveBalance: null,
+        withdrawalCredentials: valid[0]?.[0] ?? null,
+        signaturesPending: false,
+        credentialsConflict: distinct.size > 1,
+        pendingDeposits: deposits.map(([c, signatureValid]) => ({
+          amount: (32n * ETH).toString(),
+          withdrawalCredentials: c,
+          signatureValid,
+        })),
+        ...extra,
+      };
+    };
+    const PENDING = entry(
+      [
+        [MINE, null],
+        [THEIRS, null],
+      ],
+      {
+        withdrawalCredentials: null,
+        signaturesPending: true,
+        credentialsConflict: null,
+      },
+    );
+    const run = async (answers: object[], input: object = {}) => {
+      let n = 0;
+      const api = fakeApi({
+        [ROUTE]: () => ({
+          validators: [answers[Math.min(n++, answers.length - 1)]],
+        }),
+      });
+      const result = await prepareDeposit(chainWith().context(api), {
+        deposits: [DEPOSIT],
+        via: { ovm: OVM },
+        from: OWNER,
+        pendingRetry: { delayMs: 0 },
+        ...input,
+      });
+      return {
+        result,
+        calls: api.calls.filter(c => c.endpoint.endsWith('/deposit-status'))
+          .length,
+      };
+    };
+
+    it('retries while signatures are pending, then checks the resolved answer', async () => {
+      const { result, calls } = await run([
+        PENDING,
+        entry([
+          [THEIRS, false],
+          [MINE, true],
+        ]),
+      ]);
+      expect(calls).toBe(2);
+      expect(codes(result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+    });
+
+    it('throws STATUS_UNAVAILABLE (signatures_pending) when they stay pending', async () => {
+      const error = await caught(run([PENDING]));
+      expect(error).toMatchObject({
+        code: 'STATUS_UNAVAILABLE',
+        details: { reason: 'signatures_pending', pubkey: PUBKEY },
+      });
+      expect(error.hint).toMatch(/retry/i);
+      // A zero-credential top-up is not let through on a guess either.
+      expect(
+        await caught(run([PENDING], { deposits: [TOP_UP], kind: 'topUp' })),
+      ).toMatchObject({
+        code: 'STATUS_UNAVAILABLE',
+        details: { reason: 'signatures_pending' },
+      });
+    });
+
+    it('skips a queued deposit with an invalid signature when choosing the credentials', async () => {
+      // Invalid first with other credentials, valid second with ours: no conflict.
+      const ok = await run([
+        entry([
+          [THEIRS, false],
+          [MINE, true],
+        ]),
+      ]);
+      expect(codes(ok.result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+      expect(ok.result[0].checks[0].message).toMatch(/^1 deposit/);
+      // Invalid first with ours, valid second with other credentials: conflict.
+      expect(
+        await caught(
+          run([
+            entry([
+              [MINE, false],
+              [THEIRS, true],
+            ]),
+          ]),
+        ),
+      ).toMatchObject({
+        code: 'DEPOSIT_CONFLICT',
+        details: { index: 0, pubkey: PUBKEY, existingCredentials: THEIRS },
+      });
+    });
+
+    it('takes a validly signed zero-credential deposit as the one that applies', async () => {
+      expect(await caught(run([entry([[ZERO, true]])]))).toMatchObject({
+        code: 'DEPOSIT_CONFLICT',
+        details: { existingCredentials: ZERO },
+      });
+    });
+
+    it('on credentialsConflict: DEPOSIT_CONFLICT unless the deposit has the first valid credentials', async () => {
+      const mineFirst = entry([
+        [MINE, true],
+        [THEIRS, true],
+      ]);
+      const { result } = await run([mineFirst]);
+      expect(codes(result[0].checks)).toEqual([
+        'QUEUED_CREDENTIALS_CONFLICT',
+        'DEPOSIT_ALREADY_QUEUED',
+      ]);
+      expect(result[0].checks[0]).toMatchObject({
+        severity: 'warning',
+        subject: { pubkey: PUBKEY },
+      });
+      expect(
+        await caught(
+          run([
+            entry([
+              [THEIRS, true],
+              [MINE, true],
+            ]),
+          ]),
+        ),
+      ).toMatchObject({
+        code: 'DEPOSIT_CONFLICT',
+        details: { existingCredentials: THEIRS },
+      });
+      // A zero-credential top-up does not care which credentials apply.
+      const topUp = await run(
+        [
+          entry([
+            [MINE, true],
+            [THEIRS, true],
+          ]),
+        ],
+        { deposits: [TOP_UP], kind: 'topUp' },
+      );
+      expect(codes(topUp.result[0].checks)).toEqual([
+        'QUEUED_CREDENTIALS_CONFLICT',
+        'DEPOSIT_ALREADY_QUEUED',
+      ]);
+    });
+
+    it('lets a zero-credential top-up follow a validly signed queued deposit', async () => {
+      const { result } = await run(
+        [
+          entry([
+            [MINE, true],
+            [ZERO, false],
+          ]),
+        ],
+        { deposits: [TOP_UP], kind: 'topUp' },
+      );
+      expect(codes(result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+    });
+
+    it('treats a pubkey whose queued deposits are all invalid as having no target', async () => {
+      const allInvalid = entry([[THEIRS, false]]);
+      expect(
+        await caught(run([allInvalid], { deposits: [TOP_UP], kind: 'topUp' })),
+      ).toMatchObject({ code: 'DEPOSIT_TOP_UP_TARGET_MISSING' });
+      const { result } = await run([allInvalid]);
+      expect(result[0].checks).toEqual([]);
+    });
+
+    it('keeps the 2.16 rule for an older API answer without the signature fields', async () => {
+      const older = {
+        pubkey: PUBKEY,
+        status: 'queued',
+        beaconStatus: 'pending_deposit',
+        index: null,
+        balance: null,
+        effectiveBalance: null,
+        withdrawalCredentials: MINE,
+        pendingDeposits: [
+          { amount: (32n * ETH).toString(), withdrawalCredentials: MINE },
+          { amount: ETH.toString(), withdrawalCredentials: THEIRS },
+        ],
+      };
+      expect(await caught(run([older]))).toMatchObject({
+        code: 'DEPOSIT_CONFLICT',
+        details: { existingCredentials: THEIRS },
+      });
     });
   });
 

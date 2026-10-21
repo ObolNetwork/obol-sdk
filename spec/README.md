@@ -55,7 +55,9 @@ One rule for every field the Obol API enriches (and every optional output field 
   null`, `getValidators` `lockHash` / `beaconStatus` / `balance: null`, `getSplit` `params: null`,
   `credentialsMatch: null`, a status epoch not assigned yet.
 - **absent**: not asked: `principalOnBeaconChain` with `api: false`, `credentialsMatch` without
-  `expectedWithdrawalAddress`, the status epochs when the source does not report them.
+  `expectedWithdrawalAddress`, the status epochs when the source does not report them, the deposit status signature
+  fields (`signaturesPending`, `credentialsConflict`, `signatureValid`) from a source that does not check signatures
+  (a beacon node, an older API).
 - A read that answers "this is not one" returns `null` for the whole result (`ovm.getState` on a non-OVM,
   `splits.getSplit` on a non-split, `incentives.get` without incentives); a read that fails throws.
 

@@ -238,7 +238,7 @@ describe('deposits.status', () => {
       });
     });
 
-    it('asks for at most 1000 pubkeys per request', async () => {
+    it('asks for at most 500 pubkeys per request', async () => {
       const pubkeys = Array.from(
         { length: 1001 },
         (_, i) => `0x${i.toString(16).padStart(96, '0')}` as Hex,
@@ -251,7 +251,322 @@ describe('deposits.status', () => {
       expect(statuses).toHaveLength(1001);
       expect(
         api.calls.map(c => (c.body as { pubkeys: Hex[] }).pubkeys.length),
-      ).toEqual([1000, 1]);
+      ).toEqual([500, 500, 1]);
+    });
+
+    describe('queued deposit signatures', () => {
+      const checked = (
+        pubkey: Hex,
+        deposits: Array<[bigint, Hex, boolean | null]>,
+        extra: object = {},
+      ): object => {
+        const valid = deposits.filter(([, , v]) => v === true);
+        const distinct = new Set(
+          valid.map(([, c]) => c).filter(c => c !== ZERO),
+        );
+        return {
+          ...(queued(pubkey, [[0n, ZERO]]) as object),
+          withdrawalCredentials: valid[0]?.[1] ?? null,
+          signaturesPending: false,
+          credentialsConflict: distinct.size > 1,
+          pendingDeposits: deposits.map(([amount, c, signatureValid]) => ({
+            amount: wei(amount),
+            withdrawalCredentials: c,
+            signatureValid,
+          })),
+          ...extra,
+        };
+      };
+      const pending = (pubkey: Hex): object =>
+        checked(
+          pubkey,
+          [
+            [32n * ETH, credentials('01', OTHER), null],
+            [32n * ETH, CREDS, null],
+          ],
+          {
+            withdrawalCredentials: null,
+            signaturesPending: true,
+            credentialsConflict: null,
+          },
+        );
+
+      it('reads signatureValid, signaturesPending and credentialsConflict', async () => {
+        const api = serving(() => [
+          registry(PUBKEY_A, {
+            signaturesPending: false,
+            credentialsConflict: false,
+            pendingDeposits: [
+              {
+                amount: wei(ETH),
+                withdrawalCredentials: ZERO,
+                signatureValid: null,
+              },
+            ],
+          }),
+          checked(PUBKEY_B, [
+            [32n * ETH, credentials('01', OTHER), false],
+            [32n * ETH, CREDS, true],
+          ]),
+          {
+            ...(fresh(PUBKEY_C) as object),
+            signaturesPending: false,
+            credentialsConflict: false,
+          },
+        ]);
+        const [a, b, c] = await getDepositStatus(
+          fakeChain().context(api),
+          [PUBKEY_A, PUBKEY_B, PUBKEY_C],
+          { expectedWithdrawalAddress: OVM },
+        );
+        expect(a).toMatchObject({
+          signaturesPending: false,
+          credentialsConflict: false,
+          pendingDeposits: [
+            { amount: ETH, withdrawalCredentials: ZERO, signatureValid: null },
+          ],
+        });
+        // The invalid first deposit is skipped: the valid second one applies.
+        expect(b).toEqual({
+          pubkey: PUBKEY_B,
+          status: 'queued',
+          source: 'api',
+          beaconStatus: 'pending_deposit',
+          withdrawalCredentials: CREDS,
+          signaturesPending: false,
+          credentialsConflict: false,
+          pendingDeposits: [
+            {
+              amount: 32n * ETH,
+              withdrawalCredentials: credentials('01', OTHER),
+              signatureValid: false,
+            },
+            {
+              amount: 32n * ETH,
+              withdrawalCredentials: CREDS,
+              signatureValid: true,
+            },
+          ],
+          credentialsMatch: true,
+        });
+        expect(c).toMatchObject({
+          status: 'new',
+          signaturesPending: false,
+          credentialsMatch: null,
+        });
+      });
+
+      it('leaves the signature fields absent for an older API answer', async () => {
+        const api = serving(() => [
+          queued(PUBKEY_A, [
+            [32n * ETH, credentials('01', OTHER)],
+            [32n * ETH, CREDS],
+          ]),
+        ]);
+        const [a] = await getDepositStatus(
+          fakeChain().context(api),
+          [PUBKEY_A],
+          {
+            expectedWithdrawalAddress: OVM,
+          },
+        );
+        expect(a).not.toHaveProperty('signaturesPending');
+        expect(a).not.toHaveProperty('credentialsConflict');
+        expect(a.pendingDeposits[0]).not.toHaveProperty('signatureValid');
+        // No signature checks: the first queued deposit's credentials apply.
+        expect(a.withdrawalCredentials).toBe(credentials('01', OTHER));
+        expect(a.credentialsMatch).toBe(false);
+      });
+
+      it('has no credentials when no queued deposit is validly signed', async () => {
+        const api = serving(() => [
+          checked(PUBKEY_A, [[32n * ETH, CREDS, false]]),
+        ]);
+        const [a] = await getDepositStatus(
+          fakeChain().context(api),
+          [PUBKEY_A],
+          {
+            expectedWithdrawalAddress: OVM,
+          },
+        );
+        expect(a).not.toHaveProperty('withdrawalCredentials');
+        expect(a.credentialsMatch).toBeNull();
+      });
+
+      it('re-reads the batch while signatures are pending', async () => {
+        let n = 0;
+        const api = serving(() => {
+          n++;
+          return [
+            registry(PUBKEY_A),
+            n === 1
+              ? pending(PUBKEY_B)
+              : checked(PUBKEY_B, [
+                  [32n * ETH, credentials('01', OTHER), false],
+                  [32n * ETH, CREDS, true],
+                ]),
+          ];
+        });
+        const [, b] = await getDepositStatus(
+          fakeChain().context(api),
+          [PUBKEY_A, PUBKEY_B],
+          { pendingRetry: { delayMs: 0 } },
+        );
+        expect(api.calls).toHaveLength(2);
+        expect(api.calls[1].body).toEqual({ pubkeys: [PUBKEY_A, PUBKEY_B] });
+        expect(b).toMatchObject({
+          signaturesPending: false,
+          withdrawalCredentials: CREDS,
+        });
+      });
+
+      it('returns the entry as pending after the retries, without credentials', async () => {
+        const api = serving(() => [pending(PUBKEY_A)]);
+        const [a] = await getDepositStatus(
+          fakeChain().context(api),
+          [PUBKEY_A],
+          {
+            expectedWithdrawalAddress: OVM,
+            pendingRetry: { delayMs: 0 },
+          },
+        );
+        expect(api.calls).toHaveLength(3);
+        expect(a).toMatchObject({
+          status: 'queued',
+          signaturesPending: true,
+          credentialsConflict: null,
+          credentialsMatch: null,
+        });
+        expect(a).not.toHaveProperty('withdrawalCredentials');
+        expect(a.pendingDeposits.map(p => p.signatureValid)).toEqual([
+          null,
+          null,
+        ]);
+
+        const once = serving(() => [pending(PUBKEY_A)]);
+        await getDepositStatus(fakeChain().context(once), [PUBKEY_A], {
+          pendingRetry: { tries: 1 },
+        });
+        expect(once.calls).toHaveLength(1);
+      });
+
+      it('waits 8 s, then 16 s, by default', async () => {
+        jest.useFakeTimers();
+        try {
+          const api = serving(() => [pending(PUBKEY_A)]);
+          const read = getDepositStatus(fakeChain().context(api), [PUBKEY_A]);
+          await jest.advanceTimersByTimeAsync(7_999);
+          expect(api.calls).toHaveLength(1);
+          await jest.advanceTimersByTimeAsync(1);
+          expect(api.calls).toHaveLength(2);
+          await jest.advanceTimersByTimeAsync(15_999);
+          expect(api.calls).toHaveLength(2);
+          await jest.advanceTimersByTimeAsync(1);
+          expect((await read)[0].signaturesPending).toBe(true);
+          expect(api.calls).toHaveLength(3);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it('rejects a malformed pendingRetry', async () => {
+        const api = serving(() => []);
+        for (const pendingRetry of [
+          { tries: 0 },
+          { delayMs: -1 },
+          { retries: 2 },
+        ]) {
+          expect(
+            (
+              await caught(
+                getDepositStatus(fakeChain().context(api), [PUBKEY_A], {
+                  pendingRetry: pendingRetry as any,
+                }),
+              )
+            ).code,
+          ).toBe('PAYLOAD_INVALID');
+        }
+      });
+
+      it.each<[string, object]>([
+        ['a malformed signaturesPending', { signaturesPending: 'no' }],
+        ['a malformed credentialsConflict', { credentialsConflict: 1 }],
+        [
+          'a null credentialsConflict without pending signatures',
+          { credentialsConflict: null },
+        ],
+        [
+          'a credentialsConflict while signatures are pending',
+          { signaturesPending: true, withdrawalCredentials: null },
+        ],
+        [
+          'credentials that are not the first validly signed deposit',
+          { withdrawalCredentials: credentials('01', OTHER) },
+        ],
+        ['a contradicted credentialsConflict', { credentialsConflict: true }],
+        [
+          'a malformed signatureValid',
+          {
+            pendingDeposits: [
+              {
+                amount: wei(ETH),
+                withdrawalCredentials: CREDS,
+                signatureValid: 'yes',
+              },
+            ],
+          },
+        ],
+        [
+          'an unchecked deposit without pending signatures',
+          {
+            pendingDeposits: [
+              {
+                amount: wei(ETH),
+                withdrawalCredentials: CREDS,
+                signatureValid: null,
+              },
+            ],
+          },
+        ],
+      ])('throws STATUS_UNAVAILABLE for %s', async (_name, extra) => {
+        const api = serving(() => [
+          checked(
+            PUBKEY_A,
+            [
+              [32n * ETH, credentials('01', OTHER), false],
+              [32n * ETH, CREDS, true],
+            ],
+            extra,
+          ),
+        ]);
+        expect(
+          (await caught(getDepositStatus(fakeChain().context(api), [PUBKEY_A])))
+            .code,
+        ).toBe('STATUS_UNAVAILABLE');
+      });
+
+      it('throws STATUS_UNAVAILABLE for pending signatures on a registered or new pubkey', async () => {
+        for (const entry of [
+          registry(PUBKEY_A, {
+            signaturesPending: true,
+            credentialsConflict: null,
+          }),
+          {
+            ...(fresh(PUBKEY_A) as object),
+            signaturesPending: true,
+            credentialsConflict: null,
+          },
+        ]) {
+          const api = serving(() => [entry]);
+          expect(
+            (
+              await caught(
+                getDepositStatus(fakeChain().context(api), [PUBKEY_A]),
+              )
+            ).code,
+          ).toBe('STATUS_UNAVAILABLE');
+        }
+      });
     });
 
     it.each<[string, (pubkeys: Hex[]) => unknown[]]>([

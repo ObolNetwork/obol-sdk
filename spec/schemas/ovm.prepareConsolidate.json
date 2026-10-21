@@ -39,6 +39,22 @@
       "format": "obol-address",
       "type": "string"
     },
+    "pendingRetry": {
+      "additionalProperties": false,
+      "properties": {
+        "delayMs": {
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tries": {
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "requests": {
       "items": {
         "properties": {

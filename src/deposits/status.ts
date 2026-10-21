@@ -10,7 +10,7 @@ import { requireContracts } from '../chains.js';
 import type { Context } from '../context.js';
 import { ObolApiError, ObolError, isObolError } from '../errors.js';
 import { decode, invalid, T, trimTrailingSlashes } from '../schema.js';
-import type { Source, StatusSource } from '../types.js';
+import type { PendingRetry, Source, StatusSource } from '../types.js';
 import { gweiToWei } from '../units.js';
 
 export type DepositStatusName = 'new' | 'queued' | 'active' | 'exited';
@@ -23,6 +23,16 @@ export interface PendingDeposit {
    * registry validator.
    */
   withdrawalCredentials?: Hex;
+  /**
+   * Obol API, pubkeys only in the queue: whether the deposit's BLS signature
+   * is valid (the beacon chain skips queued deposits with an invalid one
+   * until a valid one creates the validator); null when not checked (a
+   * registered validator's top-up, whose signature does not matter, or while
+   * `signaturesPending`). Absent when the source does not check signatures
+   * (the beacon fallback, the interim `/v1/state/:lockHash`, an older API);
+   * such a deposit is treated as possibly valid.
+   */
+  signatureValid?: boolean | null;
 }
 
 export interface DepositStatus {
@@ -32,7 +42,12 @@ export interface DepositStatus {
   /** Raw beacon status; `pending_deposit` for a pubkey only in the queue; absent for `new`. */
   beaconStatus?: string;
   validatorIndex?: number;
-  /** The registry entry's credentials, or the first queued deposit's. */
+  /**
+   * The registry entry's credentials or, queue only, the ones the validator
+   * will be created with: from the Obol API, the first validly signed queued
+   * deposit's (absent while `signaturesPending` or when none is valid); from
+   * a source without signature checks, the first queued deposit's.
+   */
   withdrawalCredentials?: Hex;
   balance?: bigint;
   effectiveBalance?: bigint;
@@ -53,10 +68,24 @@ export interface DepositStatus {
   pendingPartialWithdrawals?: bigint;
   pendingDeposits: PendingDeposit[];
   /**
+   * Obol API: true while the signatures of this queue-only pubkey's queued
+   * deposits are still being checked (usually within a slot; `deposits.status`
+   * re-reads a few times first, see `pendingRetry`), so the credentials it
+   * will get are not known yet. False for registered and new pubkeys. Absent
+   * when the source does not check signatures.
+   */
+  signaturesPending?: boolean;
+  /**
+   * Obol API: whether validly signed queued deposits carry different
+   * withdrawal credentials (the first one applies); null while
+   * `signaturesPending`. Absent when the source does not report it.
+   */
+  credentialsConflict?: boolean | null;
+  /**
    * With `expectedWithdrawalAddress`: whether the credentials the validator
-   * has (or, queued only, will get from its first queued deposit with
-   * non-zero credentials) are `0x01` / `0x02` for that address; null when
-   * there are none yet.
+   * has (or, queued only, will get: see `effectiveCredentials`) are `0x01` /
+   * `0x02` for that address; null when there are none yet or while
+   * `signaturesPending`.
    */
   credentialsMatch?: boolean | null;
 }
@@ -72,6 +101,16 @@ export const DepositStatusOptionsSchema = Type.Object(
     lockHash: Type.Optional(T.Hash32),
     /** Sets `credentialsMatch` on each status. */
     expectedWithdrawalAddress: Type.Optional(T.Address),
+    /** Re-reads while an Obol API entry has `signaturesPending`. */
+    pendingRetry: Type.Optional(
+      Type.Object(
+        {
+          tries: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+          delayMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 60_000 })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { additionalProperties: false },
 );
@@ -84,12 +123,16 @@ export interface DepositStatusOptions extends StatusSource {
 export const StatusSourceFields = {
   beaconUrl: DepositStatusOptionsSchema.properties.beaconUrl,
   lockHash: DepositStatusOptionsSchema.properties.lockHash,
+  pendingRetry: DepositStatusOptionsSchema.properties.pendingRetry,
 };
 
 /** The `StatusSource` part of a decoded input, without absent keys. */
 export const statusSourceOf = (input: StatusSource): StatusSource => ({
   ...(input.beaconUrl !== undefined ? { beaconUrl: input.beaconUrl } : {}),
   ...(input.lockHash !== undefined ? { lockHash: input.lockHash } : {}),
+  ...(input.pendingRetry !== undefined
+    ? { pendingRetry: input.pendingRetry }
+    : {}),
 });
 
 /** Beacon FAR_FUTURE_EPOCH: no epoch assigned. */
@@ -119,19 +162,37 @@ export const canReadStatus = (
 const ZERO_CREDENTIALS = `0x${'0'.repeat(64)}`;
 
 /**
+ * Queued deposits that may still create or fund the validator: all but those
+ * whose signature the source found invalid (an unchecked one is kept).
+ */
+export const possiblyValidDeposits = (
+  status: DepositStatus,
+): PendingDeposit[] =>
+  status.pendingDeposits.filter(p => p.signatureValid !== false);
+
+/**
+ * Whether a queued deposit can be the one that creates the validator: not
+ * known to be invalid, and either known valid or with non-zero credentials
+ * (a zero-credential top-up has no valid signature for a new validator, so
+ * an unchecked one is skipped).
+ */
+export const canCreateValidator = (p: PendingDeposit): boolean =>
+  p.signatureValid === true ||
+  (p.signatureValid !== false &&
+    p.withdrawalCredentials !== undefined &&
+    p.withdrawalCredentials.toLowerCase() !== ZERO_CREDENTIALS);
+
+/**
  * The credentials a validator has, or (no registry entry yet) will get: the
- * first queued deposit with non-zero credentials (a zero-credential top-up
- * has no valid signature for a new validator, so it is skipped).
+ * first queued deposit that can create it (`canCreateValidator`); undefined
+ * while `signaturesPending` (never guessed).
  */
 export const effectiveCredentials = (
   status: DepositStatus,
 ): Hex | undefined => {
   if (status.validatorIndex !== undefined) return status.withdrawalCredentials;
-  return status.pendingDeposits.find(
-    p =>
-      p.withdrawalCredentials !== undefined &&
-      p.withdrawalCredentials.toLowerCase() !== ZERO_CREDENTIALS,
-  )?.withdrawalCredentials;
+  if (status.signaturesPending === true) return undefined;
+  return status.pendingDeposits.find(canCreateValidator)?.withdrawalCredentials;
 };
 
 const credentialsMatch = (
@@ -167,7 +228,10 @@ const lowerString = (value: unknown): string | undefined =>
 /* ------------------------------------------------------------------------ */
 
 /** Pubkeys per deposit-status request (the API's limit). */
-const DEPOSIT_STATUS_BATCH = 1000;
+export const DEPOSIT_STATUS_BATCH = 500;
+/** Default `pendingRetry`. */
+const PENDING_TRIES = 3;
+const PENDING_DELAY_MS = 8_000;
 const STATUS_NAMES = new Set<string>(['new', 'queued', 'active', 'exited']);
 
 const weiString = (value: unknown, what: string, pubkey: string): bigint => {
@@ -195,6 +259,27 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
   if (!Array.isArray(entry.pendingDeposits)) {
     return bad('malformed pending deposits');
   }
+  // Signature fields were added to the route later: absent on a deployment
+  // without them, and then left absent here.
+  const pending = entry.signaturesPending;
+  if (pending !== undefined && typeof pending !== 'boolean') {
+    return bad('a malformed signaturesPending');
+  }
+  const conflict = entry.credentialsConflict;
+  if (
+    conflict !== undefined &&
+    conflict !== null &&
+    typeof conflict !== 'boolean'
+  ) {
+    return bad('a malformed credentialsConflict');
+  }
+  if (
+    pending === true
+      ? conflict === true || conflict === false
+      : conflict === null
+  ) {
+    return bad('a credentialsConflict inconsistent with signaturesPending');
+  }
   const pendingDeposits = (entry.pendingDeposits as unknown[]).map(item => {
     const deposit = (item ?? {}) as Record<string, unknown>;
     const credentials = lowerString(deposit.withdrawalCredentials);
@@ -202,17 +287,37 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
     if (credentials === undefined || !CREDENTIALS.test(credentials)) {
       return bad('malformed pending deposit credentials');
     }
-    return { amount, withdrawalCredentials: credentials as Hex };
+    const valid = deposit.signatureValid;
+    if (valid !== undefined && valid !== null && typeof valid !== 'boolean') {
+      return bad('a malformed pending deposit signatureValid');
+    }
+    const parsed: PendingDeposit = {
+      amount,
+      withdrawalCredentials: credentials as Hex,
+    };
+    if (valid !== undefined) parsed.signatureValid = valid;
+    return parsed;
   });
+  const signatureFields = {
+    ...(pending !== undefined ? { signaturesPending: pending } : {}),
+    ...(conflict !== undefined ? { credentialsConflict: conflict } : {}),
+  };
   if (status === 'new') {
     if (
       entry.beaconStatus !== null ||
       entry.index !== null ||
-      pendingDeposits.length > 0
+      pendingDeposits.length > 0 ||
+      pending === true
     ) {
       return bad('an inconsistent new status');
     }
-    return { pubkey: pubkey as Hex, status, source: 'api', pendingDeposits };
+    return {
+      pubkey: pubkey as Hex,
+      status,
+      source: 'api',
+      ...signatureFields,
+      pendingDeposits,
+    };
   }
   const beaconStatus = entry.beaconStatus;
   if (
@@ -221,22 +326,61 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
   ) {
     return bad(`a beacon status that is not ${status}`);
   }
-  const credentials = lowerString(entry.withdrawalCredentials);
-  if (credentials === undefined || !CREDENTIALS.test(credentials)) {
+  const rawCredentials = entry.withdrawalCredentials;
+  const credentials = lowerString(rawCredentials);
+  if (
+    rawCredentials !== null &&
+    (credentials === undefined || !CREDENTIALS.test(credentials))
+  ) {
     return bad('malformed withdrawal credentials');
   }
   if (beaconStatus === PENDING_DEPOSIT) {
     if (entry.index !== null || pendingDeposits.length === 0) {
       return bad('a queued status without a queued deposit');
     }
+    const checked = pendingDeposits.some(p => p.signatureValid !== undefined);
+    if (pending !== true && checked) {
+      // Every queued deposit is checked: the credentials must be the first
+      // validly signed one's, or null when none is valid.
+      if (pendingDeposits.some(p => p.signatureValid === null)) {
+        return bad('an unchecked queued deposit without signaturesPending');
+      }
+      const valid = pendingDeposits.filter(p => p.signatureValid === true);
+      if ((valid[0]?.withdrawalCredentials ?? null) !== (credentials ?? null)) {
+        return bad(
+          "withdrawal credentials that are not the first validly signed deposit's",
+        );
+      }
+      const distinct = new Set(
+        valid
+          .map(p => p.withdrawalCredentials)
+          .filter(c => c !== ZERO_CREDENTIALS),
+      );
+      const disagree = distinct.size > 1;
+      if (conflict !== undefined && conflict !== disagree) {
+        return bad('a credentialsConflict that its queued deposits contradict');
+      }
+    } else if (pending !== true && credentials === undefined) {
+      return bad('a queued status without withdrawal credentials');
+    }
     return {
       pubkey: pubkey as Hex,
       status: 'queued',
       source: 'api',
       beaconStatus,
-      withdrawalCredentials: credentials as Hex,
+      // Null while signatures are pending: undecided, so left absent.
+      ...(pending !== true && credentials !== undefined
+        ? { withdrawalCredentials: credentials as Hex }
+        : {}),
+      ...signatureFields,
       pendingDeposits,
     };
+  }
+  if (pending === true) {
+    return bad('signaturesPending for a registered validator');
+  }
+  if (credentials === undefined) {
+    return bad('malformed withdrawal credentials');
   }
   const index = entry.index;
   if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0) {
@@ -280,19 +424,25 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
     ...(pendingPartialWithdrawals !== undefined
       ? { pendingPartialWithdrawals }
       : {}),
+    ...signatureFields,
     pendingDeposits,
   };
+};
+
+const sleep = async (ms: number): Promise<void> => {
+  await new Promise(resolve => setTimeout(resolve, ms));
 };
 
 const fromDepositStatusApi = async (
   ctx: Context,
   pubkeys: Hex[],
+  retry: PendingRetry,
 ): Promise<Map<string, DepositStatus>> => {
   const api = ctx.api;
   if (api === null) throw new Error('unreachable: API disabled');
-  const found = new Map<string, DepositStatus>();
-  for (let i = 0; i < pubkeys.length; i += DEPOSIT_STATUS_BATCH) {
-    const chunk = pubkeys.slice(i, i + DEPOSIT_STATUS_BATCH);
+  const tries = retry.tries ?? PENDING_TRIES;
+  const delayMs = retry.delayMs ?? PENDING_DELAY_MS;
+  const readChunk = async (chunk: Hex[]): Promise<DepositStatus[]> => {
     const body = await api.request<{ validators?: unknown }>(
       `/v1/validators/${ctx.chain.network}/deposit-status`,
       { method: 'POST', body: { pubkeys: chunk } },
@@ -301,22 +451,41 @@ const fromDepositStatusApi = async (
       throw unavailable('The Obol API returned a malformed deposit status');
     }
     const requested = new Set<string>(chunk);
-    for (const raw of body.validators as unknown[]) {
+    const seen = new Set<string>();
+    const statuses = (body.validators as unknown[]).map(raw => {
       const status = depositStatusEntry(raw);
       if (!requested.has(status.pubkey)) {
         throw unavailable(
           `The Obol API returned ${status.pubkey}, which was not requested`,
         );
       }
-      if (found.has(status.pubkey)) {
+      if (seen.has(status.pubkey)) {
         throw unavailable(`The Obol API returned ${status.pubkey} twice`);
       }
-      found.set(status.pubkey, status);
+      seen.add(status.pubkey);
+      return status;
+    });
+    const missing = chunk.find(p => !seen.has(p));
+    if (missing !== undefined) {
+      throw unavailable(`The Obol API left out ${missing}`);
     }
-  }
-  const missing = pubkeys.find(p => !found.has(p));
-  if (missing !== undefined) {
-    throw unavailable(`The Obol API left out ${missing}`);
+    return statuses;
+  };
+  const found = new Map<string, DepositStatus>();
+  for (let i = 0; i < pubkeys.length; i += DEPOSIT_STATUS_BATCH) {
+    const chunk = pubkeys.slice(i, i + DEPOSIT_STATUS_BATCH);
+    // Queued deposit signatures are checked in the background: re-read the
+    // batch while an entry is pending, then return it as pending.
+    let statuses = await readChunk(chunk);
+    for (
+      let attempt = 1;
+      attempt < tries && statuses.some(s => s.signaturesPending === true);
+      attempt++
+    ) {
+      await sleep(delayMs * 2 ** (attempt - 1));
+      statuses = await readChunk(chunk);
+    }
+    for (const status of statuses) found.set(status.pubkey, status);
   }
   return found;
 };
@@ -701,7 +870,7 @@ const fromApiSources = async (
   opts: StatusSource,
 ): Promise<Map<string, DepositStatus> | undefined> => {
   try {
-    return await fromDepositStatusApi(ctx, pubkeys);
+    return await fromDepositStatusApi(ctx, pubkeys, opts.pendingRetry ?? {});
   } catch (error) {
     // 404: an API without the deposit-status route (not deployed yet).
     if (!isObolError(error, 'API_NOT_FOUND')) {
@@ -732,7 +901,9 @@ const fromApiSources = async (
  * deposits.status (`api+chain`): one status per input pubkey, in input order.
  *
  * Sources: the Obol API (`POST /v1/validators/:network/deposit-status`, up
- * to 1000 pubkeys per request); while that route answers 404, the interim
+ * to 500 pubkeys per request, a batch re-read per `pendingRetry` while an
+ * entry has `signaturesPending`, then returned as it is); while that route
+ * answers 404, the interim
  * `GET /v1/state/:lockHash` when `lockHash` is given (the pubkeys must
  * belong to that lock: `PAYLOAD_INVALID` / `not_in_lock`). Else, or if the
  * API request fails, the beacon node at `beaconUrl` (pending queue read

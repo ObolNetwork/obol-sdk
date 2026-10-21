@@ -31,6 +31,7 @@ export type {
   DepositKind,
   Finding,
   FindingSubject,
+  PendingRetry,
   Prepared,
   PreparedKind,
   PreparedRequest,

@@ -31,6 +31,7 @@ import { readOvmCore, requireRole, requireSender } from '../ovm/read.js';
 import { requireObolOvm, verifyOvm } from '../ovm/verify.js';
 import {
   effectiveCredentials,
+  possiblyValidDeposits,
   StatusSourceFields,
   statusIfAvailable,
   statusSourceOf,
@@ -97,47 +98,96 @@ const existenceChecks = (
   const details = { index, pubkey };
   const subject = { pubkey };
 
+  // Queued deposits whose signature the source found invalid never reach
+  // the validator; unchecked ones are kept (possibly valid).
+  const queued = possiblyValidDeposits(status);
+
   if (!registered && status.pendingDeposits.length > 0) {
-    // The first processed deposit fixes the credentials. A top-up with
-    // all-zero credentials does not care which ones they are, and a queued
-    // one (no valid signature for a new validator) does not fix them.
+    if (status.signaturesPending === true) {
+      // Which queued deposit creates the validator is not known yet.
+      throw new ObolError(
+        'STATUS_UNAVAILABLE',
+        `The Obol API is still checking the queued deposit signatures for ${pubkey}`,
+        {
+          hint: 'Retry in a slot or two; the credentials it will get are not known yet',
+          details: { reason: 'signatures_pending', pubkey },
+        },
+      );
+    }
+    // The first processed deposit with a valid signature fixes the
+    // credentials. A top-up with all-zero credentials does not care which
+    // ones they are, and an unchecked queued one (no valid signature for a
+    // new validator) does not fix them.
     const checkCredentials =
       kind === 'deposit' || credentials !== ZERO_CREDENTIALS;
-    const other = status.pendingDeposits.find(p => {
-      if (p.withdrawalCredentials === undefined) return true;
-      const queued = p.withdrawalCredentials.toLowerCase();
-      return queued !== credentials && queued !== ZERO_CREDENTIALS;
-    });
-    if (checkCredentials && other !== undefined) {
-      throw new ObolError(
+    const conflict = (existing: Hex | undefined): ObolError =>
+      new ObolError(
         'DEPOSIT_CONFLICT',
-        other.withdrawalCredentials === undefined
+        existing === undefined
           ? `A pending deposit for ${pubkey} has unknown withdrawal credentials`
-          : `A pending deposit for ${pubkey} has different withdrawal credentials (${other.withdrawalCredentials})`,
+          : `A pending deposit for ${pubkey} has different withdrawal credentials (${existing})`,
         {
           hint: 'Do not send; find out who queued the other deposit',
           details: {
             ...details,
-            ...(other.withdrawalCredentials !== undefined
-              ? { existingCredentials: other.withdrawalCredentials }
+            ...(existing !== undefined
+              ? { existingCredentials: existing }
               : {}),
           },
         },
       );
+    if (status.credentialsConflict === true) {
+      // Validly signed queued deposits disagree: the first one applies.
+      const applies = effectiveCredentials(status);
+      if (
+        checkCredentials &&
+        (applies === undefined || applies.toLowerCase() !== credentials)
+      ) {
+        throw conflict(applies);
+      }
+      findings.push(
+        finding(
+          'QUEUED_CREDENTIALS_CONFLICT',
+          'warning',
+          `Validly signed deposits queued for ${pubkey} carry different withdrawal credentials; the first one (${applies ?? 'unknown'}) applies`,
+          {
+            hint: 'Find out who queued the other deposits before adding to this validator',
+            subject,
+            details,
+          },
+        ),
+      );
+    } else {
+      const other = queued.find(p => {
+        if (p.withdrawalCredentials === undefined) return true;
+        const existing = p.withdrawalCredentials.toLowerCase();
+        return (
+          existing !== credentials &&
+          (existing !== ZERO_CREDENTIALS || p.signatureValid === true)
+        );
+      });
+      if (checkCredentials && other !== undefined) {
+        throw conflict(other.withdrawalCredentials);
+      }
     }
-    findings.push(
-      finding(
-        'DEPOSIT_ALREADY_QUEUED',
-        'info',
-        `${status.pendingDeposits.length} deposit(s) for ${pubkey} are already queued`,
-        { hint: 'Make sure this is not a repeat', subject, details },
-      ),
-    );
+    if (queued.length > 0) {
+      findings.push(
+        finding(
+          'DEPOSIT_ALREADY_QUEUED',
+          'info',
+          `${queued.length} deposit(s) for ${pubkey} are already queued`,
+          { hint: 'Make sure this is not a repeat', subject, details },
+        ),
+      );
+    }
   }
-  if (kind === 'topUp' && status.status === 'new') {
+  if (
+    kind === 'topUp' &&
+    (status.status === 'new' || (!registered && queued.length === 0))
+  ) {
     throw new ObolError(
       'DEPOSIT_TOP_UP_TARGET_MISSING',
-      `Top-up for ${pubkey}, which has no validator and no pending deposit`,
+      `Top-up for ${pubkey}, which has no validator and no validly signed pending deposit`,
       {
         hint: 'Check the pubkey; send the full deposit data first',
         details,
@@ -170,7 +220,7 @@ const existenceChecks = (
   if (status.status !== 'exited' && (prefix === '0x00' || prefix === '0x01')) {
     const after =
       (status.balance ?? 0n) +
-      sum(status.pendingDeposits.map(p => p.amount)) +
+      sum(queued.map(p => p.amount)) +
       alreadyInInput +
       deposit.amount;
     if (after > EFFECTIVE_CAP_0X01) {
@@ -199,8 +249,9 @@ const existenceChecks = (
  * 2. via ovm: `ovm.verify` is `obol` (OVM_NOT_OBOL / PROVENANCE_UNKNOWN);
  * 3. via ovm: the sender is owner or holds DEPOSIT (OVM_ROLE_MISSING);
  * 4. via batch to credentials of an Obol OVM: OVM_STAKE_NOT_TRACKED warning;
- * 5. existence (DEPOSIT_CONFLICT, DEPOSIT_TOP_UP_TARGET_MISSING, and the
- *    findings DEPOSIT_IS_TOP_UP, DEPOSIT_ALREADY_QUEUED,
+ * 5. existence (DEPOSIT_CONFLICT, DEPOSIT_TOP_UP_TARGET_MISSING,
+ *    STATUS_UNAVAILABLE `signatures_pending`, and the findings
+ *    DEPOSIT_IS_TOP_UP, DEPOSIT_ALREADY_QUEUED, QUEUED_CREDENTIALS_CONFLICT,
  *    TOP_UP_EXITED_VALIDATOR, TOP_UP_ABOVE_EFFECTIVE_CAP), or
  *    DEPOSIT_EXISTENCE_UNCHECKED without a status source;
  * 6. the target contract has code (CONTRACT_NOT_AVAILABLE).

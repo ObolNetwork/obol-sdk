@@ -24,7 +24,8 @@ Finding = { code: string, severity: "warning" | "info", message: string, hint: s
             subject: { pubkey: Pubkey } | { address: Address } | { index: uint }?,   # set when it is about one item
             details: object? }
 Source  = "api" | "chain"
-StatusSource = { beaconUrl: string?, lockHash: Hash32? }   # the writes that read validator status
+StatusSource = { beaconUrl: string?, lockHash: Hash32?,   # the writes that read validator status
+                 pendingRetry: { tries: 1–10?, delayMs: 0–60000? }? }  # see deposits.status
 SplitParams = { recipients: Address[], allocations: bigint[], totalAllocation: bigint, distributionIncentive: uint }
 Deposit = { pubkey: Pubkey, withdrawalCredentials: Hex32, signature: Hex96, depositDataRoot: Hash32, amount: bigint }
 ```
@@ -437,7 +438,7 @@ Failures 2–7 are `DEPOSIT_INVALID` with `issue` and `index`.
 ### deposits.status
 
 Tag: `api+chain`. Inputs: `pubkeys: Pubkey[]`, `{ beaconUrl: string?, lockHash: Hash32?, expectedWithdrawalAddress:
-Address? }`. Output per pubkey:
+Address?, pendingRetry: { tries: 1–10?, delayMs: 0–60000? }? }`. Output per pubkey:
 
 ```
 { pubkey, status: "new" | "queued" | "active" | "exited", source: Source,
@@ -446,7 +447,10 @@ Address? }`. Output per pubkey:
   activationEpoch: bigint | null?,  # registry entries: null while none is assigned (FAR_FUTURE_EPOCH)
   exitEpoch: bigint | null?,        # registry entries: null while no exit is initiated
   pendingPartialWithdrawals: bigint?,  # registry entries: sum of its EIP-7002 queue entries, wei
-  pendingDeposits: { amount: bigint, withdrawalCredentials: Hex32 }[],
+  pendingDeposits: { amount: bigint, withdrawalCredentials: Hex32,
+                     signatureValid: bool | null? }[],  # API only; null: not checked (top-up, or pending)
+  signaturesPending: bool?,         # API only; true while queued deposit signatures are being checked
+  credentialsConflict: bool | null?,  # API only; null while signaturesPending
   credentialsMatch: bool | null }   # only with expectedWithdrawalAddress
 ```
 
@@ -458,21 +462,51 @@ Mapping (beacon names): no registry entry and no pending deposit → `new`; a pe
 `pending_deposits`) and no registry entry, or a registry entry in `pending_initialized` / `pending_queued` → `queued`;
 `active_*` → `active`; `exited_*` / `withdrawal_*` → `exited`.
 
-`credentialsMatch`: the credentials the validator has (registry), or will get (queue only: the first queued deposit
-with non-zero credentials, since a zero-credential top-up has no valid signature for a new validator), are `0x01` /
-`0x02` + 11 zero bytes + `expectedWithdrawalAddress` (case-insensitive); `null` when there are none yet (`new`).
+**Which credentials apply** (the *effective credentials*). A registered validator has its own. For a pubkey only in the
+queue, the beacon chain skips queued deposits with an invalid BLS signature until the first valid one creates the
+validator, so the effective credentials are those of the first queued deposit that is not `signatureValid: false` and
+is either `signatureValid: true` or has non-zero credentials (an unchecked zero-credential top-up has no valid
+signature for a new validator). While `signaturesPending` there are none (never guessed).
+
+`credentialsMatch`: the effective credentials are `0x01` / `0x02` + 11 zero bytes + `expectedWithdrawalAddress`
+(case-insensitive); `null` when there are none yet (`new`, every queued deposit invalid, or `signaturesPending`).
+
+Queued deposit signatures (Obol API only). The API checks the signature of each queued deposit of a pubkey not in the
+registry (deposit domain, genesis fork version), in the background, usually within a slot:
+
+- `signaturesPending: true` while they are not all checked; `false` for registered and new pubkeys. While pending,
+  `credentialsConflict` is `null`, each unchecked deposit has `signatureValid: null` and `withdrawalCredentials` is
+  absent (the API sends `null`: undecided).
+- `signatureValid`: `true` / `false` for a queue-only pubkey's deposit, `null` when not checked (a registered
+  validator's queued top-up, whose signature does not matter, or still pending).
+- `credentialsConflict: true` when validly signed queued deposits carry different non-zero credentials; the first one
+  applies.
+- A queue-only entry's `withdrawalCredentials` is the first validly signed deposit's (absent when none is valid).
+
+When an entry of a batch has `signaturesPending: true`, `deposits.status` re-reads that batch, up to
+`pendingRetry.tries` requests in all (default 3), waiting `pendingRetry.delayMs` (default 8000) before the first
+retry and twice as long before each later one (8 s, then 16 s: about two slots). An entry still pending after that is
+returned with `signaturesPending: true`; `deposits.status` does not throw for it, the writes do (`prepareDeposit`
+check 5). An API answer without these fields (a deployment from before them) leaves them absent, and the deposits are
+treated as possibly valid, as with the beacon fallback.
 
 Sources, in order:
 
-1. API: `POST /v1/validators/:network/deposit-status` with `{ pubkeys }`, at most 1000 distinct pubkeys per request
-   (larger inputs are batched). Answer `{ validators: [{ pubkey, status, beaconStatus, index, balance,
-   effectiveBalance, activationEpoch, exitEpoch, pendingPartialWithdrawals, withdrawalCredentials, pendingDeposits:
-   [{ amount, withdrawalCredentials }] }] }`, one entry per requested pubkey, amounts and balances as wei decimal
+1. API: `POST /v1/validators/:network/deposit-status` with `{ pubkeys }`, at most 500 distinct pubkeys per request
+   (the API's limit; larger inputs are batched). Answer `{ validators: [{ pubkey, status, beaconStatus, index,
+   balance, effectiveBalance, activationEpoch, exitEpoch, pendingPartialWithdrawals, withdrawalCredentials,
+   signaturesPending, credentialsConflict, pendingDeposits: [{ amount, withdrawalCredentials, signatureValid }] }] }`,
+   one entry per requested pubkey, amounts and balances as wei decimal
    strings, epochs as decimal strings (`null` for FAR_FUTURE_EPOCH or no registry entry), `pendingPartialWithdrawals`
    the wei sum (`"0"` when none), `null` where there is nothing (obol-api #1047). A malformed epoch or sum is
    `STATUS_UNAVAILABLE`. Every requested
    pubkey must be answered exactly once, `status` must be the mapping of `beaconStatus`, a registry entry needs an
-   index, credentials and balances, a queue-only entry at least one queued deposit, a `new` one none.
+   index, credentials and balances, a queue-only entry at least one queued deposit, a `new` one none. The signature
+   fields must agree: `signaturesPending: true` only on a queue-only entry and only with `credentialsConflict: null`
+   (`null` otherwise is malformed); once not pending, a queue-only entry with checked deposits has no
+   `signatureValid: null`, its `withdrawalCredentials` are the first validly signed deposit's (or `null` when none
+   is), and `credentialsConflict` matches its validly signed deposits. A signature check that fails on the API side
+   is an HTTP 502 for the pending entries (not cached), handled as any other API failure below.
 2. While that route answers 404 (not deployed yet): with `lockHash`, the interim `GET /v1/state/:lockHash` (with
    `pending_deposit`), which answers by lock: the lock is fetched first, a pubkey not in it is `PAYLOAD_INVALID` (issue
    `not_in_lock`), a pubkey the lock has but `/state` leaves out is `new`, and a registry validator's queued top-ups
@@ -483,13 +517,17 @@ Sources, in order:
    /eth/v1/beacon/states/head/pending_partial_withdrawals` (summed per validator index) and `POST
    /eth/v1/beacon/states/head/validators` (with `validator.activation_epoch`, `exit_epoch`, `effective_balance`); the
    pending queue is read before the registry so a deposit moving from the queue to the registry is not missed (2.16
-   `existingDeposits.ts`).
+   `existingDeposits.ts`). A beacon node does not check queued deposit signatures: the signature fields are absent,
+   every queued deposit counts as possibly valid, and a queue-only pubkey's `withdrawalCredentials` are its first
+   queued deposit's. So a queued deposit with an invalid signature and other credentials is reported there as a
+   `DEPOSIT_CONFLICT` by `prepareDeposit` (fails closed), where the API would skip it. The interim `/v1/state` source
+   (2.) has no signature fields either.
 
 Without API and `beaconUrl`: `API_DISABLED`. A malformed or incomplete answer (missing pubkey, duplicate result, bad
 credentials, unknown status) or a failed beacon request is `STATUS_UNAVAILABLE`, never a guessed `new`. (2.16)
 
 The writes that read status (`prepareDeposit`, `prepareWithdraw`, `prepareConsolidate`, `prepareEoaWithdraw`) take
-the same `beaconUrl` / `lockHash` options (`StatusSource`). A source that is configured and fails makes the write throw; the status
+the same `beaconUrl` / `lockHash` / `pendingRetry` options (`StatusSource`). A source that is configured and fails makes the write throw; the status
 checks are skipped (with `DEPOSIT_EXISTENCE_UNCHECKED` for deposits) only when there is no source at all, which
 includes an API without the deposit-status route and neither `lockHash` nor `beaconUrl` (`reason:
 "endpoint_unavailable"` above).
@@ -523,15 +561,27 @@ Checks:
    rewards unless the owner calls `setAmountOfPrincipalStake`. (new; from `ObolValidatorManager.deposit`)
 5. Existence, when `deposits.status` can answer (API or `beaconUrl`; else Finding `DEPOSIT_EXISTENCE_UNCHECKED`,
    info):
-   - a pending deposit for the pubkey has different or unknown credentials → `DEPOSIT_CONFLICT` (2.16); a queued
-     deposit with all-zero credentials (a top-up, which cannot create the validator) is not a conflict;
-   - `kind: "topUp"` and the pubkey is `new` → `DEPOSIT_TOP_UP_TARGET_MISSING` (new);
+   - queue only and `signaturesPending` still true after the `pendingRetry` re-reads → `STATUS_UNAVAILABLE` (details
+     `reason: "signatures_pending"`, `pubkey`; hint: retry in a slot or two): which deposit creates the validator,
+     and so its credentials, is not known yet, and is never guessed (any `kind`) (new);
+   - queued deposits with `signatureValid: false` are left out of the rest of this check (they never reach the
+     validator); `null` or absent counts as possibly valid;
+   - `credentialsConflict: true` (validly signed queued deposits disagree; the first one applies): `DEPOSIT_CONFLICT`
+     (`existingCredentials` = the first validly signed deposit's) when this deposit's credentials differ from it,
+     else Finding `QUEUED_CREDENTIALS_CONFLICT` (warning, subject the pubkey) (new);
+   - otherwise, a possibly valid pending deposit for the pubkey has different or unknown credentials →
+     `DEPOSIT_CONFLICT` (2.16); a queued deposit with all-zero credentials (a top-up, which cannot create the
+     validator) is not a conflict unless it is `signatureValid: true`;
+   - a top-up with all-zero credentials checks no credentials (it does not fix them), so it gets neither
+     `DEPOSIT_CONFLICT` nor, on `credentialsConflict`, more than the warning;
+   - `kind: "topUp"` and the pubkey is `new`, or only in the queue with every queued deposit `signatureValid: false`
+     → `DEPOSIT_TOP_UP_TARGET_MISSING` (new);
    - `kind: "deposit"` and the validator exists → Finding `DEPOSIT_IS_TOP_UP` (warning: credentials are ignored, the
      validator keeps its own) (2.16 message);
-   - same-credential deposits already queued → Finding `DEPOSIT_ALREADY_QUEUED` (info) (2.16);
+   - same-credential deposits already queued (possibly valid ones) → Finding `DEPOSIT_ALREADY_QUEUED` (info) (2.16);
    - `kind: "topUp"` to an `exited` validator → Finding `TOP_UP_EXITED_VALIDATOR` (warning) (new);
    - the validator has `0x01` (or `0x00`) credentials and `balance` + queued amounts + this deposit > 32 ETH →
-     Finding `TOP_UP_ABOVE_EFFECTIVE_CAP` (warning: the excess is swept back to the withdrawal address by the next
+     Finding `TOP_UP_ABOVE_EFFECTIVE_CAP` (warning; queued amounts without `signatureValid: false`: the excess is swept back to the withdrawal address by the next
      partial-withdrawal sweep, not staked) (new).
 
    `DEPOSIT_ALREADY_QUEUED` is info because a chunked activation deposit is legitimate. An app may treat it as a stop

@@ -314,3 +314,17 @@ rc.5 is additive except for the two changes below.
 New: `isValidLock`, `publicClients` on `verifyLock` / `verifyDefinition`, `verifyTypedDataSignature`,
 `cluster.parseEnr` / `cluster.isValidEnr`, the `cluster.ClusterValidator` type, and the
 `@obolnetwork/obol-sdk/blst` entry (`loadBlstBackend`, `blstBackendFrom`).
+
+## From 3.0.0-rc.5 to rc.6
+
+rc.6 is additive, but needs the obol-api deposit-status answer with queued deposit signatures (obol-api #1047) for its
+new checks, and asks that route for at most 500 pubkeys per request (the updated API's limit; rc.5 asked for 1000).
+
+- `deposits.status` entries from the Obol API carry `signaturesPending`, `credentialsConflict` and, per queued
+  deposit, `signatureValid`. A queue-only pubkey's `withdrawalCredentials` are the first validly signed deposit's,
+  absent while signatures are pending or when none is valid. While an entry is pending, `deposits.status` re-reads
+  its batch (`pendingRetry`, default 3 requests over about two slots), then returns it pending.
+- `prepareDeposit` throws `STATUS_UNAVAILABLE` with `reason: "signatures_pending"` for a queue-only pubkey still
+  pending after the retries (retry later), skips queued deposits with an invalid signature, and on
+  `credentialsConflict` throws `DEPOSIT_CONFLICT` only when this deposit's credentials differ from the first validly
+  signed one's (else the new warning `QUEUED_CREDENTIALS_CONFLICT`).

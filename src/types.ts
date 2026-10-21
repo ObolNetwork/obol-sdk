@@ -153,6 +153,21 @@ export interface StatusSource {
    * answers by lock).
    */
   lockHash?: string;
+  /**
+   * Re-reads of an Obol API deposit-status batch while an entry has
+   * `signaturesPending` (the API checks queued deposit signatures in the
+   * background, usually within a slot). Default `{ tries: 3, delayMs: 8000 }`:
+   * up to 3 requests, waiting 8 s then 16 s (about two slots).
+   */
+  pendingRetry?: PendingRetry;
+}
+
+/** See `StatusSource.pendingRetry`. */
+export interface PendingRetry {
+  /** Requests in all, 1–10 (1: no retry). Default 3. */
+  tries?: number;
+  /** Wait before the first retry, ms (0–60000), doubled for each later one. Default 8000. */
+  delayMs?: number;
 }
 
 /** 0xSplits v2 split parameters, as the contracts take them. */

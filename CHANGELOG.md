@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.6](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.5...v3.0.0-rc.6)
+
+> 21 October 2026
+
+Queued deposit signatures from the Obol API deposit-status route (obol-api #1047). Additive.
+[MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.5 to rc.6".
+
+**Required for the updated API**
+
+- `deposits.status` asks `POST /v1/validators/:network/deposit-status` for at most 500 pubkeys per request (was
+  1000), the updated API's limit; larger inputs are batched.
+
+**Added**
+
+- `DepositStatus.signaturesPending` and `credentialsConflict`, and `PendingDeposit.signatureValid`, from the Obol
+  API (absent from a source that does not check signatures: a beacon node, the interim `/v1/state`, an older API).
+  A queue-only pubkey's `withdrawalCredentials` are the first validly signed queued deposit's, absent while
+  signatures are pending or when none is valid (rc.5 rejected the API's `null` there as `STATUS_UNAVAILABLE`).
+- `pendingRetry: { tries?, delayMs? }` on `deposits.status` and the writes that read status (`StatusSource`, type
+  `PendingRetry`): while an entry has `signaturesPending`, its batch is re-read (default 3 requests, waiting 8 s then
+  16 s); still pending, the entry is returned as it is.
+- `prepareDeposit` check 5: a queue-only pubkey still `signaturesPending` is `STATUS_UNAVAILABLE` with details
+  `{ reason: 'signatures_pending', pubkey }` (never guessed); queued deposits with `signatureValid: false` are
+  skipped when choosing the credentials that apply (`null` counts as possibly valid), for conflicts, the
+  already-queued count and the 32 ETH cap sum; on `credentialsConflict: true`, `DEPOSIT_CONFLICT` when this
+  deposit's credentials differ from the first validly signed one's, else the new warning finding
+  `QUEUED_CREDENTIALS_CONFLICT` (subject the pubkey). A top-up to a pubkey whose queued deposits are all invalid is
+  `DEPOSIT_TOP_UP_TARGET_MISSING`. The zero-credential top-up rule is unchanged.
+- `deposits.status` checks the new fields for consistency (`STATUS_UNAVAILABLE` otherwise): pending only on a
+  queue-only entry and with `credentialsConflict: null`, the credentials those of the first validly signed deposit,
+  and `credentialsConflict` agreeing with the deposits. `credentialsMatch` is `null` while pending.
+
+**Unchanged**
+
+- The beacon fallback does not check signatures: every queued deposit counts as possibly valid (spec
+  "deposits.status", source 3), so an invalidly signed queued deposit with other credentials is still a
+  `DEPOSIT_CONFLICT` there.
+
 #### [v3.0.0-rc.5](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.4...v3.0.0-rc.5)
 
 > 21 October 2026

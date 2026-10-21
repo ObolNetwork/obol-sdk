@@ -57,7 +57,11 @@ export interface ObolErrorDetails {
   };
   DEPOSIT_TOP_UP_TARGET_MISSING: { index: number; pubkey: Hex };
   DEPOSIT_AMOUNT_NOT_IN_LOCK: { amount: bigint; available: bigint[] };
-  STATUS_UNAVAILABLE: { reason?: 'endpoint_unavailable' };
+  STATUS_UNAVAILABLE: {
+    reason?: 'endpoint_unavailable' | 'signatures_pending';
+    /** With `signatures_pending`: the pubkey whose credentials are undecided. */
+    pubkey?: Hex;
+  };
   // OVM
   OVM_NOT_OBOL: { address: Address; source: 'api' | 'chain' };
   PROVENANCE_UNKNOWN: { address: Address };
@@ -278,6 +282,7 @@ export const FINDING_CODES = [
   'DEPOSIT_EXISTENCE_UNCHECKED',
   'DEPOSIT_IS_TOP_UP',
   'DEPOSIT_ALREADY_QUEUED',
+  'QUEUED_CREDENTIALS_CONFLICT',
   'TOP_UP_ABOVE_EFFECTIVE_CAP',
   'TOP_UP_EXITED_VALIDATOR',
   'OVM_STAKE_NOT_TRACKED',

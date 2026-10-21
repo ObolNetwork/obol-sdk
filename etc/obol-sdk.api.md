@@ -508,6 +508,7 @@ interface DepositStatus {
     // (undocumented)
     balance?: bigint;
     beaconStatus?: string;
+    credentialsConflict?: boolean | null;
     credentialsMatch?: boolean | null;
     // (undocumented)
     effectiveBalance?: bigint;
@@ -517,6 +518,7 @@ interface DepositStatus {
     pendingPartialWithdrawals?: bigint;
     // (undocumented)
     pubkey: Hex;
+    signaturesPending?: boolean;
     // (undocumented)
     source: Source;
     // (undocumented)
@@ -766,7 +768,7 @@ export interface Finding {
 }
 
 // @public
-export const FINDING_CODES: readonly ["DEPOSIT_EXISTENCE_UNCHECKED", "DEPOSIT_IS_TOP_UP", "DEPOSIT_ALREADY_QUEUED", "TOP_UP_ABOVE_EFFECTIVE_CAP", "TOP_UP_EXITED_VALIDATOR", "OVM_STAKE_NOT_TRACKED", "PROVENANCE_UNKNOWN", "VALIDATOR_STATUS_UNCHECKED", "WITHDRAW_AMOUNT_CAPPED", "PARTIAL_WITHDRAWAL_QUEUE_FULL", "CONSOLIDATION_CREDENTIALS_DIFFER", "PRINCIPAL_STAKE_MISMATCH", "PUBLIC_FORWARDER_HOLDS_ROLE", "ROLES_SURVIVE_TRANSFER", "ROLE_HOLDERS_UNCHECKED", "ROLE_GRANT_CONSOLIDATION", "ROLE_GRANT_DEPOSIT_TO_PRINCIPAL", "RECIPIENT_WITHDRAW_PAUSED", "RAF_LEFT_IN_WAREHOUSE", "SPLIT_REUSED", "RECIPIENT_NOT_CONTRACT", "SIMULATION_UNAVAILABLE", "SIMULATION_REVERTED", "SIMULATION_PREVIEW_MISMATCH", "SIMULATION_UNTRUSTED_EVENT", "SIMULATION_CONTRACT_WALLET", "NO_INCENTIVES", "INCENTIVES_NOT_FOUND", "INCENTIVES_FETCH_FAILED", "OPERATOR_ADDRESS_MISMATCH", "INCENTIVES_DATA_INVALID", "CONTRACT_NOT_DEPLOYED", "DISTRIBUTOR_UNKNOWN", "UNSUPPORTED_CHAIN", "TOKEN_MISMATCH", "PROOF_INVALID", "ALREADY_CLAIMED", "CLAIM_WINDOW_CLOSED", "CHAIN_READ_FAILED"];
+export const FINDING_CODES: readonly ["DEPOSIT_EXISTENCE_UNCHECKED", "DEPOSIT_IS_TOP_UP", "DEPOSIT_ALREADY_QUEUED", "QUEUED_CREDENTIALS_CONFLICT", "TOP_UP_ABOVE_EFFECTIVE_CAP", "TOP_UP_EXITED_VALIDATOR", "OVM_STAKE_NOT_TRACKED", "PROVENANCE_UNKNOWN", "VALIDATOR_STATUS_UNCHECKED", "WITHDRAW_AMOUNT_CAPPED", "PARTIAL_WITHDRAWAL_QUEUE_FULL", "CONSOLIDATION_CREDENTIALS_DIFFER", "PRINCIPAL_STAKE_MISMATCH", "PUBLIC_FORWARDER_HOLDS_ROLE", "ROLES_SURVIVE_TRANSFER", "ROLE_HOLDERS_UNCHECKED", "ROLE_GRANT_CONSOLIDATION", "ROLE_GRANT_DEPOSIT_TO_PRINCIPAL", "RECIPIENT_WITHDRAW_PAUSED", "RAF_LEFT_IN_WAREHOUSE", "SPLIT_REUSED", "RECIPIENT_NOT_CONTRACT", "SIMULATION_UNAVAILABLE", "SIMULATION_REVERTED", "SIMULATION_PREVIEW_MISMATCH", "SIMULATION_UNTRUSTED_EVENT", "SIMULATION_CONTRACT_WALLET", "NO_INCENTIVES", "INCENTIVES_NOT_FOUND", "INCENTIVES_FETCH_FAILED", "OPERATOR_ADDRESS_MISMATCH", "INCENTIVES_DATA_INVALID", "CONTRACT_NOT_DEPLOYED", "DISTRIBUTOR_UNKNOWN", "UNSUPPORTED_CHAIN", "TOKEN_MISMATCH", "PROOF_INVALID", "ALREADY_CLAIMED", "CLAIM_WINDOW_CLOSED", "CHAIN_READ_FAILED"];
 
 // @public (undocumented)
 export type FindingCode = (typeof FINDING_CODES)[number];
@@ -1381,7 +1383,8 @@ export interface ObolErrorDetails {
     };
     // (undocumented)
     STATUS_UNAVAILABLE: {
-        reason?: 'endpoint_unavailable';
+        reason?: 'endpoint_unavailable' | 'signatures_pending';
+        pubkey?: Hex;
     };
     // (undocumented)
     TX_REJECTED: Record<string, never>;
@@ -1803,7 +1806,14 @@ type PartialExitsPayload = Static<typeof PartialExitsPayloadSchema>;
 interface PendingDeposit {
     // (undocumented)
     amount: bigint;
+    signatureValid?: boolean | null;
     withdrawalCredentials?: Hex;
+}
+
+// @public
+export interface PendingRetry {
+    delayMs?: number;
+    tries?: number;
 }
 
 // @public
@@ -2416,6 +2426,7 @@ type StateChange = {
 export interface StatusSource {
     beaconUrl?: string;
     lockHash?: string;
+    pendingRetry?: PendingRetry;
 }
 
 // Warning: (ae-forgotten-export) The symbol "StoredExitBlobSchema" needs to be exported by the entry point index.d.ts
