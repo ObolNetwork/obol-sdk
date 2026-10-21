@@ -27,6 +27,7 @@ export interface ObolErrorDetails {
   API_DISABLED: { operation?: string };
   CONTRACT_NOT_AVAILABLE: { address: Address };
   CHAIN_READ_FAILED: { what?: string };
+  ABORTED: { operation: string };
   // Obol API (ObolApiError)
   API_VALIDATION: ApiErrorDetails;
   API_UNAUTHORIZED: ApiErrorDetails;
@@ -208,6 +209,7 @@ export const OBOL_ERROR_CODES = [
   'API_DISABLED',
   'CONTRACT_NOT_AVAILABLE',
   'CHAIN_READ_FAILED',
+  'ABORTED',
   'API_VALIDATION',
   'API_UNAUTHORIZED',
   'API_NOT_FOUND',

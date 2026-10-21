@@ -6,6 +6,7 @@
  * (`publicClient`, or `publicClients` by chain id); the SDK has no RPCs.
  */
 import {
+  bytesToHex,
   hashTypedData,
   isAddress,
   isHex,
@@ -16,7 +17,6 @@ import {
   type Hex,
   type PublicClient,
   type TypedDataDefinition,
-  type TypedDataDomain,
   type WalletClient,
 } from 'viem';
 import { getCodeKind } from '../chainUtils.js';
@@ -79,6 +79,52 @@ const erc1271Abi = parseAbi([
   'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
 ]);
 const ERC1271_MAGIC = '0x1626ba7e';
+/**
+ * The pre-final EIP-1271 interface that Safes before 1.3.0 implement
+ * (`ISignatureValidator`, Safe 1.1.1 / 1.2.0): `_data` is the signed data,
+ * which for a hash is the 32-byte hash as bytes, as Safe 1.3.0's
+ * CompatibilityFallbackHandler forwards `isValidSignature(bytes32, bytes)`
+ * (`abi.encode(_dataHash)`) and Safe protocol-kit (2.x) called it.
+ */
+const legacyErc1271Abi = parseAbi([
+  'function isValidSignature(bytes data, bytes signature) view returns (bytes4)',
+]);
+const LEGACY_ERC1271_MAGIC = '0x20c13b0b';
+
+/**
+ * EIP-1271 on a contract: `isValidSignature(bytes32, bytes)` returning
+ * `0x1626ba7e`, else the legacy `isValidSignature(bytes, bytes)` returning
+ * `0x20c13b0b`. A revert or any other answer is a refusal.
+ */
+const contractAccepts = async (
+  publicClient: PublicClient,
+  address: Address,
+  hash: Hex,
+  signature: Hex,
+): Promise<boolean> => {
+  try {
+    const result = await publicClient.readContract({
+      address,
+      abi: erc1271Abi,
+      functionName: 'isValidSignature',
+      args: [hash, signature],
+    });
+    if (result.toLowerCase() === ERC1271_MAGIC) return true;
+  } catch {
+    // Reverted (a refusal, or no such function): try the legacy interface.
+  }
+  try {
+    const result = await publicClient.readContract({
+      address,
+      abi: legacyErc1271Abi,
+      functionName: 'isValidSignature',
+      args: [hash, signature],
+    });
+    return result.toLowerCase() === LEGACY_ERC1271_MAGIC;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Public clients for contract-wallet (EIP-1271) signature checks: one per
@@ -146,7 +192,10 @@ export type TypedDataSignatureCheck = 'valid' | 'invalid' | 'unverifiable';
 /**
  * Checks `signature` over `data` for `address`: ECDSA recovery first; when
  * that fails, EIP-1271 `isValidSignature` on `address` with the client for
- * `chainId` (default: the typed data domain's chain id). Never throws.
+ * `chainId` (default: the typed data domain's chain id): `0x1626ba7e` from
+ * `isValidSignature(bytes32, bytes)`, or the legacy `0x20c13b0b` from
+ * `isValidSignature(bytes, bytes)` with the 32-byte hash as data (Safes
+ * before 1.3.0). Never throws.
  */
 export const checkTypedDataSignature = async ({
   address,
@@ -176,39 +225,72 @@ export const checkTypedDataSignature = async ({
     : undefined;
   if (publicClient === undefined) return 'unverifiable';
   try {
-    const target = address;
-    if ((await getCodeKind(publicClient, target)) !== 'contract') {
+    if ((await getCodeKind(publicClient, address)) !== 'contract') {
       return 'invalid';
     }
-    const result = await publicClient.readContract({
-      address: target,
-      abi: erc1271Abi,
-      functionName: 'isValidSignature',
-      args: [hashTypedData(data), signature],
-    });
-    return result.toLowerCase() === ERC1271_MAGIC ? 'valid' : 'invalid';
+    return (await contractAccepts(
+      publicClient,
+      address,
+      hashTypedData(data),
+      signature,
+    ))
+      ? 'valid'
+      : 'invalid';
   } catch {
-    // The read failed (or reverted, as a contract refusing it may).
+    // The code read or the hashing failed.
     return 'invalid';
   }
 };
 
 /**
- * EIP-712 typed data as viem and `eth_signTypedData_v4` take it. An
- * `EIP712Domain` entry in `types` is accepted (and must match `domain`).
+ * EIP-712 typed data as viem and `eth_signTypedData_v4` take it, loose
+ * enough for eth-sig-util's `TypedMessage` (a `salt` as bytes, a string
+ * `verifyingContract`, a `keyof` `primaryType`). An `EIP712Domain` entry in
+ * `types` is accepted (and must match `domain`).
  */
 export interface EIP712TypedData {
-  domain?: TypedDataDomain;
+  domain?: {
+    name?: string;
+    version?: string;
+    chainId?: number | bigint;
+    verifyingContract?: string;
+    /** Hex, or bytes (an `ArrayBuffer` or typed array) converted to hex. */
+    salt?: string | ArrayBuffer | ArrayBufferView;
+  };
   types: Record<string, ReadonlyArray<{ name: string; type: string }>>;
-  primaryType: string;
+  /** A number (from a `keyof` type) is read as its string form. */
+  primaryType: string | number;
   message: Record<string, unknown>;
 }
+
+const saltHex = (salt: string | ArrayBuffer | ArrayBufferView): string => {
+  if (typeof salt === 'string') return salt;
+  const bytes = ArrayBuffer.isView(salt)
+    ? new Uint8Array(salt.buffer, salt.byteOffset, salt.byteLength)
+    : new Uint8Array(salt);
+  return bytesToHex(bytes);
+};
+
+/** viem's shape: `salt` as hex, `primaryType` as a string. */
+const toViemTypedData = (typedData: EIP712TypedData): ClusterTypedData => {
+  const { domain, primaryType } = typedData;
+  const normalized =
+    domain?.salt !== undefined && typeof domain.salt !== 'string'
+      ? { ...domain, salt: saltHex(domain.salt) }
+      : domain;
+  return {
+    ...typedData,
+    ...(normalized !== undefined ? { domain: normalized } : {}),
+    primaryType: String(primaryType),
+  } as unknown as ClusterTypedData;
+};
 
 /**
  * verifyTypedDataSignature (pure; `chain` for a contract-wallet signer):
  * whether `signature` is `address`'s EIP-712 signature of `typedData`, by
  * ECDSA recovery or, for a contract wallet such as a Safe, EIP-1271
- * `isValidSignature`. The 2.x `validateAddressSignature` /
+ * `isValidSignature` (also the legacy `isValidSignature(bytes, bytes)` →
+ * `0x20c13b0b` of Safes before 1.3.0, as 2.x accepted). The 2.x `validateAddressSignature` /
  * `validateEOASignature`.
  *
  * **Contract wallets need a client for their chain.** 2.x fell back to
@@ -218,8 +300,10 @@ export interface EIP712TypedData {
  * `address` is a Safe that would accept it.
  *
  * `typedData` is viem's shape (`domain`, `types`, `primaryType`,
- * `message`); an `EIP712Domain` entry in `types` is accepted. Never throws:
- * a malformed signature is `false`.
+ * `message`); an `EIP712Domain` entry in `types` is accepted, and so is
+ * eth-sig-util's `TypedMessage` (a bytes `salt` is converted to hex). Never
+ * throws: a malformed signature or typed data is `false` (2.x threw on a
+ * malformed signature).
  */
 export const verifyTypedDataSignature = async ({
   address,
@@ -234,12 +318,21 @@ export const verifyTypedDataSignature = async ({
   typedData: EIP712TypedData;
   /** Chain of a contract-wallet signer; default `typedData.domain.chainId`. */
   chainId?: number;
-} & SignatureClients): Promise<boolean> =>
-  (await checkTypedDataSignature({
-    address,
-    signature,
-    data: typedData as unknown as ClusterTypedData,
-    ...(chainId !== undefined ? { chainId } : {}),
-    ...(publicClient !== undefined ? { publicClient } : {}),
-    ...(publicClients !== undefined ? { publicClients } : {}),
-  })) === 'valid';
+} & SignatureClients): Promise<boolean> => {
+  let data: ClusterTypedData;
+  try {
+    data = toViemTypedData(typedData);
+  } catch {
+    return false;
+  }
+  return (
+    (await checkTypedDataSignature({
+      address,
+      signature,
+      data,
+      ...(chainId !== undefined ? { chainId } : {}),
+      ...(publicClient !== undefined ? { publicClient } : {}),
+      ...(publicClients !== undefined ? { publicClients } : {}),
+    })) === 'valid'
+  );
+};

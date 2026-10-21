@@ -103,8 +103,13 @@ const existenceChecks = (
   const queued = possiblyValidDeposits(status);
 
   if (!registered && status.pendingDeposits.length > 0) {
-    if (status.signaturesPending === true) {
-      // Which queued deposit creates the validator is not known yet.
+    if (
+      status.signaturesPending === true &&
+      effectiveCredentials(status) === undefined
+    ) {
+      // Which queued deposit creates the validator is not known yet. Once
+      // every deposit up to the first validly signed one is checked, it is,
+      // and the checks below treat the unchecked later ones as possibly valid.
       throw new ObolError(
         'STATUS_UNAVAILABLE',
         `The Obol API is still checking the queued deposit signatures for ${pubkey}`,
@@ -250,7 +255,8 @@ const existenceChecks = (
  * 3. via ovm: the sender is owner or holds DEPOSIT (OVM_ROLE_MISSING);
  * 4. via batch to credentials of an Obol OVM: OVM_STAKE_NOT_TRACKED warning;
  * 5. existence (DEPOSIT_CONFLICT, DEPOSIT_TOP_UP_TARGET_MISSING,
- *    STATUS_UNAVAILABLE `signatures_pending`, and the findings
+ *    STATUS_UNAVAILABLE `signatures_pending` while the credentials are
+ *    undecided, and the findings
  *    DEPOSIT_IS_TOP_UP, DEPOSIT_ALREADY_QUEUED, QUEUED_CREDENTIALS_CONFLICT,
  *    TOP_UP_EXITED_VALIDATOR, TOP_UP_ABOVE_EFFECTIVE_CAP), or
  *    DEPOSIT_EXISTENCE_UNCHECKED without a status source;

@@ -4,7 +4,7 @@
  * one signature at a time to find the first invalid one.
  */
 import type { BlsBackend } from '../../cluster/blsBackend.js';
-import type { Tick } from '../yielder.js';
+import { rethrowAborted, type Tick } from '../yielder.js';
 
 export interface SignatureItem<PublicKey> {
   /** null for a public key that did not decode: the item is invalid. */
@@ -50,7 +50,8 @@ export const firstInvalidSignature = async <PublicKey>(
         await tick();
       }
       valid = batch.verify();
-    } catch {
+    } catch (error) {
+      rethrowAborted(error);
       valid = false;
     }
     await tick();

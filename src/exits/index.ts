@@ -25,6 +25,7 @@ export {
   verifyPartialExit,
 };
 export type { AggregateInput, VerifyPartialExitInput };
+export type { BlsVerifyOptions } from './bls.js';
 export type { ExitCluster } from './verifyPartialExit.js';
 export type {
   ExitMessage,

@@ -507,6 +507,59 @@ describe('deposits.prepareDeposit', () => {
       });
     });
 
+    it('proceeds while later signatures are pending once the credentials are decided', async () => {
+      // Invalid, then valid with ours: decided; an unchecked later deposit
+      // with ours too does not matter.
+      const decided = (later: Hex): object =>
+        entry(
+          [
+            [THEIRS, false],
+            [MINE, true],
+            [later, null],
+          ],
+          {
+            withdrawalCredentials: MINE,
+            signaturesPending: true,
+            credentialsConflict: null,
+          },
+        );
+      const { result, calls } = await run([decided(MINE)], {
+        pendingRetry: { tries: 1 },
+      });
+      expect(calls).toBe(1);
+      expect(codes(result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+      expect(result[0].checks[0].message).toMatch(/^2 deposit/);
+      // An unchecked later deposit with other credentials counts as possibly
+      // valid: conservative, a conflict.
+      expect(
+        await caught(run([decided(THEIRS)], { pendingRetry: { tries: 1 } })),
+      ).toMatchObject({
+        code: 'DEPOSIT_CONFLICT',
+        details: { existingCredentials: THEIRS },
+      });
+      // Decided on other credentials: a conflict, not STATUS_UNAVAILABLE.
+      expect(
+        await caught(
+          run(
+            [
+              entry(
+                [
+                  [THEIRS, true],
+                  [MINE, null],
+                ],
+                {
+                  withdrawalCredentials: THEIRS,
+                  signaturesPending: true,
+                  credentialsConflict: null,
+                },
+              ),
+            ],
+            { pendingRetry: { tries: 1 } },
+          ),
+        ),
+      ).toMatchObject({ code: 'DEPOSIT_CONFLICT' });
+    });
+
     it('skips a queued deposit with an invalid signature when choosing the credentials', async () => {
       // Invalid first with other credentials, valid second with ours: no conflict.
       const ok = await run([

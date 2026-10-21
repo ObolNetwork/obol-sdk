@@ -12,6 +12,7 @@ import {
   blsVerify as verifyBytes,
   decodeG1,
 } from '../internal/bls.js';
+import type { BlsBackend } from '../cluster/blsBackend.js';
 import { decode, invalid, T } from '../schema.js';
 
 const ShareIndex = Type.Integer({ minimum: 1 });
@@ -26,13 +27,51 @@ const uniqueIndices = (items: Array<{ index: number }>, path: string): void => {
   });
 };
 
-/** Whether `signature` is a valid BLS signature of `message` by `pubkey`. */
-export const blsVerify = (pubkey: Hex, message: Hex, signature: Hex): boolean =>
-  verifyBytes(
-    fromHexString(decode(T.Pubkey, pubkey, 'pubkey')),
-    fromHexString(decode(T.Hex, message, 'message')),
-    fromHexString(decode(T.BlsSignature, signature, 'signature')),
-  );
+export interface BlsVerifyOptions {
+  /**
+   * BLS backend (default: pure JavaScript, `cluster.nobleBls`); on Node,
+   * `await loadBlstBackend()` from `@obolnetwork/obol-sdk/blst`.
+   */
+  bls?: BlsBackend;
+}
+
+/**
+ * Whether `signature` is a valid BLS signature of `message` by `pubkey`
+ * (hex strings; 2.x took `Uint8Array`s). Well-formed hex that is not a valid
+ * point (off the curve, outside the subgroup, the identity) is `false`.
+ *
+ * @throws PAYLOAD_INVALID for malformed input: not hex, a pubkey other than
+ *   48 bytes or a signature other than 96 bytes (2.x returned `false`), or
+ *   an `options.bls` without `decodePublicKey` / `verify`.
+ */
+export const blsVerify = (
+  pubkey: Hex,
+  message: Hex,
+  signature: Hex,
+  options: BlsVerifyOptions = {},
+): boolean => {
+  const pk = fromHexString(decode(T.Pubkey, pubkey, 'pubkey'));
+  const msg = fromHexString(decode(T.Hex, message, 'message'));
+  const sig = fromHexString(decode(T.BlsSignature, signature, 'signature'));
+  const bls = options?.bls;
+  if (bls === undefined) return verifyBytes(pk, msg, sig);
+  for (const method of ['decodePublicKey', 'verify'] as const) {
+    if (typeof bls?.[method] !== 'function') {
+      throw invalid(`options.bls.${method}`, 'must be a function');
+    }
+  }
+  let decoded: unknown;
+  try {
+    decoded = bls.decodePublicKey(pk, true);
+  } catch {
+    return false;
+  }
+  try {
+    return bls.verify(decoded, msg, sig);
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Plain aggregate (sum) of signatures: a multi-signature that verifies

@@ -4,7 +4,6 @@
  */
 import type { Address } from 'viem';
 import { owrAbi } from '../abi.js';
-import { requireContracts } from '../chains.js';
 import {
   chainReadFailed,
   contractNotAvailable,
@@ -21,8 +20,9 @@ export interface OwrTranches {
 }
 
 /**
- * legacy.getOwrTranches (`chain`): `getTranches()` of an existing OWR.
- * CONTRACT_NOT_AVAILABLE if the address has no contract code;
+ * legacy.getOwrTranches (`chain`): `getTranches()` of an existing OWR, on
+ * any chain the client is on (it reads only the OWR, so Gnosis and Sepolia
+ * too). CONTRACT_NOT_AVAILABLE if the address has no contract code;
  * CHAIN_READ_FAILED if the call fails.
  */
 export const getOwrTranches = async (
@@ -30,7 +30,6 @@ export const getOwrTranches = async (
   input: string,
 ): Promise<OwrTranches> => {
   const owr = checksum(decode(T.Address, input, 'owr'));
-  requireContracts(ctx.chain.id, 'legacy.getOwrTranches');
   let kind;
   try {
     kind = await getCodeKind(ctx.publicClient, owr);

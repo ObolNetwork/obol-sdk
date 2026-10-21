@@ -45,8 +45,10 @@ export interface DepositStatus {
   /**
    * The registry entry's credentials or, queue only, the ones the validator
    * will be created with: from the Obol API, the first validly signed queued
-   * deposit's (absent while `signaturesPending` or when none is valid); from
-   * a source without signature checks, the first queued deposit's.
+   * deposit's once every deposit before it is checked (so possibly while
+   * `signaturesPending`; absent while an unchecked deposit comes first, or
+   * when none is valid); from a source without signature checks, the first
+   * queued deposit's.
    */
   withdrawalCredentials?: Hex;
   balance?: bigint;
@@ -70,8 +72,9 @@ export interface DepositStatus {
   /**
    * Obol API: true while the signatures of this queue-only pubkey's queued
    * deposits are still being checked (usually within a slot; `deposits.status`
-   * re-reads a few times first, see `pendingRetry`), so the credentials it
-   * will get are not known yet. False for registered and new pubkeys. Absent
+   * re-reads a few times first, see `pendingRetry`). The credentials it will
+   * get may already be decided (`withdrawalCredentials` set: every deposit up
+   * to the first validly signed one is checked). False for registered and new pubkeys. Absent
    * when the source does not check signatures.
    */
   signaturesPending?: boolean;
@@ -84,8 +87,8 @@ export interface DepositStatus {
   /**
    * With `expectedWithdrawalAddress`: whether the credentials the validator
    * has (or, queued only, will get: see `effectiveCredentials`) are `0x01` /
-   * `0x02` for that address; null when there are none yet or while
-   * `signaturesPending`.
+   * `0x02` for that address; null when there are none yet, including while
+   * undecided (`signaturesPending` with an unchecked deposit first).
    */
   credentialsMatch?: boolean | null;
 }
@@ -183,14 +186,35 @@ export const canCreateValidator = (p: PendingDeposit): boolean =>
     p.withdrawalCredentials.toLowerCase() !== ZERO_CREDENTIALS);
 
 /**
- * The credentials a validator has, or (no registry entry yet) will get: the
- * first queued deposit that can create it (`canCreateValidator`); undefined
- * while `signaturesPending` (never guessed).
+ * Queue only, signatures checked by the source: the first validly signed
+ * deposit's credentials when every deposit before it is checked, else
+ * undefined (none valid, or an unchecked one first: undecided). Later
+ * deposits do not matter; the chain applies them as top-ups.
+ */
+const decidedCredentials = (
+  deposits: readonly PendingDeposit[],
+): Hex | undefined => {
+  for (const p of deposits) {
+    if (p.signatureValid === true) return p.withdrawalCredentials;
+    if (p.signatureValid !== false) return undefined;
+  }
+  return undefined;
+};
+
+/**
+ * The credentials a validator has, or (no registry entry yet) will get. With
+ * signature checks (Obol API), the first validly signed queued deposit's once
+ * every deposit before it is checked, so possibly while `signaturesPending`;
+ * undefined while an unchecked deposit comes first (never guessed). Without
+ * them, the first queued deposit that can create it (`canCreateValidator`).
  */
 export const effectiveCredentials = (
   status: DepositStatus,
 ): Hex | undefined => {
   if (status.validatorIndex !== undefined) return status.withdrawalCredentials;
+  if (status.pendingDeposits.some(p => p.signatureValid !== undefined)) {
+    return decidedCredentials(status.pendingDeposits);
+  }
   if (status.signaturesPending === true) return undefined;
   return status.pendingDeposits.find(canCreateValidator)?.withdrawalCredentials;
 };
@@ -339,18 +363,24 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
       return bad('a queued status without a queued deposit');
     }
     const checked = pendingDeposits.some(p => p.signatureValid !== undefined);
-    if (pending !== true && checked) {
-      // Every queued deposit is checked: the credentials must be the first
-      // validly signed one's, or null when none is valid.
-      if (pendingDeposits.some(p => p.signatureValid === null)) {
-        return bad('an unchecked queued deposit without signaturesPending');
-      }
-      const valid = pendingDeposits.filter(p => p.signatureValid === true);
-      if ((valid[0]?.withdrawalCredentials ?? null) !== (credentials ?? null)) {
+    if (checked) {
+      // The API walks the queue in order: the credentials are the first
+      // validly signed deposit's once every deposit before it is checked
+      // (later ones are top-ups), else null (none valid, or an unchecked
+      // deposit first). So they may be decided while signatures are pending.
+      if (
+        (decidedCredentials(pendingDeposits) ?? null) !== (credentials ?? null)
+      ) {
         return bad(
           "withdrawal credentials that are not the first validly signed deposit's",
         );
       }
+    }
+    if (pending !== true && checked) {
+      if (pendingDeposits.some(p => p.signatureValid === null)) {
+        return bad('an unchecked queued deposit without signaturesPending');
+      }
+      const valid = pendingDeposits.filter(p => p.signatureValid === true);
       const distinct = new Set(
         valid
           .map(p => p.withdrawalCredentials)
@@ -368,8 +398,8 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
       status: 'queued',
       source: 'api',
       beaconStatus,
-      // Null while signatures are pending: undecided, so left absent.
-      ...(pending !== true && credentials !== undefined
+      // Null while undecided (or none valid): left absent.
+      ...(credentials !== undefined && (pending !== true || checked)
         ? { withdrawalCredentials: credentials as Hex }
         : {}),
       ...signatureFields,

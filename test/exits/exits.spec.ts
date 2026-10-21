@@ -26,6 +26,8 @@ import {
   exitSigningRoot,
   partialExitsPayloadRoot,
 } from '../../src/exits/ssz.js';
+import { nobleBls } from '../../src/cluster/blsBackend.js';
+import { blstBackend } from '../helpers/blstBackend.js';
 import { fakeChain } from '../helpers/fakeChain.js';
 
 // Shares 1..4 of one 3-of-4 sharing, from distributed-validator-specs.
@@ -618,5 +620,38 @@ describe('exits BLS helpers', () => {
 
   it('blsVerify is false for a wrong signature', () => {
     expect(blsVerify(pubshare(1), msg, partials[1].signature)).toBe(false);
+  });
+
+  it('blsVerify uses the given backend (blst), with the same answers', () => {
+    const group = blsThresholdAggregate(partials);
+    const offCurve = `0x${'ff'.repeat(48)}` as Hex;
+    const notG2 = `0x${'ff'.repeat(96)}` as Hex;
+    for (const options of [{}, { bls: nobleBls }, { bls: blstBackend }]) {
+      expect(blsVerify(GROUP_PUBKEY, msg, group, options)).toBe(true);
+      expect(blsVerify(pubshare(1), msg, partials[1].signature, options)).toBe(
+        false,
+      );
+      // Well-formed hex, not a point: false.
+      expect(blsVerify(offCurve, msg, group, options)).toBe(false);
+      expect(blsVerify(GROUP_PUBKEY, msg, notG2, options)).toBe(false);
+      // Malformed hex: PAYLOAD_INVALID (2.x returned false).
+      expect(
+        caught(() => blsVerify(GROUP_PUBKEY, msg, '0x12', options)).code,
+      ).toBe('PAYLOAD_INVALID');
+    }
+    let calls = 0;
+    const counting = {
+      ...nobleBls,
+      verify: (...args: Parameters<typeof nobleBls.verify>) => {
+        calls++;
+        return nobleBls.verify(...args);
+      },
+    };
+    expect(blsVerify(GROUP_PUBKEY, msg, group, { bls: counting })).toBe(true);
+    expect(calls).toBe(1);
+    expect(
+      caught(() => blsVerify(GROUP_PUBKEY, msg, group, { bls: {} as never }))
+        .code,
+    ).toBe('PAYLOAD_INVALID');
   });
 });

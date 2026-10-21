@@ -2,7 +2,15 @@
 // binding, the bound client's clients, and the 2.x signature / ENR helpers.
 import { jest } from '@jest/globals';
 import { ENR } from '@chainsafe/enr';
-import { bytesToHex, hashTypedData, parseAbi, type Hex } from 'viem';
+import {
+  bytesToHex,
+  decodeFunctionData,
+  encodeAbiParameters,
+  hashTypedData,
+  parseAbi,
+  toFunctionSelector,
+  type Hex,
+} from 'viem';
 import { hoodi } from 'viem/chains';
 import { createObolClient } from '../../src/client.js';
 import {
@@ -253,6 +261,75 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
     expect(root.verifyTypedDataSignature).toBe(verifyTypedDataSignature);
   });
 
+  it("accepts eth-sig-util's TypedMessage (salt as bytes)", async () => {
+    // eth-sig-util's TypedMessage<MessageTypes>, as obol-api types it.
+    interface MessageTypes {
+      EIP712Domain: Array<{ name: string; type: string }>;
+      [additionalProperties: string]: Array<{ name: string; type: string }>;
+    }
+    interface TypedMessage<T extends MessageTypes> {
+      types: T;
+      primaryType: keyof T;
+      domain: {
+        name?: string;
+        version?: string;
+        chainId?: number;
+        verifyingContract?: string;
+        salt?: ArrayBuffer;
+      };
+      message: Record<string, unknown>;
+    }
+    const salt = new Uint8Array(32).fill(7);
+    const message: TypedMessage<MessageTypes> = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'salt', type: 'bytes32' },
+        ],
+        Mail: [{ name: 'contents', type: 'string' }],
+      },
+      primaryType: 'Mail',
+      domain: { name: 'Obol', salt: salt.buffer },
+      message: { contents: 'hi' },
+    };
+    const signature = await account.signTypedData({
+      ...message,
+      domain: { name: 'Obol', salt: bytesToHex(salt) },
+    } as never);
+    expect(
+      await verifyTypedDataSignature({
+        address: account.address,
+        signature,
+        typedData: message,
+      }),
+    ).toBe(true);
+    // A typed array works too; another salt does not verify.
+    expect(
+      await verifyTypedDataSignature({
+        address: account.address,
+        signature,
+        typedData: { ...message, domain: { ...message.domain, salt } },
+      }),
+    ).toBe(true);
+    expect(
+      await verifyTypedDataSignature({
+        address: account.address,
+        signature,
+        typedData: {
+          ...message,
+          domain: { name: 'Obol', salt: new Uint8Array(32).buffer },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      await verifyTypedDataSignature({
+        address: account.address,
+        signature,
+        typedData: null as never,
+      }),
+    ).toBe(false);
+  });
+
   it('checks a contract wallet with the client for chainId (EIP-1271)', async () => {
     const data = creatorConfigHashTypedData(definition().config_hash, 560048);
     const args = {
@@ -280,6 +357,52 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
         publicClients: { 560048: chain.publicClient },
       }),
     ).toBe(true);
+  });
+
+  it('accepts the legacy EIP-1271 magic of Safes before 1.3.0, and refuses others', async () => {
+    const data = creatorConfigHashTypedData(definition().config_hash, 560048);
+    const args = {
+      address: definition().creator.address,
+      signature: definition().creator.config_signature,
+      typedData: data as never,
+      chainId: 560048,
+    };
+    const abi = parseAbi([
+      'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
+      'function isValidSignature(bytes data, bytes signature) view returns (bytes4)',
+    ]);
+    const [current, legacy] = abi.map(toFunctionSelector);
+    // Answers per selector; the data a pre-1.3.0 Safe takes is the 32-byte
+    // hash as bytes (Safe 1.3.0's CompatibilityFallbackHandler forwards
+    // abi.encode(hash)).
+    const wallet = (answers: Record<Hex, Hex>): ReturnType<typeof fakeChain> =>
+      fakeChain({
+        raw: {
+          [definition().creator.address]: callData => {
+            const selector = callData.slice(0, 10) as Hex;
+            const { args: called } = decodeFunctionData({
+              abi,
+              data: callData,
+            });
+            const answer =
+              called?.[0] === hashTypedData(data)
+                ? (answers[selector] ?? '0xffffffff')
+                : '0xffffffff';
+            return encodeAbiParameters([{ type: 'bytes4' }], [answer]);
+          },
+        },
+      });
+    const verify = async (answers: Record<Hex, Hex>): Promise<boolean> =>
+      await verifyTypedDataSignature({
+        ...args,
+        publicClient: wallet(answers).publicClient,
+      });
+    expect(await verify({ [legacy]: '0x20c13b0b' })).toBe(true);
+    expect(await verify({ [current]: '0x1626ba7e' })).toBe(true);
+    // Each magic only from its own function; a refusal from both.
+    expect(await verify({ [legacy]: '0x1626ba7e' })).toBe(false);
+    expect(await verify({ [current]: '0x20c13b0b' })).toBe(false);
+    expect(await verify({})).toBe(false);
   });
 
   const definition = (): typeof clusterLockV1X11.cluster_definition =>

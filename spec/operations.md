@@ -196,8 +196,10 @@ Options: `{ publicClient: PublicClient?, publicClients: Record<chainId, PublicCl
 own `publicClient` for the client chain.
 
 **Contract-wallet signatures.** Every signature is first recovered (ECDSA). One that does not recover to its signer is
-checked as a contract wallet's (EIP-1271 `isValidSignature(hashTypedData, signature)` returning `0x1626ba7e`) with the
-client for the domain's chain: from `publicClients` (a client on another chain than the one it is listed for is
+checked as a contract wallet's (EIP-1271 `isValidSignature(bytes32 hashTypedData, signature)` returning `0x1626ba7e`,
+else the legacy `isValidSignature(bytes data, signature)` returning `0x20c13b0b`, with the 32-byte hash as `data`, as
+Safes before 1.3.0 implement it and 2.x accepted; each magic counts only from its own function) with the client for
+the domain's chain: from `publicClients` (a client on another chain than the one it is listed for is
 ignored), else `publicClient` when it is on that chain. With a client: an address with no code (or an EIP-7702
 delegation) is `invalid`; a contract that refuses, reverts or fails the read is `invalid`. Without one the SDK cannot
 tell an account from a contract wallet, so the signature is `unverifiable`: a failure (`ok: false`) that names the
@@ -212,6 +214,7 @@ Tag: `pure` (`chain` when a definition signer is a contract wallet: EIP-1271 cal
 { level: "attested" | "full" (default "full"),
   signatures: "all" | "none" | uint[],   # attested only (default "none"): validators whose step 7 / 8 BLS signatures are checked
   yieldMs: uint (default 50),            # 0 = never yield
+  signal: AbortSignal?,                  # checked at every yield point; aborted → ABORTED (cause: signal.reason)
   bls: BlsBackend?,                      # default: pure JS (@noble/curves); Node: loadBlstBackend() from /blst
   publicClient: PublicClient?,           # contract-wallet signatures on its own chain
   publicClients: Record<chainId, PublicClient> | (chainId) => PublicClient? }  # by the lock's chain
@@ -292,7 +295,12 @@ reported.
 
 Everything runs on the calling thread, with no workers and no time limit: the work yields to the event loop at
 least every `yieldMs` (it yields once half of it has passed, and one signature is about 25 ms of pure JS work), so a
-caller stays responsive; a caller that needs a deadline races the promise itself. Cost, measured on one thread
+caller stays responsive. A caller that needs a deadline passes `signal` (`AbortSignal.timeout(ms)`, or a request's
+own signal): it is checked before the run and at every yield point, and once aborted the run stops there with
+`ABORTED` (details `operation`, `cause` the signal's `reason`), so a server bounds the CPU it spends per request
+(racing the promise would leave the work running). An already-aborted signal throws before any work; a value that is
+not an `AbortSignal` is `PAYLOAD_INVALID`. With `yieldMs: 0` nothing yields, so a timer-based signal cannot fire
+mid-run. Cost, measured on one thread
 (Node 24) with synthetic locks of 3 signatures per validator: with the default backend, 1k validators `full` about
 80 s (signatures about 25 ms each; share binding 5 s) and `attested` 0.3 s, 10k validators `attested` 1.8 s; with
 an adapter over `@chainsafe/blst` (see the TSDoc of `BlsBackend`), `full` 1.3 s for 1k and 12 s for 10k.
@@ -310,7 +318,8 @@ Sepolia client; it is not a full-pass fixture.)
 Tag: `pure` (`chain` as `verifyLock`). Inputs: a lock, the `verifyLock` options. Output: `bool`. The 2.x
 `validateClusterLock`. Runs `verifyLock` with `level: "full"` unless `options.level` is given, and returns `ok`. A
 `PAYLOAD_INVALID` for the lock (a malformed lock; issue paths under `lock`) is `false`, as 2.x returned; one for the
-options (paths under `options`) and every other error are thrown. Also a root export and bound
+options (paths under `options`) and every other error are thrown, including `ABORTED` from `signal` (an abort is
+never `false`). Also a root export and bound
 (`obol.cluster.isValidLock`, with the client's `publicClient` for its chain). (new in 3.0.0-rc.5)
 
 ### cluster.parseEnr / cluster.isValidEnr
@@ -327,8 +336,11 @@ primaryType, message }, chainId?: uint, publicClient?, publicClients? }`. Output
 `validateAddressSignature` / `validateEOASignature`: `true` iff `signature` recovers to `address` (ECDSA over
 `hashTypedData`), or, with a client for `chainId` (default `typedData.domain.chainId`; a domain without `chainId`,
 such as the terms, needs `chainId` for a contract wallet), `address` is a contract whose EIP-1271
-`isValidSignature` accepts it. An `EIP712Domain` entry in `types` is accepted. Never throws (a malformed signature is
-`false`). Without a client, a contract wallet's signature is `false`. (new in 3.0.0-rc.5)
+`isValidSignature` accepts it (current or legacy magic, as in "Contract-wallet signatures" above). An `EIP712Domain`
+entry in `types` is accepted, and so is eth-sig-util's `TypedMessage`: `domain.salt` may be bytes (`ArrayBuffer` or a
+typed array; converted to hex), `domain.verifyingContract` any string, `primaryType` a number (read as a string).
+Never throws (a malformed signature or typed data is `false`; 2.x threw on a malformed signature). Without a client,
+a contract wallet's signature is `false`. (new in 3.0.0-rc.5; legacy magic and `TypedMessage` in rc.6)
 
 ### @obolnetwork/obol-sdk/blst
 
@@ -412,7 +424,8 @@ The lock's `fork_version` must match the client chain when called through the cl
 ### deposits.verifyDepositData
 
 Tag: `pure`. Inputs: `deposits: Deposit[]`, `{ chainId: uint, kind: "deposit" | "topUp" (default "deposit"),
-expectedWithdrawalAddress: Address? }`. Output: nothing (throws on the first failure).
+expectedWithdrawalAddress: Address?, yieldMs: uint?, signal: AbortSignal?, bls: BlsBackend? }`. Output: nothing
+(throws on the first failure).
 
 For each deposit in order, then the signatures (vectors `deposit_checks.json`):
 
@@ -431,7 +444,7 @@ For each deposit in order, then the signatures (vectors `deposit_checks.json`):
    (`DOMAIN_DEPOSIT 0x03000000`, genesis fork version, zero genesis validators root). Batch-verified as in
    `cluster.verifyLock` (random weights, so each signature must be valid on its own); on failure the first invalid
    index is reported (`signature_invalid`; a signature or pubkey that is not a valid point also counts). Options
-   `yieldMs` and `bls` as for `verifyLock`. (2.15)
+   `yieldMs`, `signal` (`ABORTED`) and `bls` as for `verifyLock`. (2.15; `signal` new in rc.6)
 
 Failures 2–7 are `DEPOSIT_INVALID` with `issue` and `index`.
 
@@ -466,22 +479,28 @@ Mapping (beacon names): no registry entry and no pending deposit → `new`; a pe
 queue, the beacon chain skips queued deposits with an invalid BLS signature until the first valid one creates the
 validator, so the effective credentials are those of the first queued deposit that is not `signatureValid: false` and
 is either `signatureValid: true` or has non-zero credentials (an unchecked zero-credential top-up has no valid
-signature for a new validator). While `signaturesPending` there are none (never guessed).
+signature for a new validator). With the Obol API's signature checks they are the first validly signed deposit's once
+every deposit before it is checked, even while later ones are still pending (those are top-ups); while an unchecked
+deposit (`signatureValid: null`) comes before the first valid one there are none (undecided, never guessed).
 
 `credentialsMatch`: the effective credentials are `0x01` / `0x02` + 11 zero bytes + `expectedWithdrawalAddress`
-(case-insensitive); `null` when there are none yet (`new`, every queued deposit invalid, or `signaturesPending`).
+(case-insensitive); `null` when there are none yet (`new`, every queued deposit invalid, or undecided while
+`signaturesPending`).
 
 Queued deposit signatures (Obol API only). The API checks the signature of each queued deposit of a pubkey not in the
 registry (deposit domain, genesis fork version), in the background, usually within a slot:
 
 - `signaturesPending: true` while they are not all checked; `false` for registered and new pubkeys. While pending,
-  `credentialsConflict` is `null`, each unchecked deposit has `signatureValid: null` and `withdrawalCredentials` is
-  absent (the API sends `null`: undecided).
+  `credentialsConflict` is `null` and each unchecked deposit has `signatureValid: null`.
 - `signatureValid`: `true` / `false` for a queue-only pubkey's deposit, `null` when not checked (a registered
   validator's queued top-up, whose signature does not matter, or still pending).
 - `credentialsConflict: true` when validly signed queued deposits carry different non-zero credentials; the first one
   applies.
-- A queue-only entry's `withdrawalCredentials` is the first validly signed deposit's (absent when none is valid).
+- A queue-only entry's `withdrawalCredentials`: the API walks the queue in order and stops at the first deposit that
+  is `signatureValid: null` (credentials `null`, undecided) or `true` (that deposit's credentials, which the chain
+  will apply: later deposits are top-ups). So they are the first validly signed deposit's when every deposit before
+  it is checked, possibly while `signaturesPending: true`, and absent otherwise (none valid, or an unchecked deposit
+  first).
 
 When an entry of a batch has `signaturesPending: true`, `deposits.status` re-reads that batch, up to
 `pendingRetry.tries` requests in all (default 3), waiting `pendingRetry.delayMs` (default 8000) before the first
@@ -503,9 +522,10 @@ Sources, in order:
    pubkey must be answered exactly once, `status` must be the mapping of `beaconStatus`, a registry entry needs an
    index, credentials and balances, a queue-only entry at least one queued deposit, a `new` one none. The signature
    fields must agree: `signaturesPending: true` only on a queue-only entry and only with `credentialsConflict: null`
-   (`null` otherwise is malformed); once not pending, a queue-only entry with checked deposits has no
-   `signatureValid: null`, its `withdrawalCredentials` are the first validly signed deposit's (or `null` when none
-   is), and `credentialsConflict` matches its validly signed deposits. A signature check that fails on the API side
+   (`null` otherwise is malformed); a queue-only entry with checked deposits has `withdrawalCredentials` equal to the
+   first validly signed deposit's when every deposit before it is checked, and `null` otherwise (none valid, or a
+   `signatureValid: null` before the first valid one), pending or not; once not pending it has no `signatureValid:
+   null`, and `credentialsConflict` matches its validly signed deposits. A signature check that fails on the API side
    is an HTTP 502 for the pending entries (not cached), handled as any other API failure below.
 2. While that route answers 404 (not deployed yet): with `lockHash`, the interim `GET /v1/state/:lockHash` (with
    `pending_deposit`), which answers by lock: the lock is fetched first, a pubkey not in it is `PAYLOAD_INVALID` (issue
@@ -561,9 +581,11 @@ Checks:
    rewards unless the owner calls `setAmountOfPrincipalStake`. (new; from `ObolValidatorManager.deposit`)
 5. Existence, when `deposits.status` can answer (API or `beaconUrl`; else Finding `DEPOSIT_EXISTENCE_UNCHECKED`,
    info):
-   - queue only and `signaturesPending` still true after the `pendingRetry` re-reads → `STATUS_UNAVAILABLE` (details
-     `reason: "signatures_pending"`, `pubkey`; hint: retry in a slot or two): which deposit creates the validator,
-     and so its credentials, is not known yet, and is never guessed (any `kind`) (new);
+   - queue only, `signaturesPending` still true after the `pendingRetry` re-reads, and the credentials undecided (an
+     unchecked deposit before the first valid one) → `STATUS_UNAVAILABLE` (details `reason: "signatures_pending"`,
+     `pubkey`; hint: retry in a slot or two): which deposit creates the validator, and so its credentials, is not
+     known yet, and is never guessed (any `kind`) (new). Once decided, the write proceeds with them; the unchecked
+     later deposits count as possibly valid in the conflict check below (conservative);
    - queued deposits with `signatureValid: false` are left out of the rest of this check (they never reach the
      validator); `null` or absent counts as possibly valid;
    - `credentialsConflict: true` (validly signed queued deposits disagree; the first one applies): `DEPOSIT_CONFLICT`
@@ -1190,9 +1212,15 @@ threshold: uint, chainId: uint }` (the client fills `chainId`; a chain without a
 
 ### exits BLS helpers
 
-Tag: `pure`. `blsVerify(pubkey, message, signature)`, `blsAggregate(signatures)` (plain),
+Tag: `pure`. `blsVerify(pubkey, message, signature, { bls?: BlsBackend }?)`, `blsAggregate(signatures)` (plain),
 `blsThresholdAggregate({ index, signature }[])`, `blsRecoverPubkey({ index, pubshare }[])`. Vectors:
 `bls_threshold.json` (all arrays).
+
+`blsVerify` takes hex strings (2.x: `Uint8Array`s). Malformed input (not hex, a pubkey other than 48 bytes, a
+signature other than 96 bytes, an `options.bls` without `decodePublicKey` / `verify`) is `PAYLOAD_INVALID`, where 2.x
+returned `false`; well-formed bytes that are not a valid point (off the curve, outside the subgroup, the identity) are
+`false`. With `bls` (e.g. `loadBlstBackend()` from `/blst` on a server) the pubkey is decoded with the subgroup check
+and verified by that backend; the default is pure JS. (backend option new in rc.6)
 
 ## terms
 
@@ -1400,7 +1428,9 @@ Output: `Prepared<"eoaWithdraw">`, preview `{ pubkey, amount, requestedAmount?, 
 ### legacy.getOwrTranches (2.15 `getOWRTranches`)
 
 Tag: `chain`, **experimental** (`obol.experimental.legacy`). Reads an existing OptimisticWithdrawalRecipient's tranches. Kept as a read (design: reads of existing
-legacy contracts stay).
+legacy contracts stay). It reads only the OWR, so it works on any chain the client is on, Gnosis and Sepolia included
+(no `UNSUPPORTED_CHAIN`; until rc.5 it was mainnet / Hoodi only). `CONTRACT_NOT_AVAILABLE` when the address has no
+code, `CHAIN_READ_FAILED` when `getTranches()` fails.
 
 Placed in two small modules: `withdrawals` (direct EIP-7002 requests from a withdrawal address) and `legacy` (reads
 of OWR and SplitMain v1 contracts, no creation).

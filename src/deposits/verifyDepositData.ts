@@ -15,7 +15,11 @@ import {
   type SignatureItem,
 } from '../internal/verification/signatureBatch.js';
 import { depositDataContainer } from '../internal/verification/sszTypes.js';
-import { createTick } from '../internal/yielder.js';
+import {
+  assertSignal,
+  createTick,
+  throwIfAborted,
+} from '../internal/yielder.js';
 import { nobleBls, type BlsBackend } from '../cluster/blsBackend.js';
 import { CHAINS } from '../chains.js';
 import { ObolError } from '../errors.js';
@@ -60,6 +64,12 @@ export interface VerifyDepositDataOptions {
   yieldMs?: number;
   /** BLS backend (default `cluster.nobleBls`). */
   bls?: BlsBackend;
+  /**
+   * Aborts the signature checks: checked at every yield point; an abort
+   * throws `ABORTED` with the signal's reason as `cause`. Bounds the CPU a
+   * server spends per request (e.g. `AbortSignal.timeout(5_000)`).
+   */
+  signal?: AbortSignal;
 }
 
 /** SSZ hash_tree_root of DepositData; `amountGwei` as on the wire. */
@@ -224,7 +234,10 @@ const signatureItem = (
  *    signature must be valid on its own; the first invalid index is
  *    reported). The work yields to the event loop every `yieldMs`.
  *
- * @throws PAYLOAD_INVALID; DEPOSIT_LOOKS_LIKE_TOP_UP (`index`);
+ * With `options.signal`, an abort stops the signature checks at the next
+ * yield point.
+ *
+ * @throws PAYLOAD_INVALID; ABORTED (`signal`); DEPOSIT_LOOKS_LIKE_TOP_UP (`index`);
  *   DEPOSIT_INVALID (`index`, `issue`); UNSUPPORTED_CHAIN when signatures
  *   must be checked on a chain without a known fork version.
  */
@@ -233,6 +246,8 @@ export const verifyDepositData = async (
   options: VerifyDepositDataOptions,
 ): Promise<void> => {
   const args = decode(VerifyDepositDataSchema, { deposits, options });
+  const signal = options.signal;
+  assertSignal(signal, 'options.signal');
   const kind = args.options.kind ?? 'deposit';
   const { chainId, expectedWithdrawalAddress } = args.options;
   args.deposits.forEach((deposit, index) => {
@@ -251,6 +266,7 @@ export const verifyDepositData = async (
       },
     );
   }
+  throwIfAborted(signal, 'deposits.verifyDepositData');
   const domain = depositDomainForFork(forkVersion);
   const bls = options.bls ?? nobleBls;
   const items = args.deposits.map(d =>
@@ -259,7 +275,11 @@ export const verifyDepositData = async (
   const bad = await firstInvalidSignature(
     bls,
     items,
-    createTick(args.options.yieldMs ?? 50),
+    createTick(
+      args.options.yieldMs ?? 50,
+      signal,
+      'deposits.verifyDepositData',
+    ),
   );
   if (bad === -1) return;
   throw depositInvalid(

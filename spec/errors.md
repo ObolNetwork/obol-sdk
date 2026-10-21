@@ -35,6 +35,7 @@ Operation names refer to [`operations.md`](operations.md).
 | `API_DISABLED` | An `api` operation was called with `api: false`. Fields: `operation`. | `api` operations; `deposits.status` without `beaconUrl` | enable the API, or use the chain-only operation | new |
 | `CONTRACT_NOT_AVAILABLE` | A contract the operation calls has no code or not the expected code (factory, Multicall3, batch deposit, OVM target). Fields: `address`. | `prepareCreateOvm`, `prepareCreateSplit`, `prepareOvmWithSplits`, `prepareDeposit` | check the chain; contact Obol if it persists | plain `Error` ("Required factory contracts are not available") |
 | `CHAIN_READ_FAILED` | A chain read needed for a check failed (RPC error, call reverted where it must not). Fields: `what`. | `splits.predictSplit`, reads inside `prepareX` | retry, or use another RPC | new (2.15 treated some as "not deployed") |
+| `ABORTED` | The `signal` passed in the options was aborted; the run stopped at the next yield point. `cause` is the signal's `reason` (a `TimeoutError` `DOMException` for `AbortSignal.timeout`). Fields: `operation`. | `cluster.verifyLock`, `cluster.isValidLock` (thrown, never `false`), `deposits.verifyDepositData` | treat as the caller's own deadline or cancellation (a server: 503 / 408, not a verdict on the input) | new (2.15 `ClusterLockValidationTimeoutError`) |
 
 ### Obol API
 
@@ -63,7 +64,8 @@ fails a local check raises the check's own code.
 
 2.15's `ClusterLockValidationTimeoutError` and `ClusterLockValidationBusyError` have no v3 code: `verifyLock` runs
 on the calling thread with no workers, time limit or concurrency limit, and yields to the event loop (`yieldMs`). A
-server that needs a deadline or a limit applies it around the call.
+server that needs a deadline passes `signal` (e.g. `AbortSignal.timeout(ms)`): the run stops at the next yield point
+with `ABORTED`, which bounds the CPU spent per request; a concurrency limit it applies around the call.
 
 ### Deposits
 
@@ -74,7 +76,7 @@ server that needs a deadline or a limit applies it around the call.
 | `DEPOSIT_CONFLICT` | A pending deposit for the pubkey has different or unknown withdrawal credentials; the first processed deposit with a valid signature fixes them (deposits the Obol API found invalidly signed are skipped; on `credentialsConflict`, only the first validly signed one counts). Fields: `index`, `pubkey`, `existingCredentials?`. | `prepareDeposit` | do not send; find out who queued the other deposit | 2.16 `DepositConflictError` |
 | `DEPOSIT_TOP_UP_TARGET_MISSING` | `kind: "topUp"` for a pubkey with no validator and no pending deposit; the deposit would be treated as new and fail its signature check. Fields: `index`, `pubkey`. | `prepareDeposit` | check the pubkey; send the full deposit data first | new |
 | `DEPOSIT_AMOUNT_NOT_IN_LOCK` | The requested amount is not present for every validator of the lock. Fields: `amount`, `available: bigint[]`. | `deposits.fromLock` | pick one of `available` | plain `Error` |
-| `STATUS_UNAVAILABLE` | The deposit status source failed, or answered incompletely or malformed. Also the Obol API without `POST /v1/validators/:network/deposit-status` (404) and neither `lockHash` nor `beaconUrl` given: `reason: "endpoint_unavailable"` (writes then skip the status checks, as with no source). And, from `prepareDeposit`, a queue-only pubkey whose queued deposit signatures the API was still checking after the retries: `reason: "signatures_pending"`, `pubkey` (its credentials are not known yet). | `deposits.status`, `ovm.getValidators`, writes that read status | retry; do not assume `new`; for `endpoint_unavailable`, pass `lockHash` or `beaconUrl`; for `signatures_pending`, retry in a slot or two | 2.16 plain `Error` ("Malformed …") |
+| `STATUS_UNAVAILABLE` | The deposit status source failed, or answered incompletely or malformed. Also the Obol API without `POST /v1/validators/:network/deposit-status` (404) and neither `lockHash` nor `beaconUrl` given: `reason: "endpoint_unavailable"` (writes then skip the status checks, as with no source). And, from `prepareDeposit`, a queue-only pubkey whose queued deposit signatures the API was still checking after the retries, with an unchecked deposit before the first validly signed one: `reason: "signatures_pending"`, `pubkey` (its credentials are not known yet; once decided, the write proceeds). | `deposits.status`, `ovm.getValidators`, writes that read status | retry; do not assume `new`; for `endpoint_unavailable`, pass `lockHash` or `beaconUrl`; for `signatures_pending`, retry in a slot or two | 2.16 plain `Error` ("Malformed …") |
 
 ### OVM
 

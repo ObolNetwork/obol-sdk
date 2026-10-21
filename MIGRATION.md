@@ -9,6 +9,7 @@ of every v3 operation (inputs, checks, outputs, error codes) is in [`spec/operat
   - [Every other 2.x export](#every-other-2x-export) (constants, types, helpers)
 - [From 3.0.0-rc.3 to rc.4](#from-300-rc3-to-rc4)
 - [From 3.0.0-rc.4 to rc.5](#from-300-rc4-to-rc5)
+- [From 3.0.0-rc.5 to rc.6](#from-300-rc5-to-rc6)
 
 ## From 2.x
 
@@ -63,7 +64,7 @@ const obol = createObolClient({
 | `client.splits.createValidatorManagerAndTotalSplit(...)` | `obol.setup.prepareOvmWithSplits(obol.setup.totalSplit({ ... }))` |
 | `client.splits.requestWithdrawal(...)` | `obol.ovm.prepareWithdraw({ ovm, requests, acknowledgeFullExit? })` |
 | `client.splits.deposit(...)` | `obol.deposits.prepareDeposit({ deposits, via: { ovm } })` |
-| `client.getOWRTranches(owr)` | `obol.experimental.legacy.getOwrTranches(owr)` |
+| `client.getOWRTranches(owr)` | `obol.experimental.legacy.getOwrTranches(owr)` (any client chain, Gnosis and Sepolia included, since rc.6) |
 | `client.eoa.requestWithdrawal(...)` | `obol.withdrawals.prepareEoaWithdraw({ pubkey, amount })` |
 | `client.eoa.deposit(...)` | `obol.deposits.prepareDeposit({ deposits, via: { batch: true }, expectedWithdrawalAddress })` |
 | `client.incentives.getIncentivesByAddress(address)` | `obol.incentives.get(address)` |
@@ -72,9 +73,9 @@ const obol = createObolClient({
 | `client.incentives.claimIncentives(address)` | `obol.incentives.prepareClaim(address)` then `obol.send` |
 | `client.exit.validateExitBlobs(...)` / `verifyPartialExitSignature` / `verifyExitPayloadSignature` | `obol.exits.verifyPartialExit({ cluster, payload, existing })` |
 | `client.exit.recombineExitBlobs(...)` | `obol.exits.aggregate({ validator, exit, threshold })` (threshold aggregation; 2.x summed the partials, which is not a valid exit signature) |
-| `blsVerify` | `exits.blsVerify(pubkey, message, signature)` |
-| `validateAddressSignature({ address, token, data, chainId })` | `await verifyTypedDataSignature({ address, signature: token, typedData: data, chainId, publicClients })`. A contract wallet (Safe) is checked only with a client for `chainId` (2.x used built-in RPCs) |
-| `validateEOASignature({ token, data, address })` | `await verifyTypedDataSignature({ address, signature: token, typedData: data })` (async; `false` instead of a throw for a malformed signature) |
+| `blsVerify(pubkey, message, signature)` (`Uint8Array`s) | `exits.blsVerify(pubkey, message, signature, { bls? })` with `Hex` strings (`bytesToHex` from viem). Throws `PAYLOAD_INVALID` on malformed input (not hex, wrong length) where 2.x returned `false`; a well-formed value that is not a valid point is still `false`. `bls` picks the backend (`await loadBlstBackend()` on a server; default pure JS) |
+| `validateAddressSignature({ address, token, data, chainId })` | `await verifyTypedDataSignature({ address, signature: token, typedData: data, chainId, publicClients })`. A contract wallet (Safe) is checked only with a client for `chainId` (2.x used built-in RPCs); both the EIP-1271 magic `0x1626ba7e` and the legacy `isValidSignature(bytes, bytes)` → `0x20c13b0b` of Safes before 1.3.0 are accepted, as with 2.x's Safe protocol-kit (since rc.6). `data` may stay eth-sig-util's `TypedMessage` (since rc.6: a bytes `domain.salt` is converted to hex; rc.5 needed a cast). 2.x threw on a malformed `token`; v3 returns `false` |
+| `validateEOASignature({ token, data, address })` | `await verifyTypedDataSignature({ address, signature: token, typedData: data })` (async; `false` instead of a throw for a malformed signature, as above) |
 | `getWithdrawalRequestFee` / `resolveWithdrawalFee` | inside `prepareWithdraw` / `prepareEoaWithdraw` (`fee` input; `FEE_OUT_OF_RANGE`) |
 | OWR / SplitMain creation | removed (reads of existing contracts stay under `experimental.legacy`) |
 
@@ -125,8 +126,49 @@ try {
   chain only. Without a client for the lock's chain, a definition signature that does not recover to its signer
   fails as `definition_signature_unverifiable` (not `definition_signature_invalid`), so the missing client shows.
   The same options apply to `verifyDefinition` (`signature_unverifiable`) and `verifyTypedDataSignature`.
-- There are no workers, time limit or concurrency limit (2.x `ClusterLockValidationTimeoutError` /
-  `ClusterLockValidationBusyError`): apply them around the call.
+- **Reuse the 2.x RPC settings for `publicClients`.** 2.x read `RPC_MAINNET`, `RPC_HOODI`, `RPC_GNOSIS` and
+  `RPC_SEPOLIA` from the environment; v3 reads no environment variables, so build the clients from them:
+
+  ```typescript
+  import { createPublicClient, defineChain, http, type PublicClient } from 'viem';
+
+  const RPCS: Record<number, string | undefined> = {
+    1: process.env.RPC_MAINNET,
+    560048: process.env.RPC_HOODI,
+    100: process.env.RPC_GNOSIS,
+    11155111: process.env.RPC_SEPOLIA,
+  };
+  const publicClients: Record<number, PublicClient> = {};
+  for (const [id, url] of Object.entries(RPCS)) {
+    if (url === undefined) continue;
+    const chain = defineChain({
+      id: Number(id),
+      name: `chain-${id}`,
+      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      rpcUrls: { default: { http: [url] } },
+    });
+    publicClients[chain.id] = createPublicClient({ chain, transport: http(url) }) as PublicClient;
+  }
+  ```
+
+  `defineChain` rather than `viem/chains` here because of the TypeScript note below; a client is matched to a lock by
+  its chain id only.
+- **Bound the CPU per request with `signal`** (since rc.6): `isValidLock(dto, { bls, publicClients, signal:
+  AbortSignal.timeout(10_000) })`. The run stops at its next yield point with `ABORTED` (`cause`: the signal's
+  reason), so a slow or hostile lock cannot hold the thread; map `ABORTED` to a 503 (it says nothing about the lock).
+  Racing the promise against a timer would leave the work running. `verifyDepositData` takes `signal` too. There
+  are no workers or concurrency limit (2.x `ClusterLockValidationTimeoutError` / `ClusterLockValidationBusyError`):
+  apply a concurrency limit around the call.
+- **Load blst at boot.** `@chainsafe/blst` 2.x ships prebuilt binaries for glibc and Alpine/musl Linux (x64,
+  arm64), macOS and Windows, installed by npm or yarn as optional dependencies. If the binding does not load,
+  `loadBlstBackend()` throws `BLS_BACKEND_UNAVAILABLE` and there is no fallback to the JS backend, so call it once
+  at startup (and fail the deploy) rather than on the first request.
+- **TypeScript with `module: commonjs` and `moduleResolution: node10`** (the NestJS default): importing
+  `viem/chains` pulls ox's `.ts` sources into the compilation (viem 2.57.3 / ox 0.14.45), and their type errors
+  (TS2589 and others) are not hidden by `skipLibCheck`, which skips `.d.ts` files only. `import ... from 'viem'`
+  is fine. Either build the chains with `defineChain` (as above), or move to `moduleResolution: bundler` (with
+  `module: esnext` / `preserve`, for a bundled build). `node16` / `nodenext` with CommonJS output does not help:
+  viem's types are ESM there, so `import ... from 'viem'` itself fails with TS1479.
 
 ### Every other 2.x export
 
@@ -134,8 +176,8 @@ The 2.x root re-exported its constants, types and helpers. Each one used by Laun
 
 | 2.x | 3 |
 |---|---|
-| `ENR` (`@chainsafe/enr`): `ENR.decodeTxt(enr)` to validate, `.publicKey` | `cluster.isValidEnr(enr)` (boolean), `cluster.parseEnr(enr).publicKey` (compressed key as hex; `PAYLOAD_INVALID` for a bad record). For other fields, import `@chainsafe/enr` yourself |
-| `clusterConfigOrDefinitionHash(definition, true)` / `(definition, false)` | `cluster.computeConfigHash(definition)` / `cluster.computeDefinitionHash(definition)` |
+| `ENR` (`@chainsafe/enr`): `ENR.decodeTxt(enr)` to validate, `.publicKey` | `cluster.isValidEnr(enr)` (boolean), `cluster.parseEnr(enr).publicKey` (compressed key as `0x`-prefixed hex; 2.x code that did `Buffer.from(publicKey).toString('hex')` got it without the prefix, so drop or add `0x` where it is compared or stored; `PAYLOAD_INVALID` for a bad record). For other fields, import `@chainsafe/enr` yourself |
+| `clusterConfigOrDefinitionHash(definition, true)` / `(definition, false)` | `cluster.computeConfigHash(definition)` / `cluster.computeDefinitionHash(definition)`. Both decode the definition first and throw `PAYLOAD_INVALID` for a malformed one (map it to a 400); a mongoose document is accepted as it is |
 | `signCreatorConfigHashPayload({ creator_config_hash }, chainId)` | `cluster.creatorConfigHashTypedData(configHash, chainId)` (viem typed data: no `EIP712Domain` in `types`, same hash) |
 | `signOperatorConfigHashPayload`, `signEnrPayload` | `cluster.operatorConfigHashTypedData(configHash, chainId)`, `cluster.enrTypedData(enr, chainId)` |
 | `validateAddressSignature`, `validateEOASignature` | `verifyTypedDataSignature` (see the method table) |
@@ -236,7 +278,7 @@ const full = obol.exits.aggregate({ validator, exit: storedBlob, threshold });
 | `IncentivesPreflightError` | `INCENTIVES_PREFLIGHT_FAILED` |
 | `ValidationError`, `UnauthorizedError`, `NotFoundError`, `ConflictError`, `RateLimitError`, `RequestTimeoutError` | `API_VALIDATION`, `API_UNAUTHORIZED`, `API_NOT_FOUND`, `API_CONFLICT`, `API_RATE_LIMIT`, `API_TIMEOUT` |
 | `TransactionSubmissionError` | `TX_REVERTED`, `TX_UNCONFIRMED` (from `wait`) |
-| `ClusterLockValidationTimeoutError`, `ClusterLockValidationBusyError` | none: `verifyLock` yields instead of using workers; a server applies its own deadline and concurrency limit around the call |
+| `ClusterLockValidationTimeoutError`, `ClusterLockValidationBusyError` | `ABORTED` for a deadline: pass `signal` (e.g. `AbortSignal.timeout(ms)`) to `verifyLock` / `isValidLock` (since rc.6). No busy error: `verifyLock` yields instead of using workers; a server applies its own concurrency limit around the call |
 
 The full list, with what to do for each, is [`spec/errors.md`](spec/errors.md).
 
@@ -321,10 +363,26 @@ rc.6 is additive, but needs the obol-api deposit-status answer with queued depos
 new checks, and asks that route for at most 500 pubkeys per request (the updated API's limit; rc.5 asked for 1000).
 
 - `deposits.status` entries from the Obol API carry `signaturesPending`, `credentialsConflict` and, per queued
-  deposit, `signatureValid`. A queue-only pubkey's `withdrawalCredentials` are the first validly signed deposit's,
-  absent while signatures are pending or when none is valid. While an entry is pending, `deposits.status` re-reads
-  its batch (`pendingRetry`, default 3 requests over about two slots), then returns it pending.
+  deposit, `signatureValid`. A queue-only pubkey's `withdrawalCredentials` are the first validly signed deposit's
+  once every deposit before it is checked, so they can be set while `signaturesPending` is still true (later
+  deposits are top-ups); absent while an unchecked deposit comes first, or when none is valid. While an entry is
+  pending, `deposits.status` re-reads its batch (`pendingRetry`, default 3 requests over about two slots), then
+  returns it pending.
 - `prepareDeposit` throws `STATUS_UNAVAILABLE` with `reason: "signatures_pending"` for a queue-only pubkey still
-  pending after the retries (retry later), skips queued deposits with an invalid signature, and on
+  pending after the retries whose credentials are undecided (retry later); with decided credentials it proceeds,
+  counting the still-unchecked later deposits as possibly valid for `DEPOSIT_CONFLICT`. It skips queued deposits
+  with an invalid signature, and on
   `credentialsConflict` throws `DEPOSIT_CONFLICT` only when this deposit's credentials differ from the first validly
   signed one's (else the new warning `QUEUED_CREDENTIALS_CONFLICT`).
+
+Also in rc.6 (additive):
+
+- `verifyTypedDataSignature` and the definition signature checks (`verifyLock`, `verifyDefinition`) also accept the
+  legacy EIP-1271 `isValidSignature(bytes, bytes)` → `0x20c13b0b` of Safes before 1.3.0 (the 32-byte EIP-712 hash
+  as `data`), as 2.x did through Safe protocol-kit. `verifyTypedDataSignature` takes eth-sig-util's `TypedMessage`
+  as it is (a bytes `domain.salt` is converted to hex).
+- `signal?: AbortSignal` on `verifyLock`, `isValidLock` and `verifyDepositData`: checked at every yield point; an
+  abort throws the new code `ABORTED` (`cause`: the signal's reason). `isValidLock` throws it, never `false`.
+- `exits.blsVerify(pubkey, message, signature, { bls })` verifies with the given backend (blst on a server).
+- `experimental.legacy.getOwrTranches` works on any client chain (was mainnet / Hoodi only: `UNSUPPORTED_CHAIN` on
+  Gnosis and Sepolia).

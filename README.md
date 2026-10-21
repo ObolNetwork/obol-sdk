@@ -35,6 +35,11 @@ const obol = createObolClient({
 });
 ```
 
+TypeScript with `module: commonjs` and `moduleResolution: node10` (a NestJS default): `viem/chains` pulls ox's `.ts`
+sources into `tsc`, whose errors `skipLibCheck` does not hide. Use `moduleResolution: bundler`, or build the chain with
+viem's `defineChain` (the SDK matches chains by `id`); see [MIGRATION.md](MIGRATION.md) "Verifying locks on a
+server".
+
 Every module is also exported as a namespace (`cluster`, `deposits`, `ovm`, `splits`, `setup`, `incentives`,
 `exits`, `terms`, `withdrawals`, and `experimental` for `simulate` and `legacy`), so the pure functions (hashing, lock
 verification, share math, exit aggregation) work without a client. Each module is also its own entry point, so a page
@@ -139,7 +144,11 @@ A Node server that verifies locks from users (the Obol API does) should:
   validator lock at `full` takes about 1.3 s instead of 80 s of event-loop time;
 - pass `publicClients` for every chain it serves, so Safe-created clusters verify (2.x had built-in RPCs; v3 has
   none);
-- apply its own deadline and concurrency limit around the call (there are no workers).
+- bound the CPU per request with `signal` (`AbortSignal.timeout(ms)`, or the request's own signal): the run stops at
+  the next yield point with `ABORTED` (map it to a 503, not to "invalid"); racing the promise would leave the work
+  running. Apply a concurrency limit around the call (there are no workers);
+- warm the BLS backend at boot (`await loadBlstBackend()`): there is no fallback if the native binding fails to load
+  (`BLS_BACKEND_UNAVAILABLE`), so fail the deploy rather than the first request.
 
 ```typescript
 import { isValidLock } from '@obolnetwork/obol-sdk';
@@ -148,7 +157,12 @@ import { loadBlstBackend } from '@obolnetwork/obol-sdk/blst';
 const bls = await loadBlstBackend(); // once; BLS_BACKEND_UNAVAILABLE if @chainsafe/blst is missing
 const publicClients = { 1: mainnetClient, 560048: hoodiClient };
 
-if (!(await isValidLock(lock, { bls, publicClients }))) throw new BadRequestException('Invalid lock');
+const ok = await isValidLock(lock, {
+  bls,
+  publicClients,
+  signal: AbortSignal.timeout(10_000), // ABORTED after 10 s
+});
+if (!ok) throw new BadRequestException('Invalid lock');
 ```
 
 `verifyTypedDataSignature({ address, signature, typedData, chainId?, publicClients })` checks an EIP-712 bearer

@@ -24,7 +24,6 @@ import { TRecord } from '@sinclair/typebox';
 import { TString } from '@sinclair/typebox';
 import { TUnion } from '@sinclair/typebox';
 import { TypedDataDefinition } from 'viem';
-import { TypedDataDomain } from 'viem';
 import { WalletClient } from 'viem';
 
 // @public
@@ -106,7 +105,12 @@ const blsThresholdAggregate: (partials: Array<{
 }>) => Hex;
 
 // @public
-const blsVerify: (pubkey: Hex, message: Hex, signature: Hex) => boolean;
+const blsVerify: (pubkey: Hex, message: Hex, signature: Hex, options?: BlsVerifyOptions) => boolean;
+
+// @public (undocumented)
+interface BlsVerifyOptions {
+    bls?: BlsBackend;
+}
 
 // @public
 export interface ChainContracts {
@@ -638,11 +642,16 @@ interface DistributionResult {
 // @public
 export interface EIP712TypedData {
     // (undocumented)
-    domain?: TypedDataDomain;
+    domain?: {
+        name?: string;
+        version?: string;
+        chainId?: number | bigint;
+        verifyingContract?: string;
+        salt?: string | ArrayBuffer | ArrayBufferView;
+    };
     // (undocumented)
     message: Record<string, unknown>;
-    // (undocumented)
-    primaryType: string;
+    primaryType: string | number;
     // (undocumented)
     types: Record<string, ReadonlyArray<{
         name: string;
@@ -691,6 +700,7 @@ declare namespace exits {
         verifyPartialExit,
         AggregateInput,
         VerifyPartialExitInput,
+        BlsVerifyOptions,
         ExitCluster,
         ExitMessage,
         FullExitBlob,
@@ -1010,7 +1020,7 @@ const MIN_PRINCIPAL_THRESHOLD: bigint;
 const nobleBls: BlsBackend;
 
 // @public
-export const OBOL_ERROR_CODES: readonly ["PAYLOAD_INVALID", "UNSUPPORTED_CHAIN", "CHAIN_MISMATCH", "WALLET_REQUIRED", "BASE_URL_INVALID", "API_DISABLED", "CONTRACT_NOT_AVAILABLE", "CHAIN_READ_FAILED", "API_VALIDATION", "API_UNAUTHORIZED", "API_NOT_FOUND", "API_CONFLICT", "API_RATE_LIMIT", "API_TIMEOUT", "API_ERROR", "API_RESPONSE_MISMATCH", "DEFINITION_INVALID", "ACCOUNT_NOT_OPERATOR", "LOCK_INVALID", "BLS_BACKEND_UNAVAILABLE", "DEPOSIT_INVALID", "DEPOSIT_LOOKS_LIKE_TOP_UP", "DEPOSIT_CONFLICT", "DEPOSIT_TOP_UP_TARGET_MISSING", "DEPOSIT_AMOUNT_NOT_IN_LOCK", "STATUS_UNAVAILABLE", "OVM_NOT_OBOL", "PROVENANCE_UNKNOWN", "OVM_READ_FAILED", "OVM_ROLE_EVENTS_UNAVAILABLE", "OVM_ROLE_MISSING", "OVM_OWNER_REQUIRED", "PUBLIC_FORWARDER_AS_ROLE_HOLDER", "PUBLIC_FORWARDER_AS_OWNER", "PUBLIC_FORWARDER_AS_RECIPIENT", "OWNERSHIP_HANDOVER_NOT_PENDING", "FULL_EXIT_NOT_ACKNOWLEDGED", "CONSOLIDATION_NOT_ACKNOWLEDGED", "FEE_OUT_OF_RANGE", "FEE_READ_FAILED", "VALIDATOR_NOT_ACTIVE", "VALIDATOR_EXITING", "VALIDATOR_TOO_NEW", "CREDENTIALS_NOT_SOURCE", "EXIT_BLOCKED_BY_PENDING_WITHDRAWAL", "PARTIAL_REQUIRES_COMPOUNDING", "EFFECTIVE_BALANCE_TOO_LOW", "NO_EXCESS_BALANCE", "CONSOLIDATION_TARGET_NOT_COMPOUNDING", "CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL", "CONSOLIDATION_ALREADY_COMPOUNDING", "SPLIT_ALREADY_EXISTS", "SPLIT_PARAMS_MISMATCH", "SPLIT_PARAMS_REQUIRED", "SPLIT_NOT_OVM_RECIPIENT", "SPLIT_PAUSED", "NOTHING_TO_DISTRIBUTE", "OVM_CREATE_EVENT_MISSING", "OVM_CREATE_EVENT_AMBIGUOUS", "INCENTIVES_PREFLIGHT_FAILED", "ALREADY_CLAIMED", "EXIT_SHARE_INDEX_INVALID", "EXIT_PAYLOAD_SIGNATURE_INVALID", "EXIT_VALIDATOR_NOT_IN_CLUSTER", "EXIT_VALIDATOR_INDEX_MISMATCH", "EXIT_EPOCH_MISMATCH", "EXIT_SIGNATURE_CONFLICT", "EXIT_PARTIAL_SIGNATURE_INVALID", "EXIT_NOT_ENOUGH_SHARES", "PREPARED_INVALID", "TX_REJECTED", "TX_REVERTED", "TX_REPLACED", "TX_UNCONFIRMED", "SIMULATION_FAILED"];
+export const OBOL_ERROR_CODES: readonly ["PAYLOAD_INVALID", "UNSUPPORTED_CHAIN", "CHAIN_MISMATCH", "WALLET_REQUIRED", "BASE_URL_INVALID", "API_DISABLED", "CONTRACT_NOT_AVAILABLE", "CHAIN_READ_FAILED", "ABORTED", "API_VALIDATION", "API_UNAUTHORIZED", "API_NOT_FOUND", "API_CONFLICT", "API_RATE_LIMIT", "API_TIMEOUT", "API_ERROR", "API_RESPONSE_MISMATCH", "DEFINITION_INVALID", "ACCOUNT_NOT_OPERATOR", "LOCK_INVALID", "BLS_BACKEND_UNAVAILABLE", "DEPOSIT_INVALID", "DEPOSIT_LOOKS_LIKE_TOP_UP", "DEPOSIT_CONFLICT", "DEPOSIT_TOP_UP_TARGET_MISSING", "DEPOSIT_AMOUNT_NOT_IN_LOCK", "STATUS_UNAVAILABLE", "OVM_NOT_OBOL", "PROVENANCE_UNKNOWN", "OVM_READ_FAILED", "OVM_ROLE_EVENTS_UNAVAILABLE", "OVM_ROLE_MISSING", "OVM_OWNER_REQUIRED", "PUBLIC_FORWARDER_AS_ROLE_HOLDER", "PUBLIC_FORWARDER_AS_OWNER", "PUBLIC_FORWARDER_AS_RECIPIENT", "OWNERSHIP_HANDOVER_NOT_PENDING", "FULL_EXIT_NOT_ACKNOWLEDGED", "CONSOLIDATION_NOT_ACKNOWLEDGED", "FEE_OUT_OF_RANGE", "FEE_READ_FAILED", "VALIDATOR_NOT_ACTIVE", "VALIDATOR_EXITING", "VALIDATOR_TOO_NEW", "CREDENTIALS_NOT_SOURCE", "EXIT_BLOCKED_BY_PENDING_WITHDRAWAL", "PARTIAL_REQUIRES_COMPOUNDING", "EFFECTIVE_BALANCE_TOO_LOW", "NO_EXCESS_BALANCE", "CONSOLIDATION_TARGET_NOT_COMPOUNDING", "CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL", "CONSOLIDATION_ALREADY_COMPOUNDING", "SPLIT_ALREADY_EXISTS", "SPLIT_PARAMS_MISMATCH", "SPLIT_PARAMS_REQUIRED", "SPLIT_NOT_OVM_RECIPIENT", "SPLIT_PAUSED", "NOTHING_TO_DISTRIBUTE", "OVM_CREATE_EVENT_MISSING", "OVM_CREATE_EVENT_AMBIGUOUS", "INCENTIVES_PREFLIGHT_FAILED", "ALREADY_CLAIMED", "EXIT_SHARE_INDEX_INVALID", "EXIT_PAYLOAD_SIGNATURE_INVALID", "EXIT_VALIDATOR_NOT_IN_CLUSTER", "EXIT_VALIDATOR_INDEX_MISMATCH", "EXIT_EPOCH_MISMATCH", "EXIT_SIGNATURE_CONFLICT", "EXIT_PARTIAL_SIGNATURE_INVALID", "EXIT_NOT_ENOUGH_SHARES", "PREPARED_INVALID", "TX_REJECTED", "TX_REVERTED", "TX_REPLACED", "TX_UNCONFIRMED", "SIMULATION_FAILED"];
 
 // @public (undocumented)
 export class ObolApiError<C extends ApiErrorCode = ApiErrorCode> extends ObolError<C> {
@@ -1105,6 +1115,10 @@ export type ObolErrorCode = keyof ObolErrorDetails;
 
 // @public
 export interface ObolErrorDetails {
+    // (undocumented)
+    ABORTED: {
+        operation: string;
+    };
     // (undocumented)
     ACCOUNT_NOT_OPERATOR: {
         address: Address;
@@ -2531,6 +2545,7 @@ interface VerifyDepositDataOptions {
     expectedWithdrawalAddress?: string;
     // (undocumented)
     kind?: DepositKind;
+    signal?: AbortSignal;
     yieldMs?: number;
 }
 
@@ -2544,6 +2559,7 @@ interface VerifyLockOptions {
     level?: LockVerificationLevel;
     publicClient?: PublicClient;
     publicClients?: PublicClients;
+    signal?: AbortSignal;
     signatures?: 'all' | 'none' | number[];
     yieldMs?: number;
 }

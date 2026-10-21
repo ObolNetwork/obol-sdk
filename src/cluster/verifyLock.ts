@@ -35,7 +35,13 @@ import {
   type SignatureItem,
 } from '../internal/verification/signatureBatch.js';
 import { toUint64 } from '../internal/verification/sszTypes.js';
-import { createTick, type Tick } from '../internal/yielder.js';
+import {
+  assertSignal,
+  createTick,
+  rethrowAborted,
+  throwIfAborted,
+  type Tick,
+} from '../internal/yielder.js';
 import { chainIdForForkVersion } from '../chains.js';
 import { isObolError } from '../errors.js';
 import { decode, invalid, T } from '../schema.js';
@@ -115,6 +121,14 @@ export interface VerifyLockOptions {
   yieldMs?: number;
   /** BLS backend (default {@link nobleBls}, pure JavaScript). */
   bls?: BlsBackend;
+  /**
+   * Aborts the verification: checked at every yield point (between units of
+   * work), and an abort throws `ABORTED` with the signal's reason as
+   * `cause`. The way for a server to bound the CPU spent per request, e.g.
+   * `AbortSignal.timeout(10_000)`. With `yieldMs: 0` the event loop never
+   * runs during the call, so a timer cannot fire mid-run.
+   */
+  signal?: AbortSignal;
 }
 
 const DEFAULT_YIELD_MS = 50;
@@ -161,6 +175,7 @@ const guarded = async <R>(
     return await fn();
   } catch (error) {
     if (error instanceof StepFailed) throw error;
+    rethrowAborted(error);
     return fail(step, issue);
   }
 };
@@ -657,7 +672,10 @@ const selectedValidators = (
  * The result is an object, always truthy: test `result.ok`, or use
  * {@link isValidLock} for a boolean.
  *
- * @throws PAYLOAD_INVALID for a malformed lock or options.
+ * With `signal`, an abort stops the run at the next yield point.
+ *
+ * @throws PAYLOAD_INVALID for a malformed lock or options; ABORTED when
+ *   `signal` is aborted (`cause`: its reason).
  */
 export const verifyLock = async (
   input: unknown,
@@ -684,6 +702,8 @@ export const verifyLock = async (
     );
   }
   assertSignatureClients(options, 'options');
+  assertSignal(options.signal, 'options.signal');
+  throwIfAborted(options.signal, 'cluster.verifyLock');
   const bls = options.bls ?? nobleBls;
   for (const method of BACKEND_METHODS) {
     if (typeof bls[method] !== 'function') {
@@ -699,7 +719,11 @@ export const verifyLock = async (
       lock.distributed_validators.length,
     ),
     bls,
-    tick: createTick(scalars.yieldMs ?? DEFAULT_YIELD_MS),
+    tick: createTick(
+      scalars.yieldMs ?? DEFAULT_YIELD_MS,
+      options.signal,
+      'cluster.verifyLock',
+    ),
     clients: {
       ...(options.publicClient !== undefined
         ? { publicClient: options.publicClient }
@@ -716,8 +740,9 @@ export const verifyLock = async (
  * a boolean, the drop-in for the 2.x `validateClusterLock`. Runs at
  * `level: 'full'` unless `options.level` says otherwise (a server that
  * accepts locks must keep `full`), with the other options passed through
- * (`bls`, `publicClient` / `publicClients`, `yieldMs`). A malformed lock
- * (`PAYLOAD_INVALID`) is `false`, as in 2.x; any other error is thrown.
+ * (`bls`, `publicClient` / `publicClients`, `yieldMs`, `signal`). A
+ * malformed lock (`PAYLOAD_INVALID`) is `false`, as in 2.x; any other error
+ * is thrown, including `ABORTED` from `signal` (never `false`).
  *
  * @throws PAYLOAD_INVALID only for malformed options (an invalid lock is
  *   `false`); other errors (a BLS backend failure) propagate.

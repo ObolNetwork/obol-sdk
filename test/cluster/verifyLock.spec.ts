@@ -85,6 +85,44 @@ describe('cluster.verifyLock', () => {
     });
   });
 
+  it('step 2 accepts a pre-1.3.0 Safe creator (legacy EIP-1271 magic)', async () => {
+    const definition = clusterLockV1X11.cluster_definition;
+    const expected = hashTypedData(
+      creatorConfigHashTypedData(definition.config_hash, 560048),
+    );
+    const safe = (answer: Hex): ReturnType<typeof fakeChain> =>
+      fakeChain({
+        contracts: {
+          [definition.creator.address]: {
+            abi: parseAbi([
+              'function isValidSignature(bytes data, bytes signature) view returns (bytes4)',
+            ]),
+            read: {
+              isValidSignature: ([data, signature]) =>
+                data === expected &&
+                signature === definition.creator.config_signature
+                  ? answer
+                  : '0xffffffff',
+            },
+          },
+        },
+      });
+    expect(
+      await verifyLock(copy(clusterLockV1X11), {
+        publicClient: safe('0x20c13b0b').publicClient,
+      }),
+    ).toEqual({ ok: true, level: 'full' });
+    expect(
+      await verifyLock(copy(clusterLockV1X11), {
+        publicClient: safe('0x00000000').publicClient,
+      }),
+    ).toMatchObject({
+      ok: false,
+      step: 'definition_signature_invalid',
+      issue: 'creator config_signature',
+    });
+  });
+
   describe('step 2 with a contract-wallet creator (EIP-1271)', () => {
     const definition = clusterLockV1X11.cluster_definition;
     const abi = parseAbi([

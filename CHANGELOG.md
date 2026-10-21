@@ -18,21 +18,52 @@ Queued deposit signatures from the Obol API deposit-status route (obol-api #1047
 
 - `DepositStatus.signaturesPending` and `credentialsConflict`, and `PendingDeposit.signatureValid`, from the Obol
   API (absent from a source that does not check signatures: a beacon node, the interim `/v1/state`, an older API).
-  A queue-only pubkey's `withdrawalCredentials` are the first validly signed queued deposit's, absent while
-  signatures are pending or when none is valid (rc.5 rejected the API's `null` there as `STATUS_UNAVAILABLE`).
+  A queue-only pubkey's `withdrawalCredentials` are the first validly signed queued deposit's once every deposit
+  before it is checked (as obol-api walks the queue in order), so possibly while `signaturesPending`; absent while
+  an unchecked deposit comes first or when none is valid (rc.5 rejected the API's `null` there as
+  `STATUS_UNAVAILABLE`).
 - `pendingRetry: { tries?, delayMs? }` on `deposits.status` and the writes that read status (`StatusSource`, type
   `PendingRetry`): while an entry has `signaturesPending`, its batch is re-read (default 3 requests, waiting 8 s then
   16 s); still pending, the entry is returned as it is.
-- `prepareDeposit` check 5: a queue-only pubkey still `signaturesPending` is `STATUS_UNAVAILABLE` with details
-  `{ reason: 'signatures_pending', pubkey }` (never guessed); queued deposits with `signatureValid: false` are
+- `prepareDeposit` check 5: a queue-only pubkey still `signaturesPending` with undecided credentials is
+  `STATUS_UNAVAILABLE` with details `{ reason: 'signatures_pending', pubkey }` (never guessed); with decided
+  credentials it proceeds, and the unchecked later deposits count as possibly valid for `DEPOSIT_CONFLICT`; queued deposits with `signatureValid: false` are
   skipped when choosing the credentials that apply (`null` counts as possibly valid), for conflicts, the
   already-queued count and the 32 ETH cap sum; on `credentialsConflict: true`, `DEPOSIT_CONFLICT` when this
   deposit's credentials differ from the first validly signed one's, else the new warning finding
   `QUEUED_CREDENTIALS_CONFLICT` (subject the pubkey). A top-up to a pubkey whose queued deposits are all invalid is
   `DEPOSIT_TOP_UP_TARGET_MISSING`. The zero-credential top-up rule is unchanged.
 - `deposits.status` checks the new fields for consistency (`STATUS_UNAVAILABLE` otherwise): pending only on a
-  queue-only entry and with `credentialsConflict: null`, the credentials those of the first validly signed deposit,
-  and `credentialsConflict` agreeing with the deposits. `credentialsMatch` is `null` while pending.
+  queue-only entry and with `credentialsConflict: null`; the credentials those of the first validly signed deposit
+  when every deposit before it is checked, and `null` otherwise (none valid, or an unchecked one first), pending or
+  not; and `credentialsConflict` agreeing with the deposits. `credentialsMatch` is `null` while the credentials are
+  undecided.
+- EIP-1271: contract-wallet signatures (`verifyTypedDataSignature`, `verifyLock` / `verifyDefinition` definition
+  signatures) also pass with the legacy `isValidSignature(bytes, bytes)` → `0x20c13b0b` of Safes before 1.3.0,
+  called with the 32-byte EIP-712 hash as `data` (as Safe 1.3.0's CompatibilityFallbackHandler forwards it and 2.x's
+  protocol-kit called it). Each magic counts only from its own function.
+- `verifyTypedDataSignature` accepts eth-sig-util's `TypedMessage`: `EIP712TypedData.domain` is looser (`salt` as
+  hex or bytes, converted; `verifyingContract` any string; `chainId` number or bigint) and `primaryType` may be a
+  number (from a `keyof` type). Malformed typed data is `false`, not a throw.
+- `signal?: AbortSignal` on `cluster.verifyLock`, `cluster.isValidLock` and `deposits.verifyDepositData`: checked
+  before the run and at every yield point; an abort throws the new error code `ABORTED` (details `{ operation }`,
+  `cause` the signal's reason; `isValidLock` throws it, never `false`). The way for a server to bound the CPU per
+  request (`AbortSignal.timeout(ms)`); a non-AbortSignal value is `PAYLOAD_INVALID`.
+- `exits.blsVerify(pubkey, message, signature, { bls? })`: verifies with the given `BlsBackend` (blst on a
+  server); type `BlsVerifyOptions`. Documented: malformed hex is `PAYLOAD_INVALID` (2.x returned `false`).
+
+**Changed**
+
+- `experimental.legacy.getOwrTranches` no longer requires a chain with Obol contracts: it reads only the OWR, so it
+  works on any client chain, Gnosis and Sepolia included (was `UNSUPPORTED_CHAIN` there).
+
+**Docs**
+
+- MIGRATION.md (from the obol-api migration): the `blsVerify`, `validateAddressSignature`, hash and ENR rows made
+  precise; servers reuse 2.x's `RPC_MAINNET` / `RPC_HOODI` / `RPC_GNOSIS` / `RPC_SEPOLIA` to build `publicClients`;
+  `signal` for deadlines; blst platforms and warming it at boot; `viem/chains` under `module: commonjs` +
+  `moduleResolution: node10` (ox `.ts` sources type-checked despite `skipLibCheck`: use `defineChain` or `bundler`).
+  README "Create a client" and "Servers" notes to match.
 
 **Unchanged**
 

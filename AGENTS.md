@@ -256,7 +256,7 @@ One class, **`ObolError`** (`code`, `message`, `hint`, `details`), and **`ObolAp
 | Gnosis | 100 | No | No |
 | Sepolia | 11155111 | No | No |
 
-Gnosis and Sepolia are accepted for cluster files and terms only (existing Launchpad deployments and obol-api use them); contract operations throw `UNSUPPORTED_CHAIN` there. Don't steer new users to them: use Hoodi for testing and Mainnet for production. Any other chain throws `UNSUPPORTED_CHAIN` from `createObolClient`.
+Gnosis and Sepolia are accepted for cluster files and terms only (existing Launchpad deployments and obol-api use them); contract operations throw `UNSUPPORTED_CHAIN` there (except `experimental.legacy.getOwrTranches`, which reads only the OWR). Don't steer new users to them: use Hoodi for testing and Mainnet for production. Any other chain throws `UNSUPPORTED_CHAIN` from `createObolClient`.
 
 ### Validation
 

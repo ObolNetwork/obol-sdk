@@ -3,6 +3,7 @@ import type { Hex } from 'viem';
 import { ObolApiError } from '../../src/errors.js';
 import {
   canReadStatus,
+  effectiveCredentials,
   getDepositStatus,
   statusFromBeacon,
   statusIfAvailable,
@@ -448,6 +449,65 @@ describe('deposits.status', () => {
           pendingRetry: { tries: 1 },
         });
         expect(once.calls).toHaveLength(1);
+      });
+
+      // The API decides the credentials once every deposit up to the first
+      // validly signed one is checked; later deposits may still be pending.
+      const decided = (pubkey: Hex, extra: object = {}): object =>
+        checked(
+          pubkey,
+          [
+            [32n * ETH, credentials('01', OTHER), false],
+            [32n * ETH, CREDS, true],
+            [ETH, credentials('01', OTHER), null],
+          ],
+          {
+            withdrawalCredentials: CREDS,
+            signaturesPending: true,
+            credentialsConflict: null,
+            ...extra,
+          },
+        );
+
+      it('returns decided credentials while later signatures are pending', async () => {
+        const api = serving(() => [decided(PUBKEY_A)]);
+        const [a] = await getDepositStatus(
+          fakeChain().context(api),
+          [PUBKEY_A],
+          { expectedWithdrawalAddress: OVM, pendingRetry: { tries: 1 } },
+        );
+        expect(a).toMatchObject({
+          status: 'queued',
+          signaturesPending: true,
+          credentialsConflict: null,
+          withdrawalCredentials: CREDS,
+          credentialsMatch: true,
+        });
+        expect(effectiveCredentials(a)).toBe(CREDS);
+      });
+
+      it.each<[string, object]>([
+        [
+          'credentials while an unchecked deposit comes first',
+          pending(PUBKEY_A),
+        ],
+        ['no credentials once decided', decided(PUBKEY_A)],
+      ])('throws STATUS_UNAVAILABLE for %s', async (name, entry) => {
+        const api = serving(() => [
+          {
+            ...entry,
+            withdrawalCredentials: name.startsWith('no') ? null : CREDS,
+          },
+        ]);
+        expect(
+          (
+            await caught(
+              getDepositStatus(fakeChain().context(api), [PUBKEY_A], {
+                pendingRetry: { tries: 1 },
+              }),
+            )
+          ).code,
+        ).toBe('STATUS_UNAVAILABLE');
       });
 
       it('waits 8 s, then 16 s, by default', async () => {
