@@ -6,6 +6,7 @@ import {
   type ProviderType,
 } from '../../src/types.js';
 import { TEST_ADDRESSES, mainnetDepositPayload } from '../fixtures.js';
+import { offsetDepositPair } from '../blsTestUtils.js';
 // ESM-safe mocking: mock helpers before importing the module under test
 // @ts-expect-error - ESM mocking requires top-level await
 await jest.unstable_mockModule('../../src/eoa/eoaHelpers.js', () => ({
@@ -354,6 +355,15 @@ describe('EOA', () => {
         ],
       ])('rejects %s before sending', async (_label, payload, message) => {
         await expect(eoa.deposit(payload)).rejects.toThrow(message);
+        expect(submitEOABatchDeposit).not.toHaveBeenCalled();
+      });
+
+      it('requires each deposit signature to be valid on its own', async () => {
+        await expect(
+          eoa.deposit({ deposits: offsetDepositPair(deposit) }),
+        ).rejects.toThrow(
+          'Invalid deposit at index 0: invalid deposit signature',
+        );
         expect(submitEOABatchDeposit).not.toHaveBeenCalled();
       });
 
