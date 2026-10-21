@@ -8,9 +8,9 @@ import { checksum, invalid, isAddressInput, T } from '../schema.js';
 import type { SplitParams } from '../types.js';
 
 /** 100% in SplitV2 allocations: 1% is 10000. */
-export const SPLITS_SCALE = 1_000_000;
+export const SPLITS_SCALE = 1_000_000n;
 /** The Obol RAF share added to every reward split the presets build (1%). */
-export const RAF_SHARE = 10_000;
+export const RAF_SHARE = 10_000n;
 /** SplitV2 stores the distribution incentive as a uint16 (at most 6.5535%). */
 export const MAX_DISTRIBUTION_INCENTIVE = 65_535;
 
@@ -29,7 +29,7 @@ export const compareAddresses = (a: string, b: string): number => {
  * decimals (no sign, exponent or spaces), result in [1, 1_000_000]; else
  * PAYLOAD_INVALID.
  */
-export const percent = (p: string | number): number => {
+export const percent = (p: string | number): bigint => {
   const text =
     typeof p === 'number' && Number.isFinite(p)
       ? String(p)
@@ -39,9 +39,9 @@ export const percent = (p: string | number): number => {
   const match = PERCENT.exec(text);
   const shares =
     match === null
-      ? 0
-      : Number(match[1]) * 10_000 + Number((match[2] ?? '').padEnd(4, '0'));
-  if (shares < 1 || shares > SPLITS_SCALE) {
+      ? 0n
+      : BigInt(match[1]) * 10_000n + BigInt((match[2] ?? '').padEnd(4, '0'));
+  if (shares < 1n || shares > SPLITS_SCALE) {
     throw invalid(
       'percent',
       `must be a percentage in (0, 100] with at most 4 decimals, got ${String(p)}`,
@@ -62,7 +62,7 @@ export const formatPercent = (ppm: number | bigint): string => {
       : Number.isSafeInteger(ppm)
         ? BigInt(ppm)
         : -1n;
-  if (value < 0n || value > BigInt(SPLITS_SCALE)) {
+  if (value < 0n || value > SPLITS_SCALE) {
     throw invalid('ppm', 'must be an integer in [0, 1000000]');
   }
   const whole = (value / 10_000n).toString();
@@ -95,7 +95,7 @@ const toShare = (value: unknown): bigint | null =>
 export const readShares = (
   recipients: unknown,
   path: string,
-  expectedTotal: number,
+  expectedTotal: bigint,
 ): Array<{ address: Address; share: bigint }> => {
   if (!Array.isArray(recipients) || recipients.length === 0) {
     throw invalid(path, 'must be a non-empty array', 'empty_recipients');
@@ -130,7 +130,7 @@ export const readShares = (
     total += value;
     return { address: checksum(address), share: value };
   });
-  if (total !== BigInt(expectedTotal)) {
+  if (total !== expectedTotal) {
     throw invalid(
       path,
       `shares must sum to exactly ${expectedTotal}, got ${total}`,
@@ -189,11 +189,11 @@ export const splitParams = (
     readIncentive(distributionIncentive, 'distributionIncentive'),
   );
 
-/** Split params as inputs take them (allocations as bigint). */
+/** Split params as inputs take them (allocations as bigint or safe integers). */
 export const SplitParamsSchema = Type.Object({
   recipients: Type.Array(T.Address, { minItems: 1 }),
-  allocations: Type.Array(T.Wei, { minItems: 1 }),
-  totalAllocation: T.Wei,
+  allocations: Type.Array(T.UintLike, { minItems: 1 }),
+  totalAllocation: T.UintLike,
   distributionIncentive: Type.Integer({
     minimum: 0,
     maximum: MAX_DISTRIBUTION_INCENTIVE,
@@ -212,8 +212,10 @@ export const checkSplitParams = (
   if (params.allocations.length !== params.recipients.length) {
     throw invalid(`${path}.allocations`, 'must have one entry per recipient');
   }
-  const sum = params.allocations.reduce((s, a) => s + a, 0n);
-  if (sum === 0n || sum !== params.totalAllocation) {
+  const allocations = params.allocations.map(a => BigInt(a));
+  const totalAllocation = BigInt(params.totalAllocation);
+  const sum = allocations.reduce((s, a) => s + a, 0n);
+  if (sum === 0n || sum !== totalAllocation) {
     throw invalid(
       `${path}.totalAllocation`,
       'must be the (positive) sum of the allocations',
@@ -221,8 +223,8 @@ export const checkSplitParams = (
   }
   return {
     recipients: params.recipients.map(checksum),
-    allocations: [...params.allocations],
-    totalAllocation: params.totalAllocation,
+    allocations,
+    totalAllocation,
     distributionIncentive: params.distributionIncentive,
   };
 };
@@ -256,7 +258,7 @@ export const splitAmounts = (
   amount: bigint,
 ): { amounts: bigint[]; distributorReward: bigint } => {
   const distributorReward =
-    (amount * BigInt(params.distributionIncentive)) / BigInt(SPLITS_SCALE);
+    (amount * BigInt(params.distributionIncentive)) / SPLITS_SCALE;
   const rest = amount - distributorReward;
   return {
     amounts: params.allocations.map(a => (rest * a) / params.totalAllocation),

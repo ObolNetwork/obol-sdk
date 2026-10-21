@@ -1,7 +1,6 @@
 /** setup: OVM and split creation flows (spec/operations.md "setup"). */
-import type { Address } from 'viem';
 import type { Context } from '../context.js';
-import type { Prepared, SplitParams } from '../types.js';
+import type { Prepared } from '../types.js';
 import { prepareCreateSplit, type CreateSplitInput } from '../splits/create.js';
 import {
   ovmFromReceipt,
@@ -10,18 +9,16 @@ import {
   type OvmCreated,
 } from './ovm.js';
 import { ovmSplitParams, rewardsSplit, solo, totalSplit } from './presets.js';
-import {
-  prepareOvmWithSplits,
-  type OvmWithSplitsInput,
-  type OvmWithSplitsPreview,
-} from './withSplits.js';
+import { prepareOvmWithSplits, type OvmWithSplitsInput } from './withSplits.js';
 
-export { prepareCreateSplit, type CreateSplitInput } from '../splits/create.js';
+export type { CreateSplitInput, CreateSplitPreview } from '../splits/create.js';
 export {
   DEFAULT_PRINCIPAL_THRESHOLD,
+  MAX_PRINCIPAL_THRESHOLD,
+  MIN_PRINCIPAL_THRESHOLD,
   ovmFromReceipt,
-  prepareCreateOvm,
   type CreateOvmInput,
+  type CreateOvmPreview,
   type OvmCreated,
 } from './ovm.js';
 export {
@@ -32,7 +29,6 @@ export {
   type PresetOptions,
 } from './presets.js';
 export {
-  prepareOvmWithSplits,
   type OvmRecipientInput,
   type OvmWithSplitsInput,
   type OvmWithSplitsPreview,
@@ -46,15 +42,14 @@ type Preset<F extends (input: never) => unknown> = Omit<
 
 /** The setup module bound to a client context (presets use the client chain). */
 export interface SetupModule {
-  prepareCreateOvm: (
-    input: CreateOvmInput,
-  ) => Promise<Prepared<{ factory: Address }>>;
+  prepareCreateOvm: (input: CreateOvmInput) => Promise<Prepared<'createOvm'>>;
+  /** The same operation as `splits.prepareCreateSplit`. */
   prepareCreateSplit: (
     input: CreateSplitInput,
-  ) => Promise<Prepared<{ address: Address; params: SplitParams }>>;
+  ) => Promise<Prepared<'createSplit'>>;
   prepareOvmWithSplits: (
     input: OvmWithSplitsInput,
-  ) => Promise<Prepared<OvmWithSplitsPreview>>;
+  ) => Promise<Prepared<'ovmWithSplits'>>;
   ovmFromReceipt: (receipt: Parameters<typeof ovmFromReceipt>[0]) => OvmCreated;
   ovmSplitParams: (
     input: Preset<typeof ovmSplitParams>,
@@ -74,3 +69,6 @@ export const createSetupModule = (ctx: Context): SetupModule => ({
   totalSplit: input => totalSplit({ ...input, chainId: ctx.chain.id }),
   solo: input => solo({ ...input, chainId: ctx.chain.id }),
 });
+
+/** Builds the context a module is bound to, without the other modules. */
+export { createObolContext, type ObolClientConfig } from '../clientContext.js';

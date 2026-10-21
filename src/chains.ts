@@ -35,6 +35,11 @@ export interface ObolChain {
   forkVersion: Hex;
   capellaForkVersion: Hex;
   genesisValidatorsRoot?: Hex;
+  /**
+   * Beacon chain genesis time (unix seconds), for epoch arithmetic without a
+   * beacon request. Set on the chains with Obol contracts.
+   */
+  genesisTime?: bigint;
   /** Absent on chains supported for cluster files only. */
   contracts?: ChainContracts;
 }
@@ -60,6 +65,7 @@ export const CHAINS: Record<number, ObolChain> = {
     id: 1,
     name: 'mainnet',
     network: 'mainnet',
+    genesisTime: 1606824023n,
     forkVersion: '0x00000000',
     capellaForkVersion: '0x03000000',
     genesisValidatorsRoot:
@@ -96,6 +102,7 @@ export const CHAINS: Record<number, ObolChain> = {
     id: 560048,
     name: 'hoodi',
     network: 'hoodi',
+    genesisTime: 1742213400n,
     forkVersion: '0x10000910',
     capellaForkVersion: '0x40000910',
     genesisValidatorsRoot:
@@ -193,3 +200,34 @@ export const ALLOWED_API_BASE_URLS = [
 
 export const DEFAULT_API_BASE_URL = 'https://api.obol.tech';
 export const DEFAULT_API_TIMEOUT_MS = 30_000;
+
+export const SECONDS_PER_SLOT = 12n;
+export const SLOTS_PER_EPOCH = 32n;
+
+/**
+ * The beacon chain's current epoch from the chain's genesis time and the
+ * clock (`nowMs`, default now); undefined for a chain without a genesis time.
+ */
+export const currentEpoch = (
+  chain: ObolChain,
+  nowMs: number = Date.now(),
+): bigint | undefined => {
+  if (chain.genesisTime === undefined) return undefined;
+  const now = BigInt(Math.floor(nowMs / 1000));
+  if (now < chain.genesisTime) return 0n;
+  return (now - chain.genesisTime) / SECONDS_PER_SLOT / SLOTS_PER_EPOCH;
+};
+
+const LOCAL_API = /^http(s)?:\/\/(localhost|127\.0\.0\.1)(:[0-9]{1,5})?$/;
+
+/**
+ * Whether `baseUrl` (trailing slashes removed) may receive bearer
+ * signatures: an Obol host, or with `allowLocal` an http(s) URL on
+ * `localhost` / `127.0.0.1` (any port, no path).
+ */
+export const isAllowedApiBaseUrl = (
+  baseUrl: string,
+  allowLocal: boolean,
+): boolean =>
+  (ALLOWED_API_BASE_URLS as readonly string[]).includes(baseUrl) ||
+  (allowLocal && LOCAL_API.test(baseUrl));

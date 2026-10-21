@@ -8,13 +8,14 @@
 import { encodeFunctionData, parseAbi, parseEther, type Address } from 'viem';
 import { multicall3Abi, NATIVE_TOKEN } from '../src/abi.js';
 import { OVM_ROLES } from '../src/ovm/index.js';
-import type { SplitParams } from '../src/types.js';
+import type { AnyPrepared, SplitParams } from '../src/types.js';
 import {
   balanceOf,
+  CHAIN,
   codes,
   describeFork,
   expectCode,
-  HOODI,
+  NET,
   obolFor,
   publicClient,
   randomAddress,
@@ -35,7 +36,7 @@ const warehouseAbi = parseAbi([
   'function setWithdrawConfig((uint16 incentive, bool paused) config)',
 ]);
 
-describeFork('send through a Safe on a Hoodi fork', () => {
+describeFork('send through a Safe', () => {
   let owner: Signer;
   let safe: Address;
 
@@ -61,7 +62,7 @@ describeFork('send through a Safe on a Hoodi fork', () => {
       owner.obol,
       await owner.obol.ovm.prepareTransfer({
         ovm: d.ovm,
-        newBeneficiary: d.principalRecipient,
+        newPrincipalRecipient: d.principalRecipient,
         newOwner: safe,
       }),
     );
@@ -95,7 +96,8 @@ describeFork('send through a Safe on a Hoodi fork', () => {
     const obol = obolFor(wallet.walletClient);
     // grantRoles on an OVM the Safe does not own reverts inside the Safe.
     const d = await deployOvm(owner);
-    const prepared = {
+    const prepared: AnyPrepared = {
+      kind: 'role',
       request: {
         to: d.ovm,
         data: encodeFunctionData({
@@ -104,10 +106,10 @@ describeFork('send through a Safe on a Hoodi fork', () => {
           args: [randomAddress(), OVM_ROLES.DEPOSIT],
         }),
         value: 0n,
-        chainId: 560048,
+        chainId: CHAIN.id,
       },
       checks: [],
-      preview: undefined,
+      preview: { function: 'grantRoles', args: [] },
     };
     const sent = await obol.send(prepared);
     expect(sent.contractWallet).toBe(true);
@@ -137,6 +139,7 @@ describeFork('send through a Safe on a Hoodi fork', () => {
       ({ address: split, params } = created.preview);
       const wallet = safeWallet(safe, owner);
       const sent = await obolFor(wallet.walletClient).send({
+        kind: 'role',
         request: {
           to: split,
           data: encodeFunctionData({
@@ -145,10 +148,10 @@ describeFork('send through a Safe on a Hoodi fork', () => {
             args: [true],
           }),
           value: 0n,
-          chainId: 560048,
+          chainId: CHAIN.id,
         },
         checks: [],
-        preview: undefined,
+        preview: { function: 'raw', args: [] },
       });
       await sent.wait({ timeoutMs: 30_000 });
       await owner.walletClient
@@ -168,8 +171,9 @@ describeFork('send through a Safe on a Hoodi fork', () => {
       // split's owner exemption does not apply.
       const wallet = safeWallet(safe, owner, { safeTxGas: 500_000n });
       const sent = await obolFor(wallet.walletClient).send({
+        kind: 'role',
         request: {
-          to: HOODI.multicall3,
+          to: NET.multicall3,
           data: encodeFunctionData({
             abi: multicall3Abi,
             functionName: 'aggregate3',
@@ -188,10 +192,10 @@ describeFork('send through a Safe on a Hoodi fork', () => {
             ],
           }),
           value: 0n,
-          chainId: 560048,
+          chainId: CHAIN.id,
         },
         checks: [],
-        preview: undefined,
+        preview: { function: 'raw', args: [] },
       });
       await expectCode(
         async () => await sent.wait({ timeoutMs: 30_000 }),
@@ -222,18 +226,19 @@ describeFork('send through a Safe on a Hoodi fork', () => {
     const wallet = safeWallet(safe, owner);
     const obol = obolFor(wallet.walletClient);
     const pause = await obol.send({
+      kind: 'role',
       request: {
-        to: HOODI.warehouse,
+        to: NET.warehouse,
         data: encodeFunctionData({
           abi: warehouseAbi,
           functionName: 'setWithdrawConfig',
           args: [{ incentive: 0, paused: true }],
         }),
         value: 0n,
-        chainId: 560048,
+        chainId: CHAIN.id,
       },
       checks: [],
-      preview: undefined,
+      preview: { function: 'raw', args: [] },
     });
     await pause.wait({ timeoutMs: 30_000 });
 
@@ -250,7 +255,7 @@ describeFork('send through a Safe on a Hoodi fork', () => {
     const prepared = await obol.splits.prepareDistribution({ ovm: d.ovm });
     expect(codes(prepared.checks)).toEqual(['RECIPIENT_WITHDRAW_PAUSED']);
     const safeLeg = prepared.preview.recipients.find(r => r.address === safe);
-    expect(safeLeg).toMatchObject({ skipReason: 'paused', toWallet: 0n });
+    expect(safeLeg).toMatchObject({ skipReason: 'paused', fromOvm: 0n });
     const otherLeg = prepared.preview.recipients.find(r => r.address === other);
 
     const safeBefore = await balanceOf(safe);
@@ -258,10 +263,14 @@ describeFork('send through a Safe on a Hoodi fork', () => {
     expect(sent.contractWallet).toBe(true);
     await sent.wait({ timeoutMs: 30_000 });
     expect(await balanceOf(safe)).toBe(safeBefore);
-    expect(await balanceOf(other)).toBe(otherLeg?.toWallet);
+    expect(await balanceOf(other)).toBe(
+      otherLeg !== undefined
+        ? otherLeg.fromThisDistribution + otherLeg.alreadyWaiting - 1n
+        : undefined,
+    );
     expect(
       await publicClient.readContract({
-        address: HOODI.warehouse,
+        address: NET.warehouse,
         abi: warehouseAbi,
         functionName: 'balanceOf',
         args: [safe, BigInt(NATIVE_TOKEN)],

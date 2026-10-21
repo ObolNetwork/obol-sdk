@@ -17,7 +17,7 @@ import {
   type DepositData,
   type DistributedValidator,
 } from '../types.js';
-import { secp256k1VerifyDigest } from '../secp256k1.js';
+import { secp256k1VerifyRecovered } from '../secp256k1.js';
 import {
   builderRegistrationMessageType,
   depositMessageType,
@@ -468,7 +468,7 @@ export const verifyNodeSignatures = async (
     ).publicKey;
     await tick();
 
-    if (!secp256k1VerifyDigest(publicKey, lockHash, nodeSignatures[i])) {
+    if (!secp256k1VerifyRecovered(publicKey, lockHash, nodeSignatures[i])) {
       return false;
     }
     await tick();

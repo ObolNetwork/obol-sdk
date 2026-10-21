@@ -41,12 +41,19 @@ const apiWith = (
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status });
 
-const mockBeacon = (pending: unknown[], validators: unknown[]) => {
+const mockBeacon = (
+  pending: unknown[],
+  validators: unknown[],
+  partials: unknown[] = [],
+) => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetchMock = jest.fn(async (url: any, init?: RequestInit) => {
     calls.push({ url: String(url), init });
     if (String(url).endsWith('/pending_deposits')) {
       return jsonResponse({ data: pending });
+    }
+    if (String(url).endsWith('/pending_partial_withdrawals')) {
+      return jsonResponse({ data: partials });
     }
     return jsonResponse({ data: validators });
   });
@@ -62,9 +69,13 @@ const registryRow = (pubkey: Hex, status: string, extra: object = {}) => ({
     pubkey,
     withdrawal_credentials: CREDS,
     effective_balance: (32n * GWEI).toString(),
+    activation_epoch: status === 'pending_initialized' ? FAR_FUTURE : '100',
+    exit_epoch: FAR_FUTURE,
   },
   ...extra,
 });
+
+const FAR_FUTURE = (2n ** 64n - 1n).toString();
 
 const realFetch = global.fetch;
 afterEach(() => {
@@ -128,6 +139,47 @@ describe('deposits.status', () => {
           validators: answer((body as { pubkeys: Hex[] }).pubkeys),
         }),
       });
+
+    it('reads activationEpoch, exitEpoch and pendingPartialWithdrawals (#1047)', async () => {
+      const api = serving(() => [
+        registry(PUBKEY_A, {
+          activationEpoch: '12345',
+          exitEpoch: null,
+          pendingPartialWithdrawals: wei(2n * ETH),
+        }),
+        registry(PUBKEY_B, {
+          beaconStatus: 'active_exiting',
+          activationEpoch: '10',
+          exitEpoch: '67890',
+          pendingPartialWithdrawals: '0',
+        }),
+      ]);
+      const [a, b] = await getDepositStatus(fakeChain().context(api), [
+        PUBKEY_A,
+        PUBKEY_B,
+      ]);
+      expect(a).toMatchObject({
+        activationEpoch: 12345n,
+        exitEpoch: null,
+        pendingPartialWithdrawals: 2n * ETH,
+      });
+      expect(b).toMatchObject({ activationEpoch: 10n, exitEpoch: 67890n });
+    });
+
+    it.each([
+      ['a malformed activation epoch', { activationEpoch: 12 }],
+      ['a malformed exit epoch', { exitEpoch: '-1' }],
+      [
+        'malformed pending partial withdrawals',
+        { pendingPartialWithdrawals: '1.5' },
+      ],
+    ])('throws STATUS_UNAVAILABLE for %s', async (_n, extra) => {
+      const api = serving(() => [registry(PUBKEY_A, extra)]);
+      expect(
+        (await caught(getDepositStatus(fakeChain().context(api), [PUBKEY_A])))
+          .code,
+      ).toBe('STATUS_UNAVAILABLE');
+    });
 
     it('maps registry, queue-only and new pubkeys; no lockHash needed', async () => {
       const api = serving(() => [
@@ -581,9 +633,10 @@ describe('deposits.status', () => {
       );
       expect(calls.map(c => c.url)).toEqual([
         'http://beacon.local:5052/eth/v1/beacon/states/head/pending_deposits',
+        'http://beacon.local:5052/eth/v1/beacon/states/head/pending_partial_withdrawals',
         'http://beacon.local:5052/eth/v1/beacon/states/head/validators',
       ]);
-      expect(JSON.parse(String(calls[1].init?.body))).toEqual({
+      expect(JSON.parse(String(calls[2].init?.body))).toEqual({
         ids: [PUBKEY_A, PUBKEY_B, PUBKEY_C],
       });
       expect(result[0]).toEqual({
@@ -595,6 +648,9 @@ describe('deposits.status', () => {
         withdrawalCredentials: CREDS,
         balance: 32n * ETH + 5n * GWEI,
         effectiveBalance: 32n * ETH,
+        activationEpoch: null,
+        exitEpoch: null,
+        pendingPartialWithdrawals: 0n,
         pendingDeposits: [{ amount: ETH, withdrawalCredentials: CREDS }],
       });
       expect(result[1]).toEqual({
@@ -678,6 +734,59 @@ describe('deposits.status', () => {
       ).toBe('STATUS_UNAVAILABLE');
       global.fetch = (async () =>
         jsonResponse({ nope: 1 })) as unknown as typeof fetch;
+      expect(
+        (
+          await caught(
+            getDepositStatus(fakeChain().context(), [PUBKEY_A], {
+              beaconUrl: BEACON,
+            }),
+          )
+        ).code,
+      ).toBe('STATUS_UNAVAILABLE');
+    });
+
+    it('sums pending partial withdrawals by validator index and reads the epochs', async () => {
+      mockBeacon(
+        [],
+        [
+          registryRow(PUBKEY_A, 'active_ongoing'),
+          {
+            ...registryRow(PUBKEY_B, 'active_exiting', { index: '43' }),
+          },
+        ],
+        [
+          {
+            validator_index: '42',
+            amount: GWEI.toString(),
+            withdrawable_epoch: '9',
+          },
+          {
+            validator_index: '42',
+            amount: (2n * GWEI).toString(),
+            withdrawable_epoch: '9',
+          },
+          { validator_index: '7', amount: '5', withdrawable_epoch: '9' },
+        ],
+      );
+      const [a, b] = await getDepositStatus(
+        fakeChain().context(),
+        [PUBKEY_A, PUBKEY_B],
+        { beaconUrl: BEACON },
+      );
+      expect(a).toMatchObject({
+        activationEpoch: 100n,
+        exitEpoch: null,
+        pendingPartialWithdrawals: 3n * ETH,
+      });
+      expect(b).toMatchObject({ pendingPartialWithdrawals: 0n });
+    });
+
+    it('throws STATUS_UNAVAILABLE for a malformed pending partial withdrawal', async () => {
+      mockBeacon(
+        [],
+        [registryRow(PUBKEY_A, 'active_ongoing')],
+        [{ validator_index: 'x', amount: '1' }],
+      );
       expect(
         (
           await caught(

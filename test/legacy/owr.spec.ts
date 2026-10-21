@@ -1,6 +1,7 @@
 import { getAddress } from 'viem';
 import { owrAbi } from '../../src/abi.js';
-import { createLegacyModule, getOwrTranches } from '../../src/legacy/index.js';
+import { createLegacyModule } from '../../src/legacy/index.js';
+import { getOwrTranches } from '../../src/legacy/legacy.js';
 import { fakeChain } from '../helpers/fakeChain.js';
 import { caught, ETH, PRINCIPAL, REWARD } from '../ovm/ovmFixture.js';
 

@@ -17,15 +17,23 @@ import {
 import type { Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, invalid, sameAddress, T } from '../schema.js';
-import type { Deposit, DepositKind, Finding, Prepared } from '../types.js';
+import type {
+  Deposit,
+  DepositInput,
+  DepositKind,
+  Finding,
+  Prepared,
+  StatusSource,
+} from '../types.js';
 import { ETH } from '../units.js';
 import { credentialsPrefix } from '../ovm/credentials.js';
 import { readOvmCore, requireRole, requireSender } from '../ovm/read.js';
 import { requireObolOvm, verifyOvm } from '../ovm/verify.js';
 import {
-  DepositStatusOptionsSchema,
   effectiveCredentials,
+  StatusSourceFields,
   statusIfAvailable,
+  statusSourceOf,
   type DepositStatus,
 } from './status.js';
 import { DepositSchema, verifyDepositData } from './verifyDepositData.js';
@@ -51,22 +59,18 @@ export const PrepareDepositInputSchema = Type.Object(
     ]),
     expectedWithdrawalAddress: Type.Optional(T.Address),
     from: Type.Optional(T.Address),
-    beaconUrl: DepositStatusOptionsSchema.properties.beaconUrl,
-    lockHash: DepositStatusOptionsSchema.properties.lockHash,
+    ...StatusSourceFields,
   },
   { additionalProperties: false },
 );
-export interface PrepareDepositInput {
-  deposits: Deposit[];
+export interface PrepareDepositInput extends StatusSource {
+  deposits: DepositInput[];
   kind?: DepositKind;
-  via: { ovm: Address } | { batch: true };
+  via: { ovm: string } | { batch: true };
   /** Required with batch; with ovm it is the OVM address. */
-  expectedWithdrawalAddress?: Address;
+  expectedWithdrawalAddress?: string;
   /** Sender for the OVM role check; default the wallet account. */
-  from?: Address;
-  /** Deposit status sources (see deposits.status). */
-  beaconUrl?: string;
-  lockHash?: Hex;
+  from?: string;
 }
 
 export interface DepositPreview {
@@ -91,6 +95,7 @@ const existenceChecks = (
   const registered =
     status.status !== 'new' && status.beaconStatus !== 'pending_deposit';
   const details = { index, pubkey };
+  const subject = { pubkey };
 
   if (!registered && status.pendingDeposits.length > 0) {
     // The first processed deposit fixes the credentials. A top-up with
@@ -125,7 +130,7 @@ const existenceChecks = (
         'DEPOSIT_ALREADY_QUEUED',
         'info',
         `${status.pendingDeposits.length} deposit(s) for ${pubkey} are already queued`,
-        { hint: 'Make sure this is not a repeat', details },
+        { hint: 'Make sure this is not a repeat', subject, details },
       ),
     );
   }
@@ -145,7 +150,7 @@ const existenceChecks = (
         'DEPOSIT_IS_TOP_UP',
         'warning',
         `${pubkey} is already a validator: this deposit tops it up and its withdrawal credentials are ignored`,
-        { hint: 'Confirm this is intended', details },
+        { hint: 'Confirm this is intended', subject, details },
       ),
     );
   }
@@ -155,7 +160,7 @@ const existenceChecks = (
         'TOP_UP_EXITED_VALIDATOR',
         'warning',
         `${pubkey} has exited: the top-up is swept back to its withdrawal address, not staked`,
-        { hint: 'Do not top up', details },
+        { hint: 'Do not top up', subject, details },
       ),
     );
   }
@@ -176,6 +181,7 @@ const existenceChecks = (
           `${pubkey} has ${prefix} credentials: with this deposit its balance reaches ${after} wei, above 32 ETH; the excess is swept back to the withdrawal address, not staked`,
           {
             hint: 'Deposit at most up to 32 ETH, or consolidate to 0x02 first',
+            subject,
             details: { ...details, balanceAfter: after },
           },
         ),
@@ -205,7 +211,7 @@ const existenceChecks = (
 export const prepareDeposit = async (
   ctx: Context,
   input: PrepareDepositInput,
-): Promise<Array<Prepared<DepositPreview>>> => {
+): Promise<Array<Prepared<'deposit'>>> => {
   const args = decode(PrepareDepositInputSchema, input);
   const contracts = requireContracts(ctx.chain.id, 'deposits.prepareDeposit');
   const kind: DepositKind = args.kind ?? 'deposit';
@@ -246,11 +252,7 @@ export const prepareDeposit = async (
     // 2. Provenance: the principal is at stake, so unknown is an error.
     await requireObolOvm(ctx, ovm, true);
     // 3. Role.
-    const from = requireSender(
-      ctx,
-      args.from as Address | undefined,
-      'deposits.prepareDeposit',
-    );
+    const from = requireSender(ctx, args.from, 'deposits.prepareDeposit');
     const core = await readOvmCore(ctx, ovm, {
       from,
       what: 'deposits.prepareDeposit',
@@ -266,6 +268,7 @@ export const prepareDeposit = async (
         `${expected} is an Obol OVM: the batch deposit contract does not raise its amountOfPrincipalStake, so this principal would later be paid out as rewards`,
         {
           hint: 'Deposit via the OVM, or have the owner call setAmountOfPrincipalStake',
+          subject: { address: expected },
           details: { address: expected },
         },
       ),
@@ -275,10 +278,7 @@ export const prepareDeposit = async (
   // 5. Existence. Findings about one deposit go only on its transaction.
   const perDeposit: Finding[][] = deposits.map(() => []);
   const pubkeys = deposits.map(d => d.pubkey.toLowerCase() as Hex);
-  const statuses = await statusIfAvailable(ctx, pubkeys, {
-    ...(args.beaconUrl !== undefined ? { beaconUrl: args.beaconUrl } : {}),
-    ...(args.lockHash !== undefined ? { lockHash: args.lockHash as Hex } : {}),
-  });
+  const statuses = await statusIfAvailable(ctx, pubkeys, statusSourceOf(args));
   if (statuses === null) {
     checks.push(
       finding(
@@ -324,7 +324,7 @@ export const prepareDeposit = async (
 
   if (ovm !== null) {
     return deposits.map((deposit, i) =>
-      prepared(ctx, {
+      prepared(ctx, 'deposit', {
         to: ovm,
         data: encodeFunctionData({
           abi: ovmAbi,
@@ -343,12 +343,12 @@ export const prepareDeposit = async (
       }),
     );
   }
-  const result: Array<Prepared<DepositPreview>> = [];
+  const result: Array<Prepared<'deposit'>> = [];
   for (let i = 0; i < deposits.length; i += BATCH_DEPOSIT_SIZE) {
     const batch = deposits.slice(i, i + BATCH_DEPOSIT_SIZE);
     const total = sum(batch.map(d => d.amount));
     result.push(
-      prepared(ctx, {
+      prepared(ctx, 'deposit', {
         to: contracts.batchDeposit,
         data: encodeFunctionData({
           abi: batchDepositAbi,

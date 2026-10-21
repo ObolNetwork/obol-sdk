@@ -39,7 +39,7 @@ import {
 } from '../../src/internal/verification/common.js';
 import { OVM_ROLES } from '../../src/ovm/routing.js';
 import type { FullSimulation, Simulation } from '../../src/simulate/types.js';
-import type { Deposit, Prepared } from '../../src/types.js';
+import type { AnyPrepared, Deposit } from '../../src/types.js';
 import { blsSign, FORK_HOODI, randomScalar } from '../helpers/syntheticLock.js';
 import { FIXTURES, rpcError, toJson, type Exchange } from './replay.js';
 
@@ -119,7 +119,7 @@ const publicClient = createPublicClient({
 }) as PublicClient;
 const obol = createObolClient({ chain: hoodi, publicClient, api: false });
 
-const sendAs = async (from: Address, prepared: Prepared<unknown>) => {
+const sendAs = async (from: Address, prepared: AnyPrepared) => {
   await upstream('anvil_impersonateAccount', [from]);
   const wallet = createWalletClient({ account: from, chain: hoodi, transport });
   const hash = await wallet.sendTransaction({
@@ -171,7 +171,7 @@ const BACKENDS = ['eth_simulateV1', 'debug_traceCall', 'eth_call'] as const;
 /** Simulates with every backend, checks they agree, records the exchanges. */
 const simulateAll = async (
   name: string,
-  prepared: Prepared<unknown>,
+  prepared: AnyPrepared,
   from: Address,
   meta: Record<string, string>,
 ): Promise<FullSimulation> => {
@@ -179,7 +179,7 @@ const simulateAll = async (
   const exchanges: Record<string, Exchange[]> = {};
   for (const backend of BACKENDS) {
     log = [];
-    results[backend] = await obol.simulate(prepared, { from, backend });
+    results[backend] = await obol.experimental.simulate(prepared, { from, backend });
     exchanges[backend] = log;
     log = null;
   }
@@ -351,7 +351,8 @@ run('simulate on an anvil Hoodi fork', () => {
       ...params,
       allocations: [...params.allocations].reverse(),
     };
-    const bad: Prepared<Record<string, never>> = {
+    const bad = {
+      kind: 'distribution',
       request: {
         to: HOODI.multicall3,
         data: encodeFunctionData({
@@ -378,7 +379,12 @@ run('simulate on an anvil Hoodi fork', () => {
       preview: {},
       blockNumber: distribution.blockNumber,
     };
-    const reverted = await simulateAll('revertMulticall', bad, OPERATOR, meta);
+    const reverted = await simulateAll(
+      'revertMulticall',
+      bad as unknown as AnyPrepared,
+      OPERATOR,
+      meta,
+    );
     expect(reverted.revertReason?.inner?.reason.name).toBe('InvalidSplit');
   });
 
@@ -442,7 +448,7 @@ run('simulate on an anvil Hoodi fork', () => {
 
     const transfer = await obol.ovm.prepareTransfer({
       ovm,
-      newBeneficiary: R1,
+      newPrincipalRecipient: R1,
       newOwner: OPERATOR,
       from: OWNER,
     });

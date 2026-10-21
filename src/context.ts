@@ -3,7 +3,13 @@
  * optional API. Modules are plain factories over a Context, so a second client
  * (or a test) can build one without the constructor.
  */
-import type { Account, Address, PublicClient, WalletClient } from 'viem';
+import {
+  getAddress,
+  type Account,
+  type Address,
+  type PublicClient,
+  type WalletClient,
+} from 'viem';
 import type { ObolApi } from './api.js';
 import { getObolChain, requireContracts, type ObolChain } from './chains.js';
 import { ObolError } from './errors.js';
@@ -27,7 +33,10 @@ export const requireApi = (ctx: Context, operation: string): ObolApi => {
     throw new ObolError(
       'API_DISABLED',
       `${operation} needs the Obol API, and the client was built with api: false`,
-      { hint: 'Enable the API, or use the chain-only operation' },
+      {
+        hint: 'Enable the API, or use the chain-only operation',
+        details: { operation },
+      },
     );
   }
   return ctx.api;
@@ -69,9 +78,14 @@ export const requireWallet = async (
 export const accountAddress = (account: Account | Address): Address =>
   typeof account === 'string' ? account : account.address;
 
-/** The sender for role checks: `from`, else the wallet account, else null. */
-export const senderOf = (ctx: Context, from?: Address): Address | null => {
-  if (from !== undefined) return from;
+/**
+ * The sender for role checks: `from` (already decoded), else the wallet
+ * account, else null. Checksummed.
+ */
+export const senderOf = (ctx: Context, from?: string): Address | null => {
+  if (from !== undefined) return getAddress(from.toLowerCase());
   const account = ctx.walletClient?.account;
-  return account !== undefined ? accountAddress(account) : null;
+  return account !== undefined
+    ? getAddress(accountAddress(account).toLowerCase())
+    : null;
 };

@@ -24,18 +24,21 @@ describe('createObolClient', () => {
         'cluster',
         'deposits',
         'exits',
+        'experimental',
         'incentives',
-        'legacy',
         'ovm',
         'send',
         'setup',
-        'simulate',
         'splits',
         'terms',
         'withdrawals',
       ].sort(),
     );
     expect(obol.chain.id).toBe(560048);
+    expect(Object.keys(obol.experimental).sort()).toEqual([
+      'legacy',
+      'simulate',
+    ]);
   });
 
   it('rejects an unsupported chain', () => {
@@ -64,7 +67,7 @@ describe('createObolClient', () => {
         publicClient,
         api: { baseUrl: 'https://example.com' },
       }),
-    ).toThrow(expect.objectContaining({ code: 'INVALID_BASE_URL' }));
+    ).toThrow(expect.objectContaining({ code: 'BASE_URL_INVALID' }));
     expect(() =>
       createObolClient({
         chain: hoodi,
@@ -72,6 +75,39 @@ describe('createObolClient', () => {
         api: { baseUrl: 'https://api.obol.tech/' },
       }),
     ).not.toThrow();
+  });
+
+  it('allows a local API only with allowLocal', () => {
+    const { publicClient } = fakeChain();
+    const build = (baseUrl: string, allowLocal?: boolean): unknown =>
+      createObolClient({
+        chain: hoodi,
+        publicClient,
+        api: { baseUrl, ...(allowLocal !== undefined ? { allowLocal } : {}) },
+      });
+    expect(() => build('http://localhost:3001')).toThrow(
+      expect.objectContaining({ code: 'BASE_URL_INVALID' }),
+    );
+    for (const url of [
+      'http://localhost:3001',
+      'http://localhost',
+      'https://127.0.0.1:8443/',
+      'http://127.0.0.1:3001',
+    ]) {
+      expect(() => build(url, true)).not.toThrow();
+    }
+    for (const url of [
+      'http://localhost.example.com',
+      'http://localhost:3001/v1',
+      'http://10.0.0.1:3001',
+      'http://user@localhost:3001',
+      'ftp://localhost',
+      'http://[::1]:3001',
+    ]) {
+      expect(() => build(url, true)).toThrow(
+        expect.objectContaining({ code: 'BASE_URL_INVALID' }),
+      );
+    }
   });
 
   it('api: false disables api operations', async () => {

@@ -3,7 +3,7 @@
  * "exits").
  */
 import type { Context } from '../context.js';
-import type { SignedExit } from './types.js';
+import type { FullExitBlob } from './types.js';
 import { aggregate, type AggregateInput } from './aggregate.js';
 import {
   blsAggregate,
@@ -25,11 +25,15 @@ export {
   verifyPartialExit,
 };
 export type { AggregateInput, VerifyPartialExitInput };
+export type { ExitCluster } from './verifyPartialExit.js';
 export type {
-  ExistingExit,
-  ExitBlob,
   ExitMessage,
-  SignedExit,
+  FullExitBlob,
+  FullExitResponse,
+  PartialExitBlob,
+  PartialExitsPayload,
+  ShareExitData,
+  StoredExitBlob,
 } from './types.js';
 
 /**
@@ -38,7 +42,7 @@ export type {
  */
 export interface ExitsModule {
   verifyPartialExit: typeof verifyPartialExit;
-  aggregate: (input: Omit<AggregateInput, 'chainId'>) => SignedExit;
+  aggregate: (input: Omit<AggregateInput, 'chainId'>) => FullExitBlob;
   blsVerify: typeof blsVerify;
   blsAggregate: typeof blsAggregate;
   blsThresholdAggregate: typeof blsThresholdAggregate;
@@ -54,3 +58,6 @@ export const createExitsModule = (ctx: Context): ExitsModule => ({
   blsThresholdAggregate,
   blsRecoverPubkey,
 });
+
+/** Builds the context a module is bound to, without the other modules. */
+export { createObolContext, type ObolClientConfig } from '../clientContext.js';

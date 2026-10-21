@@ -55,6 +55,11 @@ export const T = {
   /** wei, non-negative */
   Wei: Type.BigInt({ minimum: 0n, description: 'wei' }),
   Uint: Type.Integer({ minimum: 0 }),
+  /** A non-negative integer as a bigint or a safe integer number (converted with BigInt). */
+  UintLike: Type.Union([
+    Type.BigInt({ minimum: 0n }),
+    Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+  ]),
 };
 
 const messageFor = (error: { message: string; schema: TSchema }): string => {
@@ -100,6 +105,10 @@ export const checksum = (address: string): Address =>
   getAddress(address.toLowerCase());
 
 export const sameAddress = (a: string, b: string): boolean =>
+  a.toLowerCase() === b.toLowerCase();
+
+/** Hex strings (hashes, pubkeys, signatures) compared case-insensitively. */
+export const sameHex = (a: string, b: string): boolean =>
   a.toLowerCase() === b.toLowerCase();
 
 /** One-issue PAYLOAD_INVALID, for checks a schema cannot express. */

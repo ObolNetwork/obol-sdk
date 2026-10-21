@@ -10,6 +10,7 @@ import {
   blsAggregateSignatures,
   blsThresholdAggregateSignatures,
   blsVerify as verifyBytes,
+  decodeG1,
 } from '../internal/bls.js';
 import { decode, invalid, T } from '../schema.js';
 
@@ -111,7 +112,7 @@ export const blsRecoverPubkey = (
   try {
     let sum = bls12_381.G1.Point.ZERO;
     items.forEach((share, i) => {
-      const point = bls12_381.G1.Point.fromHex(share.pubshare.slice(2));
+      const point = decodeG1(fromHexString(share.pubshare), true);
       sum = sum.add(point.multiply(lagrangeAtZero(indices[i], indices)));
     });
     return bytesToHex(sum.toBytes());

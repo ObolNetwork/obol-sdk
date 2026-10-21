@@ -31,7 +31,7 @@ export interface VerifyOptions {
   publicClient?: PublicClient;
 }
 
-const VerifyDefinitionSchema = Type.Object({
+export const VerifyDefinitionSchema = Type.Object({
   definition: DefinitionSchema,
   configHash: Type.Optional(T.Hash32),
   chainId: T.Uint,

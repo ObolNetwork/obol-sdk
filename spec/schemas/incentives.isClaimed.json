@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/incentives.isClaimed.json",
+  "title": "incentives.isClaimed",
+  "properties": {
+    "contractAddress": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "index": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "contractAddress",
+    "index"
+  ],
+  "type": "object"
+}

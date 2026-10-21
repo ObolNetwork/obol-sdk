@@ -12,7 +12,14 @@ import {
   type Context,
 } from '../context.js';
 import { ObolApiError, ObolError } from '../errors.js';
-import { checksum, decode, invalid, sameAddress, T } from '../schema.js';
+import {
+  checksum,
+  decode,
+  invalid,
+  sameAddress,
+  sameHex,
+  T,
+} from '../schema.js';
 import {
   creatorConfigHashTypedData,
   enrTypedData,
@@ -28,9 +35,6 @@ import {
   type PreparedDefinition,
 } from './schema.js';
 import { verifyDefinition } from './verifyDefinition.js';
-
-const sameHex = (a: string, b: string): boolean =>
-  a.toLowerCase() === b.toLowerCase();
 
 const responseMismatch = (
   endpoint: string,
@@ -117,7 +121,7 @@ export const get = async (
   return await fetchDefinition(requireApi(ctx, 'cluster.get'), hash);
 };
 
-const GetLockSchema = Type.Union([
+export const GetLockSchema = Type.Union([
   Type.Object({ configHash: T.Hash32 }, { additionalProperties: false }),
   Type.Object({ lockHash: T.Hash32 }, { additionalProperties: false }),
 ]);
@@ -132,7 +136,7 @@ const GetLockSchema = Type.Union([
  */
 export const getLock = async (
   ctx: Context,
-  input: { configHash: Hex } | { lockHash: Hex },
+  input: { configHash: string } | { lockHash: string },
 ): Promise<ClusterLock> => {
   const args = decode(GetLockSchema, input);
   const api = requireApi(ctx, 'cluster.getLock');
@@ -255,7 +259,7 @@ const definitionInvalid = (
     },
   );
 
-const AcceptSchema = Type.Object(
+export const AcceptSchema = Type.Object(
   {
     configHash: T.Hash32,
     enr: Type.String({ pattern: '^enr:' }),
@@ -276,12 +280,12 @@ const AcceptSchema = Type.Object(
  *
  * @returns The updated definition.
  * @throws WALLET_REQUIRED, CHAIN_MISMATCH, PAYLOAD_INVALID (`enr`),
- *   DEFINITION_INVALID, NOT_AN_OPERATOR, API_DISABLED, API_* (API_CONFLICT
+ *   DEFINITION_INVALID, ACCOUNT_NOT_OPERATOR, API_DISABLED, API_* (API_CONFLICT
  *   when the API refuses a different ENR).
  */
 export const accept = async (
   ctx: Context,
-  input: { configHash: Hex; enr: string; version?: string },
+  input: { configHash: string; enr: string; version?: string },
 ): Promise<ClusterDefinition> => {
   const args = decode(AcceptSchema, input);
   try {
@@ -315,7 +319,7 @@ export const accept = async (
   );
   if (operator === undefined) {
     throw new ObolError(
-      'NOT_AN_OPERATOR',
+      'ACCOUNT_NOT_OPERATOR',
       `${address} is not an operator of cluster ${args.configHash}`,
       {
         hint: 'Use the wallet of one of the operator addresses',

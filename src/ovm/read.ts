@@ -14,7 +14,7 @@ import {
   ethBalanceCall,
   readMany,
   type ReadCall,
-} from './multicall.js';
+} from '../multicall.js';
 import { OVM_ROLES, roleNames, type OvmRoleName } from './routing.js';
 import { requireObolOvm } from './verify.js';
 import { finding } from '../chainUtils.js';
@@ -130,7 +130,7 @@ export const readPullBalances = async (
 /** The sender for an authority check: `from`, else the wallet account. */
 export const requireSender = (
   ctx: Context,
-  from: Address | undefined,
+  from: string | undefined,
   operation: string,
 ): Address => {
   const sender = senderOf(ctx, from);
@@ -143,11 +143,11 @@ export const requireSender = (
   return checksum(sender);
 };
 
-/** Owner-only call: NOT_OVM_OWNER otherwise. */
+/** Owner-only call: OVM_OWNER_REQUIRED otherwise. */
 export const requireOwner = (core: OvmCore, from: Address): void => {
   if (!sameAddress(core.owner, from)) {
     throw new ObolError(
-      'NOT_OVM_OWNER',
+      'OVM_OWNER_REQUIRED',
       `${from} is not the owner of ${core.address} (owner: ${core.owner})`,
       {
         hint: 'Send from the owner',
@@ -215,6 +215,7 @@ export const provenanceFindings = async (
       `Could not check that ${ovm} was created by the Obol OVM factory: ${verification.reason}`,
       {
         hint: 'Retry ovm.verify before relying on the contract',
+        subject: { address: ovm },
         details: { address: ovm },
       },
     ),

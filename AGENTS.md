@@ -67,6 +67,14 @@ yarn lint-ci       # CI mode, no fix
 # Format
 yarn prettier      # with --write
 yarn prettier-ci   # check only
+
+# Public surface, bundle size, spec schemas
+yarn api:check     # CI: fails on an API change not in etc/obol-sdk.api.md (yarn api:update to accept)
+yarn size:check    # after yarn build; yarn size:update records a new budget
+yarn spec:schemas  # regenerate spec/schemas/*.json (a unit test checks they are current)
+
+# Fuzz: the lock mutation slice (noble vs blst; with CHARON_ORACLE also Charon)
+yarn test:fuzz
 ```
 
 **Development workflow**: make changes → `yarn test` → `yarn build`. For faster iteration, run Jest directly on one file:
@@ -80,13 +88,16 @@ NODE_OPTIONS=--experimental-vm-modules npx jest test/deposits/prepareDeposit.spe
 ```
 src/
 ├── index.ts          # Package entry: createObolClient, errors, chains, send, module namespaces
-├── client.ts         # createObolClient: checks chain / clients / API settings, binds every module to one Context
+├── client.ts         # createObolClient: binds every module to one Context (ObolClient interface, experimental)
+├── clientContext.ts  # createObolContext: checks chain / clients / API settings (also re-exported by each module entry)
 ├── context.ts        # Context (chain, publicClient, walletClient?, api) and the wallet / API guards
 ├── chains.ts         # Chain table (fork versions, genesis validators roots, contract addresses), API hosts
 ├── api.ts            # Obol API HTTP client (typed errors, timeout)
-├── errors.ts         # ObolError / ObolApiError, isObolError, common error builders
+├── errors.ts         # ObolError<C> / ObolApiError, isObolError (narrows details), common error builders
+├── codes.ts          # ObolErrorCode / FindingCode unions and ObolErrorDetails (checked against spec/errors.md)
+├── multicall.ts      # The one Multicall3 read helper (readMany / readValues)
 ├── schema.ts         # TypeBox helpers (T.*), decode → PAYLOAD_INVALID
-├── types.ts          # Shared types: Prepared, Finding, Deposit, SplitParams
+├── types.ts          # Shared types: Prepared<K> / AnyPrepared / PreviewByKind, Finding, StatusSource, Deposit, SplitParams
 ├── units.ts          # ETH / GWEI constants and conversions
 ├── abi.ts            # Contract ABIs (viem `as const`)
 ├── chainUtils.ts     # Chain read helpers (CHAIN_READ_FAILED)
@@ -94,14 +105,16 @@ src/
 ├── simulate/         # simulate: backends (eth_simulateV1, debug_traceCall, eth_call), decoding, analysis, preview comparison
 ├── cluster/          # Definitions and locks: hashing, EIP-712, prepare/create/accept, verifyLock (+ BlsBackend), watch
 ├── deposits/         # fromLock, verifyDepositData, status, prepareDeposit
-├── ovm/              # OVM reads (verify, state, roles, validators), routing, withdraw / consolidate / distribute, role writes
+├── ovm/              # OVM reads (verify, state, roles, validators), routing, withdraw / consolidate / distribute, role writes;
+│                     #   requestRules.ts: the beacon chain's EIP-7002 / EIP-7251 request rules
 ├── splits/           # SplitV2: share math, predict / create, getSplit, distributions
 ├── setup/            # OVM + splits creation flows and presets
 ├── incentives/       # Merkle distributor reads, preflight, prepareClaim
 ├── exits/            # verifyPartialExit, aggregate, BLS helpers, exit SSZ
 ├── terms/            # Terms and conditions (EIP-712)
 ├── withdrawals/      # EIP-7002 withdrawals for EOA-credentialed validators
-├── legacy/           # Reads of 2.x-era OWR contracts
+├── legacy/           # Reads of 2.x-era OWR contracts (experimental)
+├── experimental/     # The experimental entry: simulate, legacy
 └── internal/         # Pure code carried over from 2.x (not exported)
     ├── types.ts      # Loose cluster file shapes read by the hashing code
     ├── definitionFlow.ts         # Group / Solo / Charon flow detection
@@ -121,10 +134,14 @@ test/
 ├── fixtures/spec/    # Vendored distributed-validator-specs vectors (cluster_hashing, bls_threshold)
 ├── bytecodes.ts      # Factory runtime code for fake chains (large; do not read unless needed)
 ├── helpers/          # fakeChain / fakeApi (EIP-1193 fake chain and API), syntheticLock (real-key locks), blstBackend (test-only adapter)
-├── vectors/          # spec/vectors and distributed-validator-specs suites
+├── vectors/          # spec/vectors and distributed-validator-specs suites (VECTORS_REBASELINE=1 rewrites distribution.json)
+├── spec/             # spec conformance (errors.md vs codes) and spec/schemas up to date
+├── fuzz/             # differential lock fuzz (yarn test:fuzz; run.sh with Charon), regressions/, seeded decoder fuzz
 └── <module>/         # One directory per src module (cluster, deposits, ovm, splits, setup, ...)
 
-test-e2e/             # yarn test:e2e: anvil fork of Hoodi (jest.e2e.config.cjs, *.e2e.ts)
+test-e2e/             # yarn test:e2e: anvil fork of Hoodi; yarn test:e2e:mainnet (E2E_CHAIN=mainnet) of mainnet
+scripts/              # bundle-size.mjs (+ bundle-budget.json), spec-schemas.mjs / specSchemas.ts
+etc/obol-sdk.api.md   # API Extractor report of the public surface
 ├── globalSetup.cjs   # Starts anvil on a free port (skips every suite if anvil or the RPC is missing)
 └── helpers/          # Clients and funded signers on the fork, BLS deposits, OVM deploy, a Safe wallet
 ```
@@ -142,7 +159,8 @@ Key build notes:
 - `viem` is a peer dependency and always external.
 - `@noble/curves`, `@noble/hashes` and `@chainsafe/enr` (ESM-only) are bundled; `@chainsafe/ssz` and `@sinclair/typebox` are dependencies.
 - Browser build defines `process.env` as empty and `global` as `globalThis`.
-- One entry per build (`src/index.ts`); no worker bundle and no `worker_threads` / native imports in `dist`.
+- One entry per module plus the root (`src/index.ts`, `src/<module>/index.ts`), with shared chunks (`splitting`), so classes such as `ObolError` exist once across entries; no worker bundle and no `worker_threads` / native imports in `dist`.
+- `"sideEffects": false` in the package and in `dist/esm` / `dist/browser` (the nearest package.json decides for bundlers). `yarn size:check` bundles typical imports and checks them against `scripts/bundle-budget.json`; a reads-only `ovm` import must carry no BLS or SSZ code.
 - The ESM builds get `dist/esm/package.json` and `dist/browser/package.json` (`{ "type": "module" }`, written by tsup
   `onSuccess`): the root package has no `type`, so without them Node would warn `MODULE_TYPELESS_PACKAGE_JSON`.
 
@@ -161,12 +179,13 @@ const obol = createObolClient({
 });
 
 obol.cluster.*  obol.deposits.*  obol.ovm.*  obol.splits.*  obol.setup.*
-obol.incentives.*  obol.exits.*  obol.terms.*  obol.withdrawals.*  obol.legacy.*
-obol.simulate(prepared, { from })   // what it will do, before signing
+obol.incentives.*  obol.exits.*  obol.terms.*  obol.withdrawals.*
+obol.experimental.simulate(prepared, { from })   // what it will do, before signing
+obol.experimental.legacy.*
 obol.send(prepared)
 ```
 
-Every module is a `create<Module>Module(ctx)` that binds the module's functions to one `Context`. The same modules are exported as namespaces (`import { cluster, deposits } from '@obolnetwork/obol-sdk'`), so the pure functions work without a client.
+Every module is a `create<Module>Module(ctx)` that binds the module's functions to one `Context` and has an explicit `<Module>Module` interface. The same modules are exported as namespaces (`import { cluster, deposits } from '@obolnetwork/obol-sdk'`) and as subpath entries (`@obolnetwork/obol-sdk/ovm`, with `createObolContext`), so the pure functions work without a client and an app loads only the modules it uses. Module `index.ts` files are explicit export lists (no `export *`); the public surface is recorded in `etc/obol-sdk.api.md` (`yarn api:check` in CI; `yarn api:update` after a reviewed change).
 
 **Method tags** (in TSDoc and `spec/operations.md`): `pure` (no client), `chain`, `api`, `api+chain` (API first, chain fallback). With `api: false`, `api+chain` methods use the chain and `api` methods throw `API_DISABLED`.
 
@@ -175,13 +194,17 @@ Every module is a `create<Module>Module(ctx)` that binds the module's functions 
 ### Prepare, then send
 
 ```typescript
-type Prepared<P> = {
+type Prepared<K extends PreparedKind> = {
+  kind: K;                // 'deposit' | 'withdraw' | 'distribution' | ... (spec/operations.md "Shared types")
   request: { to: Address; data: Hex; value: bigint; chainId: number };
   checks: Finding[];      // warnings / info; errors throw instead
-  preview: P;             // what the transaction will do
-  blockNumber?: bigint;   // the block the checks read
+  preview: PreviewByKind[K]; // what the transaction will do; narrows on kind
+  blockNumber?: bigint;   // the block the checks read (isStale(prepared, head, maxAgeBlocks))
 };
-type Finding = { code: string; severity: 'warning' | 'info'; message: string; hint?: string };
+type AnyPrepared = /* union of every Prepared<K> */;
+type Finding = { code: FindingCode; severity: 'warning' | 'info'; message: string; hint?: string;
+                 subject?: { pubkey } | { address } | { index } };
+// every preview* returns { preview, checks, blockNumber }
 ```
 
 `send(prepared)` checks the wallet chain, sends `request` and returns `{ hash, contractWallet, wait }`; for a Safe, `wait` follows the Safe's `ExecutionSuccess`. Callers with their own wallet layer send `request` directly.
@@ -194,20 +217,20 @@ type Finding = { code: string; severity: 'warning' | 'info'; message: string; hi
 |--------|-----------------|
 | `cluster` | `computeConfigHash` / `computeDefinitionHash` / `computeLockHash`, `prepareDefinition`, `create`, `accept`, `get`, `getLock`, `watch`, `verifyDefinition`, `verifyLock` |
 | `deposits` | `fromLock`, `verifyDepositData`, `status`, `prepareDeposit` (via `{ ovm }` or `{ batch: true }`, `kind: 'deposit' \| 'topUp'`) |
-| `ovm` | `verify` (provenance), `getState`, `getRoleHolders`, `getValidators`, `prepareWithdraw`, `prepareConsolidate`, `prepareDistribute` / `previewDistribute`, role and ownership writes (`prepareGrantRoles`, `prepareTransfer`, `prepareSetBeneficiary`, ...) |
+| `ovm` | `verify` (provenance), `getState`, `getRoleHolders`, `getValidators`, `prepareWithdraw`, `prepareConsolidate`, `prepareDistribute` / `previewDistribute`, role and ownership writes (`prepareGrantRoles`, `prepareTransfer`, `prepareSetPrincipalRecipient`, ...) |
 | `splits` | `percent` / `formatPercent` / `splitParams`, `predictSplit`, `prepareCreateSplit`, `getSplit`, `prepareDistribution` / `previewDistribution` |
 | `setup` | `prepareCreateOvm`, `prepareCreateSplit`, `prepareOvmWithSplits`, `ovmFromReceipt`, presets (`rewardsSplit`, `totalSplit`, `solo`) |
 | `incentives` | `get`, `isClaimed`, `preflight`, `prepareClaim` |
-| `exits` | `verifyPartialExit`, `aggregate` (bound: `chainId` from the client), `blsVerify`, `blsAggregate`, `blsThresholdAggregate`, `blsRecoverPubkey` |
+| `exits` | `verifyPartialExit`, `aggregate` (bound: `chainId` from the client) on the Obol API exit formats (snake_case, as stored), `blsVerify`, `blsAggregate`, `blsThresholdAggregate`, `blsRecoverPubkey` |
 | `terms` | `hasAccepted`, `accept` |
 | `withdrawals` | `prepareEoaWithdraw` |
-| `legacy` | `getOwrTranches` |
+| `experimental` | `simulate`, `legacy.getOwrTranches` (shapes may change in a minor release) |
 
 Exits use the EIP-7044 domain: the Capella fork version and genesis validators root come from the chain table, so exits work on mainnet and Hoodi only (`UNSUPPORTED_CHAIN` elsewhere).
 
-### Errors (`src/errors.ts`, codes in `spec/errors.md`)
+### Errors (`src/errors.ts`, `src/codes.ts`, codes in `spec/errors.md`)
 
-One class, **`ObolError`** (`code`, `message`, `hint`, `details`), and **`ObolApiError`** for API responses (`status`, `endpoint`, ...). Callers switch on `code`, with `isObolError(error, code)`. Every code, what throws it and what the caller should do is in `spec/errors.md`; findings codes are there too. Add a new code there first.
+One class, **`ObolError`** (`code`, `message`, `hint`, `details`), and **`ObolApiError`** for API responses (`status`, `endpoint`, ...). Codes are the `ObolErrorCode` / `FindingCode` unions in `src/codes.ts`, with `ObolErrorDetails` typing each code's `details`; `isObolError(error, code)` narrows. Every code, what throws it and what the caller should do is in `spec/errors.md`; `test/spec/conformance.spec.ts` fails when errors.md, `src/codes.ts` and the codes used in `src/` differ. Add a new code to errors.md and `src/codes.ts` first.
 
 ### Lock verification
 
@@ -237,7 +260,7 @@ All inputs are decoded with **TypeBox** schemas (`src/schema.ts`, `T.*` for hex,
 
 ### Authentication Pattern
 
-API writes (cluster create / accept, terms) use **EIP-712 typed-data signatures** from the `walletClient`, sent as `Authorization: Bearer {signature}`. No session/token management: the signature is the proof of authorization. That is why `api.baseUrl` is restricted to Obol hosts (`INVALID_BASE_URL`).
+API writes (cluster create / accept, terms) use **EIP-712 typed-data signatures** from the `walletClient`, sent as `Authorization: Bearer {signature}`. No session/token management: the signature is the proof of authorization. That is why `api.baseUrl` is restricted to Obol hosts (`BASE_URL_INVALID`); `api: { baseUrl, allowLocal: true }` also allows `http(s)://localhost[:port]` / `127.0.0.1[:port]` for a local obol-api.
 
 ## SDK as Public API Surface
 
@@ -261,7 +284,8 @@ This keeps the SDK in sync with the API and ensures external developers always h
 - `yarn test` runs every `test/**/*.spec.ts` without network; the one exception, `test/simulate/e2e.spec.ts`, is skipped
   unless `SIMULATE_E2E=1` (it needs an anvil Hoodi fork at `SIMULATE_RPC_URL`)
 - `yarn test:e2e` runs `test-e2e/*.e2e.ts` against an anvil fork of Hoodi at head (public RPC, or `RPC_HOODI`; it
-  must serve `eth_getLogs` over 50,000 blocks). It sends each `prepare*` result and compares the preview and findings
+  must serve historic `eth_getLogs`; the SDK shrinks the range for RPCs that cap it). `yarn test:e2e:mainnet`
+  (`E2E_CHAIN=mainnet`) forks mainnet instead (`RPC_MAINNET`, else a public RPC that serves historic logs). It sends each `prepare*` result and compares the preview and findings
   with what was mined (balances, logs, contract state). CI runs it non-blocking (`.github/workflows/e2e.yml`). Run
   one e2e job at a time: it spawns anvil and makes many RPC requests.
 

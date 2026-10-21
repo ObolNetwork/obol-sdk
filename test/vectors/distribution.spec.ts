@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import type { Address } from 'viem';
 import { ovmRouting, thresholdGweiToWei } from '../../src/ovm/routing.js';
 import { prepareDistribution } from '../../src/splits/distribution.js';
@@ -32,22 +32,18 @@ const params = (s: any): SplitParams & { address?: Address } => ({
   distributionIncentive: s.distributionIncentive,
 });
 
-// v3 adds `skipReason`, `blockNumber` and the recipients' `distributorReward`
-// and `fromThisDistribution` to the preview; the vectors pin the fields 2.16
-// had, so those are left out of the comparison.
-const withoutV3Fields = (preview: any): unknown => {
-  const { blockNumber: _b, ...rest } = preview;
-  const strip = ({ skipReason: _s, ...o }: any) => o;
-  return {
-    ...rest,
-    ...(rest.ovm !== undefined ? { ovm: strip(rest.ovm) } : {}),
-    splits: rest.splits.map(strip),
-    recipients: rest.recipients.map(
-      ({ distributorReward: _d, fromThisDistribution: _f, ...o }: any) =>
-        strip(o),
-    ),
-  };
-};
+// VECTORS_REBASELINE=1 rewrites the `calls` and `preview` of the accepted
+// `prepare` cases from this implementation (for a deliberate rule change;
+// review the diff and record why in each case's `notes`).
+const REBASELINE = process.env.VECTORS_REBASELINE === '1';
+afterAll(() => {
+  if (REBASELINE) {
+    writeFileSync(
+      'spec/vectors/distribution.json',
+      `${JSON.stringify(suite, null, 2)}\n`,
+    );
+  }
+});
 
 /** The chain state of a `prepare` case, served by fakeChain. */
 const chainFor = (c: any) => {
@@ -148,6 +144,10 @@ describe('vectors: distribution', () => {
             ? { principalSplit: params(p.principalSplit) }
             : {}),
           ...(p.recipients !== null ? { recipients: p.recipients } : {}),
+          ...(p.includeRaf !== undefined ? { includeRaf: p.includeRaf } : {}),
+          ...(p.minWithdraw !== undefined
+            ? { minWithdraw: BigInt(p.minWithdraw) }
+            : {}),
           from: c.input.sender,
         };
         const run = prepareDistribution(chain.context(), input);
@@ -156,18 +156,22 @@ describe('vectors: distribution', () => {
           return;
         }
         const prepared = await run;
-        expect(prepared.request.to).toBe(c.to);
-        expect(
-          norm(
-            decodeDistributionCalls(
-              prepared.request.data,
-              p.ovmAddress ?? undefined,
-            ),
+        const calls = norm(
+          decodeDistributionCalls(
+            prepared.request.data,
+            p.ovmAddress ?? undefined,
           ),
-        ).toEqual(norm(c.calls));
-        expect(norm(withoutV3Fields(prepared.preview))).toEqual(
-          norm(c.preview),
         );
+        if (REBASELINE) {
+          c.calls = calls;
+          c.preview = norm(prepared.preview);
+          c.checks = prepared.checks.map(f => f.code);
+        }
+        expect(prepared.request.to).toBe(c.to);
+        expect(calls).toEqual(norm(c.calls));
+        // Every preview field is compared.
+        expect(norm(prepared.preview)).toEqual(norm(c.preview));
+        expect(prepared.checks.map(f => f.code)).toEqual(c.checks);
       },
     );
   });

@@ -53,7 +53,7 @@ export const ovmSplitParams = (input: {
     );
   }
   const rewardSplit = toSplitParams(
-    [...rewards, { address: rafRecipient, share: BigInt(RAF_SHARE) }],
+    [...rewards, { address: rafRecipient, share: RAF_SHARE }],
     incentive,
   );
   if (input.kind === 'rewards') {
@@ -80,8 +80,8 @@ export const ovmSplitParams = (input: {
   // Split Everything: spread the RAF share over the reward recipients.
   const sorted = toSplitParams(rewards, incentive);
   const count = BigInt(sorted.recipients.length);
-  const each = BigInt(RAF_SHARE) / count;
-  const remainder = BigInt(RAF_SHARE) % count;
+  const each = RAF_SHARE / count;
+  const remainder = RAF_SHARE % count;
   return {
     rewardSplit,
     principalSplit: toSplitParams(

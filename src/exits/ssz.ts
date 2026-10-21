@@ -7,7 +7,7 @@ import {
   fromHexString,
 } from '@chainsafe/ssz';
 import { computeDomain, signingRoot } from '../internal/exitDomain.js';
-import type { ExitBlob } from './types.js';
+import type { PartialExitBlob } from './types.js';
 
 export const DOMAIN_VOLUNTARY_EXIT = '0x04000000';
 
@@ -34,7 +34,7 @@ const PartialExitsPayloadType = new ContainerType({
 
 /** Signing root of `VoluntaryExit{epoch, validator_index}` in the EIP-7044 exit domain. */
 export const exitSigningRoot = (
-  message: { epoch: string; validatorIndex: string },
+  message: { epoch: string; validator_index: string },
   capellaForkVersion: string,
   genesisValidatorsRoot: string,
 ): Uint8Array => {
@@ -45,27 +45,43 @@ export const exitSigningRoot = (
   );
   const root = VoluntaryExitType.hashTreeRoot({
     epoch: BigInt(message.epoch),
-    validator_index: BigInt(message.validatorIndex),
+    validator_index: BigInt(message.validator_index),
   });
   return signingRoot(domain, Buffer.from(root));
 };
 
-/** SSZ root of a partial exits payload: what the operator's ENR key signs. */
+/**
+ * Partial exits in the order they are signed: by validator index, ascending
+ * (as the Obol API and Charon sort them). Stable for equal indexes.
+ */
+export const sortedPartialExits = (
+  partialExits: readonly PartialExitBlob[],
+): PartialExitBlob[] =>
+  [...partialExits].sort((a, b) => {
+    const x = BigInt(a.signed_exit_message.message.validator_index);
+    const y = BigInt(b.signed_exit_message.message.validator_index);
+    return x < y ? -1 : x > y ? 1 : 0;
+  });
+
+/**
+ * SSZ root of a partial exits payload: what the operator's ENR key signs.
+ * The partial exits are sorted by validator index first.
+ */
 export const partialExitsPayloadRoot = (
-  partialExits: ExitBlob[],
+  partialExits: readonly PartialExitBlob[],
   shareIdx: number,
 ): Uint8Array =>
   PartialExitsPayloadType.hashTreeRoot({
-    partial_exits: partialExits.map(blob => ({
-      public_key: fromHexString(blob.publicKey),
+    partial_exits: sortedPartialExits(partialExits).map(blob => ({
+      public_key: fromHexString(blob.public_key),
       signed_exit_message: {
         message: {
-          epoch: BigInt(blob.signedExitMessage.message.epoch),
+          epoch: BigInt(blob.signed_exit_message.message.epoch),
           validator_index: BigInt(
-            blob.signedExitMessage.message.validatorIndex,
+            blob.signed_exit_message.message.validator_index,
           ),
         },
-        signature: fromHexString(blob.signedExitMessage.signature),
+        signature: fromHexString(blob.signed_exit_message.signature),
       },
     })),
     share_idx: BigInt(shareIdx),

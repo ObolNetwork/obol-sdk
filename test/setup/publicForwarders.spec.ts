@@ -15,7 +15,7 @@ describe('public forwarders in setup', () => {
         rewardRecipient: EOA,
         thresholdGwei: 16_000_000_000n,
       }),
-    ).toThrow(expect.objectContaining({ code: 'OWNER_TO_PUBLIC_FORWARDER' }));
+    ).toThrow(expect.objectContaining({ code: 'PUBLIC_FORWARDER_AS_OWNER' }));
     expect(() =>
       refuseOvmForwarders(560048, {
         owner: EOA,
@@ -24,7 +24,7 @@ describe('public forwarders in setup', () => {
         thresholdGwei: 16_000_000_000n,
       }),
     ).toThrow(
-      expect.objectContaining({ code: 'RECIPIENT_IS_PUBLIC_FORWARDER' }),
+      expect.objectContaining({ code: 'PUBLIC_FORWARDER_AS_RECIPIENT' }),
     );
   });
 
@@ -37,13 +37,13 @@ describe('public forwarders in setup', () => {
     };
     expect(() => refuseSplitForwarders(1, params, EOA)).toThrow(
       expect.objectContaining({
-        code: 'RECIPIENT_IS_PUBLIC_FORWARDER',
+        code: 'PUBLIC_FORWARDER_AS_RECIPIENT',
         details: expect.objectContaining({ path: 'recipients[1]' }),
       }),
     );
     expect(() =>
       refuseSplitForwarders(1, { ...params, recipients: [EOA] }, MULTICALL3),
-    ).toThrow(expect.objectContaining({ code: 'OWNER_TO_PUBLIC_FORWARDER' }));
+    ).toThrow(expect.objectContaining({ code: 'PUBLIC_FORWARDER_AS_OWNER' }));
   });
 
   it('allows ordinary addresses', () => {

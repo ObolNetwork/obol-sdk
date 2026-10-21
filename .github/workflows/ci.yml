@@ -29,5 +29,15 @@ jobs:
       - name: Build SDK
         run: yarn run build
 
+      # Fails on a public API change not reviewed into etc/obol-sdk.api.md
+      # (run `yarn api:update` and commit the report).
+      - name: API report
+        run: yarn run api:check
+
+      # Bundle sizes against scripts/bundle-budget.json; a reads-only ovm
+      # import must not carry BLS or SSZ code.
+      - name: Bundle size
+        run: yarn run size:check
+
       - name: Run unit tests
         run: yarn run test

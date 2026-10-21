@@ -114,6 +114,8 @@ export const ovmContract = (s: OvmState): FakeContract => ({
     principalThreshold: () => s.principalThresholdGwei ?? 16_000_000_000n,
     principalRecipient: () => s.principalRecipient,
     rewardRecipient: () => s.rewardRecipient,
+    owner: () => addr(0xee),
+    version: () => '1.0.0',
   },
 });
 

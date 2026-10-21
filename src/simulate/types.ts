@@ -143,6 +143,16 @@ export interface PreviewComparison {
   compared: string[];
 }
 
+export interface SimulatedGas {
+  used: bigint;
+  /** The simulated block's base fee (wei per gas); null when the node did not give it. */
+  baseFeePerGas: bigint | null;
+  /** The node's priority fee suggestion (`eth_maxPriorityFeePerGas`); null when unavailable. */
+  priorityFeePerGas: bigint | null;
+  /** `used × (baseFeePerGas + priorityFeePerGas)` (wei); null when either is unknown. */
+  estimatedFee: bigint | null;
+}
+
 interface SimulationBase {
   from: Address;
   /** The block simulated on top of. */
@@ -160,7 +170,11 @@ interface SimulationBase {
 export interface FullSimulation extends SimulationBase {
   limited: false;
   backend: 'eth_simulateV1' | 'debug_traceCall';
-  gasUsed: bigint;
+  /**
+   * Gas of the simulated call and what it would cost now. Balance changes
+   * exclude gas, so they compare with the preview.
+   */
+  gas: SimulatedGas;
   balanceChanges: BalanceChange[];
   events: SimulatedEvent[];
   stateChanges: StateChange[];

@@ -16,10 +16,11 @@ import {
 import {
   balanceOf,
   blsPubkey,
+  codes,
   describeFork,
   expectCode,
   gasCost,
-  HOODI,
+  NET,
   makeDeposit,
   publicClient,
   randomAddress,
@@ -58,7 +59,7 @@ const GWEI = 1_000_000_000n;
 const capPerRequest = (fee: bigint): bigint =>
   10n * fee > GWEI ? 10n * fee : GWEI;
 
-describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
+describeFork('EIP-7002 / EIP-7251 requests', () => {
   let s: Signer;
   let d: DeployedOvm;
   let pubkey: Hex;
@@ -77,7 +78,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
   });
 
   test('partial withdrawal: the predeploy queues it, charges the current fee and the OVM refunds the rest', async () => {
-    const fee = await currentFee(HOODI.withdrawalRequest);
+    const fee = await currentFee(NET.withdrawalRequest);
     expect(fee).toBeGreaterThan(0n);
     const cap = capPerRequest(fee);
     const excessFeeRecipient = randomAddress();
@@ -90,7 +91,8 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       to: d.ovm,
       value: cap,
     });
-    expect(prepared.checks).toEqual([]);
+    // Chain-only client: the beacon chain rules are reported unchecked.
+    expect(codes(prepared.checks)).toEqual(['VALIDATOR_STATUS_UNCHECKED']);
     expect(prepared.preview).toEqual({
       requests: [
         {
@@ -106,14 +108,14 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       maxFeePerRequest: cap,
     });
 
-    const countBefore = await queued(HOODI.withdrawalRequest);
-    const predeployBefore = await balanceOf(HOODI.withdrawalRequest);
+    const countBefore = await queued(NET.withdrawalRequest);
+    const predeployBefore = await balanceOf(NET.withdrawalRequest);
     const receipt = await sendAndWait(s.obol, prepared);
-    expect(requestLogs(receipt, HOODI.withdrawalRequest)).toEqual([
+    expect(requestLogs(receipt, NET.withdrawalRequest)).toEqual([
       concat([d.ovm.toLowerCase() as Hex, pubkey, uint64be(1_000_000_000n)]),
     ]);
-    expect(await queued(HOODI.withdrawalRequest)).toBe(countBefore + 1n);
-    expect((await balanceOf(HOODI.withdrawalRequest)) - predeployBefore).toBe(
+    expect(await queued(NET.withdrawalRequest)).toBe(countBefore + 1n);
+    expect((await balanceOf(NET.withdrawalRequest)) - predeployBefore).toBe(
       fee,
     );
     expect(await balanceOf(excessFeeRecipient)).toBe(cap - fee);
@@ -121,7 +123,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
   });
 
   test('the refund goes to the sender by default', async () => {
-    const fee = await currentFee(HOODI.withdrawalRequest);
+    const fee = await currentFee(NET.withdrawalRequest);
     const prepared = await s.obol.ovm.prepareWithdraw({
       ovm: d.ovm,
       requests: [{ pubkey, amount: parseEther('2') }],
@@ -133,7 +135,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
   });
 
   test('two requests in one call: two queue entries, the fee twice', async () => {
-    const fee = await currentFee(HOODI.withdrawalRequest);
+    const fee = await currentFee(NET.withdrawalRequest);
     const cap = capPerRequest(fee);
     const other = blsPubkey(randomBlsSecret());
     const excessFeeRecipient = randomAddress();
@@ -147,13 +149,13 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
     });
     expect(prepared.preview.totalFee).toBe(2n * cap);
     expect(prepared.preview.maxFeePerRequest).toBe(cap);
-    const countBefore = await queued(HOODI.withdrawalRequest);
+    const countBefore = await queued(NET.withdrawalRequest);
     const receipt = await sendAndWait(s.obol, prepared);
-    expect(requestLogs(receipt, HOODI.withdrawalRequest)).toEqual([
+    expect(requestLogs(receipt, NET.withdrawalRequest)).toEqual([
       concat([d.ovm.toLowerCase() as Hex, pubkey, uint64be(1_000_000_000n)]),
       concat([d.ovm.toLowerCase() as Hex, other, uint64be(3_000_000_000n)]),
     ]);
-    expect(await queued(HOODI.withdrawalRequest)).toBe(countBefore + 2n);
+    expect(await queued(NET.withdrawalRequest)).toBe(countBefore + 2n);
     expect(await balanceOf(excessFeeRecipient)).toBe(2n * (cap - fee));
   });
 
@@ -174,13 +176,13 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
     // Without a status source the exiting balance is unknown: no routing.
     expect(prepared.preview.requests).toEqual([{ pubkey, amount: 0n }]);
     const receipt = await sendAndWait(s.obol, prepared);
-    expect(requestLogs(receipt, HOODI.withdrawalRequest)).toEqual([
+    expect(requestLogs(receipt, NET.withdrawalRequest)).toEqual([
       concat([d.ovm.toLowerCase() as Hex, pubkey, uint64be(0n)]),
     ]);
   });
 
   test('routedAs matches what a distribution does when that ETH arrives', async () => {
-    const state = await s.obol.ovm.getState(d.ovm);
+    const state = (await s.obol.ovm.getState(d.ovm))!;
     expect(state.amountOfPrincipalStake).toBe(parseEther('32'));
     const amount = parseEther('40');
     const prepared = await s.obol.ovm.prepareWithdraw({
@@ -196,7 +198,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
     const snapshot = await testClient.snapshot();
     try {
       await testClient.setBalance({ address: d.ovm, value: amount });
-      const preview = await s.obol.ovm.previewDistribute({ ovm: d.ovm });
+      const { preview } = await s.obol.ovm.previewDistribute({ ovm: d.ovm });
       expect(preview.principalPayout).toBe(request.principalPart);
       expect(preview.rewardPayout).toBe(request.rewardPart);
     } finally {
@@ -205,7 +207,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
   });
 
   test('a given fee below the current fee is FEE_OUT_OF_RANGE; exactly the fee leaves no refund', async () => {
-    const fee = await currentFee(HOODI.withdrawalRequest);
+    const fee = await currentFee(NET.withdrawalRequest);
     await expectCode(
       async () =>
         await s.obol.ovm.prepareWithdraw({
@@ -238,13 +240,13 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       // maxFeePerWithdrawal (max(10 × fee, 1 gwei) at prepare time):
       // fee = e^(excess / 17) wei, about 6e12 wei at 500.
       await testClient.setStorageAt({
-        address: HOODI.withdrawalRequest,
+        address: NET.withdrawalRequest,
         index: '0x0',
         value: toHex(500n, { size: 32 }),
       });
-      const newFee = await currentFee(HOODI.withdrawalRequest);
+      const newFee = await currentFee(NET.withdrawalRequest);
       expect(newFee).toBeGreaterThan(prepared.preview.maxFeePerRequest);
-      const countBefore = await queued(HOODI.withdrawalRequest);
+      const countBefore = await queued(NET.withdrawalRequest);
       const balanceBefore = await balanceOf(s.address);
       // The OVM would revert (fee above maxFeePerWithdrawal): the wallet's
       // gas estimate fails, so nothing is broadcast.
@@ -253,7 +255,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
         'TX_REJECTED',
       );
       expect(error.message).toMatch(/revert/i);
-      expect(await queued(HOODI.withdrawalRequest)).toBe(countBefore);
+      expect(await queued(NET.withdrawalRequest)).toBe(countBefore);
       expect(await balanceOf(s.address)).toBe(balanceBefore);
     } finally {
       await testClient.revert({ id: snapshot });
@@ -281,7 +283,7 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
         } as never),
       'CONSOLIDATION_NOT_ACKNOWLEDGED',
     );
-    const fee = await currentFee(HOODI.consolidationRequest);
+    const fee = await currentFee(NET.consolidationRequest);
     const cap = capPerRequest(fee);
     const target = blsPubkey(randomBlsSecret());
     const excessFeeRecipient = randomAddress();
@@ -297,29 +299,29 @@ describeFork('EIP-7002 / EIP-7251 requests on a Hoodi fork', () => {
       totalFee: cap,
       maxFeePerRequest: cap,
     });
-    const countBefore = await queued(HOODI.consolidationRequest);
+    const countBefore = await queued(NET.consolidationRequest);
     const receipt = await sendAndWait(s.obol, prepared);
-    expect(requestLogs(receipt, HOODI.consolidationRequest)).toEqual([
+    expect(requestLogs(receipt, NET.consolidationRequest)).toEqual([
       concat([d.ovm.toLowerCase() as Hex, pubkey, target]),
     ]);
-    expect(await queued(HOODI.consolidationRequest)).toBe(countBefore + 1n);
+    expect(await queued(NET.consolidationRequest)).toBe(countBefore + 1n);
     expect(await balanceOf(excessFeeRecipient)).toBe(cap - fee);
   });
 
   test('withdrawals.prepareEoaWithdraw sends straight to the predeploy with exactly the fee', async () => {
-    const fee = await currentFee(HOODI.withdrawalRequest);
+    const fee = await currentFee(NET.withdrawalRequest);
     const eoaPubkey = blsPubkey(randomBlsSecret());
     const prepared = await s.obol.withdrawals.prepareEoaWithdraw({
       pubkey: eoaPubkey,
       amount: parseEther('1'),
     });
     expect(prepared.request).toMatchObject({
-      to: HOODI.withdrawalRequest,
+      to: NET.withdrawalRequest,
       value: fee,
       data: concat([eoaPubkey, uint64be(1_000_000_000n)]),
     });
     const receipt = await sendAndWait(s.obol, prepared);
-    expect(requestLogs(receipt, HOODI.withdrawalRequest)).toEqual([
+    expect(requestLogs(receipt, NET.withdrawalRequest)).toEqual([
       concat([
         s.address.toLowerCase() as Hex,
         eoaPubkey,

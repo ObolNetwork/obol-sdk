@@ -19,11 +19,12 @@ import {
   splitWalletAbi,
   warehouseAbi,
 } from '../abi.js';
-import { finding, prepared } from '../chainUtils.js';
+import { finding, latestBlockNumber, prepared } from '../chainUtils.js';
 import { requireContracts, senderOf, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
-import { ovmRouting, thresholdGweiToWei } from '../ovm/routing.js';
-import { requireObolOvm } from '../ovm/verify.js';
+import { provenanceFindings, readOvmCore } from '../ovm/read.js';
+import { ovmRouting } from '../ovm/routing.js';
+import { readValues, type ReadCall } from '../multicall.js';
 import {
   checksum,
   decode,
@@ -32,8 +33,13 @@ import {
   T,
   ZERO_ADDRESS,
 } from '../schema.js';
-import type { Finding, Prepared, SplitParams } from '../types.js';
-import { headBlock, readAll } from './chain.js';
+import type {
+  Finding,
+  Prepared,
+  PreviewResult,
+  SplitParams,
+  SplitParamsInput,
+} from '../types.js';
 import {
   findSplitParams,
   hasContractCode,
@@ -54,29 +60,40 @@ const DistributionSplit = Type.Object({
   address: Type.Optional(T.Address),
 });
 
-const DistributionInputSchema = Type.Object({
-  ovm: Type.Optional(T.Address),
-  rewardSplit: Type.Optional(DistributionSplit),
-  principalSplit: Type.Optional(DistributionSplit),
-  recipients: Type.Optional(Type.Array(T.Address)),
-  minWithdraw: Type.Optional(Type.BigInt({ minimum: 1n })),
-  distributor: Type.Optional(T.Address),
-  from: Type.Optional(T.Address),
-});
+export const DistributionInputSchema = Type.Object(
+  {
+    ovm: Type.Optional(T.Address),
+    rewardSplit: Type.Optional(DistributionSplit),
+    principalSplit: Type.Optional(DistributionSplit),
+    recipients: Type.Optional(Type.Array(T.Address)),
+    includeRaf: Type.Optional(Type.Boolean()),
+    minWithdraw: Type.Optional(Type.BigInt({ minimum: 1n })),
+    distributor: Type.Optional(T.Address),
+    from: Type.Optional(T.Address),
+  },
+  { additionalProperties: false },
+);
 
 export interface DistributionInput {
-  ovm?: Address;
+  ovm?: string;
   /** The split params; `address` defaults to the OVM's matching recipient. */
-  rewardSplit?: SplitParams & { address?: Address };
-  principalSplit?: SplitParams & { address?: Address };
-  /** Whose balances to withdraw; default every split recipient except the RAF. */
-  recipients?: Address[];
+  rewardSplit?: SplitParamsInput & { address?: string };
+  principalSplit?: SplitParamsInput & { address?: string };
+  /** Whose balances to withdraw; default every recipient of the splits (the Obol RAF included). */
+  recipients?: string[];
+  /**
+   * Whether the Obol RAF address (the chain's `rafRecipient`) is withdrawn
+   * (default true). Withdrawing it is permissionless and costs the
+   * recipients nothing. With `false` it is left out of the withdrawal set,
+   * and RAF_LEFT_IN_WAREHOUSE (info) reports what stays in the Warehouse.
+   */
+  includeRaf?: boolean;
   /** Skip a leg moving less than this (wei, default 1). */
   minWithdraw?: bigint;
   /** Receives split distribution incentives; default the sender. */
-  distributor?: Address;
+  distributor?: string;
   /** The sender, for the pause rules; default the wallet account. */
-  from?: Address;
+  from?: string;
 }
 
 /**
@@ -87,7 +104,8 @@ export interface DistributionInput {
 export type SkipReason = 'nothing' | 'dust' | 'paused';
 
 export interface DistributionPreview {
-  blockNumber: bigint;
+  /** The `minWithdraw` the legs were compared with (wei). */
+  minWithdraw: bigint;
   ovm?: {
     address: Address;
     distributable: bigint;
@@ -111,7 +129,9 @@ export interface DistributionPreview {
     fromPrincipalSplit: bigint;
     /** Split distribution incentives credited to this address as the distributor (wei); 0 for others. */
     distributorReward: bigint;
+    /** Its Warehouse ETH balance before this transaction (wei), from any split. */
     warehouseBalance: bigint;
+    /** Its SplitMain v1 ETH balance before this transaction (wei). */
     splitMainBalance: bigint;
     /** The recipient is in the withdrawal set; `skipReason` says if its withdrawal is left out. */
     withdraw: boolean;
@@ -123,14 +143,12 @@ export interface DistributionPreview {
      */
     fromThisDistribution: bigint;
     /**
-     * ETH this transaction sends to the recipient's wallet (wei): `fromOvm`,
-     * plus, when its withdrawal is included, its whole Warehouse balance
-     * (what it already had there, from any split, plus this distribution's
-     * split credits, minus the 1 wei kept) and its whole SplitMain v1
-     * balance (minus 1 wei). So it can exceed `fromThisDistribution`; use
-     * that for "earned by this distribution".
+     * What was already waiting for the recipient before this transaction
+     * (wei): `warehouseBalance + splitMainBalance`, from any split. A
+     * withdrawal pays it out together with this distribution's split
+     * credits; the splits contracts keep 1 wei of each balance withdrawn.
      */
-    toWallet: bigint;
+    alreadyWaiting: bigint;
   }>;
 }
 
@@ -146,74 +164,12 @@ interface ResolvedSplit {
   params: SplitParams;
 }
 
-interface OvmState {
-  balance: bigint;
-  fundsPendingWithdrawal: bigint;
-  amountOfPrincipalStake: bigint;
-  principalThreshold: bigint;
-  principalRecipient: Address;
-  rewardRecipient: Address;
-}
-
 // Splits contracts leave 1 wei behind when they move a balance.
 const withoutDust = (amount: bigint): bigint =>
   amount > 0n ? amount - 1n : 0n;
 
 const skipFor = (amount: bigint): SkipReason =>
   amount === 0n ? 'nothing' : 'dust';
-
-const readOvm = async (
-  ctx: Context,
-  multicall3: Address,
-  ovm: Address,
-  blockNumber: bigint,
-): Promise<OvmState> => {
-  const getters = [
-    'fundsPendingWithdrawal',
-    'amountOfPrincipalStake',
-    'principalThreshold',
-    'principalRecipient',
-    'rewardRecipient',
-  ] as const;
-  const results = await readAll(
-    ctx,
-    multicall3,
-    [
-      {
-        address: multicall3,
-        abi: multicall3Abi,
-        functionName: 'getEthBalance',
-        args: [ovm],
-      },
-      ...getters.map(functionName => ({
-        address: ovm,
-        abi: ovmAbi,
-        functionName,
-      })),
-    ],
-    blockNumber,
-    'the OVM state',
-  );
-  if (results.some(r => r === undefined)) {
-    throw new ObolError(
-      'OVM_READ_FAILED',
-      `${ovm} did not answer the OVM getters`,
-      {
-        hint: 'Check the address and chain; run ovm.verify',
-        details: { address: ovm },
-      },
-    );
-  }
-  const [balance, pending, stake, thresholdGwei, principal, reward] = results;
-  return {
-    balance: balance as bigint,
-    fundsPendingWithdrawal: pending as bigint,
-    amountOfPrincipalStake: stake as bigint,
-    principalThreshold: thresholdGweiToWei(thresholdGwei as bigint),
-    principalRecipient: checksum(principal as string),
-    rewardRecipient: checksum(reward as string),
-  };
-};
 
 const readSplitHash = async (
   ctx: Context,
@@ -270,7 +226,7 @@ const buildDistribution = async (
     ctx.chain.id,
     'splits.prepareDistribution',
   );
-  const { multicall3, warehouse, splitMain, rafRecipient } = contracts;
+  const { warehouse, splitMain, rafRecipient } = contracts;
   const sender = senderOf(
     ctx,
     d.from !== undefined ? checksum(d.from) : undefined,
@@ -279,33 +235,21 @@ const buildDistribution = async (
     sender !== null && sameAddress(address, sender);
   const checks: Finding[] = [];
 
-  // OVM: provenance, then its state at the block everything else is read at.
+  // OVM: provenance, then its state; everything else is read at that block.
   const ovmAddress = d.ovm !== undefined ? checksum(d.ovm) : undefined;
   if (ovmAddress !== undefined) {
-    const { verification, unknownFinding } = await requireObolOvm(
-      ctx,
-      ovmAddress,
-      false,
-    );
-    if (unknownFinding) {
-      checks.push(
-        finding(
-          'PROVENANCE_UNKNOWN',
-          'warning',
-          `Could not check that ${ovmAddress} was created by the Obol factory: ${verification.reason}`,
-          {
-            hint: 'Retry ovm.verify before relying on the contract',
-            details: { address: ovmAddress },
-          },
-        ),
-      );
-    }
+    checks.push(...(await provenanceFindings(ctx, ovmAddress)));
   }
-  const blockNumber = await headBlock(ctx);
   const ovm =
     ovmAddress !== undefined
-      ? await readOvm(ctx, multicall3, ovmAddress, blockNumber)
+      ? await readOvmCore(ctx, ovmAddress, {
+          what: 'splits.prepareDistribution',
+        })
       : undefined;
+  const blockNumber =
+    ovm !== undefined
+      ? ovm.blockNumber
+      : await latestBlockNumber(ctx.publicClient);
   const routing = ovm !== undefined ? ovmRouting(ovm) : undefined;
   const ovmIncluded =
     routing !== undefined && routing.distributable >= minWithdraw;
@@ -430,12 +374,11 @@ const buildDistribution = async (
 
   // Addresses to preview: split recipients, direct OVM recipients, the
   // recipients to withdraw for and the distributor.
-  const withdrawFor = (
-    d.recipients ??
-    splits
-      .flatMap(s => s.params.recipients)
-      .filter(a => !sameAddress(a, rafRecipient))
-  ).map(checksum);
+  const includeRaf = d.includeRaf ?? true;
+  const withdrawFor = (d.recipients ?? splits.flatMap(s => s.params.recipients))
+    .map(checksum)
+    .filter(a => includeRaf || !sameAddress(a, rafRecipient))
+    .filter((a, i, all) => all.findIndex(b => sameAddress(a, b)) === i);
   const addresses: Address[] = [];
   const addAddress = (address: Address): void => {
     if (!addresses.some(a => sameAddress(a, address))) addresses.push(address);
@@ -447,11 +390,10 @@ const buildDistribution = async (
   withdrawFor.forEach(addAddress);
   if (hasIncentive && distributor !== undefined) addAddress(distributor);
 
-  const results = await readAll(
+  const results = await readValues(
     ctx,
-    multicall3,
     [
-      ...splits.flatMap(s => [
+      ...splits.flatMap((s): ReadCall[] => [
         { address: s.address, abi: splitWalletAbi, functionName: 'splitHash' },
         { address: s.address, abi: splitWalletAbi, functionName: 'paused' },
         { address: s.address, abi: splitWalletAbi, functionName: 'owner' },
@@ -462,7 +404,7 @@ const buildDistribution = async (
           args: [NATIVE_TOKEN],
         },
       ]),
-      ...addresses.flatMap(address => [
+      ...addresses.flatMap((address): ReadCall[] => [
         {
           address: warehouse,
           abi: warehouseAbi,
@@ -483,8 +425,8 @@ const buildDistribution = async (
         },
       ]),
     ],
-    blockNumber,
     'the split and recipient balances',
+    blockNumber,
   );
 
   // Through Multicall3 the splits and the Warehouse see Multicall3 as
@@ -636,7 +578,6 @@ const buildDistribution = async (
           fromSplits.other,
       );
       const splitMainAmount = withoutDust(splitMainBalance);
-      let toWallet = fromOvm;
       let skipReason: SkipReason | undefined;
       if (withdraw) {
         const blocked =
@@ -645,7 +586,6 @@ const buildDistribution = async (
           warehouseAmount >= minWithdraw;
         let included = false;
         if (warehouseAmount >= minWithdraw && !blocked) {
-          toWallet += warehouseAmount;
           included = true;
           calls.push({
             target: warehouse,
@@ -658,7 +598,6 @@ const buildDistribution = async (
           });
         }
         if (splitMainAmount >= minWithdraw) {
-          toWallet += splitMainAmount;
           included = true;
           calls.push({
             target: splitMain,
@@ -676,7 +615,11 @@ const buildDistribution = async (
               'RECIPIENT_WITHDRAW_PAUSED',
               'info',
               `${address} paused its Warehouse withdrawals; its withdrawal is left out`,
-              { hint: 'The recipient withdraws itself', details: { address } },
+              {
+                hint: 'The recipient withdraws itself',
+                subject: { address },
+                details: { address },
+              },
             ),
           );
         }
@@ -685,6 +628,19 @@ const buildDistribution = async (
             ? 'paused'
             : skipFor(warehouseAmount + splitMainAmount);
         }
+      } else if (sameAddress(address, rafRecipient) && warehouseAmount > 0n) {
+        checks.push(
+          finding(
+            'RAF_LEFT_IN_WAREHOUSE',
+            'info',
+            `The Obol RAF address ${address} is not withdrawn: ${warehouseAmount} wei stays in the Warehouse`,
+            {
+              hint: 'Include it (the default, includeRaf: true) to withdraw it too; anyone may',
+              subject: { address },
+              details: { address, amount: warehouseAmount },
+            },
+          ),
+        );
       }
       return {
         address,
@@ -698,13 +654,13 @@ const buildDistribution = async (
         ...(skipReason !== undefined ? { skipReason } : {}),
         fromThisDistribution:
           fromOvm + fromSplits.reward + fromSplits.principal + fromSplits.other,
-        toWallet,
+        alreadyWaiting: warehouseBalance + splitMainBalance,
       };
     },
   );
 
   const preview: DistributionPreview = {
-    blockNumber,
+    minWithdraw,
     ...(ovm !== undefined && routing !== undefined && ovmAddress !== undefined
       ? {
           ovm: {
@@ -746,7 +702,7 @@ const buildDistribution = async (
 export const prepareDistribution = async (
   ctx: Context,
   input: DistributionInput,
-): Promise<Prepared<DistributionPreview>> => {
+): Promise<Prepared<'distribution'>> => {
   const { calls, preview, checks, blockNumber } = await buildDistribution(
     ctx,
     input,
@@ -760,7 +716,7 @@ export const prepareDistribution = async (
     ctx.chain.id,
     'splits.prepareDistribution',
   );
-  return prepared(ctx, {
+  return prepared(ctx, 'distribution', {
     to: multicall3,
     data: encodeFunctionData({
       abi: multicall3Abi,
@@ -781,11 +737,7 @@ export const prepareDistribution = async (
 export const previewDistribution = async (
   ctx: Context,
   input: DistributionInput,
-): Promise<{
-  preview: DistributionPreview;
-  checks: Finding[];
-  blockNumber: bigint;
-}> => {
+): Promise<PreviewResult<DistributionPreview>> => {
   const { preview, checks, blockNumber } = await buildDistribution(ctx, input);
   return { preview, checks, blockNumber };
 };
@@ -808,7 +760,7 @@ export interface DistributionResult {
  */
 export const distributionFromReceipt = (
   receipt: DistributionReceipt,
-  options: { chainId: number; ovm?: Address },
+  options: { chainId: number; ovm?: string },
 ): DistributionResult => {
   const { warehouse, splitMain } = requireContracts(
     options.chainId,

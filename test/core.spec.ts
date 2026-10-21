@@ -12,11 +12,16 @@ import { ObolError } from '../src/errors.js';
 import { decode, isAddressInput, T } from '../src/schema.js';
 import {
   codeKind,
+  latestBlockNumber,
   readRequestFee,
   resolveRequestFee,
 } from '../src/chainUtils.js';
-import { send, waitForContractWalletExecution } from '../src/send.js';
-import { headBlock } from '../src/splits/chain.js';
+import {
+  isStale,
+  send,
+  waitForContractWalletExecution,
+} from '../src/send.js';
+import type { AnyPrepared } from '../src/types.js';
 import { verifyOvm } from '../src/ovm/verify.js';
 import { ovmCreatedLog } from './splits/helpers.js';
 import { fakeChain, MULTICALL3 } from './helpers/fakeChain.js';
@@ -136,6 +141,7 @@ describe('v3 core', () => {
   describe('send', () => {
     const account = '0x2222222222222222222222222222222222222222' as Address;
     const prepared = {
+      kind: 'role',
       request: {
         to: account,
         data: '0x' as Hex,
@@ -143,8 +149,21 @@ describe('v3 core', () => {
         chainId: 560048,
       },
       checks: [],
-      preview: undefined,
-    };
+      preview: { function: 'noop', args: [] },
+    } as unknown as AnyPrepared;
+
+    it('refuses a value without a known kind (PREPARED_INVALID)', async () => {
+      const chain = fakeChain({ walletAccount: account });
+      await expect(
+        send(chain.context(), { ...prepared, kind: 'other' } as never),
+      ).rejects.toMatchObject({ code: 'PREPARED_INVALID' });
+    });
+
+    it('isStale compares the prepared block with the head', () => {
+      expect(isStale({ blockNumber: 100n }, 105n, 5)).toBe(false);
+      expect(isStale({ blockNumber: 100n }, 106n, 5n)).toBe(true);
+      expect(isStale({}, 10_000n, 0)).toBe(false);
+    });
 
     it('returns the hash before waiting and flags EOAs', async () => {
       const chain = fakeChain({ walletAccount: account });
@@ -184,12 +203,12 @@ describe('v3 core', () => {
   describe('block number reads skip the client cache', () => {
     // viem caches getBlockNumber for cacheTime (default: the polling
     // interval, 4 s); reads pinned to a cached number miss the latest block.
-    it('headBlock returns a block mined after the last read', async () => {
+    it('latestBlockNumber returns a block mined after the last read', async () => {
       const chain = fakeChain();
-      const ctx = chain.context();
-      expect(await headBlock(ctx)).toBe(2_000_000n);
+      const client = chain.context().publicClient;
+      expect(await latestBlockNumber(client)).toBe(2_000_000n);
       chain.setBlockNumber(2_000_005n);
-      expect(await headBlock(ctx)).toBe(2_000_005n);
+      expect(await latestBlockNumber(client)).toBe(2_000_005n);
     });
 
     it('ovm.verify finds a creation log in a block mined after the last read', async () => {

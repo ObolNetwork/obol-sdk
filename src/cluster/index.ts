@@ -28,17 +28,12 @@ import {
 import { watch, type ClusterEvent, type WatchOptions } from './watch.js';
 
 export {
-  accept,
   computeConfigHash,
   computeDefinitionHash,
   computeLockHash,
-  create,
-  get,
-  getLock,
   prepareDefinition,
   verifyDefinition,
   verifyLock,
-  watch,
 };
 export { nobleBls, type BlsBackend, type BlsBatch } from './blsBackend.js';
 export {
@@ -82,20 +77,20 @@ export interface ClusterModule {
   ) => PreparedDefinition;
   create: (input: unknown) => Promise<Hex>;
   accept: (input: {
-    configHash: Hex;
+    configHash: string;
     enr: string;
     version?: string;
   }) => Promise<ClusterDefinition>;
-  get: (configHash: Hex) => Promise<ClusterDefinition>;
+  get: (configHash: string) => Promise<ClusterDefinition>;
   getLock: (
-    input: { configHash: Hex } | { lockHash: Hex },
+    input: { configHash: string } | { lockHash: string },
   ) => Promise<ClusterLock>;
   watch: (
-    configHash: Hex,
+    configHash: string,
     options: WatchOptions,
   ) => AsyncIterable<ClusterEvent>;
   verifyDefinition: (
-    input: { definition: unknown; configHash?: Hex; chainId?: number },
+    input: { definition: unknown; configHash?: string; chainId?: number },
     options?: VerifyOptions,
   ) => Promise<DefinitionVerification>;
   verifyLock: (
@@ -112,15 +107,12 @@ export const createClusterModule = (ctx: Context): ClusterModule => ({
   prepareDefinition: (input: { chainId?: number } & object) =>
     prepareDefinition({ ...input, chainId: input.chainId ?? ctx.chain.id }),
   create: async (input: unknown) => await create(ctx, input),
-  accept: async (input: { configHash: Hex; enr: string; version?: string }) =>
-    await accept(ctx, input),
-  get: async (configHash: Hex) => await get(ctx, configHash),
-  getLock: async (input: { configHash: Hex } | { lockHash: Hex }) =>
-    await getLock(ctx, input),
-  watch: (configHash: Hex, options: WatchOptions) =>
-    watch(ctx, configHash, options),
+  accept: async input => await accept(ctx, input),
+  get: async configHash => await get(ctx, configHash),
+  getLock: async input => await getLock(ctx, input),
+  watch: (configHash, options) => watch(ctx, configHash, options),
   verifyDefinition: async (
-    input: { definition: unknown; configHash?: Hex; chainId?: number },
+    input: { definition: unknown; configHash?: string; chainId?: number },
     options: VerifyOptions = {},
   ) =>
     await verifyDefinition(
@@ -130,3 +122,6 @@ export const createClusterModule = (ctx: Context): ClusterModule => ({
   verifyLock: async (lock: unknown, options: VerifyLockOptions = {}) =>
     await verifyLock(lock, { publicClient: ctx.publicClient, ...options }),
 });
+
+/** Builds the context a module is bound to, without the other modules. */
+export { createObolContext, type ObolClientConfig } from '../clientContext.js';

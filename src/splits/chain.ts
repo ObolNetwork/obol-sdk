@@ -1,14 +1,8 @@
 /**
- * Chain helpers for the splits, setup and incentives modules: expected-code
- * checks for the factories, and Multicall3 reads pinned to one block.
+ * Expected-code checks for the factories (splits, setup).
  */
-import {
-  keccak256,
-  type Address,
-  type ContractFunctionParameters,
-  type Hex,
-} from 'viem';
-import { chainReadFailed, latestBlockNumber } from '../chainUtils.js';
+import { keccak256, type Address, type Hex } from 'viem';
+import { chainReadFailed } from '../chainUtils.js';
 import type { Context } from '../context.js';
 import { ObolError } from '../errors.js';
 
@@ -64,41 +58,4 @@ export const requireExpectedCode = async (
       },
     );
   }
-};
-
-/** The latest block number; CHAIN_READ_FAILED on error. */
-export const headBlock = async (ctx: Context): Promise<bigint> => {
-  try {
-    return await latestBlockNumber(ctx.publicClient);
-  } catch (cause) {
-    throw chainReadFailed('the block number', cause);
-  }
-};
-
-/**
- * Runs view calls in one Multicall3 `aggregate3` at `blockNumber`. A call
- * that reverts or cannot be decoded (e.g. a call to an address without code)
- * gives `undefined`; an RPC failure is CHAIN_READ_FAILED.
- */
-export const readAll = async (
-  ctx: Context,
-  multicall3: Address,
-  calls: ContractFunctionParameters[],
-  blockNumber: bigint,
-  what: string,
-): Promise<unknown[]> => {
-  if (calls.length === 0) return [];
-  let results;
-  try {
-    results = await ctx.publicClient.multicall({
-      contracts: calls,
-      allowFailure: true,
-      multicallAddress: multicall3,
-      blockNumber,
-      batchSize: 0,
-    });
-  } catch (cause) {
-    throw chainReadFailed(what, cause);
-  }
-  return results.map(r => (r.status === 'success' ? r.result : undefined));
 };

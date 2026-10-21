@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/ovm.prepareWithdraw.json",
+  "title": "ovm.prepareWithdraw",
+  "additionalProperties": false,
+  "properties": {
+    "acknowledgeFullExit": {
+      "type": "boolean"
+    },
+    "beaconUrl": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "excessFeeRecipient": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "fee": {
+      "description": "wei",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "x-obol-type": "bigint",
+      "x-obol-minimum": "0"
+    },
+    "from": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "lockHash": {
+      "description": "32-byte hex",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "type": "string"
+    },
+    "ovm": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "requests": {
+      "items": {
+        "properties": {
+          "amount": {
+            "description": "wei",
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "x-obol-type": "bigint",
+            "x-obol-minimum": "0"
+          },
+          "pubkey": {
+            "description": "BLS public key (48 bytes)",
+            "pattern": "^0x[0-9a-fA-F]{96}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pubkey",
+          "amount"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "ovm",
+    "requests"
+  ],
+  "type": "object"
+}

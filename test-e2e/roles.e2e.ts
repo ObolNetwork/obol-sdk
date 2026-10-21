@@ -10,7 +10,7 @@ import {
   codes,
   describeFork,
   expectCode,
-  HOODI,
+  NET,
   makeDeposit,
   publicClient,
   randomAddress,
@@ -28,7 +28,7 @@ const ovmAbi = parseAbi([
   'function grantRoles(address user, uint256 roles) payable',
 ]);
 
-describeFork('OVM role and ownership writes on a Hoodi fork', () => {
+describeFork('OVM role and ownership writes', () => {
   let owner: Signer;
   let holder: Signer;
   let consolidator: Address;
@@ -66,7 +66,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
     });
     const transfer = await owner.obol.ovm.prepareTransfer({
       ovm: d.ovm,
-      newBeneficiary: randomAddress(),
+      newPrincipalRecipient: randomAddress(),
       newOwner: randomAddress(),
     });
     expect(codes(transfer.checks)).toEqual([]);
@@ -143,7 +143,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
     await sendAndWait(holder.obol, withdraw);
   });
 
-  test('a non-owner grant is NOT_OVM_OWNER, and the OVM would revert', async () => {
+  test('a non-owner grant is OVM_OWNER_REQUIRED, and the OVM would revert', async () => {
     await expectCode(
       async () =>
         await holder.obol.ovm.prepareGrantRoles({
@@ -151,7 +151,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
           user: holder.address,
           roles: OVM_ROLES.SET_REWARD,
         }),
-      'NOT_OVM_OWNER',
+      'OVM_OWNER_REQUIRED',
     );
     await expect(
       publicClient.call({
@@ -186,7 +186,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
   });
 
   test('roles and ownership for Multicall3 are refused; a role it already holds is flagged', async () => {
-    const multicall3 = HOODI.multicall3;
+    const multicall3 = NET.multicall3;
     await expectCode(
       async () =>
         await owner.obol.ovm.prepareGrantRoles({
@@ -194,16 +194,16 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
           user: multicall3,
           roles: OVM_ROLES.WITHDRAWAL,
         }),
-      'ROLE_TO_PUBLIC_FORWARDER',
+      'PUBLIC_FORWARDER_AS_ROLE_HOLDER',
     );
     await expectCode(
       async () =>
         await owner.obol.ovm.prepareTransfer({
           ovm: d.ovm,
-          newBeneficiary: randomAddress(),
+          newPrincipalRecipient: randomAddress(),
           newOwner: multicall3,
         }),
-      'OWNER_TO_PUBLIC_FORWARDER',
+      'PUBLIC_FORWARDER_AS_OWNER',
     );
     await expectCode(
       async () =>
@@ -211,7 +211,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
           ovm: d.ovm,
           pendingOwner: multicall3,
         }),
-      'OWNER_TO_PUBLIC_FORWARDER',
+      'PUBLIC_FORWARDER_AS_OWNER',
     );
 
     // Granted without the SDK: both reads flag it, then the owner revokes it.
@@ -232,7 +232,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
         severity: 'warning',
       }),
     ]);
-    const state = await owner.obol.ovm.getState(d.ovm);
+    const state = (await owner.obol.ovm.getState(d.ovm))!;
     expect(codes(state.findings)).toEqual(['PUBLIC_FORWARDER_HOLDS_ROLE']);
     const revoke = await owner.obol.ovm.prepareRevokeRoles({
       ovm: d.ovm,
@@ -274,10 +274,10 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
 
   test('transfer warns ROLES_SURVIVE_TRANSFER, and the roles indeed survive it', async () => {
     const newOwner = await signer(10);
-    const newBeneficiary = randomAddress();
+    const newPrincipalRecipient = randomAddress();
     const prepared = await owner.obol.ovm.prepareTransfer({
       ovm: d.ovm,
-      newBeneficiary,
+      newPrincipalRecipient,
       newOwner: newOwner.address,
     });
     expect(codes(prepared.checks)).toEqual(['ROLES_SURVIVE_TRANSFER']);
@@ -298,7 +298,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
         functionName,
       });
     expect(await read('owner')).toBe(newOwner.address);
-    expect(await read('principalRecipient')).toBe(newBeneficiary);
+    expect(await read('principalRecipient')).toBe(newPrincipalRecipient);
     expect(await rolesOf(consolidator)).toBe(OVM_ROLES.CONSOLIDATION);
     const { holders } = await newOwner.obol.ovm.getRoleHolders(d.ovm);
     expect(holders.map(h => [h.address, h.isOwner])).toEqual([
@@ -314,7 +314,7 @@ describeFork('OVM role and ownership writes on a Hoodi fork', () => {
           user: owner.address,
           roles: OVM_ROLES.DEPOSIT,
         }),
-      'NOT_OVM_OWNER',
+      'OVM_OWNER_REQUIRED',
     );
   });
 

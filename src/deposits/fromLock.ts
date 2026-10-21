@@ -27,7 +27,7 @@ export interface FromLockOptions {
    * Only these validators, by index in the lock or by group pubkey (default
    * all). Results stay in lock order.
    */
-  validators?: Array<number | Hex>;
+  validators?: Array<number | string>;
   /** The chain the deposits are for; the lock's `fork_version` must match it. Set by the client. */
   chainId?: number;
   /** For contract-wallet definition signatures during verification. */
@@ -50,7 +50,7 @@ export interface LockDeposits {
   deposits?: Deposit[];
 }
 
-const OptionsSchema = Type.Object({
+export const FromLockOptionsSchema = Type.Object({
   amount: Type.Optional(T.Wei),
   verify: Type.Optional(
     Type.Union([
@@ -199,7 +199,7 @@ export const fromLock = async (
     validators: requested,
     yieldMs,
   } = decode(
-    OptionsSchema,
+    FromLockOptionsSchema,
     {
       ...(options.amount !== undefined ? { amount: options.amount } : {}),
       ...(options.verify !== undefined ? { verify: options.verify } : {}),

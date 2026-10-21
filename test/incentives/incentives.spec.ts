@@ -6,16 +6,18 @@ import {
   type Address,
   type Hex,
 } from 'viem';
+import { createIncentivesModule } from '../../src/incentives/index.js';
 import {
-  createIncentivesModule,
   getIncentives,
   isClaimed,
+  preflight,
+  prepareClaim,
+} from '../../src/incentives/incentives.js';
+import {
   merkleDistributorAbi,
   merkleLeaf,
   MERKLE_DISTRIBUTOR_RUNTIME,
-  preflight,
-  prepareClaim,
-} from '../../src/incentives/index.js';
+} from '../../src/incentives/merkle.js';
 import { ObolApiError } from '../../src/errors.js';
 import { merkleDistributorRuntimeCode } from '../fixtures.js';
 import { fakeApi, fakeChain } from '../helpers/fakeChain.js';
@@ -237,7 +239,7 @@ describe('incentives.preflight / prepareClaim', () => {
       ['NO_INCENTIVES'],
     ],
     [
-      'OPERATOR_ADDRESS_MISMATCH and INVALID_INCENTIVES_DATA',
+      'OPERATOR_ADDRESS_MISMATCH and INCENTIVES_DATA_INVALID',
       {
         api: () =>
           record({
@@ -248,14 +250,14 @@ describe('incentives.preflight / prepareClaim', () => {
       },
       [
         'OPERATOR_ADDRESS_MISMATCH',
-        'INVALID_INCENTIVES_DATA',
-        'INVALID_INCENTIVES_DATA',
+        'INCENTIVES_DATA_INVALID',
+        'INCENTIVES_DATA_INVALID',
       ],
     ],
     ['CONTRACT_NOT_DEPLOYED', { code: '0x' }, ['CONTRACT_NOT_DEPLOYED']],
-    ['UNKNOWN_DISTRIBUTOR', { code: '0x6080604052' }, ['UNKNOWN_DISTRIBUTOR']],
-    ['UNEXPECTED_TOKEN', { token: addr(0x70) }, ['UNEXPECTED_TOKEN']],
-    ['INVALID_PROOF', { root: `0x${'99'.repeat(32)}` }, ['INVALID_PROOF']],
+    ['DISTRIBUTOR_UNKNOWN', { code: '0x6080604052' }, ['DISTRIBUTOR_UNKNOWN']],
+    ['TOKEN_MISMATCH', { token: addr(0x70) }, ['TOKEN_MISMATCH']],
+    ['PROOF_INVALID', { root: `0x${'99'.repeat(32)}` }, ['PROOF_INVALID']],
     ['CLAIM_WINDOW_CLOSED', { timestamp: END + 1n }, ['CLAIM_WINDOW_CLOSED']],
     ['CHAIN_READ_FAILED (calls)', { revert: true }, ['CHAIN_READ_FAILED']],
     ['CHAIN_READ_FAILED (block)', { blockFails: true }, ['CHAIN_READ_FAILED']],

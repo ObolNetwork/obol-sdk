@@ -1,6 +1,6 @@
 import type { Address } from 'viem';
 import { splitCreatedEvents, splitUpdatedEvent } from '../../src/abi.js';
-import { getSplit } from '../../src/splits/getSplit.js';
+import { getSplit as getSplitOrNull } from '../../src/splits/getSplit.js';
 import { hashSplitParams } from '../../src/splits/shares.js';
 import { ZERO_ADDRESS } from '../../src/schema.js';
 import type { SplitParams } from '../../src/types.js';
@@ -13,6 +13,15 @@ import {
   splitContract,
   warehouseContract,
 } from './helpers.js';
+
+/** getSplit for an address that must be a split. */
+const getSplit = async (
+  ...args: Parameters<typeof getSplitOrNull>
+): Promise<NonNullable<Awaited<ReturnType<typeof getSplitOrNull>>>> => {
+  const info = await getSplitOrNull(...args);
+  if (info === null) throw new Error('not a split');
+  return info;
+};
 
 const SPLIT = addr(0x5b11);
 const OVM = addr(0x0f0f);
@@ -65,7 +74,7 @@ const chainWith = (
     ...(opts.code !== undefined ? { code: { [SPLIT]: opts.code } } : {}),
     logs: opts.logs ?? [],
     ...(opts.getLogsFails === true
-      ? { getLogsError: () => new Error('range too wide') }
+      ? { getLogsError: () => new Error('internal error') }
       : {}),
   });
 
@@ -98,29 +107,36 @@ describe('splits.getSplit', () => {
     expect(error.details.address).toBe(SPLIT);
   });
 
-  it('checks the code first: no code is SPLIT_NOT_FOUND even if calls answer', async () => {
+  it('checks the code first: no code is not a split (null) even if calls answer', async () => {
     const chain = chainWith(original, { code: '0x' });
-    expect(
-      (await caught(getSplit(chain.context(), { address: SPLIT }))).code,
-    ).toBe('SPLIT_NOT_FOUND');
+    expect(await getSplitOrNull(chain.context(), { address: SPLIT })).toBeNull();
   });
 
-  it('treats an EIP-7702 delegation as SPLIT_NOT_FOUND', async () => {
+  it('treats an EIP-7702 delegation as not a split (null)', async () => {
     const chain = chainWith(original, { code: `0xef0100${'11'.repeat(20)}` });
-    expect(
-      (await caught(getSplit(chain.context(), { address: SPLIT }))).code,
-    ).toBe('SPLIT_NOT_FOUND');
+    expect(await getSplitOrNull(chain.context(), { address: SPLIT })).toBeNull();
   });
 
-  it('treats a zero splitHash or failing getters as SPLIT_NOT_FOUND', async () => {
+  it('treats a zero splitHash or failing getters as not a split (null)', async () => {
     const zero = chainWith(original, { splitHash: `0x${'00'.repeat(32)}` });
-    expect(
-      (await caught(getSplit(zero.context(), { address: SPLIT }))).code,
-    ).toBe('SPLIT_NOT_FOUND');
+    expect(await getSplitOrNull(zero.context(), { address: SPLIT })).toBeNull();
     const notSplit = fakeChain({ code: { [SPLIT]: '0x6080604052' } });
     expect(
-      (await caught(getSplit(notSplit.context(), { address: SPLIT }))).code,
-    ).toBe('SPLIT_NOT_FOUND');
+      await getSplitOrNull(notSplit.context(), { address: SPLIT }),
+    ).toBeNull();
+  });
+
+  it('throws CHAIN_READ_FAILED when the code cannot be read', async () => {
+    const chain = fakeChain({
+      onRequest: method => {
+        if (method === 'eth_getCode') throw new Error('rpc down');
+        return undefined;
+      },
+    });
+    const error = await caught(
+      getSplitOrNull(chain.context(), { address: SPLIT }),
+    );
+    expect(error.code).toBe('CHAIN_READ_FAILED');
   });
 
   it('finds params in the SplitCreated log', async () => {

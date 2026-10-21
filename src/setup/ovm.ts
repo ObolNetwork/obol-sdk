@@ -10,6 +10,7 @@ import { createOvmEvent, ovmFactoryAbi } from '../abi.js';
 import {
   codeKind,
   chainReadFailed,
+  latestBlockNumber,
   finding,
   prepared,
   refusePublicForwarders,
@@ -26,28 +27,27 @@ import {
 } from '../schema.js';
 import type { Finding, Prepared } from '../types.js';
 import { ETH, GWEI, weiToGwei } from '../units.js';
-import {
-  EXPECTED_CODE_HASHES,
-  headBlock,
-  requireExpectedCode,
-} from '../splits/chain.js';
+import { EXPECTED_CODE_HASHES, requireExpectedCode } from '../splits/chain.js';
 
 export const DEFAULT_PRINCIPAL_THRESHOLD = 16n * ETH;
 export const MIN_PRINCIPAL_THRESHOLD = 16n * ETH;
 export const MAX_PRINCIPAL_THRESHOLD = 2048n * ETH;
 
-const CreateOvmInputSchema = Type.Object({
-  owner: T.Address,
-  principalRecipient: T.Address,
-  rewardRecipient: T.Address,
-  principalThreshold: Type.Optional(T.Wei),
-});
+export const CreateOvmInputSchema = Type.Object(
+  {
+    owner: T.Address,
+    principalRecipient: T.Address,
+    rewardRecipient: T.Address,
+    principalThreshold: Type.Optional(T.Wei),
+  },
+  { additionalProperties: false },
+);
 
 export interface CreateOvmInput {
-  owner: Address;
+  owner: string;
   /** Any address: a split, an EOA, a Safe. */
-  principalRecipient: Address;
-  rewardRecipient: Address;
+  principalRecipient: string;
+  rewardRecipient: string;
   /** wei, whole gwei, 16 to 2048 ETH; default 16 ETH. */
   principalThreshold?: bigint;
 }
@@ -148,6 +148,7 @@ export const recipientCodeFindings = async (
           `OVM recipient ${address} has no contract code (an EOA, or a split not created yet)`,
           {
             hint: 'If it should be a split, create it first or use prepareOvmWithSplits',
+            subject: { address },
             details: { address },
           },
         ),
@@ -169,14 +170,14 @@ export const recipientCodeFindings = async (
 export const prepareCreateOvm = async (
   ctx: Context,
   input: CreateOvmInput,
-): Promise<Prepared<{ factory: Address }>> => {
+): Promise<Prepared<'createOvm'>> => {
   const checked = checkOvmInput(input);
   refuseOvmForwarders(ctx.chain.id, checked);
   const { ovmFactory } = requireContracts(
     ctx.chain.id,
     'setup.prepareCreateOvm',
   );
-  const blockNumber = await headBlock(ctx);
+  const blockNumber = await latestBlockNumber(ctx.publicClient);
   await requireExpectedCode(
     ctx,
     ovmFactory.address,
@@ -189,7 +190,7 @@ export const prepareCreateOvm = async (
     [checked.principalRecipient, checked.rewardRecipient],
     blockNumber,
   );
-  return prepared(ctx, {
+  return prepared(ctx, 'createOvm', {
     to: ovmFactory.address,
     data: encodeCreateOvm(checked),
     checks,
@@ -197,6 +198,11 @@ export const prepareCreateOvm = async (
     blockNumber,
   });
 };
+
+/** What `prepareCreateOvm` calls; the OVM address is only known from the receipt (`ovmFromReceipt`). */
+export interface CreateOvmPreview {
+  factory: Address;
+}
 
 export interface OvmCreated {
   ovm: Address;
@@ -254,7 +260,10 @@ export const ovmFromReceipt = (
     throw new ObolError(
       'OVM_CREATE_EVENT_AMBIGUOUS',
       `${created.length} CreateObolValidatorManager events in the receipt`,
-      { hint: 'Read the addresses from the logs yourself' },
+      {
+        hint: 'Read the addresses from the logs yourself',
+        details: { ovms: created.map(c => c.ovm) },
+      },
     );
   }
   return created[0];

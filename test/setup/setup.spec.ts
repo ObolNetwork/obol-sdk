@@ -8,12 +8,12 @@ import {
 import {
   createSetupModule,
   ovmFromReceipt,
-  prepareCreateOvm,
-  prepareOvmWithSplits,
   rewardsSplit,
   solo,
   totalSplit,
 } from '../../src/setup/index.js';
+import { prepareCreateOvm } from '../../src/setup/ovm.js';
+import { prepareOvmWithSplits } from '../../src/setup/withSplits.js';
 import { MAINNET_MULTICALL3_BYTECODE } from '../bytecodes.js';
 import { ZERO_ADDRESS } from '../../src/schema.js';
 import type { SplitParams } from '../../src/types.js';

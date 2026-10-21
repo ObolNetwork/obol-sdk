@@ -70,7 +70,7 @@ const isReady = (definition: ClusterDefinition): boolean =>
 // eslint-disable-next-line generator-star-spacing -- prettier's spacing
 async function* poll(
   api: ObolApi,
-  configHash: Hex,
+  configHash: string,
   options: WatchOptions,
   intervalMs: number,
 ): AsyncGenerator<ClusterEvent> {

@@ -2,6 +2,7 @@
  * Obol API transport. Maps HTTP failures to the API_* codes of spec/errors.md;
  * a 2xx body is returned as is and checked by the caller.
  */
+import type { ApiErrorCode } from './codes.js';
 import { ObolApiError } from './errors.js';
 
 export interface ApiConfig {
@@ -16,7 +17,7 @@ export interface ApiRequest {
   signal?: AbortSignal;
 }
 
-const CODE_FOR_STATUS: Record<number, string> = {
+const CODE_FOR_STATUS: Record<number, ApiErrorCode> = {
   400: 'API_VALIDATION',
   401: 'API_UNAUTHORIZED',
   403: 'API_UNAUTHORIZED',

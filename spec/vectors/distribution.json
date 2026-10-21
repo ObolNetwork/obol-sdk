@@ -5,7 +5,8 @@
     "source": "sdk",
     "sdk_ref": "obol-sdk feat/sdk-2.16 working tree on 9297307 (staged, unreleased)",
     "generated_by": "scratch generator running src/splits/distribution.ts getOVMDistributionRouting, getSplitV2Distribution and prepareDistribution against a fake provider",
-    "note": "The fake provider answers like test/splits/distribution.spec.ts makeChain (Hoodi addresses; test addresses stand in for the OVM and splits). Routing matches ObolValidatorManager._distributeFunds; the 1-wei rules match SplitsWarehouse.withdraw (balance - 1) and the PullSplit distribute amount used by 2.16 ((split balance - 1) + (warehouse balance - 1)), which was not re-checked against the SplitV2 source. Reason codes are the v3 codes; 2.16 threw InvalidArgumentError / ObolSdkError SPLIT_PAUSED."
+    "note": "The fake provider answers like test/splits/distribution.spec.ts makeChain (Hoodi addresses; test addresses stand in for the OVM and splits). Routing matches ObolValidatorManager._distributeFunds; the 1-wei rules match SplitsWarehouse.withdraw (balance - 1) and the PullSplit distribute amount used by 2.16 ((split balance - 1) + (warehouse balance - 1)), which was not re-checked against the SplitV2 source. Reason codes are the v3 codes; 2.16 threw InvalidArgumentError / ObolSdkError SPLIT_PAUSED.",
+    "rebaselined": "3.0.0-rc.4: the accepted prepare cases were re-run on the v3 prepareDistribution (VECTORS_REBASELINE=1 test/vectors/distribution.spec.ts) and every preview field is now compared. Deliberate differences from 2.16, recorded per case in notes: the default withdrawal set includes the Obol RAF address; the preview has minWithdraw, skipReason, distributorReward, fromThisDistribution and alreadyWaiting, and no toWallet or blockNumber; checks lists the finding codes."
   },
   "addresses": {
     "multicall3": "0xcA11bde05977b3631167028862bE2a173976CA11",
@@ -122,13 +123,19 @@
             "0x1234567890123456789012345678901234567890",
             "0x2345678901234567890123456789012345678901"
           ],
-          "allocations": ["1", "2"],
+          "allocations": [
+            "1",
+            "2"
+          ],
           "totalAllocation": "3",
           "distributionIncentive": 10000
         },
         "amount": "1000"
       },
-      "amounts": ["330", "660"],
+      "amounts": [
+        "330",
+        "660"
+      ],
       "distributorReward": "10",
       "notes": "distributorReward = amount * incentive / 1e6; each recipient gets floor((amount - reward) * allocation / total)."
     },
@@ -141,7 +148,11 @@
             "0x2345678901234567890123456789012345678901",
             "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
           ],
-          "allocations": ["500000", "490000", "10000"],
+          "allocations": [
+            "500000",
+            "490000",
+            "10000"
+          ],
           "totalAllocation": "1000000",
           "distributionIncentive": 0
         },
@@ -162,13 +173,19 @@
             "0x1234567890123456789012345678901234567890",
             "0x2345678901234567890123456789012345678901"
           ],
-          "allocations": ["505000", "495000"],
+          "allocations": [
+            "505000",
+            "495000"
+          ],
           "totalAllocation": "1000000",
           "distributionIncentive": 0
         },
         "amount": "31999999999999999999"
       },
-      "amounts": ["16159999999999999999", "15839999999999999999"],
+      "amounts": [
+        "16159999999999999999",
+        "15839999999999999999"
+      ],
       "distributorReward": "0"
     },
     {
@@ -179,13 +196,19 @@
             "0x1234567890123456789012345678901234567890",
             "0x2345678901234567890123456789012345678901"
           ],
-          "allocations": ["500000", "500000"],
+          "allocations": [
+            "500000",
+            "500000"
+          ],
           "totalAllocation": "1000000",
           "distributionIncentive": 65535
         },
         "amount": "1000000000000000000"
       },
-      "amounts": ["467232500000000000", "467232500000000000"],
+      "amounts": [
+        "467232500000000000",
+        "467232500000000000"
+      ],
       "distributorReward": "65535000000000000"
     }
   ],
@@ -203,7 +226,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -212,7 +239,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -267,35 +297,42 @@
         {
           "op": "split.distribute",
           "target": "0x6789012345678901234567890123456789012345",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         },
         {
           "op": "split.distribute",
           "target": "0x7890123456789012345678901234567890123456",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         },
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x1234567890123456789012345678901234567890",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x1234567890123456789012345678901234567890"
         },
         {
           "op": "splitMain.withdraw",
-          "target": "0xc05ae267291705ac16F75283572294ed2a91CBc7",
-          "owner": "0x1234567890123456789012345678901234567890",
-          "allowFailure": true
+          "target": "0xc05ae267291705ac16f75283572294ed2a91cbc7",
+          "allowFailure": true,
+          "owner": "0x1234567890123456789012345678901234567890"
         },
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x2345678901234567890123456789012345678901",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x2345678901234567890123456789012345678901"
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5"
         }
       ],
       "preview": {
+        "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
           "distributable": "40000000000000000000",
@@ -324,34 +361,41 @@
             "fromOvm": "0",
             "fromRewardSplit": "3999999999999999999",
             "fromPrincipalSplit": "16159999999999999999",
+            "distributorReward": "0",
             "warehouseBalance": "5",
             "splitMainBalance": "10",
             "withdraw": true,
-            "toWallet": "20160000000000000011"
+            "fromThisDistribution": "20159999999999999998",
+            "alreadyWaiting": "15"
           },
           {
             "address": "0x2345678901234567890123456789012345678901",
             "fromOvm": "0",
             "fromRewardSplit": "3919999999999999999",
             "fromPrincipalSplit": "15839999999999999999",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "19759999999999999997"
+            "fromThisDistribution": "19759999999999999998",
+            "alreadyWaiting": "0"
           },
           {
-            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "address": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5",
             "fromOvm": "0",
             "fromRewardSplit": "79999999999999999",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
-            "toWallet": "0"
+            "withdraw": true,
+            "fromThisDistribution": "79999999999999999",
+            "alreadyWaiting": "0"
           }
         ]
       },
-      "notes": "Withdrawals for every split recipient but the RAF. Splits keep 1 wei of what they move; warehouse and SplitMain withdrawals leave 1 wei."
+      "notes": "Withdrawals for every split recipient but the RAF. Splits keep 1 wei of what they move; warehouse and SplitMain withdrawals leave 1 wei. v3 rc.4: the RAF is withdrawn by default (2.16 left it out), so there is one more Warehouse withdrawal.",
+      "checks": []
     },
     {
       "name": "plain_recipients_paid_by_ovm",
@@ -408,6 +452,7 @@
         }
       ],
       "preview": {
+        "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
           "distributable": "1000000000000000000",
@@ -423,24 +468,29 @@
             "fromOvm": "0",
             "fromRewardSplit": "0",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "0"
+            "fromThisDistribution": "0",
+            "alreadyWaiting": "0"
           },
           {
             "address": "0x2345678901234567890123456789012345678901",
             "fromOvm": "1000000000000000000",
             "fromRewardSplit": "0",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "1000000000000000000"
+            "fromThisDistribution": "1000000000000000000",
+            "alreadyWaiting": "0"
           }
         ]
       },
-      "notes": "OVM recipients that are not splits are paid directly (push)."
+      "notes": "OVM recipients that are not splits are paid directly (push).",
+      "checks": []
     },
     {
       "name": "only_listed_recipients_skip_dust",
@@ -455,7 +505,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -464,7 +518,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -515,32 +572,36 @@
       "calls": [
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x1234567890123456789012345678901234567890",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x1234567890123456789012345678901234567890"
         }
       ],
       "preview": {
+        "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
           "distributable": "0",
           "principalPayout": "0",
           "rewardPayout": "0",
           "principalRecipient": "0x7890123456789012345678901234567890123456",
-          "rewardRecipient": "0x6789012345678901234567890123456789012345"
+          "rewardRecipient": "0x6789012345678901234567890123456789012345",
+          "skipReason": "nothing"
         },
         "splits": [
           {
             "address": "0x6789012345678901234567890123456789012345",
             "kind": "reward",
             "distributable": "0",
-            "distributorReward": "0"
+            "distributorReward": "0",
+            "skipReason": "nothing"
           },
           {
             "address": "0x7890123456789012345678901234567890123456",
             "kind": "principal",
             "distributable": "0",
-            "distributorReward": "0"
+            "distributorReward": "0",
+            "skipReason": "nothing"
           }
         ],
         "recipients": [
@@ -549,34 +610,42 @@
             "fromOvm": "0",
             "fromRewardSplit": "0",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "100",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "99"
+            "fromThisDistribution": "0",
+            "alreadyWaiting": "100"
           },
           {
             "address": "0x2345678901234567890123456789012345678901",
             "fromOvm": "0",
             "fromRewardSplit": "0",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "1",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "0"
+            "skipReason": "nothing",
+            "fromThisDistribution": "0",
+            "alreadyWaiting": "1"
           },
           {
-            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "address": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5",
             "fromOvm": "0",
             "fromRewardSplit": "0",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "0"
+            "fromThisDistribution": "0",
+            "alreadyWaiting": "0"
           }
         ]
       },
-      "notes": "Nothing to distribute; B holds only the 1 wei dust, so only A is withdrawn."
+      "notes": "Nothing to distribute; B holds only the 1 wei dust, so only A is withdrawn.",
+      "checks": []
     },
     {
       "name": "leftover_split_balance_without_ovm",
@@ -592,7 +661,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -639,11 +712,12 @@
         {
           "op": "split.distribute",
           "target": "0x6789012345678901234567890123456789012345",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         }
       ],
       "preview": {
+        "minWithdraw": "1",
         "splits": [
           {
             "address": "0x6789012345678901234567890123456789012345",
@@ -658,34 +732,43 @@
             "fromOvm": "0",
             "fromRewardSplit": "500",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "0"
+            "fromThisDistribution": "500",
+            "alreadyWaiting": "0"
           },
           {
             "address": "0x2345678901234567890123456789012345678901",
             "fromOvm": "0",
             "fromRewardSplit": "490",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "0"
+            "fromThisDistribution": "490",
+            "alreadyWaiting": "0"
           },
           {
-            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "address": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5",
             "fromOvm": "0",
             "fromRewardSplit": "10",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "0"
+            "fromThisDistribution": "10",
+            "alreadyWaiting": "0"
           }
         ]
       },
-      "notes": "distributable = (1001 - 1) + (2 - 1)."
+      "notes": "distributable = (1001 - 1) + (2 - 1). v3 rc.4: recipients are listed without the RAF, which has a Warehouse balance: RAF_LEFT_IN_WAREHOUSE (info).",
+      "checks": [
+        "RAF_LEFT_IN_WAREHOUSE"
+      ]
     },
     {
       "name": "paused_withdrawals_skipped_except_sender",
@@ -700,7 +783,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -709,7 +796,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -768,23 +858,24 @@
         {
           "op": "split.distribute",
           "target": "0x6789012345678901234567890123456789012345",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         },
         {
           "op": "split.distribute",
           "target": "0x7890123456789012345678901234567890123456",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         },
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x5678901234567890123456789012345678901234",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x5678901234567890123456789012345678901234"
         }
       ],
       "preview": {
+        "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
           "distributable": "40000000000000000000",
@@ -813,44 +904,57 @@
             "fromOvm": "0",
             "fromRewardSplit": "3999999999999999999",
             "fromPrincipalSplit": "16159999999999999999",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "0"
+            "skipReason": "paused",
+            "fromThisDistribution": "20159999999999999998",
+            "alreadyWaiting": "0"
           },
           {
             "address": "0x2345678901234567890123456789012345678901",
             "fromOvm": "0",
             "fromRewardSplit": "3919999999999999999",
             "fromPrincipalSplit": "15839999999999999999",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "0"
+            "fromThisDistribution": "19759999999999999998",
+            "alreadyWaiting": "0"
           },
           {
-            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "address": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5",
             "fromOvm": "0",
             "fromRewardSplit": "79999999999999999",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": false,
-            "toWallet": "0"
+            "fromThisDistribution": "79999999999999999",
+            "alreadyWaiting": "0"
           },
           {
             "address": "0x5678901234567890123456789012345678901234",
             "fromOvm": "0",
             "fromRewardSplit": "0",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "50",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "49"
+            "fromThisDistribution": "0",
+            "alreadyWaiting": "50"
           }
         ]
       },
-      "notes": "Warehouse.withdraw skips the pause check when tx.origin is the owner; this only holds when the sender is an EOA (not a Safe)."
+      "notes": "Warehouse.withdraw skips the pause check when tx.origin is the owner; this only holds when the sender is an EOA (not a Safe). v3 rc.4: recipients are listed without the RAF, which has a Warehouse balance: RAF_LEFT_IN_WAREHOUSE (info).",
+      "checks": [
+        "RECIPIENT_WITHDRAW_PAUSED",
+        "RAF_LEFT_IN_WAREHOUSE"
+      ]
     },
     {
       "name": "below_threshold_all_to_reward_split",
@@ -865,7 +969,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -874,7 +982,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -925,23 +1036,30 @@
         {
           "op": "split.distribute",
           "target": "0x6789012345678901234567890123456789012345",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         },
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x1234567890123456789012345678901234567890",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x1234567890123456789012345678901234567890"
         },
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x2345678901234567890123456789012345678901",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x2345678901234567890123456789012345678901"
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5"
         }
       ],
       "preview": {
+        "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
           "distributable": "10000000000000000000",
@@ -961,7 +1079,8 @@
             "address": "0x7890123456789012345678901234567890123456",
             "kind": "principal",
             "distributable": "0",
-            "distributorReward": "0"
+            "distributorReward": "0",
+            "skipReason": "nothing"
           }
         ],
         "recipients": [
@@ -970,34 +1089,41 @@
             "fromOvm": "0",
             "fromRewardSplit": "4999999999999999999",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "4999999999999999998"
+            "fromThisDistribution": "4999999999999999999",
+            "alreadyWaiting": "0"
           },
           {
             "address": "0x2345678901234567890123456789012345678901",
             "fromOvm": "0",
             "fromRewardSplit": "4899999999999999999",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "4899999999999999998"
+            "fromThisDistribution": "4899999999999999999",
+            "alreadyWaiting": "0"
           },
           {
-            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "address": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5",
             "fromOvm": "0",
             "fromRewardSplit": "99999999999999999",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
-            "toWallet": "0"
+            "withdraw": true,
+            "fromThisDistribution": "99999999999999999",
+            "alreadyWaiting": "0"
           }
         ]
       },
-      "notes": "Principal split gets nothing, so it is not distributed."
+      "notes": "Principal split gets nothing, so it is not distributed. v3 rc.4: the RAF is withdrawn by default (2.16 left it out), so there is one more Warehouse withdrawal.",
+      "checks": []
     },
     {
       "name": "reject_ovm_recipient_split_without_params",
@@ -1012,7 +1138,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1069,7 +1199,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["990000", "10000"],
+            "allocations": [
+              "990000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1078,7 +1211,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1136,7 +1272,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1145,7 +1285,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1202,7 +1345,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1211,7 +1358,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1268,7 +1418,11 @@
               "0x2345678901234567890123456789012345678901",
               "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
             ],
-            "allocations": ["500000", "490000", "10000"],
+            "allocations": [
+              "500000",
+              "490000",
+              "10000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1277,7 +1431,10 @@
               "0x1234567890123456789012345678901234567890",
               "0x2345678901234567890123456789012345678901"
             ],
-            "allocations": ["505000", "495000"],
+            "allocations": [
+              "505000",
+              "495000"
+            ],
             "totalAllocation": "1000000",
             "distributionIncentive": 0
           },
@@ -1328,29 +1485,36 @@
         {
           "op": "split.distribute",
           "target": "0x6789012345678901234567890123456789012345",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         },
         {
           "op": "split.distribute",
           "target": "0x7890123456789012345678901234567890123456",
-          "distributor": "0x5678901234567890123456789012345678901234",
-          "allowFailure": false
+          "allowFailure": false,
+          "distributor": "0x5678901234567890123456789012345678901234"
         },
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x1234567890123456789012345678901234567890",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x1234567890123456789012345678901234567890"
         },
         {
           "op": "warehouse.withdraw",
-          "target": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
-          "owner": "0x2345678901234567890123456789012345678901",
-          "allowFailure": true
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x2345678901234567890123456789012345678901"
+        },
+        {
+          "op": "warehouse.withdraw",
+          "target": "0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8",
+          "allowFailure": true,
+          "owner": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5"
         }
       ],
       "preview": {
+        "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
           "distributable": "40000000000000000000",
@@ -1379,33 +1543,41 @@
             "fromOvm": "0",
             "fromRewardSplit": "3999999999999999999",
             "fromPrincipalSplit": "16159999999999999999",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "20159999999999999997"
+            "fromThisDistribution": "20159999999999999998",
+            "alreadyWaiting": "0"
           },
           {
             "address": "0x2345678901234567890123456789012345678901",
             "fromOvm": "0",
             "fromRewardSplit": "3919999999999999999",
             "fromPrincipalSplit": "15839999999999999999",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
             "withdraw": true,
-            "toWallet": "19759999999999999997"
+            "fromThisDistribution": "19759999999999999998",
+            "alreadyWaiting": "0"
           },
           {
-            "address": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+            "address": "0x43f641fa70e09f0326ac66b4ef0c416eaecbc6f5",
             "fromOvm": "0",
             "fromRewardSplit": "79999999999999999",
             "fromPrincipalSplit": "0",
+            "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
-            "toWallet": "0"
+            "withdraw": true,
+            "fromThisDistribution": "79999999999999999",
+            "alreadyWaiting": "0"
           }
         ]
-      }
+      },
+      "checks": [],
+      "notes": "v3 rc.4: the RAF is withdrawn by default (2.16 left it out), so there is one more Warehouse withdrawal."
     },
     {
       "name": "reject_not_an_ovm",

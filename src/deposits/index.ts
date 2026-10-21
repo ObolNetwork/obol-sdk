@@ -1,34 +1,57 @@
+/** deposits: deposit data, deposit status and deposit transactions (spec/operations.md "deposits"). */
 import type { Context } from '../context.js';
-import type { Deposit, Hex } from '../types.js';
-import { fromLock, type FromLockOptions } from './fromLock.js';
+import type { DepositInput, Prepared } from '../types.js';
+import {
+  fromLock,
+  type FromLockOptions,
+  type LockDeposits,
+} from './fromLock.js';
 import { prepareDeposit, type PrepareDepositInput } from './prepareDeposit.js';
-import { getDepositStatus, type DepositStatusOptions } from './status.js';
+import {
+  getDepositStatus,
+  type DepositStatus,
+  type DepositStatusOptions,
+} from './status.js';
 import {
   verifyDepositData,
   type VerifyDepositDataOptions,
 } from './verifyDepositData.js';
 
-export * from './fromLock.js';
-export * from './prepareDeposit.js';
-export * from './status.js';
-export * from './verifyDepositData.js';
+export { fromLock, verifyDepositData };
+export { depositDataRoot } from './verifyDepositData.js';
+export {
+  MAX_COMPOUNDING_DEPOSIT,
+  MAX_DEPOSIT,
+  MIN_DEPOSIT,
+} from './verifyDepositData.js';
+export { BATCH_DEPOSIT_SIZE } from './prepareDeposit.js';
+export type { FromLockOptions, LockDeposits } from './fromLock.js';
+export type { DepositPreview, PrepareDepositInput } from './prepareDeposit.js';
+export type {
+  DepositStatus,
+  DepositStatusName,
+  DepositStatusOptions,
+  PendingDeposit,
+} from './status.js';
+export type { VerifyDepositDataOptions } from './verifyDepositData.js';
 
+/** The deposits module bound to a client context. */
 export interface DepositsModule {
   fromLock: (
     lock: Parameters<typeof fromLock>[0],
     options?: FromLockOptions,
-  ) => ReturnType<typeof fromLock>;
+  ) => Promise<LockDeposits>;
   verifyDepositData: (
-    deposits: Deposit[],
+    deposits: readonly DepositInput[],
     options?: Partial<VerifyDepositDataOptions>,
   ) => Promise<void>;
   status: (
-    pubkeys: Hex[],
+    pubkeys: readonly string[],
     options?: DepositStatusOptions,
-  ) => ReturnType<typeof getDepositStatus>;
+  ) => Promise<DepositStatus[]>;
   prepareDeposit: (
     input: PrepareDepositInput,
-  ) => ReturnType<typeof prepareDeposit>;
+  ) => Promise<Array<Prepared<'deposit'>>>;
 }
 
 /** The deposits module, bound to a Context (chain and publicClient filled in). */
@@ -46,3 +69,6 @@ export const createDepositsModule = (ctx: Context): DepositsModule => ({
     await getDepositStatus(ctx, pubkeys, options),
   prepareDeposit: async input => await prepareDeposit(ctx, input),
 });
+
+/** Builds the context a module is bound to, without the other modules. */
+export { createObolContext, type ObolClientConfig } from '../clientContext.js';

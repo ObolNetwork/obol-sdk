@@ -140,8 +140,57 @@ describe('splits.prepareDistribution', () => {
     );
     expect(byAddress[A].skipReason).toBe('dust');
     expect(byAddress[B].skipReason).toBe('nothing');
-    expect(byAddress[A].toWallet).toBe(0n);
-    expect(byAddress[HOODI.rafRecipient].skipReason).toBeUndefined();
+    expect(byAddress[A].alreadyWaiting).toBe(100n);
+    expect(byAddress[A].fromThisDistribution).toBe(0n);
+    // The RAF is in the withdrawal set by default.
+    expect(byAddress[HOODI.rafRecipient].withdraw).toBe(true);
+    expect('blockNumber' in preview).toBe(false);
+    expect(preview.minWithdraw).toBe(parseEther('2'));
+  });
+
+  it('withdraws the RAF by default; includeRaf: false leaves it with RAF_LEFT_IN_WAREHOUSE', async () => {
+    const chain = scenario({
+      ovmBalance: parseEther('1'),
+      warehouse: { [HOODI.rafRecipient]: 500n },
+    });
+    const withRaf = await prepareDistribution(chain.context(), {
+      ovm: OVM,
+      ...both,
+      from: SENDER,
+    });
+    const raf = withRaf.preview.recipients.find(
+      r => r.address === HOODI.rafRecipient,
+    )!;
+    expect(raf).toMatchObject({ withdraw: true, alreadyWaiting: 500n });
+    expect(raf.skipReason).toBeUndefined();
+    expect(
+      decodeDistributionCalls(withRaf.request.data, OVM).some(
+        c => c.op === 'warehouse.withdraw' && c.owner === HOODI.rafRecipient,
+      ),
+    ).toBe(true);
+    expect(withRaf.checks).toEqual([]);
+
+    const without = await prepareDistribution(chain.context(), {
+      ovm: OVM,
+      ...both,
+      from: SENDER,
+      includeRaf: false,
+    });
+    const left = without.preview.recipients.find(
+      r => r.address === HOODI.rafRecipient,
+    )!;
+    expect(left.withdraw).toBe(false);
+    expect(without.checks).toEqual([
+      expect.objectContaining({
+        code: 'RAF_LEFT_IN_WAREHOUSE',
+        severity: 'info',
+        subject: { address: HOODI.rafRecipient },
+        details: {
+          address: HOODI.rafRecipient,
+          amount: 500n + left.fromThisDistribution - 1n,
+        },
+      }),
+    ]);
   });
 
   it('separates what this distribution credits from what reaches the wallet', async () => {
@@ -166,8 +215,8 @@ describe('splits.prepareDistribution', () => {
     const a = preview.recipients.find(r => r.address === A)!;
     expect(a.fromThisDistribution).toBeGreaterThan(0n);
     expect(a.warehouseBalance).toBe(100n);
-    // The withdrawal takes the whole Warehouse balance, prior wei included.
-    expect(a.toWallet).toBe(a.fromThisDistribution + a.warehouseBalance - 1n);
+    // What was waiting is reported apart from this distribution's credit.
+    expect(a.alreadyWaiting).toBe(100n);
   });
 
   it('includes a leg at exactly minWithdraw', async () => {
@@ -282,8 +331,11 @@ describe('splits.prepareDistribution', () => {
     });
     expect(prepared.checks).toEqual([]);
     expect(
-      prepared.preview.recipients.find(r => r.address === SENDER)?.toWallet,
-    ).toBe(49n);
+      prepared.preview.recipients.find(r => r.address === SENDER),
+    ).toMatchObject({ withdraw: true, alreadyWaiting: 50n });
+    expect(
+      prepared.preview.recipients.find(r => r.address === SENDER)?.skipReason,
+    ).toBeUndefined();
   });
 
   it('finds params for an OVM recipient split in the SplitCreated log', async () => {
@@ -312,6 +364,8 @@ describe('splits.prepareDistribution', () => {
     ).toEqual([
       'ovm.distributeFunds',
       'split.distribute',
+      // The split's recipients, the RAF included.
+      'warehouse.withdraw',
       'warehouse.withdraw',
       'warehouse.withdraw',
     ]);
@@ -381,8 +435,12 @@ describe('splits.prepareDistribution', () => {
     });
     expect(prepared.preview.splits[0].distributorReward).toBe(10_000n);
     expect(
-      prepared.preview.recipients.find(r => r.address === SENDER)?.toWallet,
-    ).toBe(9_999n);
+      prepared.preview.recipients.find(r => r.address === SENDER),
+    ).toMatchObject({
+      fromThisDistribution: 10_000n,
+      alreadyWaiting: 0n,
+      withdraw: true,
+    });
   });
 
   it.each<[string, object]>([

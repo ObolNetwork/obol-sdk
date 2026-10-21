@@ -51,12 +51,16 @@ const obol = createObolClient({
 Every write is a `prepareX(input)` returning:
 
 ```ts
-type Prepared<P = unknown> = {
+type Prepared<K extends PreparedKind> = {
+  kind: K             // which operation: 'deposit' | 'withdraw' | 'distribution' | ...; narrows preview
   request: { to: Address; data: Hex; value: bigint; chainId: number }  // viem-compatible
   checks: Finding[]   // everything the SDK verified; errors make prepare throw instead
-  preview?: P         // what the transaction will do (amounts per recipient, predicted addresses, ...)
+  preview: PreviewByKind[K]  // what the transaction will do (amounts per recipient, predicted addresses, ...)
+  blockNumber?: bigint
 }
-type Finding = { code: string; severity: 'warning' | 'info'; message: string; hint?: string }
+type AnyPrepared = Prepared<'deposit'> | Prepared<'withdraw'> | ...   // discriminated by kind
+type Finding = { code: FindingCode; severity: 'warning' | 'info'; message: string; hint?: string;
+                 subject?: { pubkey } | { address } | { index } }
 ```
 
 - `prepareX` throws a typed error for anything that would lose funds or certainly revert (bad deposit signature,
@@ -191,8 +195,13 @@ spec/
 
 ## Packaging
 
-- One package, ESM + CJS, with correct `.d.ts` for both. Tree-shakeable modules.
-- Peer dependency: `viem@^2`. Bundled: `@noble/curves`, `@chainsafe/ssz`. No ethers (the launchpad uses wagmi / viem;
+- One package, ESM + CJS, with correct `.d.ts` for both. Tree-shakeable modules: `"sideEffects": false`, and one
+  entry per module (`@obolnetwork/obol-sdk/ovm`, `/splits`, `/cluster`, `/deposits`, `/setup`, `/incentives`,
+  `/terms`, `/withdrawals`, `/exits`, `/experimental`) with shared chunks, so a reads-only `ovm` import carries no BLS
+  or SSZ code (`yarn size:check` keeps it so, with a size budget).
+- The public surface is explicit export lists, recorded in `etc/obol-sdk.api.md` (API Extractor; CI fails on an
+  unreviewed change). What may still change (`simulate`, `legacy`) is under `experimental`.
+- Peer dependency: `viem@^2`. Bundled: `@noble/curves`, `@noble/hashes`, `@chainsafe/enr`; dependencies: `@chainsafe/ssz`, `@sinclair/typebox`. No ethers (the launchpad uses wagmi / viem;
   the ethers adapter was dropped).
 - Node ≥ 20, browsers via the ESM build.
 - No native modules and no worker threads: BLS is pure JS (`@noble/curves`), and long verifications run on the

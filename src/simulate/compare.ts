@@ -9,7 +9,7 @@ import type { Address, Hex } from 'viem';
 import type { ChainContracts } from '../chains.js';
 import { DEPOSIT_CONTRACT, ovmAbi } from '../abi.js';
 import { sameAddress } from '../schema.js';
-import type { Prepared } from '../types.js';
+import type { AnyPrepared, Prepared } from '../types.js';
 import { decodeCall } from './decode.js';
 import { requestFees, type ReadValues } from './analyze.js';
 import type { SimTx } from './backends.js';
@@ -32,8 +32,6 @@ type Obj = Record<string, any>;
 
 const isObj = (v: unknown): v is Obj =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
-
-const has = (v: Obj, ...keys: string[]): boolean => keys.every(k => k in v);
 
 const lower = (v: unknown): string => String(v).toLowerCase();
 
@@ -158,8 +156,43 @@ const distribute = (c: Comparer, tx: SimTx, p: Obj): void => {
   }
 };
 
+const withoutDust = (amount: bigint): bigint =>
+  amount > 0n ? amount - 1n : 0n;
+
+/**
+ * ETH a distribution sends to a recipient's wallet: its direct OVM payout,
+ * plus each included withdrawal leg (Warehouse: what was waiting there and
+ * this distribution's credits; SplitMain v1), less the 1 wei each leaves.
+ */
+const walletAmount = (r: Obj, minWithdraw: bigint, paused: boolean): bigint => {
+  let amount = r.fromOvm as bigint;
+  if (r.withdraw !== true || r.skipReason !== undefined) return amount;
+  const warehouse = withoutDust(
+    (r.warehouseBalance as bigint) +
+      (r.fromRewardSplit as bigint) +
+      (r.fromPrincipalSplit as bigint) +
+      (r.distributorReward as bigint),
+  );
+  const splitMain = withoutDust(r.splitMainBalance as bigint);
+  if (!paused && warehouse >= minWithdraw) amount += warehouse;
+  if (splitMain >= minWithdraw) amount += splitMain;
+  return amount;
+};
+
 /** splits.prepareDistribution */
-const distribution = (c: Comparer, p: Obj): void => {
+const distribution = (
+  c: Comparer,
+  p: Obj,
+  prepared: Prepared<'distribution'>,
+): void => {
+  const paused = (address: string): boolean =>
+    prepared.checks.some(
+      f =>
+        f.code === 'RECIPIENT_WITHDRAW_PAUSED' &&
+        f.subject !== undefined &&
+        'address' in f.subject &&
+        sameAddress(f.subject.address, address),
+    );
   if (isObj(p.ovm) && p.ovm.skipReason === undefined) {
     payouts(c, p.ovm.address, p.ovm, 'OVM');
   }
@@ -218,7 +251,11 @@ const distribution = (c: Comparer, p: Obj): void => {
       );
       c.check(`${r.address} distributor reward`, r.distributorReward, earned);
     }
-    c.check(`ETH to ${r.address}`, r.toWallet, c.ethDelta(r.address));
+    c.check(
+      `ETH to ${r.address}`,
+      walletAmount(r, p.minWithdraw as bigint, paused(r.address as string)),
+      c.ethDelta(r.address),
+    );
   }
 };
 
@@ -459,53 +496,59 @@ const creates = (c: Comparer, input: CompareInput, p: Obj): void => {
   }
 };
 
-/** Comparison of a simulation with `prepared.preview`. */
+/** Comparison of a simulation with `prepared.preview`, by the prepared kind. */
 export const comparePreview = (
-  prepared: Prepared<unknown>,
+  prepared: AnyPrepared,
   input: CompareInput,
 ): PreviewComparison => {
   const c = new Comparer(input);
-  const p = prepared.preview;
-  const { tx, contracts } = input;
+  const p = prepared.preview as unknown;
+  const { tx } = input;
   if (!isObj(p)) return c.result();
-  const ovmCall = decodeCall(ovmAbi, tx.data)?.functionName;
-  if (has(p, 'mode', 'principalPayout', 'rewardPayout')) {
-    distribute(c, tx, p);
-  } else if (has(p, 'splits', 'recipients') && Array.isArray(p.recipients)) {
-    distribution(c, p);
-  } else if (
-    has(p, 'requests', 'totalFee', 'maxFeePerRequest') &&
-    (ovmCall === 'withdraw' || ovmCall === 'consolidate')
-  ) {
-    requests(c, input, p, ovmCall);
-  } else if (has(p, 'pubkeys', 'total', 'kind')) {
-    deposit(c, input, p);
-  } else if (
-    has(p, 'pubkey', 'amount', 'fee') &&
-    sameAddress(tx.to, contracts.withdrawalRequest)
-  ) {
-    const request = input.changes.find(x => x.kind === 'withdrawalRequest');
-    c.check(
-      'withdrawal request',
-      `${lower(p.pubkey)} ${String(p.amount)}`,
-      request?.kind === 'withdrawalRequest'
-        ? `${lower(request.pubkey)} ${String(request.amount)}`
-        : 'none',
-    );
-    c.check('fee paid to the predeploy', p.fee, c.ethDelta(tx.to));
-  } else if (has(p, 'function', 'args')) {
-    ovmWrite(c, input, p);
-  } else if (has(p, 'amount', 'contractAddress')) {
-    const claimed = c.events('Claimed', p.contractAddress as Address);
-    c.check(
-      'claimed amount',
-      p.amount,
-      claimed.length === 1
-        ? claimed[0].args.amount
-        : `${claimed.length} Claimed events`,
-    );
-  } else {
-    creates(c, input, p);
+  switch (prepared.kind) {
+    case 'distribute':
+      distribute(c, tx, p);
+      break;
+    case 'distribution':
+      distribution(c, p, prepared);
+      break;
+    case 'withdraw':
+    case 'consolidate':
+      requests(c, input, p, prepared.kind);
+      break;
+    case 'deposit':
+      deposit(c, input, p);
+      break;
+    case 'eoaWithdraw': {
+      const request = input.changes.find(x => x.kind === 'withdrawalRequest');
+      c.check(
+        'withdrawal request',
+        `${lower(p.pubkey)} ${String(p.amount)}`,
+        request?.kind === 'withdrawalRequest'
+          ? `${lower(request.pubkey)} ${String(request.amount)}`
+          : 'none',
+      );
+      c.check('fee paid to the predeploy', p.fee, c.ethDelta(tx.to));
+      break;
+    }
+    case 'claim': {
+      const claimed = c.events('Claimed', p.contractAddress as Address);
+      c.check(
+        'claimed amount',
+        p.amount,
+        claimed.length === 1
+          ? claimed[0].args.amount
+          : `${claimed.length} Claimed events`,
+      );
+      break;
+    }
+    case 'createOvm':
+    case 'createSplit':
+    case 'ovmWithSplits':
+      creates(c, input, p);
+      break;
+    default:
+      ovmWrite(c, input, p);
   }
   return c.result();
 };

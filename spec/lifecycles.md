@@ -39,12 +39,12 @@ Notes:
 
 | State | Meaning | Observed by | Safe to retry? |
 |---|---|---|---|
-| `prepared` | Checked and encoded at one block; nothing sent. | the `Prepared` value | – |
+| `prepared` | Checked and encoded at one block; nothing sent. | the `Prepared` value (`kind`, `blockNumber`; `isStale(prepared, head, maxAgeBlocks)`) | – |
 | not sent | The wallet refused or failed before returning a hash. | `send` throws `TX_REJECTED` | yes |
 | `sent` | The wallet returned a hash. | `send` resolves `{ hash, wait }` | no: look the hash up first |
 | `mined` | Receipt with `status = 1`. | `wait` resolves the receipt | – |
 | `reverted` | Receipt with `status = 0`. Nothing moved (the fee for gas was spent). | `wait` throws `TX_REVERTED` | yes |
-| `replaced` | Another transaction with the same nonce was mined instead (viem reason `cancelled` or `replaced`), so the prepared call did not run. A `repriced` transaction (same call, higher gas) is followed instead (`onReplaced`) and ends `mined` or `reverted`. | `wait` throws `TX_REPLACED` | yes (the call did not run) |
+| `replaced` | Another transaction with the same nonce was mined instead (viem reason `cancelled` or `replaced`, in `details.reason`), so the prepared call did not run. A `repriced` transaction (same call, higher gas) is followed instead (`onReplaced`, where an app re-keys the hash it keeps) and ends `mined` or `reverted`. | `wait` throws `TX_REPLACED` | yes (the call did not run) |
 | `unconfirmed` | No receipt within `timeoutMs`. It may still be mined or dropped. | `wait` throws `TX_UNCONFIRMED` | no: watch the hash |
 
 Notes:
@@ -95,6 +95,10 @@ Notes:
   routed (see `distribution.json` `routing`). A deposit through the batch contract does not.
 - **Withdrawal and exit** requests (EIP-7002 via `ovm.prepareWithdraw` / `withdrawals.prepareEoaWithdraw`) move a validator towards
   `exited` (amount 0) or reduce its balance (partial, `0x02` only). The request transaction being mined does not mean
-  the beacon chain accepted it; `deposits.status` shows the effect.
+  the beacon chain accepted it; `deposits.status` shows the effect. The beacon chain ignores (and keeps the fee of) a
+  request for a validator that is not active, already exiting, activated less than 256 epochs ago, not credentialed to
+  the sender, an exit behind pending partial withdrawals, and a partial without `0x02`, below 32 ETH effective balance
+  or with no excess: the `prepare*` operations refuse each of these when the status source can tell
+  (operations.md `prepareWithdraw` 6), and report the ones they could not check as `VALIDATOR_STATUS_UNCHECKED`.
 - Without the API and without `beaconUrl`, there is no status: `prepareDeposit` adds `DEPOSIT_EXISTENCE_UNCHECKED` and
   relies on `kind` alone.

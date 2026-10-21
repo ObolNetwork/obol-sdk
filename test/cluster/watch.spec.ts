@@ -3,6 +3,7 @@ import {
   createClusterModule,
   type ClusterEvent,
 } from '../../src/cluster/index.js';
+import type { ApiErrorCode } from '../../src/codes.js';
 import { ObolApiError, type ObolError } from '../../src/errors.js';
 import { clusterLockSoloV1X10, clusterLockV1X10 } from '../fixtures.js';
 import { fakeApi, fakeChain } from '../helpers/fakeChain.js';
@@ -14,7 +15,7 @@ const configHash = definition.config_hash as Hex;
 const DEF = `/v1/definition/${configHash}`;
 const LOCK = `/v1/lock/configHash/${configHash}`;
 
-const apiError = (code: string, status: number, endpoint: string) =>
+const apiError = (code: ApiErrorCode, status: number, endpoint: string) =>
   new ObolApiError(code, code, { status, endpoint, method: 'GET' });
 
 /** The definition with only the first `n` operators signed. */

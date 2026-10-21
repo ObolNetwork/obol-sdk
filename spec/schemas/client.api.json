@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/client.api.json",
+  "title": "client.api",
+  "additionalProperties": false,
+  "properties": {
+    "allowLocal": {
+      "type": "boolean"
+    },
+    "baseUrl": {
+      "type": "string"
+    },
+    "timeoutMs": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "type": "object"
+}

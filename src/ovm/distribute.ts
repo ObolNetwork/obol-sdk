@@ -7,7 +7,7 @@ import { prepared } from '../chainUtils.js';
 import type { Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, T } from '../schema.js';
-import type { Finding, Prepared } from '../types.js';
+import type { Finding, Prepared, PreviewResult } from '../types.js';
 import { provenanceFindings, readOvmCore } from './read.js';
 import { ovmRouting } from './routing.js';
 
@@ -21,7 +21,7 @@ export const PrepareDistributeInputSchema = Type.Object(
   { additionalProperties: false },
 );
 export interface PrepareDistributeInput {
-  ovm: Address;
+  ovm: string;
   /** `push` (default): distributeFunds(); `pull`: distributeFundsPull(). */
   mode?: 'push' | 'pull';
 }
@@ -39,14 +39,14 @@ const build = async (
   ctx: Context,
   input: PrepareDistributeInput,
   operation: string,
-): Promise<Prepared<DistributePreview>> => {
+): Promise<Prepared<'distribute'>> => {
   const args = decode(PrepareDistributeInputSchema, input);
   requireContracts(ctx.chain.id, operation);
   const ovm = checksum(args.ovm);
   const mode = args.mode ?? 'push';
   const checks: Finding[] = await provenanceFindings(ctx, ovm);
   const core = await readOvmCore(ctx, ovm, { what: operation });
-  return prepared(ctx, {
+  return prepared(ctx, 'distribute', {
     to: ovm,
     data: encodeFunctionData({
       abi: ovmAbi,
@@ -73,7 +73,7 @@ const build = async (
 export const prepareDistribute = async (
   ctx: Context,
   input: PrepareDistributeInput,
-): Promise<Prepared<DistributePreview>> => {
+): Promise<Prepared<'distribute'>> => {
   const result = await build(ctx, input, 'ovm.prepareDistribute');
   if (result.preview.distributable === 0n) {
     throw new ObolError(
@@ -89,16 +89,16 @@ export const prepareDistribute = async (
  * ovm.previewDistribute (`chain`): the same reads and checks as
  * `prepareDistribute`, returning the preview (zeros instead of
  * NOTHING_TO_DISTRIBUTE), for a page that shows the figures with the button
- * disabled.
+ * disabled. Same shape as every `preview*`: `{ preview, checks, blockNumber }`.
  */
 export const previewDistribute = async (
   ctx: Context,
   input: PrepareDistributeInput,
-): Promise<DistributePreview & { blockNumber: bigint; checks: Finding[] }> => {
+): Promise<PreviewResult<DistributePreview>> => {
   const result = await build(ctx, input, 'ovm.previewDistribute');
   return {
-    ...result.preview,
-    blockNumber: result.blockNumber as bigint,
+    preview: result.preview,
     checks: result.checks,
+    blockNumber: result.blockNumber as bigint,
   };
 };

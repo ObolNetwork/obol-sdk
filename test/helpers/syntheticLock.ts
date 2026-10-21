@@ -126,15 +126,14 @@ export const syntheticLock = (
     lock.lock_hash = clusterLockHash(lock);
     const digest = fromHexString(lock.lock_hash);
     lock.signature_aggregate = blsSign(digest, shareSecrets);
-    lock.node_signatures = nodeKeys.map(key =>
-      hex(
-        secp256k1.sign(digest, key, {
-          prehash: false,
-          lowS: true,
-          format: 'compact',
-        } as any),
-      ),
-    );
+    // As Charon signs: 65 bytes, r || s || v (noble's 'recovered' is v || r || s).
+    lock.node_signatures = nodeKeys.map(key => {
+      const recovered = secp256k1.sign(digest, key, {
+        prehash: false,
+        format: 'recovered',
+      }) as Uint8Array;
+      return hex(new Uint8Array([...recovered.slice(1), recovered[0]]));
+    });
     return lock;
   };
   return {

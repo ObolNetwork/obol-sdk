@@ -5,12 +5,12 @@
  * guessed `new`.
  */
 import { Type } from '@sinclair/typebox';
-import { parseEther, type Address, type Hex } from 'viem';
+import { parseEther, type Hex } from 'viem';
 import { requireContracts } from '../chains.js';
 import type { Context } from '../context.js';
 import { ObolApiError, ObolError, isObolError } from '../errors.js';
 import { decode, invalid, T } from '../schema.js';
-import type { Source } from '../types.js';
+import type { Source, StatusSource } from '../types.js';
 import { gweiToWei } from '../units.js';
 
 export type DepositStatusName = 'new' | 'queued' | 'active' | 'exited';
@@ -36,6 +36,21 @@ export interface DepositStatus {
   withdrawalCredentials?: Hex;
   balance?: bigint;
   effectiveBalance?: bigint;
+  /**
+   * Registry validators: the activation epoch, or null while none is
+   * assigned. Absent when the source does not report it (the interim
+   * `/v1/state/:lockHash` answer, an API before deposit-status had it) and
+   * for pubkeys not in the registry.
+   */
+  activationEpoch?: bigint | null;
+  /** Registry validators: the exit epoch, or null while no exit is initiated. Absent as `activationEpoch`. */
+  exitEpoch?: bigint | null;
+  /**
+   * Registry validators: the sum of their entries in the beacon chain's
+   * pending partial withdrawal queue (EIP-7002), wei. Absent as
+   * `activationEpoch`.
+   */
+  pendingPartialWithdrawals?: bigint;
   pendingDeposits: PendingDeposit[];
   /**
    * With `expectedWithdrawalAddress`: whether the credentials the validator
@@ -60,18 +75,25 @@ export const DepositStatusOptionsSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export interface DepositStatusOptions {
-  /** Beacon node REST URL, for the chain fallback. */
-  beaconUrl?: string;
-  /**
-   * The cluster lock of the pubkeys: only needed while the Obol API does not
-   * serve `POST /v1/validators/:network/deposit-status` (then the interim
-   * `GET /v1/state/:lockHash` answers by lock).
-   */
-  lockHash?: Hex;
+export interface DepositStatusOptions extends StatusSource {
   /** Sets `credentialsMatch` on each status. */
-  expectedWithdrawalAddress?: Address;
+  expectedWithdrawalAddress?: string;
 }
+
+/** The `StatusSource` fields of a write's input schema. */
+export const StatusSourceFields = {
+  beaconUrl: DepositStatusOptionsSchema.properties.beaconUrl,
+  lockHash: DepositStatusOptionsSchema.properties.lockHash,
+};
+
+/** The `StatusSource` part of a decoded input, without absent keys. */
+export const statusSourceOf = (input: StatusSource): StatusSource => ({
+  ...(input.beaconUrl !== undefined ? { beaconUrl: input.beaconUrl } : {}),
+  ...(input.lockHash !== undefined ? { lockHash: input.lockHash } : {}),
+});
+
+/** Beacon FAR_FUTURE_EPOCH: no epoch assigned. */
+export const FAR_FUTURE_EPOCH = 2n ** 64n - 1n;
 
 export const PENDING_DEPOSIT = 'pending_deposit';
 
@@ -220,6 +242,26 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
   if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0) {
     return bad('a malformed validator index');
   }
+  // Added to the route later: absent on a deployment without them.
+  const epoch = (value: unknown, what: string): bigint | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value !== 'string' || !DECIMAL.test(value)) {
+      return bad(`a malformed ${what}`);
+    }
+    const n = BigInt(value);
+    return n === FAR_FUTURE_EPOCH ? null : n;
+  };
+  const activationEpoch = epoch(entry.activationEpoch, 'activation epoch');
+  const exitEpoch = epoch(entry.exitEpoch, 'exit epoch');
+  const pendingPartialWithdrawals =
+    entry.pendingPartialWithdrawals === undefined
+      ? undefined
+      : weiString(
+          entry.pendingPartialWithdrawals,
+          'pending partial withdrawals',
+          pubkey,
+        );
   return {
     pubkey: pubkey as Hex,
     status: status as DepositStatusName,
@@ -233,6 +275,11 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
       'effective balance',
       pubkey,
     ),
+    ...(activationEpoch !== undefined ? { activationEpoch } : {}),
+    ...(exitEpoch !== undefined ? { exitEpoch } : {}),
+    ...(pendingPartialWithdrawals !== undefined
+      ? { pendingPartialWithdrawals }
+      : {}),
     pendingDeposits,
   };
 };
@@ -480,6 +527,30 @@ const gweiString = (value: unknown, what: string): bigint => {
   return gweiToWei(BigInt(value));
 };
 
+const beaconEpoch = (value: unknown, what: string): bigint | null => {
+  if (typeof value !== 'string' || !DECIMAL.test(value)) {
+    throw unavailable(`Malformed beacon node ${what}`);
+  }
+  const n = BigInt(value);
+  return n === FAR_FUTURE_EPOCH ? null : n;
+};
+
+/** Beacon PENDING_PARTIAL_WITHDRAWALS_LIMIT (Electra). */
+export const PENDING_PARTIAL_WITHDRAWALS_LIMIT = 2 ** 27;
+
+/** What the beacon fallback read besides the statuses. */
+export interface BeaconQueues {
+  /** Length of the pending partial withdrawal queue. */
+  pendingPartialWithdrawals: number;
+}
+
+const beaconQueues = new WeakMap<Map<string, DepositStatus>, BeaconQueues>();
+
+/** The queue lengths read with these statuses, when they came from a beacon node. */
+export const queuesOf = (
+  statuses: Map<string, DepositStatus>,
+): BeaconQueues | undefined => beaconQueues.get(statuses);
+
 const fromBeacon = async (
   pubkeys: Hex[],
   beaconUrl: string,
@@ -512,6 +583,24 @@ const fromBeacon = async (
       withdrawalCredentials: credentials as Hex,
     });
     pending.set(pubkey, entries);
+  }
+
+  // Pending partial withdrawals, by validator index (gwei amounts).
+  const partialRows = await beaconData(
+    `${base}/eth/v1/beacon/states/head/pending_partial_withdrawals`,
+    'pending_partial_withdrawals',
+  );
+  const partialsByIndex = new Map<string, bigint>();
+  for (const row of partialRows as Array<Record<string, unknown> | null>) {
+    const index = row?.validator_index;
+    if (typeof index !== 'string' || !DECIMAL.test(index)) {
+      throw unavailable(
+        'Malformed beacon node pending_partial_withdrawals response',
+      );
+    }
+    const amount = gweiString(row?.amount, 'pending partial withdrawal amount');
+    const key = BigInt(index).toString();
+    partialsByIndex.set(key, (partialsByIndex.get(key) ?? 0n) + amount);
   }
 
   const found = new Map<string, DepositStatus>();
@@ -560,6 +649,13 @@ const fromBeacon = async (
           validator?.effective_balance,
           'effective balance',
         ),
+        activationEpoch: beaconEpoch(
+          validator?.activation_epoch,
+          'activation epoch',
+        ),
+        exitEpoch: beaconEpoch(validator?.exit_epoch, 'exit epoch'),
+        pendingPartialWithdrawals:
+          partialsByIndex.get(BigInt(raw.index).toString()) ?? 0n,
         pendingDeposits: pending.get(pubkey) ?? [],
       });
     }
@@ -575,6 +671,7 @@ const fromBeacon = async (
       pendingDeposits: entries,
     });
   }
+  beaconQueues.set(found, { pendingPartialWithdrawals: partialRows.length });
   return found;
 };
 
@@ -601,7 +698,7 @@ const apiOrBeacon = async (
 const fromApiSources = async (
   ctx: Context,
   pubkeys: Hex[],
-  opts: { beaconUrl?: string; lockHash?: string },
+  opts: StatusSource,
 ): Promise<Map<string, DepositStatus> | undefined> => {
   try {
     return await fromDepositStatusApi(ctx, pubkeys);
@@ -646,15 +743,25 @@ const fromApiSources = async (
  */
 export const getDepositStatus = async (
   ctx: Context,
-  pubkeys: Hex[],
+  pubkeys: readonly string[],
   options: DepositStatusOptions = {},
-): Promise<DepositStatus[]> => {
+): Promise<DepositStatus[]> => (await readStatuses(ctx, pubkeys, options)).list;
+
+const readStatuses = async (
+  ctx: Context,
+  pubkeys: readonly string[],
+  options: DepositStatusOptions,
+): Promise<{
+  list: DepositStatus[];
+  queues?: BeaconQueues;
+}> => {
   const input = decode(Type.Array(T.Pubkey), pubkeys, 'pubkeys');
   const opts = decode(DepositStatusOptionsSchema, options, 'options');
   requireContracts(ctx.chain.id, 'deposits.status');
   const unique = [...new Set(input.map(p => p.toLowerCase() as Hex))];
 
   let found: Map<string, DepositStatus> | undefined;
+  let queues: BeaconQueues | undefined;
   let source: Source = 'api';
   if (ctx.api !== null) {
     found = await fromApiSources(ctx, unique, opts);
@@ -668,10 +775,11 @@ export const getDepositStatus = async (
       );
     }
     found = await fromBeacon(unique, opts.beaconUrl);
+    queues = queuesOf(found);
     source = 'chain';
   }
   const expected = opts.expectedWithdrawalAddress;
-  return input.map(raw => {
+  const list = input.map(raw => {
     const pubkey = raw.toLowerCase() as Hex;
     const status: DepositStatus = found?.get(pubkey) ?? {
       pubkey,
@@ -689,6 +797,7 @@ export const getDepositStatus = async (
           ),
         };
   });
+  return { list, ...(queues !== undefined ? { queues } : {}) };
 };
 
 /**
@@ -699,13 +808,15 @@ export const getDepositStatus = async (
  */
 export const statusIfAvailable = async (
   ctx: Context,
-  pubkeys: Hex[],
+  pubkeys: readonly string[],
   options: DepositStatusOptions,
 ): Promise<Map<string, DepositStatus> | null> => {
   if (!canReadStatus(ctx, options)) return null;
   try {
-    const statuses = await getDepositStatus(ctx, pubkeys, options);
-    return new Map(statuses.map(s => [s.pubkey, s]));
+    const { list, queues } = await readStatuses(ctx, pubkeys, options);
+    const map = new Map(list.map(s => [s.pubkey, s]));
+    if (queues !== undefined) beaconQueues.set(map, queues);
+    return map;
   } catch (error) {
     if (
       isObolError(error, 'STATUS_UNAVAILABLE') &&

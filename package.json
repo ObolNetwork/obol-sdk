@@ -1,6 +1,6 @@
 {
   "name": "@obolnetwork/obol-sdk",
-  "version": "3.0.0-rc.3",
+  "version": "3.0.0-rc.4",
   "description": "TypeScript SDK for creating and managing Obol Distributed Validators, built on viem.",
   "bugs": {
     "url": "https://github.com/obolnetwork/obol-sdk/issues"
@@ -18,6 +18,7 @@
     "build:tsup": "tsup && tsc -b ./tsconfig.types.json",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --testPathPattern='/test/.*\\.spec\\.ts$'",
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest -c jest.e2e.config.cjs --runInBand",
+    "test:e2e:mainnet": "E2E_CHAIN=mainnet yarn -s test:e2e",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "npm:publish:next": "npm publish --tag next",
@@ -27,7 +28,14 @@
     "lint-ci": "eslint ./src --ext .ts,.js",
     "prettier-ci": "prettier --check ./src --ext .ts,.js",
     "prettier": "prettier --write \"src/**/*.{js,ts}\"",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "build:types": "tsc -b ./tsconfig.types.json",
+    "api:check": "yarn -s build:types && api-extractor run",
+    "api:update": "yarn -s build:types && api-extractor run --local",
+    "size:check": "node scripts/bundle-size.mjs",
+    "size:update": "node scripts/bundle-size.mjs --update",
+    "spec:schemas": "node scripts/spec-schemas.mjs",
+    "test:fuzz": "FUZZ=1 NODE_OPTIONS=--experimental-vm-modules jest --testPathPattern='/test/fuzz/.*\\.spec\\.ts$'"
   },
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
@@ -45,7 +53,128 @@
         "require": "./dist/cjs/src/index.js"
       },
       "default": "./dist/esm/src/index.js"
-    }
+    },
+    "./cluster": {
+      "types": "./dist/types/src/cluster/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/cluster/index.js",
+        "default": "./dist/browser/src/cluster/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/cluster/index.js",
+        "require": "./dist/cjs/src/cluster/index.js"
+      },
+      "default": "./dist/esm/src/cluster/index.js"
+    },
+    "./deposits": {
+      "types": "./dist/types/src/deposits/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/deposits/index.js",
+        "default": "./dist/browser/src/deposits/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/deposits/index.js",
+        "require": "./dist/cjs/src/deposits/index.js"
+      },
+      "default": "./dist/esm/src/deposits/index.js"
+    },
+    "./ovm": {
+      "types": "./dist/types/src/ovm/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/ovm/index.js",
+        "default": "./dist/browser/src/ovm/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/ovm/index.js",
+        "require": "./dist/cjs/src/ovm/index.js"
+      },
+      "default": "./dist/esm/src/ovm/index.js"
+    },
+    "./splits": {
+      "types": "./dist/types/src/splits/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/splits/index.js",
+        "default": "./dist/browser/src/splits/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/splits/index.js",
+        "require": "./dist/cjs/src/splits/index.js"
+      },
+      "default": "./dist/esm/src/splits/index.js"
+    },
+    "./setup": {
+      "types": "./dist/types/src/setup/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/setup/index.js",
+        "default": "./dist/browser/src/setup/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/setup/index.js",
+        "require": "./dist/cjs/src/setup/index.js"
+      },
+      "default": "./dist/esm/src/setup/index.js"
+    },
+    "./incentives": {
+      "types": "./dist/types/src/incentives/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/incentives/index.js",
+        "default": "./dist/browser/src/incentives/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/incentives/index.js",
+        "require": "./dist/cjs/src/incentives/index.js"
+      },
+      "default": "./dist/esm/src/incentives/index.js"
+    },
+    "./terms": {
+      "types": "./dist/types/src/terms/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/terms/index.js",
+        "default": "./dist/browser/src/terms/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/terms/index.js",
+        "require": "./dist/cjs/src/terms/index.js"
+      },
+      "default": "./dist/esm/src/terms/index.js"
+    },
+    "./withdrawals": {
+      "types": "./dist/types/src/withdrawals/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/withdrawals/index.js",
+        "default": "./dist/browser/src/withdrawals/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/withdrawals/index.js",
+        "require": "./dist/cjs/src/withdrawals/index.js"
+      },
+      "default": "./dist/esm/src/withdrawals/index.js"
+    },
+    "./exits": {
+      "types": "./dist/types/src/exits/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/exits/index.js",
+        "default": "./dist/browser/src/exits/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/exits/index.js",
+        "require": "./dist/cjs/src/exits/index.js"
+      },
+      "default": "./dist/esm/src/exits/index.js"
+    },
+    "./experimental": {
+      "types": "./dist/types/src/experimental/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/experimental/index.js",
+        "default": "./dist/browser/src/experimental/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/experimental/index.js",
+        "require": "./dist/cjs/src/experimental/index.js"
+      },
+      "default": "./dist/esm/src/experimental/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "author": "Obol Labs (https://obol.org)",
   "repository": {
@@ -79,6 +208,7 @@
   },
   "devDependencies": {
     "@chainsafe/blst": "2.2.0",
+    "@microsoft/api-extractor": "7.59.4",
     "@noble/curves": "2.2.0",
     "@release-it/conventional-changelog": "11.0.0",
     "@types/jest": "29.5.14",
@@ -109,6 +239,7 @@
   "files": [
     "package.json",
     "README.md",
+    "MIGRATION.md",
     "dist"
   ],
   "release-it": {
@@ -179,5 +310,40 @@
   "packageManager": "yarn@1.22.22",
   "peerDependencies": {
     "viem": "^2.21.0"
+  },
+  "sideEffects": false,
+  "typesVersions": {
+    "*": {
+      "cluster": [
+        "./dist/types/src/cluster/index.d.ts"
+      ],
+      "deposits": [
+        "./dist/types/src/deposits/index.d.ts"
+      ],
+      "ovm": [
+        "./dist/types/src/ovm/index.d.ts"
+      ],
+      "splits": [
+        "./dist/types/src/splits/index.d.ts"
+      ],
+      "setup": [
+        "./dist/types/src/setup/index.d.ts"
+      ],
+      "incentives": [
+        "./dist/types/src/incentives/index.d.ts"
+      ],
+      "terms": [
+        "./dist/types/src/terms/index.d.ts"
+      ],
+      "withdrawals": [
+        "./dist/types/src/withdrawals/index.d.ts"
+      ],
+      "exits": [
+        "./dist/types/src/exits/index.d.ts"
+      ],
+      "experimental": [
+        "./dist/types/src/experimental/index.d.ts"
+      ]
+    }
   }
 }

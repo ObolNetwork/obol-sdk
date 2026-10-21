@@ -1,19 +1,25 @@
 import { ENR } from '@chainsafe/enr';
 import { Type } from '@sinclair/typebox';
 import { fromHexString } from '@chainsafe/ssz';
+import type { Hex } from 'viem';
 import { blsVerify } from '../internal/bls.js';
 import { secp256k1VerifyDigest } from '../internal/secp256k1.js';
 import { CHAINS, chainIdForForkVersion } from '../chains.js';
-import { ObolError } from '../errors.js';
-import { decode, invalid, T } from '../schema.js';
+import { ObolError, type ObolErrorOptions } from '../errors.js';
+import { decode, invalid, sameHex, T } from '../schema.js';
 import { MAX_UINT64 } from '../units.js';
-import { exitSigningRoot, partialExitsPayloadRoot } from './ssz.js';
 import {
-  ExistingExitSchema,
-  ExitBlobSchema,
-  type ExitBlob,
-  type ExistingExit,
-  type ExitMessage,
+  exitSigningRoot,
+  partialExitsPayloadRoot,
+  sortedPartialExits,
+} from './ssz.js';
+import {
+  PartialExitsPayloadSchema,
+  StoredExitBlobSchema,
+  type PartialExitBlob,
+  type PartialExitsPayload,
+  type ShareExitData,
+  type StoredExitBlob,
 } from './types.js';
 
 export const ForkVersion = Type.String({
@@ -21,52 +27,79 @@ export const ForkVersion = Type.String({
   description: 'fork version (4 bytes)',
 });
 
-const VerifyPartialExitSchema = Type.Object({
-  cluster: Type.Object({
-    operators: Type.Array(Type.Object({ enr: Type.String() })),
-    forkVersion: ForkVersion,
-    threshold: T.Uint,
-    validators: Type.Array(
-      Type.Object({
-        distributedPublicKey: T.Pubkey,
-        publicShares: Type.Array(T.Pubkey),
-      }),
-    ),
-  }),
-  payload: Type.Object({
-    shareIdx: T.Uint,
-    partialExits: Type.Array(ExitBlobSchema),
-    signature: T.Hex,
-  }),
-  existing: Type.Optional(ExistingExitSchema),
+const ClusterSchema = Type.Object({
+  operators: Type.Array(Type.Object({ enr: Type.String() })),
+  forkVersion: ForkVersion,
+  validators: Type.Array(
+    Type.Object({
+      distributedPublicKey: T.Pubkey,
+      publicShares: Type.Array(T.Pubkey),
+    }),
+  ),
 });
 
-export interface VerifyPartialExitInput {
-  cluster: {
-    operators: Array<{ enr: string }>;
-    forkVersion: string;
-    threshold: number;
-    validators: Array<{ distributedPublicKey: string; publicShares: string[] }>;
-  };
-  payload: { shareIdx: number; partialExits: ExitBlob[]; signature: string };
-  existing?: ExistingExit;
+export const VerifyPartialExitSchema = Type.Object({
+  cluster: ClusterSchema,
+  payload: PartialExitsPayloadSchema,
+  existing: Type.Optional(
+    Type.Union([
+      Type.Array(StoredExitBlobSchema),
+      Type.Record(Type.String(), StoredExitBlobSchema),
+    ]),
+  ),
+});
+
+/** The parts of a cluster lock exit verification needs. */
+export interface ExitCluster {
+  /** In lock order: operator `share_idx` is `operators[share_idx - 1]`. */
+  operators: Array<{ enr: string }>;
+  /** The lock's genesis fork version (selects the chain). */
+  forkVersion: string;
+  validators: Array<{ distributedPublicKey: string; publicShares: string[] }>;
 }
 
-const exitError = (
-  code: string,
-  message: string,
-  details: Record<string, unknown> = {},
-): ObolError =>
-  new ObolError(code, message, { hint: 'Reject the payload', details });
+export interface VerifyPartialExitInput {
+  cluster: ExitCluster;
+  /** The operator's submission, as the Obol API receives it. */
+  payload: PartialExitsPayload;
+  /**
+   * The exits already stored for the cluster's validators, as the Obol API
+   * stores them: a list, or a map keyed by pubkey. Every blob's pubkey is
+   * looked up here.
+   */
+  existing?: StoredExitBlob[] | Record<string, StoredExitBlob>;
+}
 
-/** Checks epoch and validator index fit in uint64 (the schema checks digits only). */
-export const checkUint64 = (message: ExitMessage, path: string): void => {
-  if (BigInt(message.epoch) > MAX_UINT64) {
-    throw invalid(`${path}.epoch`, 'must fit in uint64');
-  }
-  if (BigInt(message.validatorIndex) > MAX_UINT64) {
-    throw invalid(`${path}.validatorIndex`, 'must fit in uint64');
-  }
+const exitError = <
+  C extends
+    | 'EXIT_SHARE_INDEX_INVALID'
+    | 'EXIT_PAYLOAD_SIGNATURE_INVALID'
+    | 'EXIT_VALIDATOR_NOT_IN_CLUSTER'
+    | 'EXIT_VALIDATOR_INDEX_MISMATCH'
+    | 'EXIT_EPOCH_MISMATCH'
+    | 'EXIT_SIGNATURE_CONFLICT'
+    | 'EXIT_PARTIAL_SIGNATURE_INVALID',
+>(
+  code: C,
+  message: string,
+  details: ObolError<C>['details'],
+): ObolError<C> =>
+  new ObolError<C>(
+    code,
+    message,
+    ...([{ hint: 'Reject the payload', details }] as unknown as [
+      ObolErrorOptions<C>,
+    ]),
+  );
+
+/**
+ * A uint64 decimal string in canonical form (no leading zeros); PAYLOAD_INVALID
+ * when it does not fit in uint64. The schema has checked the digits.
+ */
+export const canonicalUint64 = (value: string, path: string): string => {
+  const n = BigInt(value);
+  if (n > MAX_UINT64) throw invalid(path, 'must fit in uint64');
+  return n.toString();
 };
 
 /**
@@ -97,50 +130,106 @@ export const exitNetwork = (
   };
 };
 
-const sameHex = (a: string, b: string): boolean =>
-  a.toLowerCase() === b.toLowerCase();
+/**
+ * The stored shares of an exit, by 0-based operator position. The Obol API
+ * may expose `shares_exit_data` wrapped in an array; the entries are merged.
+ */
+export const storedShares = (
+  stored: StoredExitBlob,
+): Map<number, ShareExitData> => {
+  const groups = Array.isArray(stored.shares_exit_data)
+    ? stored.shares_exit_data
+    : [stored.shares_exit_data];
+  const shares = new Map<number, ShareExitData>();
+  for (const group of groups) {
+    for (const [key, share] of Object.entries(group)) {
+      shares.set(Number(key), share);
+    }
+  }
+  return shares;
+};
+
+const storedByPubkey = (
+  existing: VerifyPartialExitInput['existing'],
+): Map<string, StoredExitBlob> => {
+  const list =
+    existing === undefined
+      ? []
+      : Array.isArray(existing)
+        ? existing
+        : Object.values(existing);
+  return new Map(list.map(blob => [blob.publickey.toLowerCase(), blob]));
+};
+
+const normalizeBlob = (
+  blob: PartialExitBlob,
+  path: string,
+): PartialExitBlob => {
+  const { message, signature } = blob.signed_exit_message;
+  return {
+    public_key: blob.public_key.toLowerCase(),
+    signed_exit_message: {
+      message: {
+        epoch: canonicalUint64(message.epoch, `${path}.message.epoch`),
+        validator_index: canonicalUint64(
+          message.validator_index,
+          `${path}.message.validator_index`,
+        ),
+      },
+      signature: signature.toLowerCase(),
+    },
+  };
+};
 
 /**
  * Verifies an operator's partial exits payload, as the Obol API does before
  * storing it:
  *
- * 1. `shareIdx` is between 1 and the number of operators;
- * 2. the payload signature (secp256k1, 64 or 65 bytes) over the payload's
- *    SSZ root is by operator `shareIdx`'s ENR key;
+ * 1. `share_idx` is between 1 and the number of operators;
+ * 2. the payload signature is 65 bytes and is by operator `share_idx`'s ENR
+ *    key over the payload's SSZ root, with `partial_exits` sorted by
+ *    validator index (high-s accepted, as the API does);
  * 3. the cluster's `forkVersion` is a chain with a known Capella fork
  *    version and genesis validators root (mainnet, Hoodi);
  * 4. each blob's pubkey is a cluster validator with a public share at
- *    `shareIdx`;
- * 5. against `existing` for the same pubkey: same validator index, epoch not
- *    lower, and at the same epoch no different stored signature for this
- *    share (the same one is dropped as already stored);
+ *    `share_idx`;
+ * 5. against the stored exit for the same pubkey: the same validator index
+ *    and the same epoch; a stored partial for this share must be the same
+ *    signature (then the blob is dropped as already stored);
  * 6. each partial signature verifies against the public share for the exit
  *    message in the EIP-7044 exit domain.
  *
- * @returns The blobs not stored yet.
- * @throws PAYLOAD_INVALID (also for an unparsable ENR), UNSUPPORTED_CHAIN,
- *   EXIT_SHARE_INDEX_INVALID, EXIT_PAYLOAD_SIGNATURE_INVALID,
- *   EXIT_VALIDATOR_NOT_IN_CLUSTER, EXIT_VALIDATOR_INDEX_MISMATCH,
- *   EXIT_EPOCH_REGRESSION, EXIT_SIGNATURE_CONFLICT,
- *   EXIT_PARTIAL_SIGNATURE_INVALID.
+ * Decimal strings with leading zeros are accepted and returned canonical.
+ *
+ * @returns The blobs not stored yet, normalised (lowercase hex, canonical
+ *   decimals), sorted by validator index.
+ * @throws PAYLOAD_INVALID (also for an unparsable ENR or a value above
+ *   uint64), UNSUPPORTED_CHAIN, EXIT_SHARE_INDEX_INVALID,
+ *   EXIT_PAYLOAD_SIGNATURE_INVALID, EXIT_VALIDATOR_NOT_IN_CLUSTER,
+ *   EXIT_VALIDATOR_INDEX_MISMATCH, EXIT_EPOCH_MISMATCH,
+ *   EXIT_SIGNATURE_CONFLICT, EXIT_PARTIAL_SIGNATURE_INVALID.
  */
 export const verifyPartialExit = (
   input: VerifyPartialExitInput,
-): ExitBlob[] => {
+): PartialExitBlob[] => {
   const { cluster, payload, existing } = decode(VerifyPartialExitSchema, input);
-  payload.partialExits.forEach((blob, i) => {
-    checkUint64(
-      blob.signedExitMessage.message,
-      `payload.partialExits[${i}].signedExitMessage.message`,
+  const blobs = payload.partial_exits.map((blob, i) =>
+    normalizeBlob(blob, `payload.partial_exits[${i}].signed_exit_message`),
+  );
+  const stored = storedByPubkey(existing);
+  for (const [pubkey, blob] of stored) {
+    canonicalUint64(blob.epoch, `existing[${pubkey}].epoch`);
+    canonicalUint64(
+      blob.validator_index,
+      `existing[${pubkey}].validator_index`,
     );
-  });
-  if (existing !== undefined) checkUint64(existing, 'existing');
+  }
 
-  const { shareIdx } = payload;
+  const shareIdx = payload.share_idx;
   if (shareIdx < 1 || shareIdx > cluster.operators.length) {
     throw exitError(
       'EXIT_SHARE_INDEX_INVALID',
-      `shareIdx ${shareIdx} is not between 1 and ${cluster.operators.length}`,
+      `share_idx ${shareIdx} is not between 1 and ${cluster.operators.length}`,
       { shareIdx },
     );
   }
@@ -154,13 +243,13 @@ export const verifyPartialExit = (
       'must be a valid ENR',
     );
   }
-  const signatureBytes = (payload.signature.length - 2) / 2;
   if (
-    (signatureBytes !== 64 && signatureBytes !== 65) ||
+    payload.signature.length !== 2 + 65 * 2 ||
     !secp256k1VerifyDigest(
       enrKey,
-      partialExitsPayloadRoot(payload.partialExits, shareIdx),
+      partialExitsPayloadRoot(blobs, shareIdx),
       payload.signature,
+      { lowS: false },
     )
   ) {
     throw exitError(
@@ -175,57 +264,61 @@ export const verifyPartialExit = (
     'exits.verifyPartialExit',
   );
 
-  const fresh: ExitBlob[] = [];
-  for (const blob of payload.partialExits) {
-    const { message, signature } = blob.signedExitMessage;
+  const fresh: PartialExitBlob[] = [];
+  for (const blob of sortedPartialExits(blobs)) {
+    const { message, signature } = blob.signed_exit_message;
+    const pubkey = blob.public_key as Hex;
     const validator = cluster.validators.find(v =>
-      sameHex(v.distributedPublicKey, blob.publicKey),
+      sameHex(v.distributedPublicKey, pubkey),
     );
     if (validator === undefined) {
       throw exitError(
         'EXIT_VALIDATOR_NOT_IN_CLUSTER',
-        `${blob.publicKey} is not a validator of the cluster`,
-        { pubkey: blob.publicKey },
+        `${pubkey} is not a validator of the cluster`,
+        { pubkey },
       );
     }
     const publicShare = validator.publicShares[shareIdx - 1];
     if (publicShare === undefined) {
       throw exitError(
         'EXIT_SHARE_INDEX_INVALID',
-        `No public share ${shareIdx} for validator ${blob.publicKey}`,
-        { shareIdx, pubkey: blob.publicKey },
+        `No public share ${shareIdx} for validator ${pubkey}`,
+        { shareIdx, pubkey },
       );
     }
 
-    if (existing !== undefined && sameHex(existing.publicKey, blob.publicKey)) {
-      if (existing.validatorIndex !== message.validatorIndex) {
+    const previous = stored.get(pubkey);
+    if (previous !== undefined) {
+      const storedIndex = BigInt(previous.validator_index).toString();
+      if (storedIndex !== message.validator_index) {
         throw exitError(
           'EXIT_VALIDATOR_INDEX_MISMATCH',
-          `Validator index ${message.validatorIndex} differs from the stored ${existing.validatorIndex} for ${blob.publicKey}`,
-          { pubkey: blob.publicKey },
+          `Validator index ${message.validator_index} differs from the stored ${storedIndex} for ${pubkey}`,
+          {
+            pubkey,
+            validatorIndex: message.validator_index,
+            storedValidatorIndex: storedIndex,
+          },
         );
       }
-      const epoch = BigInt(message.epoch);
-      const storedEpoch = BigInt(existing.epoch);
-      if (epoch < storedEpoch) {
+      const storedEpoch = BigInt(previous.epoch).toString();
+      if (storedEpoch !== message.epoch) {
         throw exitError(
-          'EXIT_EPOCH_REGRESSION',
-          `Exit epoch ${epoch} is lower than the stored ${storedEpoch} for ${blob.publicKey}`,
-          { pubkey: blob.publicKey },
+          'EXIT_EPOCH_MISMATCH',
+          `Exit epoch ${message.epoch} differs from the stored ${storedEpoch} for ${pubkey}`,
+          { pubkey, epoch: message.epoch, storedEpoch },
         );
       }
-      if (epoch === storedEpoch) {
-        const stored = existing.partialSignatures[String(shareIdx - 1)] ?? '';
-        if (stored !== '') {
-          if (!sameHex(stored, signature)) {
-            throw exitError(
-              'EXIT_SIGNATURE_CONFLICT',
-              `A different partial signature is stored for share ${shareIdx} of ${blob.publicKey} at epoch ${epoch}`,
-              { pubkey: blob.publicKey, shareIdx },
-            );
-          }
-          continue;
+      const share = storedShares(previous).get(shareIdx - 1);
+      if (share !== undefined && share.partial_exit_signature !== '') {
+        if (!sameHex(share.partial_exit_signature, signature)) {
+          throw exitError(
+            'EXIT_SIGNATURE_CONFLICT',
+            `A different partial signature is stored for share ${shareIdx} of ${pubkey}`,
+            { pubkey, shareIdx },
+          );
         }
+        continue;
       }
     }
 
@@ -239,8 +332,8 @@ export const verifyPartialExit = (
     ) {
       throw exitError(
         'EXIT_PARTIAL_SIGNATURE_INVALID',
-        `Invalid partial exit signature by share ${shareIdx} for ${blob.publicKey}`,
-        { pubkey: blob.publicKey, shareIdx },
+        `Invalid partial exit signature by share ${shareIdx} for ${pubkey}`,
+        { pubkey, shareIdx },
       );
     }
     fresh.push(blob);

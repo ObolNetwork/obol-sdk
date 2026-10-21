@@ -8,7 +8,7 @@ import { createPublicClient, custom, type PublicClient } from 'viem';
 import { hoodi } from 'viem/chains';
 import { CHAINS } from '../../src/chains.js';
 import type { Context } from '../../src/context.js';
-import type { Prepared } from '../../src/types.js';
+import type { AnyPrepared } from '../../src/types.js';
 import type { SimulationBackend } from '../../src/simulate/types.js';
 
 export interface Exchange {
@@ -21,7 +21,7 @@ export interface Exchange {
 export interface Recording {
   name: string;
   from: string;
-  prepared: Prepared<unknown>;
+  prepared: AnyPrepared;
   /** Scenario addresses (OVM, splits, recipients). */
   meta: Record<string, string>;
   backends: Partial<Record<SimulationBackend, Exchange[]>>;

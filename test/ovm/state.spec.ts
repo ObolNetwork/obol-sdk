@@ -3,7 +3,7 @@ import { decodeFunctionData, type Hex } from 'viem';
 import { multicall3Abi } from '../../src/abi.js';
 import {
   getOvmRoleHolders,
-  getOvmState,
+  getOvmState as getOvmStateOrNull,
   getOvmValidators,
 } from '../../src/ovm/state.js';
 import { ovmRouting } from '../../src/ovm/routing.js';
@@ -22,6 +22,15 @@ import {
   REWARD,
   rolesLog,
 } from './ovmFixture.js';
+
+/** getOvmState for an address that must be an OVM. */
+const getOvmState = async (
+  ...args: Parameters<typeof getOvmStateOrNull>
+): Promise<NonNullable<Awaited<ReturnType<typeof getOvmStateOrNull>>>> => {
+  const state = await getOvmStateOrNull(...args);
+  if (state === null) throw new Error('not an OVM');
+  return state;
+};
 
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
 
@@ -69,11 +78,19 @@ describe('ovm.getState', () => {
     expect((await getOvmState(chain.context(), OVM)).version).toBeNull();
   });
 
-  it('throws OVM_READ_FAILED when a getter fails', async () => {
+  it('returns null when a getter reverts (not an OVM)', async () => {
     const chain = ovmChain({ state: { failing: ['principalThreshold'] } });
-    expect(await caught(getOvmState(chain.context(), OVM))).toMatchObject({
-      code: 'OVM_READ_FAILED',
-    });
+    expect(await getOvmStateOrNull(chain.context(), OVM)).toBeNull();
+  });
+
+  it('returns null for an address without code', async () => {
+    const chain = ovmChain();
+    expect(
+      await getOvmStateOrNull(
+        chain.context(),
+        '0x00000000000000000000000000000000000000aa',
+      ),
+    ).toBeNull();
   });
 
   it('throws UNSUPPORTED_CHAIN off mainnet / Hoodi', async () => {
@@ -168,12 +185,17 @@ describe('ovm.getState', () => {
       ]);
     });
 
-    it('is absent when the API fails', async () => {
+    it('is null when the API was asked and had no answer', async () => {
       const chain = ovmChain();
       const api = fakeApi({});
       const state = await getOvmState(chain.context(api), OVM);
-      expect(state.principalOnBeaconChain).toBeUndefined();
+      expect(state.principalOnBeaconChain).toBeNull();
       expect(state.source).toBe('chain');
+    });
+
+    it('is absent when the API was not asked (api: false)', async () => {
+      const state = await getOvmState(ovmChain().context(), OVM);
+      expect('principalOnBeaconChain' in state).toBe(false);
     });
   });
 
@@ -432,7 +454,10 @@ describe('ovm.getValidators', () => {
     });
     expect(result.validators[1]).toEqual({
       pubkey: PUBKEY_A,
+      lockHash: null,
       status: 'queued',
+      beaconStatus: null,
+      balance: null,
       withdrawalCredentials: validator.withdrawalCredentials,
     });
   });
@@ -465,6 +490,8 @@ describe('ovm.getValidators', () => {
           pubkey: PUBKEY_A,
           lockHash: `0x${'bb'.repeat(32)}`,
           status: 'new',
+          beaconStatus: null,
+          balance: null,
           withdrawalCredentials: credentials('02', OVM),
         },
       ],

@@ -114,7 +114,7 @@ const errorText = (error: unknown): string =>
 
 export const verifyOvm = async (
   ctx: Context,
-  input: Address,
+  input: string,
 ): Promise<OvmVerification> => {
   const ovm = checksum(decode(T.Address, input, 'ovm'));
   const { ovmFactory } = requireContracts(ctx.chain.id, 'ovm.verify');

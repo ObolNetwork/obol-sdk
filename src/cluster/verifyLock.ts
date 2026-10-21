@@ -45,6 +45,7 @@ import { invalidDefinitionSignatures } from './verifyDefinition.js';
 
 export type LockStep =
   | 'definition_flow_unknown'
+  | 'definition_invalid'
   | 'definition_signature_invalid'
   | 'hash_mismatch'
   | 'share_layout_invalid'
@@ -99,7 +100,7 @@ export interface VerifyLockOptions {
 
 const DEFAULT_YIELD_MS = 50;
 
-const OptionsSchema = Type.Object({
+export const VerifyLockOptionsSchema = Type.Object({
   level: Type.Optional(
     Type.Union([Type.Literal('attested'), Type.Literal('full')]),
   ),
@@ -168,6 +169,88 @@ const checkFlow = (lock: ClusterLock): DefinitionFlow => {
     lock.cluster_definition as unknown as LegacyDefinition,
   );
   return flow ?? fail('definition_flow_unknown', 'definition_flow_unknown');
+};
+
+const GWEI_PER_ETH = 1_000_000_000n;
+const MIN_DEPOSIT_GWEI = GWEI_PER_ETH;
+const DEFAULT_DEPOSIT_GWEI = 32n * GWEI_PER_ETH;
+const MAX_COMPOUNDING_DEPOSIT_GWEI = 2048n * GWEI_PER_ETH;
+
+/** `compounding` is a definition field from v1.10.0 on (not read before). */
+export const compoundingOf = (
+  definition: ClusterLock['cluster_definition'],
+): boolean =>
+  definition.version !== 'v1.6.0' &&
+  definition.version !== 'v1.7.0' &&
+  definition.version !== 'v1.8.0' &&
+  definition.compounding === true;
+
+/**
+ * The deposit amounts (gwei) a lock's deposits may have, as Charon's DKG
+ * makes them: the definition's `deposit_amounts`, deduplicated; when empty,
+ * Charon's defaults (1 and 32 ETH; with compounding 1, 8, 32 and 256 ETH),
+ * none of them required;
+ * 32 ETH only for v1.6.0 / v1.7.0 (no partial deposits).
+ */
+export const allowedDepositAmounts = (
+  definition: ClusterLock['cluster_definition'],
+  layout: Layout,
+): { allowed: Set<string>; required: Set<string> } => {
+  if (layout !== 'v1.8+') {
+    const only = new Set([DEFAULT_DEPOSIT_GWEI.toString()]);
+    return { allowed: only, required: only };
+  }
+  const given = (definition.deposit_amounts ?? []).map(a =>
+    toUint64(a).toString(),
+  );
+  if (given.length > 0) {
+    const set = new Set(given);
+    return { allowed: set, required: set };
+  }
+  const defaults = compoundingOf(definition) ? [1n, 8n, 32n, 256n] : [1n, 32n];
+  // Not required: locks made by earlier Charon releases with empty
+  // `deposit_amounts` have the 32 ETH deposit only.
+  return {
+    allowed: new Set(defaults.map(e => (e * GWEI_PER_ETH).toString())),
+    required: new Set(),
+  };
+};
+
+/**
+ * Step 2: what Charon refuses when it loads the definition: a fork version
+ * of no known chain, `num_validators` other than the number of validators,
+ * and `deposit_amounts` outside its rules (each at least 1 ETH and at most
+ * 32 ETH, or 2048 ETH with compounding; together at least 32 ETH).
+ */
+const checkDefinition = (run: Run): void => {
+  const definition = run.lock.cluster_definition;
+  if (chainIdForForkVersion(definition.fork_version) === null) {
+    fail('definition_invalid', 'fork_version_unknown');
+  }
+  if (definition.num_validators !== (definition.validators ?? []).length) {
+    fail('definition_invalid', 'num_validators_mismatch');
+  }
+  if (run.layout === 'v1.8+') {
+    const amounts = (definition.deposit_amounts ?? []).map(a => {
+      try {
+        return toUint64(a);
+      } catch {
+        return fail('definition_invalid', 'deposit_amounts_invalid');
+      }
+    });
+    if (amounts.length > 0) {
+      const max = compoundingOf(definition)
+        ? MAX_COMPOUNDING_DEPOSIT_GWEI
+        : DEFAULT_DEPOSIT_GWEI;
+      const sum = amounts.reduce((a, b) => a + b, 0n);
+      if (
+        amounts.some(a => a < MIN_DEPOSIT_GWEI || a > max) ||
+        sum < DEFAULT_DEPOSIT_GWEI
+      ) {
+        fail('definition_invalid', 'deposit_amounts_invalid');
+      }
+    }
+  }
 };
 
 const checkDefinitionSignatures = async (
@@ -355,25 +438,23 @@ const checkDeposits = async (run: Run): Promise<void> => {
   const step = 'deposit_data_invalid';
   const { lock, layout } = run;
   const definition = lock.cluster_definition;
-  const compounding =
-    layout === 'v1.8+' ? definition.compounding === true : false;
+  const compounding = compoundingOf(definition);
   await guarded(step, 'malformed', async () => {
-    const amounts = [
-      ...new Set(
-        (definition.deposit_amounts ?? []).map(a => toUint64(a).toString()),
-      ),
-    ];
+    const { allowed, required } = allowedDepositAmounts(definition, layout);
     for (const [i, validator] of lock.distributed_validators.entries()) {
       const deposits = depositsOf(run, i);
-      if (deposits === undefined) fail(step, 'deposit_data_missing', i);
+      if (deposits === undefined || deposits.length === 0) {
+        fail(step, 'deposit_data_missing', i);
+      }
       const withdrawal = (definition.validators ?? [])[i].withdrawal_address;
-      if (layout === 'v1.8+') {
-        const present = new Set(
-          (deposits ?? []).map(d => toUint64(d.amount ?? '').toString()),
-        );
-        if (!amounts.every(a => present.has(a))) {
-          fail(step, 'deposit_amount_missing', i);
-        }
+      const present = new Set(
+        (deposits ?? []).map(d => toUint64(d.amount ?? '').toString()),
+      );
+      if (![...required].every(a => present.has(a))) {
+        fail(step, 'deposit_amount_missing', i);
+      }
+      if (![...present].every(a => allowed.has(a))) {
+        fail(step, 'deposit_amount_unexpected', i);
       }
       for (const deposit of deposits ?? []) {
         const matches = depositFieldsMatch(
@@ -469,6 +550,7 @@ const runSteps = async (run: Run): Promise<LockVerification> => {
   const { level } = run;
   try {
     const flow = checkFlow(run.lock);
+    checkDefinition(run);
     await checkDefinitionSignatures(run, flow);
     await checkHashes(run);
     await checkShareLayout(run);
@@ -547,7 +629,7 @@ export const verifyLock = async (
 ): Promise<LockVerification> => {
   const lock = decode(LockSchema, input, 'lock');
   const scalars = decode(
-    OptionsSchema,
+    VerifyLockOptionsSchema,
     {
       ...(options.level !== undefined ? { level: options.level } : {}),
       ...(options.signatures !== undefined

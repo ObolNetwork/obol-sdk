@@ -194,7 +194,7 @@ export const ovmChain = (options: OvmChainOptions = {}) => {
         provenance === 'unknown' &&
         String(filter.address).toLowerCase() === factory.toLowerCase()
       ) {
-        return new Error('range too wide');
+        return new Error('internal error');
       }
       return options.getLogsError?.(filter);
     },
@@ -231,12 +231,21 @@ export const BEACON_URL = 'http://beacon.local:5052';
 export const mockBeacon = (
   pending: Array<{ pubkey: Hex; withdrawal_credentials: Hex; amount: string }>,
   validators: unknown[],
+  partials: Array<{
+    validator_index: string;
+    amount: string;
+    withdrawable_epoch?: string;
+  }> = [],
 ): (() => void) => {
   const real = global.fetch;
   global.fetch = (async (url: unknown) =>
     new Response(
       JSON.stringify({
-        data: String(url).endsWith('/pending_deposits') ? pending : validators,
+        data: String(url).endsWith('/pending_deposits')
+          ? pending
+          : String(url).endsWith('/pending_partial_withdrawals')
+            ? partials
+            : validators,
       }),
       { status: 200 },
     )) as unknown as typeof fetch;
@@ -245,18 +254,32 @@ export const mockBeacon = (
   };
 };
 
+export const FAR_FUTURE = (2n ** 64n - 1n).toString();
+
 export const registryRow = (
   pubkey: Hex,
   status: string,
   withdrawalCredentials: Hex,
   balanceWei = 32n * ETH,
+  extra: {
+    index?: string;
+    activationEpoch?: string;
+    exitEpoch?: string;
+    effectiveBalanceWei?: bigint;
+  } = {},
 ) => ({
-  index: '42',
+  index: extra.index ?? '42',
   balance: (balanceWei / GWEI).toString(),
   status,
   validator: {
     pubkey,
     withdrawal_credentials: withdrawalCredentials,
-    effective_balance: (32n * GWEI).toString(),
+    effective_balance: (
+      (extra.effectiveBalanceWei ?? 32n * ETH) / GWEI
+    ).toString(),
+    activation_epoch: extra.activationEpoch ?? '0',
+    exit_epoch:
+      extra.exitEpoch ??
+      (/^(active_exiting|exited|withdrawal)/.test(status) ? '100' : FAR_FUTURE),
   },
 });

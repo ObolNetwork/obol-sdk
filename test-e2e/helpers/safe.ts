@@ -19,10 +19,11 @@ import {
   type Hex,
   type WalletClient,
 } from 'viem';
-import { hoodi } from 'viem/chains';
+
 import {
   ANVIL_URL,
-  HOODI,
+  CHAIN,
+  NET,
   publicClient,
   testClient,
   type Signer,
@@ -62,14 +63,14 @@ export const deploySafe = async (owner: Signer): Promise<Address> => {
   const hash = await owner.walletClient.writeContract({
     account: owner.account,
     chain: owner.walletClient.chain,
-    address: HOODI.safeProxyFactory,
+    address: NET.safeProxyFactory,
     abi: factoryAbi,
     functionName: 'createProxyWithNonce',
-    args: [HOODI.safeSingleton, initializer, BigInt(Date.now())],
+    args: [NET.safeSingleton, initializer, BigInt(Date.now())],
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   for (const log of receipt.logs) {
-    if (log.address.toLowerCase() !== HOODI.safeProxyFactory.toLowerCase()) {
+    if (log.address.toLowerCase() !== NET.safeProxyFactory.toLowerCase()) {
       continue;
     }
     const { eventName, args } = decodeEventLog({
@@ -176,7 +177,7 @@ export const safeWallet = (
   };
   const walletClient = createWalletClient({
     account: safe,
-    chain: hoodi,
+    chain: CHAIN,
     transport: custom({
       request: async ({ method, params }) => {
         if (method === 'eth_sendTransaction') {

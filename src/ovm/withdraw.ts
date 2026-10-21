@@ -6,27 +6,23 @@ import { Type } from '@sinclair/typebox';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { ovmAbi } from '../abi.js';
 import { requireContracts } from '../chains.js';
-import {
-  finding,
-  prepared,
-  readRequestFee,
-  resolveRequestFee,
-} from '../chainUtils.js';
+import { prepared, readRequestFee, resolveRequestFee } from '../chainUtils.js';
 import { senderOf, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, invalid, T, ZERO_ADDRESS } from '../schema.js';
-import type { Finding, Prepared } from '../types.js';
-import { MAX_UINT64, weiToGwei } from '../units.js';
+import type { Prepared, StatusSource } from '../types.js';
+import { GWEI, MAX_UINT64, weiToGwei } from '../units.js';
 import {
-  DepositStatusOptionsSchema,
+  StatusSourceFields,
   statusIfAvailable,
-  type DepositStatus,
+  statusSourceOf,
 } from '../deposits/status.js';
 import {
-  credentialsAddress,
-  credentialsPointAt,
-  credentialsPrefix,
-} from './credentials.js';
+  checkConsolidationRequests,
+  checkWithdrawalRequests,
+  noStatusFinding,
+  type CheckedWithdrawal,
+} from './requestRules.js';
 import {
   provenanceFindings,
   readOvmCore,
@@ -35,11 +31,6 @@ import {
   type OvmCore,
 } from './read.js';
 import { ovmRouting } from './routing.js';
-
-const statusOptionFields = {
-  beaconUrl: DepositStatusOptionsSchema.properties.beaconUrl,
-  lockHash: DepositStatusOptionsSchema.properties.lockHash,
-};
 
 /** wei → gwei for an EIP-7002 amount: whole gwei and at most 2^64−1 gwei. */
 export const requestAmountGwei = (amount: bigint, path: string): bigint => {
@@ -64,70 +55,13 @@ export const requireFullExitAcknowledged = (
   }
 };
 
-/**
- * Findings for one withdrawal request from the validator's status
- * (spec "prepareWithdraw" 6, "prepareEoaWithdraw" 2–3). `target` is the
- * address the credentials must point at, with the finding code to use.
- */
-export const requestStatusFindings = (
-  status: DepositStatus,
-  amount: bigint,
-  target: { address: Address; code: string; what: string } | null,
-): Finding[] => {
-  const findings: Finding[] = [];
-  const details = { pubkey: status.pubkey };
-  const credentials = status.withdrawalCredentials;
-  if (
-    target !== null &&
-    credentials !== undefined &&
-    !credentialsPointAt(credentials, target.address)
-  ) {
-    findings.push(
-      finding(
-        target.code,
-        'warning',
-        `The credentials of ${status.pubkey} do not point at ${target.what} ${target.address}: the request would be ignored and the fee kept`,
-        {
-          hint: 'Send the request from the address the validator credentials point at',
-          details: { ...details, withdrawalCredentials: credentials },
-        },
-      ),
-    );
-  }
-  if (
-    amount > 0n &&
-    credentials !== undefined &&
-    credentialsPrefix(credentials) !== '0x02'
-  ) {
-    findings.push(
-      finding(
-        'WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING',
-        'warning',
-        `${status.pubkey} does not have 0x02 credentials: the beacon chain ignores a partial withdrawal and keeps the fee`,
-        { hint: 'Consolidate to 0x02 first, or exit', details },
-      ),
-    );
-  }
-  if (status.status !== 'active') {
-    findings.push(
-      finding(
-        'WITHDRAW_VALIDATOR_NOT_ACTIVE',
-        'warning',
-        `${status.pubkey} is not active (${status.beaconStatus ?? status.status})`,
-        { hint: 'Wait for activation, or drop the request', details },
-      ),
-    );
-  }
-  return findings;
-};
-
 /** `excessFeeRecipient`, else `from`, else the wallet account; non-zero. */
 const resolveExcessFeeRecipient = (
   ctx: Context,
   given: string | undefined,
   from: string | undefined,
 ): Address => {
-  const recipient = given ?? from ?? senderOf(ctx, undefined) ?? undefined;
+  const recipient = given ?? from ?? senderOf(ctx) ?? undefined;
   if (recipient === undefined) {
     throw invalid(
       'excessFeeRecipient',
@@ -154,25 +88,27 @@ export const PrepareWithdrawInputSchema = Type.Object(
     excessFeeRecipient: Type.Optional(T.Address),
     from: Type.Optional(T.Address),
     acknowledgeFullExit: Type.Optional(Type.Boolean()),
-    ...statusOptionFields,
+    ...StatusSourceFields,
   },
   { additionalProperties: false },
 );
-export interface PrepareWithdrawInput {
-  ovm: Address;
-  requests: Array<{ pubkey: Hex; amount: bigint }>;
+export interface PrepareWithdrawInput extends StatusSource {
+  ovm: string;
+  /** `amount` in wei, whole gwei; 0 is a full exit (needs `acknowledgeFullExit`). */
+  requests: Array<{ pubkey: string; amount: bigint }>;
   /** Total fee in wei; default max(10 × current fee, 1 gwei) × n (the OVM refunds the excess to `excessFeeRecipient`). */
   fee?: bigint;
-  excessFeeRecipient?: Address;
-  from?: Address;
+  excessFeeRecipient?: string;
+  from?: string;
   acknowledgeFullExit?: boolean;
-  beaconUrl?: string;
-  lockHash?: Hex;
 }
 
 export interface WithdrawRequestPreview {
   pubkey: Hex;
+  /** wei in the request: the amount asked for, or the excess balance it was capped to. */
   amount: bigint;
+  /** The amount asked for, when it was capped to the excess balance (WITHDRAW_AMOUNT_CAPPED). */
+  requestedAmount?: bigint;
   /** How a distribution right after this request's ETH arrives would route it (absent when the amount is unknown). */
   routedAs?: 'principal' | 'reward' | 'mixed';
   principalPart?: bigint;
@@ -222,13 +158,13 @@ const routeArrival = (
 export const prepareWithdraw = async (
   ctx: Context,
   input: PrepareWithdrawInput,
-): Promise<Prepared<WithdrawPreview>> => {
+): Promise<Prepared<'withdraw'>> => {
   const args = decode(PrepareWithdrawInputSchema, input);
   const contracts = requireContracts(ctx.chain.id, 'ovm.prepareWithdraw');
   const ovm = checksum(args.ovm);
-  const amountsGwei = args.requests.map((r, i) =>
-    requestAmountGwei(r.amount, `requests[${i}].amount`),
-  );
+  args.requests.forEach((r, i) => {
+    requestAmountGwei(r.amount, `requests[${i}].amount`);
+  });
   requireFullExitAcknowledged(
     args.requests.map(r => r.amount),
     args.acknowledgeFullExit,
@@ -240,11 +176,7 @@ export const prepareWithdraw = async (
   );
 
   const checks = await provenanceFindings(ctx, ovm);
-  const from = requireSender(
-    ctx,
-    args.from as Address | undefined,
-    'ovm.prepareWithdraw',
-  );
+  const from = requireSender(ctx, args.from, 'ovm.prepareWithdraw');
   const core = await readOvmCore(ctx, ovm, {
     from,
     what: 'ovm.prepareWithdraw',
@@ -264,37 +196,53 @@ export const prepareWithdraw = async (
   });
   const maxFeePerRequest = totalFee / BigInt(n);
 
-  const pubkeys = args.requests.map(r => r.pubkey.toLowerCase() as Hex);
-  const statuses = await statusIfAvailable(ctx, pubkeys, {
-    ...(args.beaconUrl !== undefined ? { beaconUrl: args.beaconUrl } : {}),
-    ...(args.lockHash !== undefined ? { lockHash: args.lockHash as Hex } : {}),
-  });
-  const requests = args.requests.map((request, i): WithdrawRequestPreview => {
-    const pubkey = pubkeys[i];
-    const status = statuses?.get(pubkey);
-    if (status !== undefined) {
-      checks.push(
-        ...requestStatusFindings(status, request.amount, {
-          address: ovm,
-          code: 'WITHDRAW_CREDENTIALS_NOT_OVM',
-          what: 'the OVM',
-        }),
-      );
-    }
-    const arriving = request.amount > 0n ? request.amount : status?.balance;
+  const asked = args.requests.map(r => ({
+    pubkey: r.pubkey.toLowerCase() as Hex,
+    amount: r.amount,
+  }));
+  const statuses = await statusIfAvailable(
+    ctx,
+    asked.map(r => r.pubkey),
+    statusSourceOf(args),
+  );
+  let sent: CheckedWithdrawal[] = asked;
+  if (statuses === null) {
+    checks.push(noStatusFinding('ovm.prepareWithdraw'));
+  } else {
+    const result = checkWithdrawalRequests(
+      { chain: ctx.chain },
+      asked,
+      statuses,
+      {
+        address: ovm,
+        what: 'the OVM',
+      },
+    );
+    sent = result.requests;
+    checks.push(...result.checks);
+  }
+  const requests = sent.map((request): WithdrawRequestPreview => {
+    const arriving =
+      request.amount > 0n
+        ? request.amount
+        : statuses?.get(request.pubkey)?.balance;
     return {
-      pubkey,
-      amount: request.amount,
+      ...request,
       ...(arriving !== undefined ? routeArrival(core, arriving) : {}),
     };
   });
 
-  return prepared(ctx, {
+  return prepared(ctx, 'withdraw', {
     to: ovm,
     data: encodeFunctionData({
       abi: ovmAbi,
       functionName: 'withdraw',
-      args: [pubkeys, amountsGwei, maxFeePerRequest, excessFeeRecipient],
+      args: [
+        requests.map(r => r.pubkey),
+        requests.map(r => r.amount / GWEI),
+        maxFeePerRequest,
+        excessFeeRecipient,
+      ],
     }),
     value: totalFee,
     checks,
@@ -327,20 +275,19 @@ export const PrepareConsolidateInputSchema = Type.Object(
     fee: Type.Optional(T.Wei),
     excessFeeRecipient: Type.Optional(T.Address),
     from: Type.Optional(T.Address),
-    ...statusOptionFields,
+    ...StatusSourceFields,
   },
   { additionalProperties: false },
 );
-export interface PrepareConsolidateInput {
-  ovm: Address;
-  requests: Array<{ sources: Hex[]; target: Hex }>;
+export interface PrepareConsolidateInput extends StatusSource {
+  ovm: string;
+  /** A source equal to its target switches it to 0x02 (compounding) credentials. */
+  requests: Array<{ sources: string[]; target: string }>;
   acknowledgeStakeMovesToTarget: true;
   /** Total fee in wei; default max(10 × current fee, 1 gwei) × total sources (the OVM refunds the excess). */
   fee?: bigint;
-  excessFeeRecipient?: Address;
-  from?: Address;
-  beaconUrl?: string;
-  lockHash?: Hex;
+  excessFeeRecipient?: string;
+  from?: string;
 }
 
 export interface ConsolidatePreview {
@@ -362,7 +309,7 @@ export interface ConsolidatePreview {
 export const prepareConsolidate = async (
   ctx: Context,
   input: PrepareConsolidateInput,
-): Promise<Prepared<ConsolidatePreview>> => {
+): Promise<Prepared<'consolidate'>> => {
   // Checked first and at runtime, also for untyped callers.
   if (
     (input as { acknowledgeStakeMovesToTarget?: unknown } | null)
@@ -386,11 +333,7 @@ export const prepareConsolidate = async (
   );
 
   const checks = await provenanceFindings(ctx, ovm);
-  const from = requireSender(
-    ctx,
-    args.from as Address | undefined,
-    'ovm.prepareConsolidate',
-  );
+  const from = requireSender(ctx, args.from, 'ovm.prepareConsolidate');
   const core = await readOvmCore(ctx, ovm, {
     from,
     what: 'ovm.prepareConsolidate',
@@ -415,56 +358,19 @@ export const prepareConsolidate = async (
   const maxFeePerRequest = totalFee / BigInt(n);
 
   const pubkeys = [...new Set(requests.flatMap(r => [...r.sources, r.target]))];
-  const statuses = await statusIfAvailable(ctx, pubkeys, {
-    ...(args.beaconUrl !== undefined ? { beaconUrl: args.beaconUrl } : {}),
-    ...(args.lockHash !== undefined ? { lockHash: args.lockHash as Hex } : {}),
-  });
-  if (statuses !== null) {
-    for (const request of requests) {
-      const target = statuses.get(request.target);
-      const targetCredentials = target?.withdrawalCredentials;
-      if (
-        target?.status !== 'active' ||
-        targetCredentials === undefined ||
-        credentialsPrefix(targetCredentials) !== '0x02'
-      ) {
-        checks.push(
-          finding(
-            'CONSOLIDATION_TARGET_NOT_COMPOUNDING',
-            'warning',
-            `Target ${request.target} is not active with 0x02 credentials`,
-            {
-              hint: 'Switch the target to 0x02 first',
-              details: { pubkey: request.target },
-            },
-          ),
-        );
-      }
-      if (targetCredentials === undefined) continue;
-      for (const source of request.sources) {
-        const sourceCredentials = statuses.get(source)?.withdrawalCredentials;
-        if (
-          sourceCredentials !== undefined &&
-          credentialsAddress(sourceCredentials) !==
-            credentialsAddress(targetCredentials)
-        ) {
-          checks.push(
-            finding(
-              'CONSOLIDATION_CREDENTIALS_DIFFER',
-              'warning',
-              `Source ${source} and target ${request.target} have different withdrawal addresses`,
-              {
-                hint: 'Check the pubkeys',
-                details: { source, target: request.target },
-              },
-            ),
-          );
-        }
-      }
-    }
-  }
+  const statuses = await statusIfAvailable(ctx, pubkeys, statusSourceOf(args));
+  checks.push(
+    ...(statuses === null
+      ? [noStatusFinding('ovm.prepareConsolidate')]
+      : checkConsolidationRequests(
+          { chain: ctx.chain },
+          requests,
+          statuses,
+          ovm,
+        )),
+  );
 
-  return prepared(ctx, {
+  return prepared(ctx, 'consolidate', {
     to: ovm,
     data: encodeFunctionData({
       abi: ovmAbi,

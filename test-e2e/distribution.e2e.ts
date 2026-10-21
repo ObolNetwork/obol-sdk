@@ -20,7 +20,7 @@ import {
   describeFork,
   expectCode,
   gasCost,
-  HOODI,
+  NET,
   impersonate,
   makeDeposit,
   publicClient,
@@ -44,7 +44,7 @@ const NATIVE_ID = BigInt(NATIVE_TOKEN);
 
 const warehouseBalance = async (owner: Address): Promise<bigint> =>
   await publicClient.readContract({
-    address: HOODI.warehouse,
+    address: NET.warehouse,
     abi: warehouseAbi,
     functionName: 'balanceOf',
     args: [owner, NATIVE_ID],
@@ -67,6 +67,30 @@ const transfer = async (
 const withoutDust = (amount: bigint): bigint =>
   amount > 0n ? amount - 1n : 0n;
 
+type Row = DistributionPreview['recipients'][number];
+
+/**
+ * ETH the transaction should send to a recipient's wallet, from the preview
+ * fields: the direct OVM payout, plus, when its withdrawal is included, each
+ * leg at or above minWithdraw (the Warehouse: what was waiting there and the
+ * split credits; SplitMain v1), less the 1 wei each leaves.
+ */
+const toWallet = (r: Row, minWithdraw: bigint): bigint => {
+  if (!r.withdraw || r.skipReason !== undefined) return r.fromOvm;
+  const warehouse = withoutDust(
+    r.warehouseBalance +
+      r.fromRewardSplit +
+      r.fromPrincipalSplit +
+      r.distributorReward,
+  );
+  const splitMain = withoutDust(r.splitMainBalance);
+  return (
+    r.fromOvm +
+    (warehouse >= minWithdraw ? warehouse : 0n) +
+    (splitMain >= minWithdraw ? splitMain : 0n)
+  );
+};
+
 /**
  * Sends a prepared distribution and checks each recipient's wallet and
  * Warehouse balances, the OVM payout and the receipt parse against the
@@ -74,7 +98,7 @@ const withoutDust = (amount: bigint): bigint =>
  */
 const executeAndCompare = async (
   s: Signer,
-  prepared: Prepared<DistributionPreview>,
+  prepared: Prepared<'distribution'>,
   ovm?: Address,
 ): Promise<TransactionReceipt> => {
   const { preview } = prepared;
@@ -98,7 +122,10 @@ const executeAndCompare = async (
     expect({
       address: r.address,
       received: walletAfter - walletBefore[i] + spent,
-    }).toEqual({ address: r.address, received: r.toWallet });
+    }).toEqual({
+      address: r.address,
+      received: toWallet(r, preview.minWithdraw),
+    });
 
     const credited =
       warehouseBefore[i] +
@@ -116,8 +143,9 @@ const executeAndCompare = async (
           ? credited - withoutDust(credited)
           : credited,
     });
-    if (withdrawn && r.toWallet - r.fromOvm > 0n) {
-      expect(parsed.withdrawn[r.address]).toBe(r.toWallet - r.fromOvm);
+    const fromWithdrawals = toWallet(r, preview.minWithdraw) - r.fromOvm;
+    if (withdrawn && fromWithdrawals > 0n) {
+      expect(parsed.withdrawn[r.address]).toBe(fromWithdrawals);
     } else {
       expect(parsed.withdrawn[r.address]).toBeUndefined();
     }
@@ -133,7 +161,7 @@ const executeAndCompare = async (
   return receipt;
 };
 
-describeFork('distributions on a Hoodi fork', () => {
+describeFork('distributions', () => {
   let s: Signer;
   let principal: Address;
   let d: DeployedOvm;
@@ -155,7 +183,8 @@ describeFork('distributions on a Hoodi fork', () => {
 
   test('rewards below the principal threshold go through the reward split to its recipients', async () => {
     await transfer(s, d.ovm, parseEther('0.5'));
-    const ovmPreview = await s.obol.ovm.previewDistribute({ ovm: d.ovm });
+    const { preview: ovmPreview, checks: ovmChecks } =
+      await s.obol.ovm.previewDistribute({ ovm: d.ovm });
     expect(ovmPreview).toMatchObject({
       mode: 'push',
       distributable: parseEther('0.5'),
@@ -163,12 +192,12 @@ describeFork('distributions on a Hoodi fork', () => {
       rewardPayout: parseEther('0.5'),
       principalRecipient: principal,
       rewardRecipient: d.rewardRecipient,
-      checks: [],
     });
+    expect(ovmChecks).toEqual([]);
 
     const prepared = await s.obol.splits.prepareDistribution({ ovm: d.ovm });
     const { preview } = prepared;
-    expect(prepared.request.to).toBe(HOODI.multicall3);
+    expect(prepared.request.to).toBe(NET.multicall3);
     expect(prepared.checks).toEqual([]);
     expect(preview.ovm).toEqual({
       address: d.ovm,
@@ -189,8 +218,10 @@ describeFork('distributions on a Hoodi fork', () => {
     const byAddress = Object.fromEntries(
       preview.recipients.map(r => [r.address, r]),
     );
-    expect(byAddress[HOODI.rafRecipient].withdraw).toBe(false);
-    expect(byAddress[principal]).toMatchObject({ fromOvm: 0n, toWallet: 0n });
+    // The RAF is withdrawn by default (rc.4).
+    expect(byAddress[NET.rafRecipient].withdraw).toBe(true);
+    expect(byAddress[principal]).toMatchObject({ fromOvm: 0n });
+    expect(toWallet(byAddress[principal], preview.minWithdraw)).toBe(0n);
     expect(byAddress[r1].withdraw).toBe(true);
     expect(byAddress[r2].withdraw).toBe(true);
 
@@ -202,22 +233,24 @@ describeFork('distributions on a Hoodi fork', () => {
 
   test('an exit-sized arrival pays the principal stake first, then rewards', async () => {
     await transfer(s, d.ovm, parseEther('33'));
-    const ovmPreview = await s.obol.ovm.previewDistribute({ ovm: d.ovm });
+    const { preview: ovmPreview, checks: ovmChecks } =
+      await s.obol.ovm.previewDistribute({ ovm: d.ovm });
     expect(ovmPreview).toMatchObject({
       distributable: parseEther('33'),
       principalPayout: parseEther('32'),
       rewardPayout: parseEther('1'),
     });
+    expect(ovmChecks).toEqual([]);
     const prepared = await s.obol.splits.prepareDistribution({ ovm: d.ovm });
     const direct = prepared.preview.recipients.find(
       r => r.address === principal,
     );
-    expect(direct).toMatchObject({
-      fromOvm: parseEther('32'),
-      toWallet: parseEther('32'),
-    });
+    expect(direct).toMatchObject({ fromOvm: parseEther('32') });
+    expect(toWallet(direct!, prepared.preview.minWithdraw)).toBe(
+      parseEther('32'),
+    );
     await executeAndCompare(s, prepared, d.ovm);
-    const state = await s.obol.ovm.getState(d.ovm);
+    const state = (await s.obol.ovm.getState(d.ovm))!;
     expect(state.amountOfPrincipalStake).toBe(0n);
     expect(state.balance).toBe(0n);
   });
@@ -233,14 +266,13 @@ describeFork('distributions on a Hoodi fork', () => {
     expect(preview.ovm?.skipReason).toBeUndefined();
     const r2Leg = preview.recipients.find(r => r.address === r2);
     // 39% of 1 ETH is below 0.5 ETH.
-    expect(r2Leg).toMatchObject({
-      withdraw: true,
-      skipReason: 'dust',
-      toWallet: 0n,
-    });
+    expect(r2Leg).toMatchObject({ withdraw: true, skipReason: 'dust' });
+    expect(toWallet(r2Leg!, preview.minWithdraw)).toBe(0n);
     const r1Leg = preview.recipients.find(r => r.address === r1);
     expect(r1Leg?.skipReason).toBeUndefined();
-    expect(r1Leg?.toWallet).toBeGreaterThanOrEqual(minWithdraw);
+    expect(toWallet(r1Leg!, preview.minWithdraw)).toBeGreaterThanOrEqual(
+      minWithdraw,
+    );
 
     const prepared = await s.obol.splits.prepareDistribution({
       ovm: d.ovm,
@@ -265,7 +297,7 @@ describeFork('distributions on a Hoodi fork', () => {
     }
     for (const r of preview.recipients.filter(r => r.withdraw)) {
       expect(r.skipReason).toBeDefined();
-      expect(r.toWallet).toBe(0n);
+      expect(toWallet(r, preview.minWithdraw)).toBe(0n);
     }
     await expectCode(
       async () =>
@@ -283,7 +315,7 @@ describeFork('distributions on a Hoodi fork', () => {
     const hash = await r2Wallet.walletClient.sendTransaction({
       account: r2,
       chain: r2Wallet.walletClient.chain,
-      to: HOODI.warehouse,
+      to: NET.warehouse,
       data: encodeFunctionData({
         abi: warehouseAbi,
         functionName: 'setWithdrawConfig',
@@ -298,7 +330,7 @@ describeFork('distributions on a Hoodi fork', () => {
     expect(prepared.checks[0].details).toEqual({ address: r2 });
     expect(
       prepared.preview.recipients.find(r => r.address === r2),
-    ).toMatchObject({ withdraw: true, skipReason: 'paused', toWallet: 0n });
+    ).toMatchObject({ withdraw: true, skipReason: 'paused' });
     await executeAndCompare(s, prepared, d.ovm);
 
     // Sent by the paused recipient itself (an EOA, so tx.origin): included.
@@ -307,7 +339,7 @@ describeFork('distributions on a Hoodi fork', () => {
     expect(codes(own.checks)).toEqual([]);
     const r2Leg = own.preview.recipients.find(r => r.address === r2);
     expect(r2Leg?.skipReason).toBeUndefined();
-    expect(r2Leg?.toWallet).toBeGreaterThan(0n);
+    expect(toWallet(r2Leg!, own.preview.minWithdraw)).toBeGreaterThan(0n);
     await executeAndCompare(r2Wallet, own, d.ovm);
     await testClient.stopImpersonatingAccount({ address: r2 });
   });
@@ -325,7 +357,7 @@ describeFork('distributions on a Hoodi fork', () => {
       principalPayout: 0n,
     });
     await sendAndWait(s.obol, pull);
-    const state = await s.obol.ovm.getState(d.ovm);
+    const state = (await s.obol.ovm.getState(d.ovm))!;
     expect(state).toMatchObject({
       balance: parseEther('2'),
       fundsPendingWithdrawal: parseEther('2'),
@@ -335,7 +367,7 @@ describeFork('distributions on a Hoodi fork', () => {
       },
       distributable: 0n,
     });
-    const preview = await s.obol.ovm.previewDistribute({ ovm: d.ovm });
+    const { preview } = await s.obol.ovm.previewDistribute({ ovm: d.ovm });
     expect(preview.distributable).toBe(0n);
     await expectCode(
       async () => await s.obol.ovm.prepareDistribute({ ovm: d.ovm }),
@@ -350,7 +382,7 @@ describeFork('distributions on a Hoodi fork', () => {
     expect(withdraw.preview.amount).toBe(parseEther('2'));
     await sendAndWait(s.obol, withdraw);
     expect((await balanceOf(d.rewardRecipient)) - before).toBe(parseEther('2'));
-    expect((await s.obol.ovm.getState(d.ovm)).fundsPendingWithdrawal).toBe(0n);
+    expect((await s.obol.ovm.getState(d.ovm))!.fundsPendingWithdrawal).toBe(0n);
     await expectCode(
       async () =>
         await s.obol.ovm.prepareWithdrawPullBalance({
@@ -388,7 +420,8 @@ describeFork('distributions on a Hoodi fork', () => {
     const distributor = prepared.preview.recipients.find(
       r => r.address === s.address,
     );
-    expect(distributor).toMatchObject({ withdraw: false, toWallet: 0n });
+    expect(distributor).toMatchObject({ withdraw: false });
+    expect(toWallet(distributor!, prepared.preview.minWithdraw)).toBe(0n);
     await executeAndCompare(s, prepared, other.ovm);
   });
 
@@ -416,7 +449,7 @@ describeFork('distributions on a Hoodi fork', () => {
       });
       await publicClient.waitForTransactionReceipt({ hash });
       await transfer(s, split, parseEther('1'));
-      expect((await s.obol.splits.getSplit({ address: split })).paused).toBe(
+      expect((await s.obol.splits.getSplit({ address: split }))?.paused).toBe(
         true,
       );
     });

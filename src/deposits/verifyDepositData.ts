@@ -20,7 +20,7 @@ import { nobleBls, type BlsBackend } from '../cluster/blsBackend.js';
 import { CHAINS } from '../chains.js';
 import { ObolError } from '../errors.js';
 import { decode, T } from '../schema.js';
-import type { Deposit, DepositKind } from '../types.js';
+import type { Deposit, DepositInput, DepositKind } from '../types.js';
 import { ETH, GWEI } from '../units.js';
 
 export const MIN_DEPOSIT = 1n * ETH;
@@ -40,7 +40,7 @@ export const DepositSchema = Type.Object({
   amount: T.Wei,
 });
 
-const VerifyDepositDataSchema = Type.Object({
+export const VerifyDepositDataSchema = Type.Object({
   deposits: Type.Array(DepositSchema),
   options: Type.Object({
     chainId: T.Uint,
@@ -229,7 +229,7 @@ const signatureItem = (
  *   must be checked on a chain without a known fork version.
  */
 export const verifyDepositData = async (
-  deposits: Deposit[],
+  deposits: readonly DepositInput[],
   options: VerifyDepositDataOptions,
 ): Promise<void> => {
   const args = decode(VerifyDepositDataSchema, { deposits, options });

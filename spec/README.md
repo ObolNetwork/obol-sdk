@@ -9,7 +9,7 @@ contract and checked with the same test vectors. It follows [`spec/DESIGN.md`](.
 | [`lifecycles.md`](lifecycles.md) | Cluster, transaction and deposit states, and which operation or event observes each. |
 | [`errors.md`](errors.md) | Every error code and finding code: meaning, thrown by, what the caller should do. |
 | [`vectors/`](vectors/README.md) | JSON test vectors for the SDK-level rules (shares, distribution, fees, deposit checks). |
-| `schemas/` | (Milestone 2) JSON Schema generated from the TypeBox types. Not written yet. |
+| [`schemas/`](schemas/) | JSON Schema of every operation input, generated from the TypeBox schemas the SDK decodes with (`yarn spec:schemas`; a test fails when they are out of date). `bigint` fields are decimal strings marked `"x-obol-type": "bigint"`. |
 
 ## Scope
 
@@ -42,10 +42,27 @@ suites here use the same file format and could later move into that repo as an S
 - **Shares are integer parts per million**: `1_000_000` = 100%, the 0xSplits `PERCENTAGE_SCALE`. `percent("33.3333")`
   = `333333`. A percentage with more than 4 decimals is rejected, never rounded. The SplitV2 distribution incentive
   is also ppm (uint16, so at most 65535 = 6.5535%).
-- Gas is not estimated or set by the SDK; the caller's wallet layer does that.
+- **On-chain integers are `bigint` in outputs** (amounts, allocations, shares from `percent`, role masks, epochs).
+  Two exceptions, below 2^53 and typed `number` by viem or used as positions: the validator index and the split
+  `distributionIncentive` (uint16). Inputs take `number | bigint` where both are natural (roles, allocations, shares).
+- Gas is not estimated or set by the SDK; the caller's wallet layer does that (`simulate` reports gas apart).
+
+### Null and absent
+
+One rule for every field the Obol API enriches (and every optional output field read from a source):
+
+- **`null`**: the source was asked and had no data (or failed, for display-only enrichment): `principalOnBeaconChain:
+  null`, `getValidators` `lockHash` / `beaconStatus` / `balance: null`, `getSplit` `params: null`,
+  `credentialsMatch: null`, a status epoch not assigned yet.
+- **absent**: not asked: `principalOnBeaconChain` with `api: false`, `credentialsMatch` without
+  `expectedWithdrawalAddress`, the status epochs when the source does not report them.
+- A read that answers "this is not one" returns `null` for the whole result (`ovm.getState` on a non-OVM,
+  `splits.getSplit` on a non-split, `incentives.get` without incentives); a read that fails throws.
 
 ### Encodings
 
+- **Inputs are plain strings** (typed `string` in TypeScript, not viem's `` `0x${string}` ``), checked at runtime by G1;
+  outputs are typed `Hex` / `Address`.
 - **Hex** (`Hex`): `0x` prefix, lowercase in outputs, either case accepted in inputs. Fixed-length values are checked
   for length: pubkey 48 bytes, signature 96 bytes (BLS) or 65 bytes (secp256k1), withdrawal credentials 32 bytes,
   hashes and roots 32 bytes.

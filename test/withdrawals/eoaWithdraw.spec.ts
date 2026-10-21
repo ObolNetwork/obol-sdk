@@ -1,8 +1,6 @@
 import { concat, numberToHex } from 'viem';
-import {
-  createWithdrawalsModule,
-  prepareEoaWithdraw,
-} from '../../src/withdrawals/index.js';
+import { createWithdrawalsModule } from '../../src/withdrawals/index.js';
+import { prepareEoaWithdraw } from '../../src/withdrawals/withdrawals.js';
 import {
   BEACON_URL,
   caught,
@@ -41,7 +39,8 @@ describe('withdrawals.prepareEoaWithdraw', () => {
       amount: 2n * ETH,
       fee: 3n,
     });
-    expect(result.checks).toEqual([]);
+    expect(result.kind).toBe('eoaWithdraw');
+    expect(codes(result.checks)).toEqual(['VALIDATOR_STATUS_UNCHECKED']);
     expect(result.request.data).toHaveLength(2 + 2 * 56);
   });
 
@@ -92,7 +91,14 @@ describe('withdrawals.prepareEoaWithdraw', () => {
     it('passes when the credentials point at the sender', async () => {
       restore = mockBeacon(
         [],
-        [registryRow(PUBKEY_A, 'active_ongoing', credentials('02', OWNER))],
+        [
+          registryRow(
+            PUBKEY_A,
+            'active_ongoing',
+            credentials('02', OWNER),
+            40n * ETH,
+          ),
+        ],
       );
       const result = await prepareEoaWithdraw(ovmChain().context(), {
         pubkey: PUBKEY_A,
@@ -103,37 +109,100 @@ describe('withdrawals.prepareEoaWithdraw', () => {
       expect(result.checks).toEqual([]);
     });
 
-    it('warns WITHDRAW_CREDENTIALS_NOT_SENDER, partial without 0x02, not active', async () => {
-      restore = mockBeacon(
-        [],
-        [registryRow(PUBKEY_A, 'pending_queued', credentials('01', OTHER))],
-      );
-      const result = await prepareEoaWithdraw(
-        ovmChain({ walletAccount: OWNER }).context(),
-        {
-          pubkey: PUBKEY_A,
-          amount: ETH,
-          beaconUrl: BEACON_URL,
-        },
-      );
-      expect(codes(result.checks)).toEqual([
-        'WITHDRAW_CREDENTIALS_NOT_SENDER',
-        'WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING',
-        'WITHDRAW_VALIDATOR_NOT_ACTIVE',
-      ]);
-    });
-
-    it('skips the sender check without a sender', async () => {
+    it('rejects credentials of another address (CREDENTIALS_NOT_SOURCE)', async () => {
       restore = mockBeacon(
         [],
         [registryRow(PUBKEY_A, 'active_ongoing', credentials('02', OTHER))],
+      );
+      const error = await caught(
+        prepareEoaWithdraw(ovmChain({ walletAccount: OWNER }).context(), {
+          pubkey: PUBKEY_A,
+          amount: 0n,
+          acknowledgeFullExit: true,
+          beaconUrl: BEACON_URL,
+        }),
+      );
+      expect(error).toMatchObject({
+        code: 'CREDENTIALS_NOT_SOURCE',
+        details: { source: OWNER },
+      });
+    });
+
+    it('applies the partial rules and caps to the excess', async () => {
+      restore = mockBeacon(
+        [],
+        [
+          registryRow(
+            PUBKEY_A,
+            'active_ongoing',
+            credentials('01', OWNER),
+            40n * ETH,
+          ),
+        ],
+      );
+      expect(
+        (
+          await caught(
+            prepareEoaWithdraw(ovmChain().context(), {
+              pubkey: PUBKEY_A,
+              amount: ETH,
+              from: OWNER,
+              beaconUrl: BEACON_URL,
+            }),
+          )
+        ).code,
+      ).toBe('PARTIAL_REQUIRES_COMPOUNDING');
+      restore();
+      restore = mockBeacon(
+        [],
+        [
+          registryRow(
+            PUBKEY_A,
+            'active_ongoing',
+            credentials('02', OWNER),
+            33n * ETH,
+          ),
+        ],
+      );
+      const capped = await prepareEoaWithdraw(ovmChain().context(), {
+        pubkey: PUBKEY_A,
+        amount: 5n * ETH,
+        from: OWNER,
+        beaconUrl: BEACON_URL,
+      });
+      expect(capped.preview).toMatchObject({
+        amount: ETH,
+        requestedAmount: 5n * ETH,
+      });
+      expect(capped.request.data).toBe(
+        concat([PUBKEY_A, numberToHex(GWEI, { size: 8 })]),
+      );
+      expect(codes(capped.checks)).toEqual(['WITHDRAW_AMOUNT_CAPPED']);
+    });
+
+    it('reports the credentials unchecked without a sender', async () => {
+      restore = mockBeacon(
+        [],
+        [
+          registryRow(
+            PUBKEY_A,
+            'active_ongoing',
+            credentials('02', OTHER),
+            40n * ETH,
+          ),
+        ],
       );
       const result = await prepareEoaWithdraw(ovmChain().context(), {
         pubkey: PUBKEY_A,
         amount: ETH,
         beaconUrl: BEACON_URL,
       });
-      expect(result.checks).toEqual([]);
+      expect(result.checks).toEqual([
+        expect.objectContaining({
+          code: 'VALIDATOR_STATUS_UNCHECKED',
+          details: { checks: ['credentials'] },
+        }),
+      ]);
     });
   });
 

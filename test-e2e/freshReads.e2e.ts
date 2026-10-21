@@ -12,16 +12,17 @@ import {
   parseAbi,
   parseEther,
 } from 'viem';
-import { hoodi } from 'viem/chains';
+
 import { createObolClient } from '../src/index.js';
 import { OVM_ROLES } from '../src/ovm/index.js';
 import {
   ANVIL_URL,
   codes,
   describeFork,
-  HOODI,
+  NET,
   impersonate,
   publicClient,
+  CHAIN,
   randomAddress,
   signer,
   type Signer,
@@ -30,7 +31,7 @@ import { deployOvm } from './helpers/ovm.js';
 
 const appClient = () =>
   createPublicClient({
-    chain: hoodi,
+    chain: CHAIN,
     transport: http(ANVIL_URL),
     cacheTime: 30_000,
   });
@@ -47,7 +48,7 @@ describeFork(
     test('ovm.verify sees an OVM created in the latest block', async () => {
       const client = appClient();
       const obol = createObolClient({
-        chain: hoodi,
+        chain: CHAIN,
         publicClient: client,
         walletClient: s.walletClient,
         api: false,
@@ -76,7 +77,7 @@ describeFork(
       const d = await deployOvm(s);
       const client = appClient();
       const obol = createObolClient({
-        chain: hoodi,
+        chain: CHAIN,
         publicClient: client,
         walletClient: s.walletClient,
         api: false,
@@ -112,7 +113,7 @@ describeFork(
           async hash => await publicClient.waitForTransactionReceipt({ hash }),
         );
       const obol = createObolClient({
-        chain: hoodi,
+        chain: CHAIN,
         publicClient: appClient(),
         walletClient: s.walletClient,
         api: false,
@@ -122,7 +123,7 @@ describeFork(
       const hash = await paused.walletClient.sendTransaction({
         account: recipient,
         chain: paused.walletClient.chain,
-        to: HOODI.warehouse,
+        to: NET.warehouse,
         data: encodeFunctionData({
           abi: parseAbi([
             'function setWithdrawConfig((uint16 incentive, bool paused) config)',

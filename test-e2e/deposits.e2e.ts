@@ -20,7 +20,7 @@ import {
   depositCount,
   describeFork,
   expectCode,
-  HOODI,
+  NET,
   littleEndian,
   makeDeposit,
   publicClient,
@@ -54,7 +54,7 @@ const depositEvents = (
 }> =>
   receipt.logs
     .filter(
-      log => log.address.toLowerCase() === HOODI.depositContract.toLowerCase(),
+      log => log.address.toLowerCase() === NET.depositContract.toLowerCase(),
     )
     .map(log => {
       const { args } = decodeEventLog({
@@ -82,7 +82,7 @@ const expectEventFor = (
   });
 };
 
-describeFork('deposits.prepareDeposit on a Hoodi fork', () => {
+describeFork('deposits.prepareDeposit', () => {
   let s: Signer;
   let deployed: DeployedOvm;
 
@@ -126,7 +126,7 @@ describeFork('deposits.prepareDeposit on a Hoodi fork', () => {
       expectEventFor(events[0], deposit);
       expect(await depositCount()).toBe(countBefore + 1n);
       expect(await stakeOf(deployed.ovm)).toBe(stakeBefore + amount);
-      const state = await s.obol.ovm.getState(deployed.ovm);
+      const state = (await s.obol.ovm.getState(deployed.ovm))!;
       expect(state.amountOfPrincipalStake).toBe(stakeBefore + amount);
       // The ETH went to the deposit contract, not the OVM.
       expect(state.balance).toBe(0n);
@@ -150,7 +150,7 @@ describeFork('deposits.prepareDeposit on a Hoodi fork', () => {
     expect(prepared).toHaveLength(1);
     const [tx] = prepared;
     expect(tx.request).toMatchObject({
-      to: HOODI.batchDeposit,
+      to: NET.batchDeposit,
       value: parseEther('72'),
     });
     expect(tx.preview).toEqual({
@@ -320,12 +320,12 @@ describeFork('deposits.prepareDeposit on a Hoodi fork', () => {
   });
 
   test('via a contract the OVM factory did not create: OVM_NOT_OBOL', async () => {
-    const deposit = makeDeposit({ withdrawalAddress: HOODI.warehouse });
+    const deposit = makeDeposit({ withdrawalAddress: NET.warehouse });
     await expectCode(
       async () =>
         await s.obol.deposits.prepareDeposit({
           deposits: [deposit],
-          via: { ovm: HOODI.warehouse },
+          via: { ovm: NET.warehouse },
         }),
       'OVM_NOT_OBOL',
     );

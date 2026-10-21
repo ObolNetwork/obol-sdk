@@ -12,7 +12,7 @@ import {
   scanLogs,
 } from '../chainUtils.js';
 import { requireApi, type Context } from '../context.js';
-import { ObolError } from '../errors.js';
+import { isObolError, ObolError } from '../errors.js';
 import { checksum, decode, sameAddress, T } from '../schema.js';
 import type { Finding, Source } from '../types.js';
 import { ETH } from '../units.js';
@@ -21,7 +21,7 @@ import {
   type DepositStatusName,
 } from '../deposits/status.js';
 import { fetchOvmApiRecord, type OvmApiRecord } from './apiRecord.js';
-import { readMany, type ReadCall } from './multicall.js';
+import { readMany, type ReadCall } from '../multicall.js';
 import { ovmReadFailed, readOvmCore } from './read.js';
 import { ovmRouting, roleNames, type OvmRoleName } from './routing.js';
 
@@ -67,6 +67,9 @@ export const publicForwarderFindings = (
       `${exposed.map(describe).join('; ')}: anyone can call the role-gated functions through it`,
       {
         hint: 'Revoke the roles (or transfer ownership) from the forwarder now',
+        ...(exposed.length === 1
+          ? { subject: { address: exposed[0].address } }
+          : {}),
         details: {
           holders: exposed.map(h => ({
             address: h.address,
@@ -102,8 +105,12 @@ export interface OvmState {
   distributable: bigint;
   principalPayout: bigint;
   rewardPayout: bigint;
-  /** API only: ETH the beacon chain credited to this OVM's validators minus principal paid out. */
-  principalOnBeaconChain?: bigint;
+  /**
+   * ETH the beacon chain credited to this OVM's validators minus principal
+   * paid out (wei), from the Obol API. `null` when the API was asked and had
+   * no value (or failed); absent with `api: false`.
+   */
+  principalOnBeaconChain?: bigint | null;
   findings: Finding[];
   /** `api` when the API supplied `principalOnBeaconChain`; every other value is read on chain. */
   source: Source;
@@ -112,22 +119,32 @@ export interface OvmState {
 const MISMATCH_TOLERANCE = ETH;
 
 /**
- * ovm.getState (`api+chain`): the OVM getters, balance and block number in
+ * ovm.getState (`api+chain`): null when the address is not an OVM (no code,
+ * or the OVM getters revert); it checks the shape of the contract, never
+ * its origin: a look-alike passes, so provenance is only `ovm.verify`. A
+ * failed read throws (CHAIN_READ_FAILED). Otherwise the OVM getters, balance
+ * and block number in
  * one Multicall3 read, the recipients' pull balances (and the chain's public
  * forwarders' `rolesOf`) at that block, and the routing `distributeFunds()`
  * would apply now. PUBLIC_FORWARDER_HOLDS_ROLE when a public forwarder is
  * the owner or holds a role. With the API, compares
  * `amountOfPrincipalStake` with the API's `principalOnBeaconChain` and adds
- * `PRINCIPAL_STAKE_MISMATCH` when they differ by more than 1 ETH. Does not
- * check provenance (use `verify`). OVM_READ_FAILED if a getter fails.
+ * `PRINCIPAL_STAKE_MISMATCH` when they differ by more than 1 ETH.
  */
 export const getOvmState = async (
   ctx: Context,
-  input: Address,
-): Promise<OvmState> => {
+  input: string,
+): Promise<OvmState | null> => {
   const ovm = checksum(decode(T.Address, input, 'ovm'));
   const { publicForwarders } = requireContracts(ctx.chain.id, 'ovm.getState');
-  const core = await readOvmCore(ctx, ovm);
+  let core;
+  try {
+    core = await readOvmCore(ctx, ovm);
+  } catch (error) {
+    // The batch was read and the getters reverted: not an OVM.
+    if (isObolError(error, 'OVM_READ_FAILED')) return null;
+    throw error;
+  }
   // Pull balances and the public forwarders' roles in one read at that block.
   const read = (functionName: string, account: Address): ReadCall => ({
     address: ovm,
@@ -151,13 +168,14 @@ export const getOvmState = async (
   });
   const routing = ovmRouting(core);
 
-  let principalOnBeaconChain: bigint | undefined;
+  let principalOnBeaconChain: bigint | null | undefined;
   if (ctx.api !== null) {
     try {
-      principalOnBeaconChain = (await fetchOvmApiRecord(ctx, ovm))
-        .principalOnBeaconChain;
+      principalOnBeaconChain =
+        (await fetchOvmApiRecord(ctx, ovm)).principalOnBeaconChain ?? null;
     } catch {
-      // Display enrichment only: without it the value is absent.
+      // Display enrichment only: asked, no answer.
+      principalOnBeaconChain = null;
     }
   }
   const findings: Finding[] = publicForwarderFindings(
@@ -171,7 +189,7 @@ export const getOvmState = async (
       };
     }),
   );
-  if (principalOnBeaconChain !== undefined) {
+  if (typeof principalOnBeaconChain === 'bigint') {
     const diff = core.amountOfPrincipalStake - principalOnBeaconChain;
     if (diff > MISMATCH_TOLERANCE || -diff > MISMATCH_TOLERANCE) {
       findings.push(
@@ -181,6 +199,7 @@ export const getOvmState = async (
           `amountOfPrincipalStake (${core.amountOfPrincipalStake} wei) differs by more than 1 ETH from the principal the beacon chain credited to this OVM's validators (${principalOnBeaconChain} wei)`,
           {
             hint: 'Review deposits made via OVM.deposit; the owner can correct it with prepareSetAmountOfPrincipalStake',
+            subject: { address: ovm },
             details: {
               amountOfPrincipalStake: core.amountOfPrincipalStake,
               principalOnBeaconChain,
@@ -209,7 +228,7 @@ export const getOvmState = async (
     ...routing,
     ...(principalOnBeaconChain !== undefined ? { principalOnBeaconChain } : {}),
     findings,
-    source: principalOnBeaconChain !== undefined ? 'api' : 'chain',
+    source: typeof principalOnBeaconChain === 'bigint' ? 'api' : 'chain',
   };
 };
 
@@ -260,7 +279,7 @@ const [ROLES_UPDATED_TOPIC] = encodeEventTopics({
  */
 export const getOvmRoleHolders = async (
   ctx: Context,
-  input: Address,
+  input: string,
 ): Promise<OvmRoleHolders> => {
   const ovm = checksum(decode(T.Address, input, 'ovm'));
   const { ovmFactory, publicForwarders } = requireContracts(
@@ -268,16 +287,7 @@ export const getOvmRoleHolders = async (
     'ovm.getRoleHolders',
   );
   const deployBlock = ovmFactory.deployBlock;
-  let head: bigint;
-  try {
-    head = await latestBlockNumber(ctx.publicClient);
-  } catch (cause) {
-    throw new ObolError(
-      'CHAIN_READ_FAILED',
-      'Could not read the block number',
-      { hint: 'Retry, or use another RPC', cause },
-    );
-  }
+  const head = await latestBlockNumber(ctx.publicClient);
 
   const candidates = new Map<string, Address>();
   const addFromLogs = (logs: unknown[]): void => {
@@ -359,6 +369,7 @@ export const getOvmRoleHolders = async (
         {
           hint: 'Retry later, or use an RPC that serves eth_getLogs over 50,000 blocks',
           cause,
+          details: { address: ovm },
         },
       );
     }
@@ -416,11 +427,20 @@ export const getOvmRoleHolders = async (
 
 export interface OvmValidator {
   pubkey: Hex;
-  lockHash?: Hex;
+  /** The lock it belongs to; null when the API knows no lock for it. */
+  lockHash: Hex | null;
   status: DepositStatusName;
-  beaconStatus?: string;
-  balance?: bigint;
+  /** The raw beacon status; null for `new` (in a lock, no deposit seen). */
+  beaconStatus: string | null;
+  /** wei; null when the API has no balance for it. */
+  balance: bigint | null;
   withdrawalCredentials: Hex;
+}
+
+export interface OvmValidators {
+  validators: OvmValidator[];
+  /** The block the API record was read at; null when the API does not say. */
+  blockNumber: bigint | null;
 }
 
 const statusUnavailable = (message: string): ObolError =>
@@ -462,10 +482,10 @@ const parseValidator = (raw: unknown, index: number): OvmValidator => {
   }
   return {
     pubkey: pubkey as Hex,
-    ...(lockHash !== undefined ? { lockHash: lockHash as Hex } : {}),
+    lockHash: (lockHash ?? null) as Hex | null,
     status,
-    ...(beaconStatus !== undefined ? { beaconStatus } : {}),
-    ...(balance !== undefined ? { balance } : {}),
+    beaconStatus: beaconStatus ?? null,
+    balance: balance ?? null,
     withdrawalCredentials: credentials as Hex,
   };
 };
@@ -478,8 +498,8 @@ const parseValidator = (raw: unknown, index: number): OvmValidator => {
  */
 export const getOvmValidators = async (
   ctx: Context,
-  input: Address,
-): Promise<{ validators: OvmValidator[]; blockNumber?: bigint }> => {
+  input: string,
+): Promise<OvmValidators> => {
   const ovm = checksum(decode(T.Address, input, 'ovm'));
   requireApi(ctx, 'ovm.getValidators');
   requireContracts(ctx.chain.id, 'ovm.getValidators');
@@ -488,9 +508,5 @@ export const getOvmValidators = async (
     throw statusUnavailable('The Obol API OVM record has no validators list');
   }
   const validators = record.validators.map(parseValidator);
-  const blockNumber = record.blockNumber;
-  return {
-    validators,
-    ...(blockNumber !== undefined ? { blockNumber } : {}),
-  };
+  return { validators, blockNumber: record.blockNumber ?? null };
 };

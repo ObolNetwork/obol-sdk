@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/deposits.status.options.json",
+  "title": "deposits.status.options",
+  "additionalProperties": false,
+  "properties": {
+    "beaconUrl": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "expectedWithdrawalAddress": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "lockHash": {
+      "description": "32-byte hex",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}

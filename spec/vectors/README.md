@@ -52,6 +52,10 @@ Encoding inside the files:
   `src/splits/distribution.ts`), unreleased. The `prepare` cases ran `prepareDistribution` against a fake provider that
   answers like `test/splits/distribution.spec.ts` `makeChain`, so the chain state in each `input` is exactly what the
   code saw.
+- 3.0.0-rc.4 re-ran the accepted `distribution.json` `prepare` cases on the v3 `prepareDistribution`
+  (`VECTORS_REBASELINE=1` with `test/vectors/distribution.spec.ts`): the expected `calls`, `preview` (every field) and
+  `checks` (finding codes) are now v3's, and each case where v3 differs from 2.16 on purpose says why in `notes` (the
+  RAF withdrawn by default, `RAF_LEFT_IN_WAREHOUSE`). The runners compare every output field, not a subset.
 
 Cases mirror the existing unit tests, plus boundary pairs (at the limit, one over) and a few cases added to pin a rule
 the tests leave implicit (address order by numeric value, a seven-recipient Split Everything remainder). The

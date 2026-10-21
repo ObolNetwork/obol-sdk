@@ -1,5 +1,6 @@
 /**
- * Shared helpers for the Hoodi fork suites: viem clients on the anvil that
+ * Shared helpers for the fork suites (Hoodi, or mainnet with
+ * E2E_CHAIN=mainnet): viem clients on the anvil that
  * globalSetup.cjs started, funded signers, an SDK client per signer, and
  * small chain readers used to compare SDK previews with what was mined.
  */
@@ -26,15 +27,21 @@ import {
   privateKeyToAccount,
   type Account,
 } from 'viem/accounts';
-import { hoodi } from 'viem/chains';
-import { createObolClient, type ObolClient } from '../../src/index.js';
-import type { Deposit, Finding, Prepared } from '../../src/types.js';
+import { hoodi, mainnet } from 'viem/chains';
+import { CHAINS, createObolClient, type ObolClient } from '../../src/index.js';
+import type { AnyPrepared, Deposit, Finding } from '../../src/types.js';
 import {
   depositDomainForFork,
   depositSigningRoot,
 } from '../../src/internal/verification/common.js';
 import { depositDataRoot } from '../../src/deposits/verifyDepositData.js';
 import { GWEI } from '../../src/units.js';
+
+/** The forked chain: Hoodi (default) or mainnet (E2E_CHAIN=mainnet). */
+export const E2E_CHAIN: 'hoodi' | 'mainnet' =
+  process.env.E2E_CHAIN === 'mainnet' ? 'mainnet' : 'hoodi';
+export const CHAIN = E2E_CHAIN === 'mainnet' ? mainnet : hoodi;
+export const ON_MAINNET = E2E_CHAIN === 'mainnet';
 
 export const SKIP_REASON =
   process.env.E2E_SKIP_REASON ??
@@ -44,12 +51,22 @@ export const SKIP_REASON =
 export const ANVIL_URL = process.env.E2E_ANVIL_URL ?? 'http://127.0.0.1:0';
 export const FORK_BLOCK = BigInt(process.env.E2E_FORK_BLOCK ?? '0');
 
-/** `describe`, or `describe.skip` with the reason when there is no fork. */
-export const describeFork = (name: string, fn: () => void): void => {
+/**
+ * `describe` on the forked chain, or `describe.skip` with the reason when
+ * there is no fork (or the suite is for the other chain: `only`).
+ */
+export const describeFork = (
+  name: string,
+  fn: () => void,
+  only?: 'hoodi' | 'mainnet',
+): void => {
+  const title = `${name} (${E2E_CHAIN} fork)`;
   if (SKIP_REASON !== undefined) {
-    describe.skip(`${name} (skipped: ${SKIP_REASON})`, fn);
+    describe.skip(`${title} (skipped: ${SKIP_REASON})`, fn);
+  } else if (only !== undefined && only !== E2E_CHAIN) {
+    describe.skip(`${title} (skipped: ${only} only)`, fn);
   } else {
-    describe(name, fn);
+    describe(title, fn);
   }
 };
 
@@ -95,32 +112,36 @@ const transport = (): Transport => {
 };
 
 export const publicClient: PublicClient = createPublicClient({
-  chain: hoodi,
+  chain: CHAIN,
   transport: transport(),
   pollingInterval: 100,
 });
 
 export const testClient = createTestClient({
   mode: 'anvil',
-  chain: hoodi,
+  chain: CHAIN,
   transport: transport(),
 });
 
-export const HOODI = {
-  ovmFactory: '0x5754C8665B7e7BF15E83fCdF6d9636684B782b12',
-  pullSplitFactory: '0x5cbA88D55Cec83caD5A105Ad40C8c9aF20bE21d1',
-  warehouse: '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8',
-  multicall3: '0xcA11bde05977b3631167028862bE2a173976CA11',
-  withdrawalRequest: '0x00000961Ef480Eb55e80D19ad83579A64c007002',
-  consolidationRequest: '0x0000BBdDc7CE488642fb579F8B00f3a590007251',
-  batchDeposit: '0x4c9506eE2fCd962f03022D9d8ebf6f7828abEfaf',
+const contracts = CHAINS[CHAIN.id].contracts!;
+
+/** The forked chain's contracts (from the SDK chain table) and a few more. */
+export const NET = {
+  ovmFactory: contracts.ovmFactory.address,
+  pullSplitFactory: contracts.pullSplitFactory,
+  warehouse: contracts.warehouse,
+  multicall3: contracts.multicall3,
+  withdrawalRequest: contracts.withdrawalRequest,
+  consolidationRequest: contracts.consolidationRequest,
+  batchDeposit: contracts.batchDeposit,
+  rafRecipient: contracts.rafRecipient,
+  // The same addresses on mainnet and Hoodi.
   depositContract: '0x00000000219ab540356cBB839Cbe05303d7705Fa',
-  rafRecipient: '0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5',
   safeProxyFactory: '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67',
   safeSingleton: '0x41675C099F32341bf84BFc5382aF534df5C7461a',
 } as const satisfies Record<string, Address>;
 
-export const FORK_VERSION_HOODI = '0x10000910';
+export const FORK_VERSION = CHAINS[CHAIN.id].forkVersion;
 
 const MNEMONIC = 'test test test test test test test test test test test junk';
 
@@ -136,7 +157,7 @@ export const obolFor = (
   api: Parameters<typeof createObolClient>[0]['api'] = false,
 ): ObolClient =>
   createObolClient({
-    chain: hoodi,
+    chain: CHAIN,
     publicClient,
     ...(walletClient !== undefined ? { walletClient } : {}),
     api,
@@ -156,7 +177,7 @@ export const signer = async (index: number): Promise<Signer> => {
   });
   const walletClient = createWalletClient({
     account,
-    chain: hoodi,
+    chain: CHAIN,
     transport: transport(),
   });
   return {
@@ -173,7 +194,7 @@ export const impersonate = async (address: Address): Promise<Signer> => {
   await testClient.setBalance({ address, value: parseEther('10000') });
   const walletClient = createWalletClient({
     account: address,
-    chain: hoodi,
+    chain: CHAIN,
     transport: transport(),
   });
   return {
@@ -205,7 +226,7 @@ export const gasCost = (receipt: TransactionReceipt): bigint =>
 /** `obol.send` then `wait`; returns the receipt (wait throws on revert). */
 export const sendAndWait = async (
   obol: ObolClient,
-  prepared: Prepared<unknown>,
+  prepared: AnyPrepared,
 ): Promise<TransactionReceipt> => {
   const sent = await obol.send(prepared);
   return await sent.wait({ timeoutMs: 120_000 });
@@ -251,7 +272,7 @@ export const blsPubkey = (secret: bigint): Hex =>
   hex(bls12_381.G1.Point.BASE.multiply(secret).toBytes());
 
 /**
- * A deposit for a fresh validator key, signed in the Hoodi deposit domain:
+ * A deposit for a fresh validator key, signed in the chain's deposit domain:
  * credentials `prefix ‖ 11 zero bytes ‖ withdrawalAddress`.
  */
 export const makeDeposit = (args: {
@@ -272,7 +293,7 @@ export const makeDeposit = (args: {
       withdrawal_credentials: withdrawalCredentials,
       amount: amountGwei.toString(),
     },
-    depositDomainForFork(FORK_VERSION_HOODI),
+    depositDomainForFork(FORK_VERSION),
   );
   const signature = hex(
     ls.Signature.toBytes(ls.hash(root, DST).multiply(secret)),
@@ -314,7 +335,7 @@ export const littleEndian = (bytes: Hex): bigint => {
 export const depositCount = async (blockNumber?: bigint): Promise<bigint> =>
   littleEndian(
     await publicClient.readContract({
-      address: HOODI.depositContract,
+      address: NET.depositContract,
       abi: depositContractAbi,
       functionName: 'get_deposit_count',
       ...(blockNumber !== undefined ? { blockNumber } : {}),

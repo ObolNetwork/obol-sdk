@@ -2,7 +2,7 @@
 import { Type } from '@sinclair/typebox';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { multicall3Abi } from '../abi.js';
-import { finding, prepared } from '../chainUtils.js';
+import { finding, latestBlockNumber, prepared } from '../chainUtils.js';
 import { requireContracts, type Context } from '../context.js';
 import {
   checksum,
@@ -13,12 +13,9 @@ import {
   ZERO_ADDRESS,
 } from '../schema.js';
 import type { Finding, Prepared, SplitParams } from '../types.js';
+import { EXPECTED_CODE_HASHES, requireExpectedCode } from '../splits/chain.js';
 import {
-  EXPECTED_CODE_HASHES,
-  headBlock,
-  requireExpectedCode,
-} from '../splits/chain.js';
-import {
+  CreateSplitInputSchema,
   DEFAULT_SPLIT_SALT,
   encodeCreateSplit,
   predictSplit,
@@ -32,39 +29,50 @@ import {
   refuseOvmForwarders,
 } from './ovm.js';
 
-const SplitSpecSchema = Type.Object({
-  recipients: Type.Unknown(),
-  distributionIncentive: Type.Optional(Type.Unknown()),
-  owner: Type.Optional(T.Address),
-  salt: Type.Optional(T.Hash32),
-});
+const SplitSpecSchema = Type.Object(
+  {
+    recipients: CreateSplitInputSchema.properties.recipients,
+    distributionIncentive:
+      CreateSplitInputSchema.properties.distributionIncentive,
+    owner: Type.Optional(T.Address),
+    salt: Type.Optional(T.Hash32),
+  },
+  { additionalProperties: false },
+);
 
-const Recipient = Type.Object({
-  split: Type.Optional(SplitSpecSchema),
-  address: Type.Optional(T.Address),
-});
+const Recipient = Type.Object(
+  {
+    split: Type.Optional(SplitSpecSchema),
+    address: Type.Optional(T.Address),
+  },
+  { additionalProperties: false },
+);
 
-const OvmWithSplitsInputSchema = Type.Object({
-  owner: T.Address,
-  principalThreshold: Type.Optional(T.Wei),
-  reward: Recipient,
-  principal: Recipient,
-});
+export const OvmWithSplitsInputSchema = Type.Object(
+  {
+    owner: T.Address,
+    principalThreshold: Type.Optional(T.Wei),
+    reward: Recipient,
+    principal: Recipient,
+  },
+  { additionalProperties: false },
+);
 
 export interface SplitSpec {
   recipients: ShareRecipient[];
   /** ppm, default 0. */
   distributionIncentive?: number;
   /** The split's owner; default the zero address (immutable). */
-  owner?: Address;
-  salt?: Hex;
+  owner?: string;
+  /** 32-byte hex; default DEFAULT_SPLIT_SALT. */
+  salt?: string;
 }
 
 /** A recipient of the OVM: a split to create (or reuse), or any address. */
-export type OvmRecipientInput = { split: SplitSpec } | { address: Address };
+export type OvmRecipientInput = { split: SplitSpec } | { address: string };
 
 export interface OvmWithSplitsInput {
-  owner: Address;
+  owner: string;
   /** wei; default 16 ETH. */
   principalThreshold?: bigint;
   reward: OvmRecipientInput;
@@ -99,7 +107,7 @@ interface Side {
 export const prepareOvmWithSplits = async (
   ctx: Context,
   input: OvmWithSplitsInput,
-): Promise<Prepared<OvmWithSplitsPreview>> => {
+): Promise<Prepared<'ovmWithSplits'>> => {
   const d = decode(OvmWithSplitsInputSchema, input);
   const contracts = requireContracts(
     ctx.chain.id,
@@ -122,7 +130,7 @@ export const prepareOvmWithSplits = async (
     }
   }
 
-  const blockNumber = await headBlock(ctx);
+  const blockNumber = await latestBlockNumber(ctx.publicClient);
   const resolve = async (key: 'reward' | 'principal'): Promise<Side> => {
     const side = d[key];
     const p = params[key];
@@ -200,6 +208,7 @@ export const prepareOvmWithSplits = async (
           'info',
           `The split ${side.address} already exists and is reused`,
           {
+            subject: { address: side.address },
             details: { address: side.address },
           },
         ),
@@ -226,7 +235,7 @@ export const prepareOvmWithSplits = async (
   };
   const createOvm = encodeCreateOvm(ovmInput);
   if (creates.length === 0) {
-    return prepared(ctx, {
+    return prepared(ctx, 'ovmWithSplits', {
       to: contracts.ovmFactory.address,
       data: createOvm,
       checks,
@@ -246,7 +255,7 @@ export const prepareOvmWithSplits = async (
       callData: createOvm,
     },
   ];
-  return prepared(ctx, {
+  return prepared(ctx, 'ovmWithSplits', {
     to: contracts.multicall3,
     data: encodeFunctionData({
       abi: multicall3Abi,

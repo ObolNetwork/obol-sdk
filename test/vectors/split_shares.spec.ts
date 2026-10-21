@@ -13,7 +13,7 @@ describe('vectors: split_shares', () => {
       '%s',
       async (_n, c) => {
         if (c.accepted) {
-          expect(percent(c.input.percent)).toBe(c.shares);
+          expect(percent(c.input.percent)).toBe(BigInt(c.shares));
         } else {
           expect((await caught(() => percent(c.input.percent))).code).toBe(
             c.reason,
@@ -46,9 +46,12 @@ describe('vectors: split_shares', () => {
           return;
         }
         const result = run();
-        expect(norm(result.rewardSplit)).toEqual(norm(c.rewardSplit));
-        expect(norm(result.principalSplit ?? null)).toEqual(
-          norm(c.principalSplit),
+        // The whole result is compared, not a subset.
+        expect(norm({ principalSplit: null, ...result })).toEqual(
+          norm({
+            rewardSplit: c.rewardSplit,
+            principalSplit: c.principalSplit,
+          }),
         );
         // Outputs are checksummed exactly as the vector.
         expect(result.rewardSplit.recipients).toEqual(c.rewardSplit.recipients);

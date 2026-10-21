@@ -102,7 +102,7 @@ describe('simulate: recorded operations', () => {
       ] as const) {
         expect(trace[key]).toEqual(v1[key]);
       }
-      expect(v1.gasUsed).toBeGreaterThan(21_000n);
+      expect(v1.gas.used).toBeGreaterThan(21_000n);
     },
   );
 
@@ -145,8 +145,12 @@ describe('simulate: recorded operations', () => {
     const { R1, R2 } = rec.meta;
     for (const r of [R1, R2]) {
       const row = preview.recipients.find((x: any) => x.address === r);
-      expect(eth(sim, r)).toBe(row.toWallet);
-      expect(row.toWallet).toBeGreaterThan(parseEther('0.59'));
+      // The Warehouse withdrawal: this distribution's credit plus what was
+      // already waiting, less the 1 wei the Warehouse keeps.
+      expect(eth(sim, r)).toBe(
+        row.fromThisDistribution + row.alreadyWaiting - 1n,
+      );
+      expect(eth(sim, r)).toBeGreaterThan(parseEther('0.59'));
     }
     const warehouse = sim.balanceChanges.filter(
       b => b.asset === 'WAREHOUSE_ETH',
@@ -484,7 +488,7 @@ describe('simulate: preview comparison', () => {
       {},
       {
         ...rec.prepared,
-        preview: undefined,
+        preview: undefined as never,
       },
     );
     expect((result as FullSimulation).matchesPreview).toEqual({

@@ -2,12 +2,11 @@
 import type { Address, Hex, TransactionReceipt } from 'viem';
 import type { OvmWithSplitsInput, OvmCreated } from '../../src/setup/index.js';
 import type { Prepared, SplitParams } from '../../src/types.js';
-import type { OvmWithSplitsPreview } from '../../src/setup/withSplits.js';
 import { randomAddress, sendAndWait, type Signer } from './fork.js';
 
 export interface DeployedOvm extends OvmCreated {
   input: OvmWithSplitsInput;
-  prepared: Prepared<OvmWithSplitsPreview>;
+  prepared: Prepared<'ovmWithSplits'>;
   receipt: TransactionReceipt;
   rewardSplit: SplitParams;
   recipients: Array<{ address: Address; share: bigint }>;

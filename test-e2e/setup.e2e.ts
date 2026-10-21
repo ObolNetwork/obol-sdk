@@ -8,7 +8,7 @@ import { hashSplitParams } from '../src/splits/index.js';
 import {
   codes,
   describeFork,
-  HOODI,
+  NET,
   publicClient,
   randomAddress,
   sendAndWait,
@@ -26,7 +26,7 @@ const ovmReadAbi = parseAbi([
 ]);
 const splitAbi = parseAbi(['function splitHash() view returns (bytes32)']);
 
-describeFork('setup.prepareOvmWithSplits on a Hoodi fork', () => {
+describeFork('setup.prepareOvmWithSplits', () => {
   let s: Signer;
   let principal: Address;
   let deployed: DeployedOvm;
@@ -39,7 +39,7 @@ describeFork('setup.prepareOvmWithSplits on a Hoodi fork', () => {
   test('prepares a split create plus the OVM create through Multicall3', async () => {
     deployed = await deployOvm(s, { principalRecipient: principal });
     const { prepared } = deployed;
-    expect(prepared.request.to).toBe(HOODI.multicall3);
+    expect(prepared.request.to).toBe(NET.multicall3);
     expect(prepared.preview.rewardRecipient.created).toBe(true);
     expect(prepared.preview.principalRecipient).toEqual({
       address: principal,
@@ -88,21 +88,21 @@ describeFork('setup.prepareOvmWithSplits on a Hoodi fork', () => {
     expect(verification).toEqual({
       status: 'obol',
       source: 'chain',
-      factoryAddress: HOODI.ovmFactory,
+      factoryAddress: NET.ovmFactory,
       reason: expect.any(String),
       creationTxHash: deployed.receipt.transactionHash,
     });
   });
 
   test('ovm.verify reports notObol for a contract and an EOA the factory did not create', async () => {
-    const warehouse = await s.obol.ovm.verify(HOODI.warehouse);
+    const warehouse = await s.obol.ovm.verify(NET.warehouse);
     expect(warehouse).toMatchObject({ status: 'notObol', source: 'chain' });
     const eoa = await s.obol.ovm.verify(randomAddress());
     expect(eoa).toMatchObject({ status: 'notObol', source: 'chain' });
   });
 
   test('ovm.getState matches the setup inputs', async () => {
-    const state = await s.obol.ovm.getState(deployed.ovm);
+    const state = (await s.obol.ovm.getState(deployed.ovm))!;
     expect(state).toMatchObject({
       address: deployed.ovm,
       owner: s.address,
@@ -148,14 +148,14 @@ describeFork('setup.prepareOvmWithSplits on a Hoodi fork', () => {
     });
     expect(hashSplitParams(deployed.rewardSplit)).toBe(onChain);
     // The RAF recipient is in the split with 1%.
-    const raf = deployed.rewardSplit.recipients.indexOf(HOODI.rafRecipient);
+    const raf = deployed.rewardSplit.recipients.indexOf(NET.rafRecipient);
     expect(deployed.rewardSplit.allocations[raf]).toBe(10_000n);
   });
 
   test('splits.getSplit without params reads them from the SplitCreated log', async () => {
-    const split = await s.obol.splits.getSplit({
+    const split = (await s.obol.splits.getSplit({
       address: deployed.rewardRecipient,
-    });
+    }))!;
     expect(split.paramsSource).toBe('chain');
     expect(split.params).toEqual(deployed.rewardSplit);
     expect(hashSplitParams(split.params!)).toBe(split.splitHash);
@@ -176,7 +176,7 @@ describeFork('setup.prepareOvmWithSplits on a Hoodi fork', () => {
       ]),
     );
     // Nothing to create: the direct factory call.
-    expect(again.request.to).toBe(HOODI.ovmFactory);
+    expect(again.request.to).toBe(NET.ovmFactory);
     const receipt = await sendAndWait(s.obol, again);
     const second = s.obol.setup.ovmFromReceipt(receipt);
     expect(second.ovm).not.toBe(deployed.ovm);

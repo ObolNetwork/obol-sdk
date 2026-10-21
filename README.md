@@ -36,14 +36,24 @@ const obol = createObolClient({
 ```
 
 Every module is also exported as a namespace (`cluster`, `deposits`, `ovm`, `splits`, `setup`, `incentives`,
-`exits`, `terms`, `withdrawals`, `legacy`), so the pure functions (hashing, lock verification, share math, exit
-aggregation) work without a client.
+`exits`, `terms`, `withdrawals`, and `experimental` for `simulate` and `legacy`), so the pure functions (hashing, lock
+verification, share math, exit aggregation) work without a client. Each module is also its own entry point, so a page
+that needs one module loads only that one (a reads-only `ovm` import has no BLS or SSZ code):
+
+```typescript
+import { createObolContext, createOvmModule } from '@obolnetwork/obol-sdk/ovm';
+
+const ovm = createOvmModule(createObolContext({ chain: hoodi, publicClient }));
+const state = await ovm.getState(ovmAddress); // null when the address is not an OVM
+```
 
 ## Prepare, then send
 
 Writes are split in two. A `prepare*` operation runs every check, reads what it needs from the chain and the API,
-and returns `Prepared` values: an encoded `request` (`to`, `data`, `value`, `chainId`), non-blocking `checks`
-(findings with a `severity`) and a `preview`. Nothing is sent until you pass it to `send`, or to your own wallet
+and returns `Prepared` values: a `kind` (which operation), an encoded `request` (`to`, `data`, `value`, `chainId`),
+non-blocking `checks` (findings with a `severity` and, when about one item, a `subject`), a `preview` typed by
+`kind`, and the `blockNumber` it read (`isStale(prepared, head, maxAgeBlocks)` tells when to prepare again). Every
+`preview*` operation returns `{ preview, checks, blockNumber }`. Nothing is sent until you pass it to `send`, or to your own wallet
 layer (wagmi, a Safe, a relayer).
 
 ```typescript
@@ -65,13 +75,13 @@ for (const tx of prepared) {
 }
 ```
 
-To show what a transaction will do before the user signs it, simulate it. `simulate` runs the request on the node
-without sending it and returns the balance changes, events, state changes, plain-language `summary` lines and a
-comparison with the operation's own `preview`:
+To show what a transaction will do before the user signs it, simulate it (experimental: the result shape may still
+change). `simulate` runs the request on the node without sending it and returns the balance changes, gas, events,
+state changes, plain-language `summary` lines and a comparison with the operation's own `preview`:
 
 ```typescript
 const prepared = await obol.ovm.prepareDistribute({ ovm: ovmAddress });
-const sim = await obol.simulate(prepared, { from: account });
+const sim = await obol.experimental.simulate(prepared, { from: account });
 
 if (!sim.success) throw new Error(sim.summary[0]); // "Reverts: Unauthorized()"
 sim.summary.forEach(line => console.log(line));
@@ -95,7 +105,7 @@ try {
   await obol.deposits.fromLock(lock);
 } catch (error) {
   if (isObolError(error, 'LOCK_INVALID')) {
-    // do not deposit: error.details.step says which check failed
+    // do not deposit: error.details.step says which check failed (typed per code)
   }
 }
 ```
@@ -125,7 +135,8 @@ await obol.cluster.verifyLock(lock, { bls: blstBackend }); // 1k validators, ful
 
 What each operation checks, reads and returns, every error and finding code, and the test vectors are in
 [`spec/`](spec/README.md): [`operations.md`](spec/operations.md), [`errors.md`](spec/errors.md),
-[`lifecycles.md`](spec/lifecycles.md) and [`vectors/`](spec/vectors/README.md). A migration guide from 2.x follows.
+[`lifecycles.md`](spec/lifecycles.md), [`schemas/`](spec/schemas/) and [`vectors/`](spec/vectors/README.md). Moving
+from 2.x, or from an earlier 3.0 release candidate: [MIGRATION.md](MIGRATION.md).
 
 ## Terms and Conditions
 
@@ -136,7 +147,8 @@ accepted once per address: `obol.terms.hasAccepted()` and `obol.terms.accept()`.
 
 - **API host:** `api.baseUrl` must be one of `https://api.obol.tech`, `https://obol-api-nonprod-dev.dev.obol.tech`
   or `https://obol-api-nonprod-qa.dev.obol.tech`, because EIP-712 signatures are sent to it as bearer tokens. Any
-  other value throws `INVALID_BASE_URL`.
+  other value throws `BASE_URL_INVALID`, except `http(s)://localhost[:port]` and `http(s)://127.0.0.1[:port]` with
+  `api: { baseUrl, allowLocal: true }`, for a local obol-api.
 - **Keys:** the SDK never sees private keys; it uses the viem `walletClient` you pass. Keep backend keys in a KMS or
   HSM and never commit them.
 

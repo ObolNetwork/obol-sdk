@@ -2,6 +2,112 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.4](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.3...v3.0.0-rc.4)
+
+> 21 October 2026
+
+Freezes the public shape before 3.0 and hardens behaviour. **Pin this release exactly: it breaks rc.3 call sites.**
+After rc.4 only additive changes are planned until 3.0. [MIGRATION.md](MIGRATION.md) has before / after snippets.
+
+**Breaking**
+
+- `Prepared` has a `kind` discriminant (`deposit`, `withdraw`, `consolidate`, `distribute`, `distribution`,
+  `createOvm`, `ovmWithSplits`, `createSplit`, `claim`, `eoaWithdraw`, `role`, `ownership`, `recipient`,
+  `principalStake`, `sweep`, `withdrawPullBalance`, `recoverFunds`) and is typed `Prepared<K>` with
+  `preview: PreviewByKind[K]`; `AnyPrepared` is the union. `send` and `simulate` take `AnyPrepared` and refuse a value
+  without a known `kind` (`PREPARED_INVALID`).
+- One preview shape: `ovm.previewDistribute` returns `{ preview, checks, blockNumber }` (was the preview flattened);
+  `DistributionPreview` no longer has `blockNumber` (it is the top-level one).
+- `DistributionPreview` recipients: `toWallet` is replaced by `alreadyWaiting` (Warehouse + SplitMain balance before
+  this transaction) next to `fromThisDistribution`; the preview has `minWithdraw`.
+- `splits.prepareDistribution` / `previewDistribution` withdraw for every split recipient by default, the Obol RAF
+  address included (`includeRaf: false` leaves it out, with `RAF_LEFT_IN_WAREHOUSE`).
+- `ovm.prepareSetBeneficiary({ newBeneficiary })` is `ovm.prepareSetPrincipalRecipient({ newPrincipalRecipient })`;
+  `prepareTransfer` takes `newPrincipalRecipient`; `prepareSweep` takes `to` (was `beneficiary`).
+- `splits.getSplit` returns `null` for an address that is not a split (was `SPLIT_NOT_FOUND`, now removed);
+  `ovm.getState` returns `null` for an address that is not an OVM (was `OVM_READ_FAILED`). Read failures still throw.
+- Null versus absent, one rule: `null` = asked, no data; absent = not asked. `OvmState.principalOnBeaconChain` is
+  `null` when the API had no value; `ovm.getValidators` entries always carry `lockHash`, `beaconStatus` and `balance`
+  (`null` when unknown) and its `blockNumber` is `bigint | null`.
+- Error codes renamed to one pattern (subject first): `INVALID_BASE_URL` → `BASE_URL_INVALID`, `NOT_AN_OPERATOR` →
+  `ACCOUNT_NOT_OPERATOR`, `NOT_OVM_OWNER` → `OVM_OWNER_REQUIRED`, `ROLE_TO_PUBLIC_FORWARDER` →
+  `PUBLIC_FORWARDER_AS_ROLE_HOLDER`, `OWNER_TO_PUBLIC_FORWARDER` → `PUBLIC_FORWARDER_AS_OWNER`,
+  `RECIPIENT_IS_PUBLIC_FORWARDER` → `PUBLIC_FORWARDER_AS_RECIPIENT`, `EXIT_EPOCH_REGRESSION` → `EXIT_EPOCH_MISMATCH`;
+  incentive issues `INVALID_INCENTIVES_DATA` → `INCENTIVES_DATA_INVALID`, `UNKNOWN_DISTRIBUTOR` →
+  `DISTRIBUTOR_UNKNOWN`, `UNEXPECTED_TOKEN` → `TOKEN_MISMATCH`, `INVALID_PROOF` → `PROOF_INVALID`. Removed:
+  `SPLIT_NOT_FOUND`, `EXIT_SIGNATURE_MALFORMED`, and the findings `WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING`,
+  `WITHDRAW_CREDENTIALS_NOT_OVM`, `WITHDRAW_CREDENTIALS_NOT_SENDER`, `WITHDRAW_VALIDATOR_NOT_ACTIVE` (now errors, below).
+- `ovm.prepareWithdraw`, `withdrawals.prepareEoaWithdraw` and `ovm.prepareConsolidate` throw for every request the
+  beacon chain would ignore (Electra `process_withdrawal_request` / `process_consolidation_request`): new codes
+  `VALIDATOR_NOT_ACTIVE`, `VALIDATOR_EXITING`, `VALIDATOR_TOO_NEW`, `CREDENTIALS_NOT_SOURCE`,
+  `EXIT_BLOCKED_BY_PENDING_WITHDRAWAL`, `PARTIAL_REQUIRES_COMPOUNDING`, `EFFECTIVE_BALANCE_TOO_LOW`,
+  `NO_EXCESS_BALANCE`, `CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL`, `CONSOLIDATION_ALREADY_COMPOUNDING`;
+  `CONSOLIDATION_TARGET_NOT_COMPOUNDING` is an error (was a warning). A partial amount above the excess balance is sent
+  capped (`requestedAmount` in the preview, `WITHDRAW_AMOUNT_CAPPED`).
+- `simulate` and `legacy` moved under `experimental`: `obol.experimental.simulate`, `obol.experimental.legacy`, and
+  the `experimental` namespace / `@obolnetwork/obol-sdk/experimental` entry. `FullSimulation.gasUsed` is
+  `gas.used`.
+- Exits use the Obol API wire and storage formats as they are (snake_case): `PartialExitBlob`,
+  `PartialExitsPayload`, `StoredExitBlob` (with `shares_exit_data`, also wrapped in an array), `FullExitResponse`,
+  `FullExitBlob`. `verifyPartialExit` takes `existing` as a list or a map of stored exits and checks each blob against
+  its own pubkey's; the payload root is of the partial exits sorted by validator index; the payload signature must be
+  65 bytes (high-s accepted, as the API does); the epoch must equal the stored one. `aggregate({ validator, exit,
+  threshold })` takes a stored exit or the API's full exit response, verifies each partial against its public share and
+  uses any `threshold` valid ones.
+- Module namespaces and entries export explicit lists of the documented API. Gone from the namespaces: internals
+  (`readOvmCore`, `requestAmountGwei`, `credentialsPointAt`, the merkle helpers, …), the TypeBox schema constants, and
+  the functions that take a `Context` (use the client, or `create<Module>Module(createObolContext(config))`).
+  `ObolClient` is an explicit interface, as is every `<Module>Module`.
+- Inputs take plain `string` for hex and addresses (still checked at runtime); outputs stay `Hex` / `Address`.
+- On-chain integers are `bigint` in outputs: `splits.percent` returns `bigint`; `SPLITS_SCALE` and `RAF_SHARE` are
+  `bigint`. Split allocations accept `number | bigint`.
+- `ObolError` is generic over its code: `ObolError<C>['details']` is `ObolErrorDetails[C]`, and
+  `isObolError(error, code)` narrows it. `Finding.code` is `FindingCode`.
+- `cluster.verifyLock` follows Charon where it differed (found by a differential fuzz of 10k mutated locks against
+  Charon): a new step `definition_invalid` (an unknown fork version for every flow, `num_validators` other than the
+  number of validators, `deposit_amounts` outside Charon's rules); deposits for amounts outside `deposit_amounts` (or
+  Charon's defaults when it is empty, 32 ETH only for v1.6 / v1.7) are `deposit_amount_unexpected`; `compounding` is
+  read from v1.10.0 on only; node signatures must be 65 bytes with a recovery id that recovers the ENR key (high-s
+  accepted, like Charon); point encodings must be canonical.
+
+**Added**
+
+- `ObolErrorCode` / `FindingCode` unions (`OBOL_ERROR_CODES`, `FINDING_CODES`), `ObolErrorDetails`, and
+  `Finding.subject` (`{ pubkey } | { address } | { index }`) on every finding about one item.
+- `isStale(prepared, head, maxAgeBlocks)`.
+- `api: { baseUrl, allowLocal: true }` allows `http(s)://localhost[:port]` and `http(s)://127.0.0.1[:port]`.
+- `deposits.status` reads `activationEpoch`, `exitEpoch` and `pendingPartialWithdrawals` from
+  `POST /v1/validators/:network/deposit-status` (obol-api #1047) and from the beacon fallback (registry epochs,
+  `pending_partial_withdrawals`). Checks the source cannot support are reported as `VALIDATOR_STATUS_UNCHECKED`
+  (info); `PARTIAL_WITHDRAWAL_QUEUE_FULL` (warning) from a beacon node.
+- `ObolChain.genesisTime` (mainnet, Hoodi) and `currentEpoch(chain)`.
+- `simulate` result `gas: { used, baseFeePerGas, priorityFeePerGas, estimatedFee }`; balance changes stay gas-free.
+- `TX_REPLACED` details carry `reason` (`cancelled` / `replaced`) and `replacement`; `send` documents re-keying a
+  stored hash on `repriced` in `onReplaced`.
+- Per-module entry points (`@obolnetwork/obol-sdk/cluster`, `/deposits`, `/ovm`, `/splits`, `/setup`,
+  `/incentives`, `/terms`, `/withdrawals`, `/exits`, `/experimental`) for ESM, CJS and types, with
+  `createObolContext`; `"sideEffects": false`. A reads-only `ovm` import carries no BLS or SSZ code.
+- API Extractor report (`etc/obol-sdk.api.md`, `yarn api:check` in CI), bundle-size budget (`yarn size:check` in CI),
+  JSON Schemas of every operation input (`spec/schemas/`, `yarn spec:schemas`, checked by a test), and a test that
+  `spec/errors.md`, the code unions and the codes in `src/` agree.
+- Mainnet-fork e2e mode (`yarn test:e2e:mainnet`, `E2E_CHAIN=mainnet`, `RPC_MAINNET`).
+- The differential lock fuzz harness (`test/fuzz/`, `yarn test:fuzz`; with a built `charon-oracle` it compares with
+  Charon), its minimized disagreements as regression tests, and a seeded decoder fuzz in `yarn test`.
+- `MIGRATION.md`: every 2.x method mapped to v3, and the rc.3 → rc.4 changes.
+
+**Fixed**
+
+- Log scans (`ovm.verify`, `ovm.getRoleHolders`, `splits.getSplit`) adapt to RPCs that cap `eth_getLogs` by block
+  range or by result count: on a range / limit refusal the window halves (from 50,000 down to 1,000 blocks) and the
+  working size is remembered per `PublicClient`. One-event scans (`ovm.verify`, `SplitCreated`) read newest first, so
+  a recently created OVM resolves in one request. A genuine failure still gives `unknown`, never `notObol`.
+- Non-canonical BLS encodings (a field element at or above the modulus, which the decoder reduced) were accepted for
+  public shares, group keys and signatures in `verifyLock`, `verifyDepositData` and the exit helpers. They are refused,
+  as blst and Charon refuse them.
+- `verifyLock` accepted 64-byte node signatures and a wrong recovery id, and refused a valid high-s signature.
+- Vectors from the 2.16 code were re-run on v3 (`distribution.json`, with the deliberate differences recorded per
+  case), and the runners compare every field.
+
 #### [v3.0.0-rc.3](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.2...v3.0.0-rc.3)
 
 > 21 October 2026

@@ -20,9 +20,17 @@ import {
 import { getCodeKind, latestBlockNumber } from './chainUtils.js';
 import { accountAddress, requireWallet, type Context } from './context.js';
 import { ObolError } from './errors.js';
-import type { Prepared } from './types.js';
+import { PREPARED_KINDS, type AnyPrepared } from './types.js';
 
 export interface WaitOptions {
+  /**
+   * Called when the wallet replaces the transaction (viem `onReplaced`).
+   * With `reason: 'repriced'` (a speed-up: the same call with more gas) the
+   * wait goes on and resolves with the replacement's receipt, so an app that
+   * remembers the hash should re-key it to `replacement.transaction.hash`.
+   * `cancelled` and `replaced` (another call took the nonce) end the wait with
+   * TX_REPLACED.
+   */
   onReplaced?: (replacement: ReplacementReturnType) => void;
   /** Default 180 s for an account, 30 min for a contract wallet. */
   timeoutMs?: number;
@@ -139,12 +147,12 @@ export const waitForContractWalletExecution = async ({
 };
 
 /** PREPARED_INVALID unless `prepared` looks like a prepareX result; CHAIN_MISMATCH for another chain. */
-export const assertPrepared = (
-  ctx: Context,
-  prepared: Prepared<unknown>,
-): void => {
-  const request = (prepared as Partial<Prepared<unknown>>)?.request;
+export const assertPrepared = (ctx: Context, prepared: AnyPrepared): void => {
+  const candidate = prepared as Partial<AnyPrepared> | null | undefined;
+  const request = candidate?.request;
   const ok =
+    typeof candidate?.kind === 'string' &&
+    (PREPARED_KINDS as readonly string[]).includes(candidate.kind) &&
     request !== undefined &&
     typeof request.to === 'string' &&
     isAddress(request.to, { strict: false }) &&
@@ -156,7 +164,7 @@ export const assertPrepared = (
   if (!ok) {
     throw new ObolError(
       'PREPARED_INVALID',
-      'send expects the value a prepareX operation returned',
+      'send expects the value a prepareX operation returned (with its kind and request)',
     );
   }
   if (request.chainId !== ctx.chain.id) {
@@ -173,9 +181,32 @@ export const assertPrepared = (
   }
 };
 
+/**
+ * Whether `prepared` was checked more than `maxAgeBlocks` blocks before
+ * `head` (a `Prepared` without `blockNumber` read no chain state and is never
+ * stale). `send` never refuses an old one; an app that shows a review for a
+ * while re-prepares when this is true.
+ */
+export const isStale = (
+  prepared: Pick<AnyPrepared, 'blockNumber'>,
+  head: bigint,
+  maxAgeBlocks: bigint | number,
+): boolean =>
+  prepared.blockNumber !== undefined &&
+  head - prepared.blockNumber > BigInt(maxAgeBlocks);
+
+/**
+ * send (wallet): checks `prepared` and the wallet chain (PREPARED_INVALID,
+ * CHAIN_MISMATCH, WALLET_REQUIRED), sends `prepared.request` and returns as
+ * soon as the wallet gives a hash (TX_REJECTED if it does not). `wait`
+ * follows it: TX_REVERTED, TX_REPLACED (`cancelled` / `replaced`, with
+ * `reason` and the `replacement` hash), TX_UNCONFIRMED. A `repriced`
+ * replacement (a wallet speed-up) is reported through `onReplaced` and the
+ * wait resolves with its receipt: re-key a stored hash there.
+ */
 export const send = async (
   ctx: Context,
-  prepared: Prepared<unknown>,
+  prepared: AnyPrepared,
 ): Promise<Sent> => {
   assertPrepared(ctx, prepared);
   const { walletClient, account } = await requireWallet(ctx, 'send');
@@ -229,8 +260,15 @@ export const send = async (
               'TX_REPLACED',
               `Transaction ${hash} was ${replacement.reason} by ${replacement.transaction.hash}`,
               {
-                hint: 'The prepared call did not run; retrying is safe',
-                details: { hash, replacement: replacement.transaction.hash },
+                hint:
+                  replacement.reason === 'cancelled'
+                    ? 'The wallet cancelled it; the prepared call did not run, retrying is safe'
+                    : 'Another call took its nonce; the prepared call did not run, retrying is safe',
+                details: {
+                  hash,
+                  reason: replacement.reason,
+                  replacement: replacement.transaction.hash,
+                },
               },
             );
           }

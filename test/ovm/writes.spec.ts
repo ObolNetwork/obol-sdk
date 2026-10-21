@@ -78,14 +78,18 @@ describe('ovm.prepareDistribute / previewDistribute', () => {
     expect((await caught(ovm.prepareDistribute({ ovm: OVM }))).code).toBe(
       'NOTHING_TO_DISTRIBUTE',
     );
-    const preview = await ovm.previewDistribute({ ovm: OVM });
-    expect(preview).toMatchObject({
-      distributable: 0n,
-      principalPayout: 0n,
-      rewardPayout: 0n,
+    const result = await ovm.previewDistribute({ ovm: OVM });
+    expect(Object.keys(result).sort()).toEqual([
+      'blockNumber',
+      'checks',
+      'preview',
+    ]);
+    expect(result).toMatchObject({
+      preview: { distributable: 0n, principalPayout: 0n, rewardPayout: 0n },
       blockNumber: 2_000_000n,
       checks: [],
     });
+    expect('blockNumber' in result.preview).toBe(false);
   });
 
   it('checks provenance', async () => {
@@ -141,7 +145,7 @@ describe('ovm role writes', () => {
         }),
       ),
     ).toMatchObject({
-      code: 'NOT_OVM_OWNER',
+      code: 'OVM_OWNER_REQUIRED',
       details: { from: OTHER, owner: OWNER },
     });
   });
@@ -182,7 +186,7 @@ describe('ovm role writes', () => {
         }),
       );
       expect(error).toMatchObject({
-        code: 'ROLE_TO_PUBLIC_FORWARDER',
+        code: 'PUBLIC_FORWARDER_AS_ROLE_HOLDER',
         details: {
           user: MULTICALL3,
           roles: OVM_ROLES.WITHDRAWAL | OVM_ROLES.DEPOSIT,
@@ -202,7 +206,7 @@ describe('ovm role writes', () => {
             from: OWNER,
           }),
         );
-        expect(error.code).toBe('ROLE_TO_PUBLIC_FORWARDER');
+        expect(error.code).toBe('PUBLIC_FORWARDER_AS_ROLE_HOLDER');
       }
       // On Hoodi they have no code: an ordinary grant.
       const hoodi = await ovmFor().prepareGrantRoles({
@@ -219,13 +223,13 @@ describe('ovm role writes', () => {
         await caught(
           ovmFor().prepareTransfer({
             ovm: OVM,
-            newBeneficiary: OTHER,
+            newPrincipalRecipient: OTHER,
             newOwner: MULTICALL3 as Address,
             from: OWNER,
           }),
         ),
       ).toMatchObject({
-        code: 'OWNER_TO_PUBLIC_FORWARDER',
+        code: 'PUBLIC_FORWARDER_AS_OWNER',
         details: { newOwner: MULTICALL3 },
       });
       expect(
@@ -240,11 +244,11 @@ describe('ovm role writes', () => {
             }),
           )
         ).code,
-      ).toBe('OWNER_TO_PUBLIC_FORWARDER');
-      // Multicall3 as the new beneficiary is not an ownership change.
+      ).toBe('PUBLIC_FORWARDER_AS_OWNER');
+      // Multicall3 as the new principal recipient is not an ownership change.
       const transfer = await ovmFor().prepareTransfer({
         ovm: OVM,
-        newBeneficiary: MULTICALL3 as Address,
+        newPrincipalRecipient: MULTICALL3 as Address,
         newOwner: OTHER,
         from: OWNER,
       });
@@ -290,7 +294,7 @@ describe('ovm role writes', () => {
           }),
         )
       ).code,
-    ).toBe('NOT_OVM_OWNER');
+    ).toBe('OVM_OWNER_REQUIRED');
   });
 
   it('renounceRoles: the sender must hold them', async () => {
@@ -313,8 +317,8 @@ describe('ovm role writes', () => {
 
   it.each([
     [
-      'prepareSetBeneficiary',
-      { newBeneficiary: OTHER },
+      'prepareSetPrincipalRecipient',
+      { newPrincipalRecipient: OTHER },
       'SET_BENEFICIARY',
       0x04n,
     ],
@@ -356,10 +360,10 @@ describe('ovm role writes', () => {
   );
 
   it.each([
-    ['prepareSetBeneficiary', { newBeneficiary: ZERO }],
+    ['prepareSetPrincipalRecipient', { newPrincipalRecipient: ZERO }],
     ['prepareSetRewardRecipient', { newRewardRecipient: ZERO }],
     ['prepareRecoverFunds', { token: OTHER, recipient: ZERO }],
-    ['prepareTransfer', { newBeneficiary: OTHER, newOwner: ZERO }],
+    ['prepareTransfer', { newPrincipalRecipient: OTHER, newOwner: ZERO }],
     ['prepareCompleteOwnershipHandover', { pendingOwner: ZERO }],
     ['prepareWithdrawPullBalance', { account: ZERO }],
   ] as const)('%s rejects the zero address', async (method, extra) => {
@@ -393,9 +397,9 @@ describe('ovm role writes', () => {
     expect(
       (
         await caught(
-          ovmFor({ provenance: 'notObol' }).prepareSetBeneficiary({
+          ovmFor({ provenance: 'notObol' }).prepareSetPrincipalRecipient({
             ovm: OVM,
-            newBeneficiary: OTHER,
+            newPrincipalRecipient: OTHER,
             from: OWNER,
           }),
         )
@@ -404,7 +408,7 @@ describe('ovm role writes', () => {
     expect(
       (
         await caught(
-          ovmFor().prepareSetBeneficiary({ ovm: OVM, newBeneficiary: OTHER }),
+          ovmFor().prepareSetPrincipalRecipient({ ovm: OVM, newPrincipalRecipient: OTHER }),
         )
       ).code,
     ).toBe('PAYLOAD_INVALID');
@@ -414,9 +418,9 @@ describe('ovm role writes', () => {
     expect(
       (
         await caught(
-          ovmFor({ state: { failing: ['owner'] } }).prepareSetBeneficiary({
+          ovmFor({ state: { failing: ['owner'] } }).prepareSetPrincipalRecipient({
             ovm: OVM,
-            newBeneficiary: OTHER,
+            newPrincipalRecipient: OTHER,
             from: OWNER,
           }),
         )
@@ -446,7 +450,7 @@ describe('ovm ownership writes', () => {
     };
     const result = await ovmFor(options).prepareTransfer({
       ovm: OVM,
-      newBeneficiary: PRINCIPAL,
+      newPrincipalRecipient: PRINCIPAL,
       newOwner: OTHER,
       from: OWNER,
     });
@@ -464,19 +468,19 @@ describe('ovm ownership writes', () => {
         await caught(
           ovmFor(options).prepareTransfer({
             ovm: OVM,
-            newBeneficiary: PRINCIPAL,
+            newPrincipalRecipient: PRINCIPAL,
             newOwner: OTHER,
             from: HOLDER,
           }),
         )
       ).code,
-    ).toBe('NOT_OVM_OWNER');
+    ).toBe('OVM_OWNER_REQUIRED');
   });
 
   it('transfer: no finding without other holders; ROLE_HOLDERS_UNCHECKED when unreadable', async () => {
     const clean = await ovmFor().prepareTransfer({
       ovm: OVM,
-      newBeneficiary: PRINCIPAL,
+      newPrincipalRecipient: PRINCIPAL,
       newOwner: OTHER,
       from: OWNER,
     });
@@ -488,7 +492,7 @@ describe('ovm ownership writes', () => {
           : undefined,
     }).prepareTransfer({
       ovm: OVM,
-      newBeneficiary: PRINCIPAL,
+      newPrincipalRecipient: PRINCIPAL,
       newOwner: OTHER,
       from: OWNER,
     });
@@ -539,7 +543,7 @@ describe('ovm ownership writes', () => {
           }),
         )
       ).code,
-    ).toBe('NOT_OVM_OWNER');
+    ).toBe('OVM_OWNER_REQUIRED');
   });
 
   it('completeOwnershipHandover: warns ROLES_SURVIVE_TRANSFER', async () => {
@@ -576,21 +580,21 @@ describe('ovm sweep and pull balances', () => {
     expect(error.details.issues[0].issue).toBe('above_pull_balance');
   });
 
-  it('sweep: a beneficiary needs the owner', async () => {
+  it('sweep: a destination other than the principal recipient needs the owner', async () => {
     const ovm = ovmFor({ state: { pull } });
     const ok = await ovm.prepareSweep({
       ovm: OVM,
-      beneficiary: OTHER,
+      to: OTHER,
       from: OWNER,
     });
     expect(call(ok.request.data).args).toEqual([OTHER, 0n]);
     expect(
       (
         await caught(
-          ovm.prepareSweep({ ovm: OVM, beneficiary: OTHER, from: HOLDER }),
+          ovm.prepareSweep({ ovm: OVM, to: OTHER, from: HOLDER }),
         )
       ).code,
-    ).toBe('NOT_OVM_OWNER');
+    ).toBe('OVM_OWNER_REQUIRED');
   });
 
   it('withdrawPullBalance: previews the amount; NOTHING_TO_DISTRIBUTE at 0', async () => {
@@ -618,7 +622,7 @@ describe('createOvmModule', () => {
   it('binds the reads and exposes the pure helpers', async () => {
     const ovm = ovmFor({ ovmBalance: ETH });
     expect((await ovm.verify(OVM)).status).toBe('obol');
-    expect((await ovm.getState(OVM)).balance).toBe(ETH);
+    expect((await ovm.getState(OVM))?.balance).toBe(ETH);
     expect((await ovm.getRoleHolders(OVM)).owner).toBe(OWNER);
     expect(ovm.OVM_ROLES.DEPOSIT).toBe(0x20n);
     expect(ovm.roleNames(0x21n)).toEqual(['WITHDRAWAL', 'DEPOSIT']);

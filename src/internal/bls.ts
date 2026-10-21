@@ -44,18 +44,58 @@ export function decodeG1Unchecked(bytes: Uint8Array): G1Point {
 }
 
 /**
- * Decodes a G1 public key. With `subgroupCheck`, the point must be in the
- * prime-order subgroup (noble's full validation); the identity is always
- * rejected.
+ * The canonical-encoding rules of the ZCash compressed format (IETF BLS,
+ * Ethereum consensus `KeyValidate`), checked on the bytes before a point is
+ * decoded: the compression flag set; the infinity flag only with every other
+ * bit zero (sign flag included); each field element (G1: x; G2: x.c1, then
+ * x.c0) below the field modulus. A field element at or above the modulus is a
+ * second encoding of a smaller one and is refused here, since the decoder
+ * would reduce it.
+ */
+function assertCanonical(bytes: Uint8Array, length: 48 | 96): void {
+  if (bytes.length !== length) {
+    throw new Error(`point: expected ${length} bytes`);
+  }
+  const flags = bytes[0];
+  if ((flags & 0x80) === 0) throw new Error('point: not compressed');
+  const body = bytes.slice();
+  body[0] &= 0x1f;
+  if ((flags & 0x40) !== 0) {
+    if ((flags & 0x20) !== 0 || body.some(b => b !== 0)) {
+      throw new Error('point: malformed infinity encoding');
+    }
+    return;
+  }
+  for (let offset = 0; offset < length; offset += 48) {
+    if (bytesToNumberBE(body.subarray(offset, offset + 48)) >= Fp.ORDER) {
+      throw new Error('point: coordinate not in the field');
+    }
+  }
+}
+
+/**
+ * Decodes a G1 public key from its canonical encoding. With
+ * `subgroupCheck`, the point must be in the prime-order subgroup (noble's
+ * full validation); the identity is always rejected.
  */
 export function decodeG1(bytes: Uint8Array, subgroupCheck: boolean): G1Point {
-  const point = subgroupCheck ? G1.fromBytes(bytes) : decodeG1Unchecked(bytes);
+  if (!subgroupCheck) {
+    const point = decodeG1Unchecked(bytes);
+    if (point.is0()) throw new Error('G1 point: point at infinity');
+    return point;
+  }
+  assertCanonical(bytes, 48);
+  const point = G1.fromBytes(bytes);
   if (point.is0()) throw new Error('G1 point: point at infinity');
   return point;
 }
 
-/** Decodes a G2 signature: on the curve, in the subgroup, not the identity. */
-function decodeSignature(bytes: Uint8Array): G2Point {
+/**
+ * Decodes a G2 signature from its canonical encoding: on the curve, in the
+ * subgroup, not the identity.
+ */
+export function decodeSignature(bytes: Uint8Array): G2Point {
+  assertCanonical(bytes, 96);
   const point = ls.Signature.fromBytes(bytes);
   if (point.is0()) throw new Error('signature is the point at infinity');
   return point;
@@ -250,7 +290,9 @@ export class NobleSignatureBatch {
 }
 
 export function blsAggregateSignatures(signatures: Uint8Array[]): Uint8Array {
-  return ls.Signature.toBytes(ls.aggregateSignatures(signatures)) as Uint8Array;
+  return ls.Signature.toBytes(
+    ls.aggregateSignatures(signatures.map(decodeSignature)),
+  ) as Uint8Array;
 }
 
 function lagrangeCoeffAtZero(shareIndex: bigint, indices: bigint[]): bigint {
@@ -294,8 +336,7 @@ export function blsThresholdAggregateSignatures(
   let aggregate = bls12_381.G2.Point.ZERO;
   let i = 0;
   for (const sig of partialsByIndex.values()) {
-    const point = ls.Signature.fromBytes(sig);
-    point.assertValidity();
+    const point = decodeSignature(sig);
     const coeff = lagrangeCoeffAtZero(indices[i], indices);
     aggregate = aggregate.add(point.multiply(coeff));
     i++;

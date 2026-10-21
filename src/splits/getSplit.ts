@@ -18,14 +18,15 @@ import {
 import {
   addressTopic,
   chainReadFailed,
+  latestBlockNumber,
   codeKind,
   scanLogs,
 } from '../chainUtils.js';
 import { requireContracts, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, sameAddress, T } from '../schema.js';
-import type { Source, SplitParams } from '../types.js';
-import { headBlock, readAll } from './chain.js';
+import type { Source, SplitParams, SplitParamsInput } from '../types.js';
+import { readValues } from '../multicall.js';
 import {
   checkSplitParams,
   hashSplitParams,
@@ -49,29 +50,22 @@ export interface SplitInfo {
   blockNumber: bigint;
 }
 
-const GetSplitInputSchema = Type.Object({
-  address: T.Address,
-  params: Type.Optional(SplitParamsSchema),
-  ovm: Type.Optional(T.Address),
-});
+export const GetSplitInputSchema = Type.Object(
+  {
+    address: T.Address,
+    params: Type.Optional(SplitParamsSchema),
+    ovm: Type.Optional(T.Address),
+  },
+  { additionalProperties: false },
+);
 
 export interface GetSplitInput {
-  address: Address;
+  address: string;
   /** Known params; checked against `splitHash` (SPLIT_PARAMS_MISMATCH). */
-  params?: SplitParams;
+  params?: SplitParamsInput;
   /** An OVM paying the split, so the Obol API can be asked for its params. */
-  ovm?: Address;
+  ovm?: string;
 }
-
-export const splitNotFound = (address: Address, reason: string): ObolError =>
-  new ObolError(
-    'SPLIT_NOT_FOUND',
-    `${address} is not a SplitV2 split: ${reason}`,
-    {
-      hint: 'Check the address',
-      details: { address },
-    },
-  );
 
 export const splitParamsMismatch = (
   address: Address,
@@ -267,10 +261,11 @@ export const findSplitParams = async (
 };
 
 /**
- * Reads a SplitV2 split. Checks, in order: the address has contract code and
- * is not an EIP-7702 delegation; `splitHash()`, `owner()`, `paused()` answer
- * and `splitHash` is non-zero (else SPLIT_NOT_FOUND); given `params` hash to
- * `splitHash` (else SPLIT_PARAMS_MISMATCH). Without params it asks the Obol
+ * Reads a SplitV2 split, or returns null when the address is not one: no
+ * contract code (or an EIP-7702 delegation), or the read succeeded and
+ * `splitHash()`, `owner()` or `paused()` reverted or `splitHash` is zero. A
+ * failed read (RPC error) throws CHAIN_READ_FAILED, never null. Given
+ * `params` must hash to `splitHash` (else SPLIT_PARAMS_MISMATCH). Without params it asks the Obol
  * API (when `ovm` is given) and then the split's `SplitUpdated` /
  * `SplitCreated` logs (from the OVM factory's deployment block); answers that
  * do not hash to `splitHash` are discarded. No match: `params: null`.
@@ -278,7 +273,7 @@ export const findSplitParams = async (
 export const getSplit = async (
   ctx: Context,
   input: GetSplitInput,
-): Promise<SplitInfo> => {
+): Promise<SplitInfo | null> => {
   const decoded = decode(GetSplitInputSchema, input);
   const address = checksum(decoded.address);
   const given =
@@ -290,43 +285,38 @@ export const getSplit = async (
     'splits.getSplit',
   );
 
-  if (!(await hasContractCode(ctx, address))) {
-    throw splitNotFound(
-      address,
-      'no contract code (or an EIP-7702 delegation)',
+  if (!(await hasContractCode(ctx, address))) return null;
+  const blockNumber = await latestBlockNumber(ctx.publicClient);
+  const [splitHash, owner, paused, balance, warehouseBalance] =
+    await readValues(
+      ctx,
+      [
+        { address, abi: splitWalletAbi, functionName: 'splitHash' },
+        { address, abi: splitWalletAbi, functionName: 'owner' },
+        { address, abi: splitWalletAbi, functionName: 'paused' },
+        {
+          address: multicall3,
+          abi: multicall3Abi,
+          functionName: 'getEthBalance',
+          args: [address],
+        },
+        {
+          address: warehouse,
+          abi: warehouseAbi,
+          functionName: 'balanceOf',
+          args: [address, NATIVE_TOKEN_ID],
+        },
+      ],
+      'the split state',
+      blockNumber,
     );
-  }
-  const blockNumber = await headBlock(ctx);
-  const [splitHash, owner, paused, balance, warehouseBalance] = await readAll(
-    ctx,
-    multicall3,
-    [
-      { address, abi: splitWalletAbi, functionName: 'splitHash' },
-      { address, abi: splitWalletAbi, functionName: 'owner' },
-      { address, abi: splitWalletAbi, functionName: 'paused' },
-      {
-        address: multicall3,
-        abi: multicall3Abi,
-        functionName: 'getEthBalance',
-        args: [address],
-      },
-      {
-        address: warehouse,
-        abi: warehouseAbi,
-        functionName: 'balanceOf',
-        args: [address, NATIVE_TOKEN_ID],
-      },
-    ],
-    blockNumber,
-    'the split state',
-  );
   if (
     typeof splitHash !== 'string' ||
     splitHash === ZERO_HASH ||
     typeof owner !== 'string' ||
     typeof paused !== 'boolean'
   ) {
-    throw splitNotFound(address, 'it does not answer the SplitV2 getters');
+    return null;
   }
   if (typeof balance !== 'bigint' || typeof warehouseBalance !== 'bigint') {
     throw chainReadFailed(`the balances of ${address}`, undefined);

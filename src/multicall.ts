@@ -1,6 +1,6 @@
 /**
- * One Multicall3 `aggregate3` read, so that every value comes from the same
- * block. Used by the OVM, deposit and withdrawal operations.
+ * The one Multicall3 read helper: view calls in one `aggregate3` eth_call,
+ * so that every value comes from the same block.
  */
 import {
   decodeFunctionResult,
@@ -9,10 +9,10 @@ import {
   type Address,
   type Hex,
 } from 'viem';
-import { multicall3Abi } from '../abi.js';
-import { chainReadFailed } from '../chainUtils.js';
-import type { Context } from '../context.js';
-import { requireContracts } from '../chains.js';
+import { multicall3Abi } from './abi.js';
+import { chainReadFailed } from './chainUtils.js';
+import type { Context } from './context.js';
+import { requireContracts } from './chains.js';
 
 export interface ReadCall {
   address: Address;
@@ -100,4 +100,19 @@ export const readMany = async (
       return { ok: false };
     }
   });
+};
+
+/**
+ * `readMany`, with each result as its value or `undefined` for a call that
+ * reverted or did not decode (e.g. a call to an address without code).
+ */
+export const readValues = async (
+  ctx: Context,
+  calls: ReadCall[],
+  what: string,
+  blockNumber?: bigint,
+): Promise<unknown[]> => {
+  if (calls.length === 0) return [];
+  const results = await readMany(ctx, calls, what, blockNumber);
+  return results.map(r => (r.ok ? r.value : undefined));
 };

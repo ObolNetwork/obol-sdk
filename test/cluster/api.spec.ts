@@ -285,10 +285,10 @@ describe('cluster.accept', () => {
     ).toBe(operator.address);
   });
 
-  it('rejects a wallet that is not an operator (NOT_AN_OPERATOR)', async () => {
+  it('rejects a wallet that is not an operator (ACCOUNT_NOT_OPERATOR)', async () => {
     const { hash, cluster } = await setup({ walletKey: KEYS.other });
     const error = await rejection(cluster.accept({ configHash: hash, enr }));
-    expect(error.code).toBe('NOT_AN_OPERATOR');
+    expect(error.code).toBe('ACCOUNT_NOT_OPERATOR');
     expect(error.details).toEqual({
       address: accountOf(KEYS.other).address,
       configHash: hash,

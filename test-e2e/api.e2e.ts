@@ -70,9 +70,10 @@ describeFork('the public Obol API with a Hoodi fork (read-only)', () => {
         creationTxHash: d.receipt.transactionHash,
       });
       // getState without the API's OVM endpoint: chain values, no enrichment.
-      const state = await withApi().ovm.getState(d.ovm);
+      const state = (await withApi().ovm.getState(d.ovm))!;
       expect(state.source).toBe('chain');
-      expect(state.principalOnBeaconChain).toBeUndefined();
+      // Asked, and the API has no record of this OVM: null (absent only with api: false).
+      expect(state.principalOnBeaconChain).toBeNull();
     },
   );
 
@@ -137,4 +138,4 @@ describeFork('the public Obol API with a Hoodi fork (read-only)', () => {
       ).toBe(true);
     },
   );
-});
+}, 'hoodi');

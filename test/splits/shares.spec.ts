@@ -20,7 +20,7 @@ describe('splits shares', () => {
     [0, '0'],
   ])('formatPercent(%s) = %s', (ppm, text) => {
     expect(formatPercent(ppm)).toBe(text);
-    if (ppm > 0) expect(percent(text)).toBe(ppm);
+    if (ppm > 0) expect(percent(text)).toBe(BigInt(ppm));
   });
 
   it('formatPercent rejects out-of-range and fractional ppm', async () => {
