@@ -1,7 +1,7 @@
 /**
  * cluster: definitions and locks (spec/operations.md "cluster").
  */
-import type { Hex } from 'viem';
+import type { Hex, PublicClient } from 'viem';
 import type { Context } from '../context.js';
 import { accept, create, get, getLock } from './api.js';
 import {
@@ -9,6 +9,7 @@ import {
   computeDefinitionHash,
   computeLockHash,
 } from './hash.js';
+import { assertSignatureClients } from './eip712.js';
 import { prepareDefinition } from './prepareDefinition.js';
 import type {
   ClusterDefinition,
@@ -21,6 +22,7 @@ import {
   type VerifyOptions,
 } from './verifyDefinition.js';
 import {
+  isValidLock,
   verifyLock,
   type LockVerification,
   type VerifyLockOptions,
@@ -34,12 +36,18 @@ export {
   prepareDefinition,
   verifyDefinition,
   verifyLock,
+  isValidLock,
 };
+export { isValidEnr, parseEnr, type ParsedEnr } from './enr.js';
 export { nobleBls, type BlsBackend, type BlsBatch } from './blsBackend.js';
 export {
   creatorConfigHashTypedData,
   enrTypedData,
   operatorConfigHashTypedData,
+  verifyTypedDataSignature,
+  type EIP712TypedData,
+  type PublicClients,
+  type SignatureClients,
 } from './eip712.js';
 export {
   DEFAULT_DEFINITION_VERSION,
@@ -47,6 +55,7 @@ export {
   type ClusterDefinition,
   type ClusterLock,
   type ClusterOperator,
+  type ClusterValidator,
   type PrepareDefinitionInput,
   type PreparedDefinition,
 } from './schema.js';
@@ -65,8 +74,9 @@ export type { ClusterEvent, WatchOptions } from './watch.js';
 
 /**
  * The cluster module bound to a client context. `verifyDefinition` defaults
- * `chainId` to the client chain, and both verifiers use the client's
- * `publicClient` for contract-wallet signatures unless the options pass one.
+ * `chainId` to the client chain, and the verifiers use the client's
+ * `publicClient` for contract-wallet signatures on the client chain, after
+ * any `publicClient` / `publicClients` the options pass.
  */
 export interface ClusterModule {
   computeConfigHash: typeof computeConfigHash;
@@ -97,6 +107,7 @@ export interface ClusterModule {
     lock: unknown,
     options?: VerifyLockOptions,
   ) => Promise<LockVerification>;
+  isValidLock: (lock: unknown, options?: VerifyLockOptions) => Promise<boolean>;
 }
 
 export const createClusterModule = (ctx: Context): ClusterModule => ({
@@ -117,11 +128,35 @@ export const createClusterModule = (ctx: Context): ClusterModule => ({
   ) =>
     await verifyDefinition(
       { ...input, chainId: input.chainId ?? ctx.chain.id },
-      { ...options, publicClient: options.publicClient ?? ctx.publicClient },
+      withClientFallback(ctx, options),
     ),
   verifyLock: async (lock: unknown, options: VerifyLockOptions = {}) =>
-    await verifyLock(lock, { publicClient: ctx.publicClient, ...options }),
+    await verifyLock(lock, withClientFallback(ctx, options)),
+  isValidLock: async (lock: unknown, options: VerifyLockOptions = {}) =>
+    await isValidLock(lock, withClientFallback(ctx, options)),
 });
+
+/**
+ * The options' clients, with the client's own `publicClient` for its chain
+ * when `publicClients` has none for it.
+ */
+const withClientFallback = <O extends VerifyLockOptions>(
+  ctx: Context,
+  options: O,
+): O => {
+  assertSignatureClients(options, 'options');
+  const { publicClients } = options;
+  if (publicClients === undefined) {
+    return { publicClient: ctx.publicClient, ...options };
+  }
+  const own = ctx.publicClient;
+  const resolve = (chainId: number): PublicClient | undefined =>
+    (typeof publicClients === 'function'
+      ? publicClients(chainId)
+      : publicClients[chainId]) ??
+    (own.chain?.id === chainId ? own : undefined);
+  return { ...options, publicClients: resolve };
+};
 
 /** Builds the context a module is bound to, without the other modules. */
 export { createObolContext, type ObolClientConfig } from '../clientContext.js';

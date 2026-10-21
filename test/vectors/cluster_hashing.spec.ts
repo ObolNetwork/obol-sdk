@@ -34,14 +34,17 @@ describe('vectors cluster_hashing', () => {
     },
   );
 
-  it('real_keys_3_of_4 stops at its placeholder EIP-712 signatures', async () => {
+  it('real_keys_3_of_4 stops at its placeholder EIP-712 signatures (unverifiable without a Sepolia client)', async () => {
     // Only the node signatures and signature_aggregate of this case are real;
     // its creator / operator signatures and deposit data are placeholders.
     const lock = suite.lock.find((c: any) => c.name === 'real_keys_3_of_4');
+    // A Sepolia lock checked with no client for Sepolia: a signature that
+    // does not recover to its signer cannot be ruled out as a contract
+    // wallet's.
     expect(await verifyLock(lock.input)).toEqual({
       ok: false,
       level: 'full',
-      step: 'definition_signature_invalid',
+      step: 'definition_signature_unverifiable',
       issue: 'creator config_signature',
     });
   });

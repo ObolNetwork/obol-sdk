@@ -11,6 +11,7 @@ import { ObolError } from '../../src/errors.js';
 import { clusterLockV1X10 } from '../fixtures.js';
 import { OPS, prepareInput, signedDefinition, VALIDATOR } from './fixtures.js';
 import { accountOf, KEYS } from './wallet.js';
+import { fakeChain } from '../helpers/fakeChain.js';
 
 const copy = <T>(value: T): any => JSON.parse(JSON.stringify(value));
 
@@ -208,11 +209,10 @@ describe('cluster.verifyDefinition', () => {
     definition.name = 'renamed';
     definition.operators[2].enr_signature =
       definition.operators[1].enr_signature;
-    const result = await verifyDefinition({
-      definition,
-      configHash: `0x${'ab'.repeat(32)}`,
-      chainId: 1,
-    });
+    const result = await verifyDefinition(
+      { definition, configHash: `0x${'ab'.repeat(32)}`, chainId: 1 },
+      { publicClient: fakeChain({ chainId: 1 }).publicClient },
+    );
     expect(result.ok).toBe(false);
     expect(result.issues.map(i => i.code)).toEqual([
       'config_hash_mismatch',
@@ -242,12 +242,37 @@ describe('cluster.verifyDefinition', () => {
     const definition = copy(clusterLockV1X10.cluster_definition);
     definition.operators[2].enr_signature =
       definition.operators[1].enr_signature;
-    const result = await verifyDefinition({ definition, chainId: 560048 });
+    const result = await verifyDefinition(
+      { definition, chainId: 560048 },
+      { publicClient: fakeChain().publicClient },
+    );
     expect(result.issues).toEqual([
       {
         code: 'signature_invalid',
         message: 'invalid operators[2] enr_signature',
       },
     ]);
+  });
+
+  it('reports a signature it cannot check without a client for the chain (signature_unverifiable)', async () => {
+    const definition = copy(clusterLockV1X10.cluster_definition);
+    definition.operators[2].enr_signature =
+      definition.operators[1].enr_signature;
+    const mainnet = fakeChain({ chainId: 1 }).publicClient;
+    for (const options of [{}, { publicClient: mainnet }]) {
+      const result = await verifyDefinition(
+        { definition, chainId: 560048 },
+        options,
+      );
+      expect(result.issues.map(i => i.code)).toEqual([
+        'signature_unverifiable',
+      ]);
+    }
+    // A client for the chain from publicClients is used.
+    const result = await verifyDefinition(
+      { definition, chainId: 560048 },
+      { publicClients: { 1: mainnet, 560048: fakeChain().publicClient } },
+    );
+    expect(result.issues.map(i => i.code)).toEqual(['signature_invalid']);
   });
 });

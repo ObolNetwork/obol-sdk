@@ -2,6 +2,8 @@ import { decodeFunctionData, type Hex } from 'viem';
 import { ovmAbi } from '../../src/abi.js';
 import { CHAINS, currentEpoch } from '../../src/chains.js';
 import { prepareConsolidate, prepareWithdraw } from '../../src/ovm/withdraw.js';
+import { checkWithdrawalRequests } from '../../src/ovm/requestRules.js';
+import type { DepositStatus } from '../../src/deposits/status.js';
 import { fakeApi } from '../helpers/fakeChain.js';
 import {
   BEACON_URL,
@@ -771,6 +773,47 @@ describe('ovm.prepareConsolidate', () => {
           )
         ).code,
       ).toBe('CONSOLIDATION_ALREADY_COMPOUNDING');
+    });
+  });
+});
+
+describe('checkWithdrawalRequests', () => {
+  const status = (balance: bigint): DepositStatus => ({
+    pubkey: PUBKEY_A,
+    status: 'active',
+    source: 'chain',
+    beaconStatus: 'active_ongoing',
+    validatorIndex: 1,
+    withdrawalCredentials: credentials('02', OVM),
+    balance,
+    effectiveBalance: 32n * ETH,
+    activationEpoch: 0n,
+    exitEpoch: null,
+    pendingPartialWithdrawals: 0n,
+    pendingDeposits: [],
+  });
+  const check = (balance: bigint) =>
+    checkWithdrawalRequests(
+      { chain: CHAINS[560048] },
+      [{ pubkey: PUBKEY_A, amount: ETH }],
+      new Map([[PUBKEY_A, status(balance)]]),
+      { address: OVM, what: 'the OVM' },
+    );
+
+  it('refuses a partial whose excess rounds down to 0 gwei (never a 0 amount, which is a full exit)', () => {
+    let error: unknown;
+    try {
+      check(32n * ETH + GWEI - 1n);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toMatchObject({ code: 'NO_EXCESS_BALANCE' });
+  });
+
+  it('caps to a 1 gwei excess', () => {
+    expect(check(32n * ETH + GWEI).requests[0]).toMatchObject({
+      amount: GWEI,
+      requestedAmount: ETH,
     });
   });
 });

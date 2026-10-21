@@ -198,6 +198,28 @@ describe('v3 core', () => {
         code: 'CHAIN_MISMATCH',
       });
     });
+
+    it.each([
+      ['the client chain', true],
+      ['a minimal chain (hand-built context)', false],
+    ])(
+      'refuses when the wallet switches chain after the wallet check (%s)',
+      async (_name, withViemChain) => {
+        let asked = 0;
+        // Hoodi for requireWallet, mainnet when viem re-checks at send time.
+        const chain = fakeChain({
+          walletAccount: account,
+          walletChainId: () => (asked++ === 0 ? 560048 : 1),
+        });
+        const ctx = chain.context();
+        if (!withViemChain) delete ctx.viemChain;
+        await expect(send(ctx, prepared)).rejects.toMatchObject({
+          code: 'CHAIN_MISMATCH',
+          details: { expectedChainId: 560048, actualChainId: 1 },
+        });
+        expect(chain.sent).toHaveLength(0);
+      },
+    );
   });
 
   describe('block number reads skip the client cache', () => {

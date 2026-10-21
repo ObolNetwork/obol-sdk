@@ -32,11 +32,18 @@ export const MODULE_ENTRIES = [
   'exits',
   'experimental',
 ] as const;
-const nodeEntries: Record<string, string> = {
+const entries: Record<string, string> = {
   index: 'src/index.ts',
   ...Object.fromEntries(
     MODULE_ENTRIES.map(m => [`${m}/index`, `src/${m}/index.ts`]),
   ),
+};
+// Node only: the native BLS backend (`@obolnetwork/obol-sdk/blst`). It loads
+// the optional peer @chainsafe/blst with a dynamic import, which stays
+// external; no other entry imports this one.
+const nodeEntries: Record<string, string> = {
+  ...entries,
+  'blst/index': 'src/blst/index.ts',
 };
 
 // Bundle ESM-only deps and @noble/curves (avoids ESM resolution issues in CJS consumers)
@@ -52,7 +59,7 @@ export default defineConfig([
     splitting: true,
     sourcemap: true,
     noExternal,
-    external: ['@chainsafe/ssz', 'viem'],
+    external: ['@chainsafe/blst', '@chainsafe/ssz', 'viem'],
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -67,7 +74,7 @@ export default defineConfig([
     sourcemap: true,
     outExtension: () => ({ js: '.js' }), // Use .js instead of .mjs
     noExternal,
-    external: ['@chainsafe/ssz', 'viem'],
+    external: ['@chainsafe/blst', '@chainsafe/ssz', 'viem'],
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -75,7 +82,7 @@ export default defineConfig([
   },
   // Browser ESM build
   {
-    entry: nodeEntries,
+    entry: entries,
     format: ['esm'],
     dts: false,
     outDir: 'dist/browser/src',

@@ -105,6 +105,10 @@ export type ClusterDefinition = Static<typeof DefinitionSchema>;
 /** A cluster lock file (wire format). */
 export type ClusterLock = Static<typeof LockSchema>;
 export type ClusterOperator = Static<typeof OperatorSchema>;
+/** One entry of a definition's `validators` (the 2.x `ClusterValidator`). */
+export type ClusterValidator = NonNullable<
+  ClusterDefinition['validators']
+>[number];
 
 export const PrepareDefinitionSchema = Type.Object(
   {

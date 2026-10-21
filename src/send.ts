@@ -4,6 +4,8 @@
  * or, for a contract wallet (a Safe), to the Safe's execution log.
  */
 import {
+  BaseError,
+  ChainMismatchError,
   isAddress,
   isHex,
   slice,
@@ -18,7 +20,12 @@ import {
   TransactionReceiptNotFoundError,
 } from 'viem';
 import { getCodeKind, latestBlockNumber } from './chainUtils.js';
-import { accountAddress, requireWallet, type Context } from './context.js';
+import {
+  accountAddress,
+  requireWallet,
+  viemChainOf,
+  type Context,
+} from './context.js';
 import { ObolError } from './errors.js';
 import { PREPARED_KINDS, type AnyPrepared } from './types.js';
 
@@ -220,12 +227,30 @@ export const send = async (
   try {
     hash = await walletClient.sendTransaction({
       account,
-      chain: walletClient.chain ?? null,
+      // The client chain, so viem re-checks the wallet chain when it sends:
+      // the wallet may have switched since requireWallet.
+      chain: viemChainOf(ctx),
       to: prepared.request.to,
       data: prepared.request.data,
       value: prepared.request.value,
     });
   } catch (cause) {
+    if (
+      cause instanceof ChainMismatchError ||
+      (cause instanceof BaseError &&
+        cause.walk(e => e instanceof ChainMismatchError) !== null)
+    ) {
+      const actual = await walletClient.getChainId().catch(() => -1);
+      throw new ObolError(
+        'CHAIN_MISMATCH',
+        `The wallet switched to chain ${actual} before sending; the client is on ${ctx.chain.id}`,
+        {
+          hint: "Nothing was sent; switch the wallet back to the client's chain and retry",
+          details: { expectedChainId: ctx.chain.id, actualChainId: actual },
+          cause,
+        },
+      );
+    }
     throw new ObolError(
       'TX_REJECTED',
       `The wallet did not send the transaction: ${(cause as Error).message}`,

@@ -9,7 +9,7 @@ import { parseEther, type Hex } from 'viem';
 import { requireContracts } from '../chains.js';
 import type { Context } from '../context.js';
 import { ObolApiError, ObolError, isObolError } from '../errors.js';
-import { decode, invalid, T } from '../schema.js';
+import { decode, invalid, T, trimTrailingSlashes } from '../schema.js';
 import type { Source, StatusSource } from '../types.js';
 import { gweiToWei } from '../units.js';
 
@@ -480,7 +480,7 @@ const normalizeBeaconUrl = (beaconUrl: string): string => {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw invalid('beaconUrl', 'must be an http(s) URL');
   }
-  return url.toString().replace(/\/+$/, '');
+  return trimTrailingSlashes(url.toString());
 };
 
 const beaconData = async (

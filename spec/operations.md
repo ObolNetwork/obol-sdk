@@ -186,7 +186,22 @@ message }[] }`; `cluster.accept` throws `DEFINITION_INVALID` with these issues.
    Gnosis, `0x90000069` Sepolia). Issue `fork_version_mismatch`. (2.15)
 4. For a definition with signatures: the creator and operator EIP-712 signatures as distributed-validator-specs
    "EIP-712 Signature Computation" (contract-wallet signers via EIP-1271, which makes this step `chain`). Issue
-   `signature_invalid`. (2.15 `verifyDefinitionSignatures`, run only inside lock verification today; `new` for accept)
+   `signature_invalid`; `signature_unverifiable` for a signature that does not recover to its signer when no client
+   for `chainId` was given (see "Contract-wallet signatures" below). (2.15 `verifyDefinitionSignatures`, run only
+   inside lock verification today; `new` for accept)
+
+Options: `{ publicClient: PublicClient?, publicClients: Record<chainId, PublicClient> | (chainId) => PublicClient?
+}`; a `publicClients` that is neither: `PAYLOAD_INVALID`. The bound `obol.cluster.verifyDefinition` adds the client's
+own `publicClient` for the client chain.
+
+**Contract-wallet signatures.** Every signature is first recovered (ECDSA). One that does not recover to its signer is
+checked as a contract wallet's (EIP-1271 `isValidSignature(hashTypedData, signature)` returning `0x1626ba7e`) with the
+client for the domain's chain: from `publicClients` (a client on another chain than the one it is listed for is
+ignored), else `publicClient` when it is on that chain. With a client: an address with no code (or an EIP-7702
+delegation) is `invalid`; a contract that refuses, reverts or fails the read is `invalid`. Without one the SDK cannot
+tell an account from a contract wallet, so the signature is `unverifiable`: a failure (`ok: false`) that names the
+missing client instead of passing for `invalid`. The SDK has no RPCs of its own (2.x used built-in ones,
+`PROVIDER_MAP`), so a server passes `publicClients` for every chain it serves.
 
 ### cluster.verifyLock
 
@@ -196,13 +211,15 @@ Tag: `pure` (`chain` when a definition signer is a contract wallet: EIP-1271 cal
 { level: "attested" | "full" (default "full"),
   signatures: "all" | "none" | uint[],   # attested only (default "none"): validators whose step 7 / 8 BLS signatures are checked
   yieldMs: uint (default 50),            # 0 = never yield
-  bls: BlsBackend?,                      # default: pure JS (@noble/curves)
-  publicClient: PublicClient? }
+  bls: BlsBackend?,                      # default: pure JS (@noble/curves); Node: loadBlstBackend() from /blst
+  publicClient: PublicClient?,           # contract-wallet signatures on its own chain
+  publicClients: Record<chainId, PublicClient> | (chainId) => PublicClient? }  # by the lock's chain
 ```
 
 Output: `{ ok: bool, level, step: string?, issue: string?, validator: uint? }`; `validator` is the index of the
 failing validator when the failing check is per validator (steps 5–8). Steps: `definition_flow_unknown`,
-`definition_invalid`, `definition_signature_invalid`, `hash_mismatch`, `share_layout_invalid`,
+`definition_invalid`, `definition_signature_invalid`, `definition_signature_unverifiable`, `hash_mismatch`,
+`share_layout_invalid`,
 `share_reconstruction_failed`, `deposit_data_invalid`, `builder_registration_invalid`, `lock_signature_invalid`.
 
 The full "Verifying a Lock Before Use" sequence of distributed-validator-specs, plus the Obol definition and deposit
@@ -215,8 +232,19 @@ rules, in this order (first failure is reported as `step`):
    v1.8.0+, a non-empty `deposit_amounts` with an amount below 1 ETH or above 32 ETH (2048 ETH with `compounding`), or
    summing to less than 32 ETH (`deposit_amounts_invalid`). `definition_invalid`. (new in 3.0.0-rc.4, from the
    differential fuzz against Charon)
-3. Definition signatures valid for the flow (as `verifyDefinition` 4). `definition_signature_invalid`.
-4. Recomputed `config_hash`, `definition_hash` and `lock_hash` equal the stored values. `hash_mismatch`. (spec step 1)
+3. Definition signatures valid for the flow (as `verifyDefinition` 4, with the lock's chain from its
+   `fork_version`). `definition_signature_invalid` for a signature known to be invalid (reported first, if any);
+   else `definition_signature_unverifiable` for one that could not be checked: it does not recover to its signer and
+   no client for the lock's chain was given (see `verifyDefinition` "Contract-wallet signatures"). The issue names
+   the signature (`creator config_signature`, `operators[i] enr_signature`, ...). (`definition_signature_unverifiable`
+   new in 3.0.0-rc.5; rc.4 reported it as `definition_signature_invalid`)
+4. Recomputed `config_hash`, `definition_hash` and `lock_hash` equal the stored values. `hash_mismatch`, issue
+   `config_hash`, `definition_hash` or `lock_hash` (the first that differs). (spec step 1) `config_hash` is
+   recomputed from the definition's fields, never taken as given: the creator and operator signatures of step 3 are
+   over `config_hash`, so this is what binds them to the definition's contents. An edited definition with its old
+   `config_hash` passes step 3 and fails here (`config_hash`), however `definition_hash`, `lock_hash` and the node
+   signatures were re-sealed; one with `config_hash` recomputed fails step 3 (the signatures are over the old hash);
+   and a self-consistent lock that carries another cluster's `config_hash` fails here too.
 5. Every validator has exactly one public share per operator, no two validators share a group key, no validator
    repeats a share (case-insensitive). `share_layout_invalid`. (spec step 2)
 6. `full`: the shares bind to the group key. With Y0 the group key and Yj the share at index j (1-based, file order),
@@ -268,8 +296,48 @@ caller stays responsive; a caller that needs a deadline races the promise itself
 80 s (signatures about 25 ms each; share binding 5 s) and `attested` 0.3 s, 10k validators `attested` 1.8 s; with
 an adapter over `@chainsafe/blst` (see the TSDoc of `BlsBackend`), `full` 1.3 s for 1k and 12 s for 10k.
 
-Vectors: the `cluster_hashing.json` hash cases. (`real_keys_3_of_4` has placeholder EIP-712, deposit and builder
-signatures, so it stops at `definition_signature_invalid`; it is not a full-pass fixture.)
+Servers. `full` is the level for locks from users: `attested` skips share binding and `signature_aggregate`. With
+the default backend a 1k-validator lock is about 80 s of event-loop time; a Node server passes the native backend
+(below). The result is an object (always truthy): test `ok`, or use `isValidLock`.
+
+Vectors: the `cluster_hashing.json` hash cases. (`real_keys_3_of_4`, a Sepolia lock, has placeholder EIP-712,
+deposit and builder signatures, so it stops at its creator signature: `definition_signature_unverifiable` without a
+Sepolia client; it is not a full-pass fixture.)
+
+### cluster.isValidLock
+
+Tag: `pure` (`chain` as `verifyLock`). Inputs: a lock, the `verifyLock` options. Output: `bool`. The 2.x
+`validateClusterLock`. Runs `verifyLock` with `level: "full"` unless `options.level` is given, and returns `ok`. A
+`PAYLOAD_INVALID` for the lock (a malformed lock; issue paths under `lock`) is `false`, as 2.x returned; one for the
+options (paths under `options`) and every other error are thrown. Also a root export and bound
+(`obol.cluster.isValidLock`, with the client's `publicClient` for its chain). (new in 3.0.0-rc.5)
+
+### cluster.parseEnr / cluster.isValidEnr
+
+Tag: `pure`. `parseEnr(enr)`: decodes a text ENR (`enr:` + base64url RLP, EIP-778) and checks its signature, as 2.x
+`ENR.decodeTxt`; output `{ publicKey: Hex (33-byte compressed secp256k1), nodeId: Hex, seq: bigint, ip?, tcp?, udp?
+}`; anything else: `PAYLOAD_INVALID` (path `enr`). `isValidEnr(value)`: `true` iff `parseEnr` would succeed; never
+throws; whitespace is not trimmed. (new in 3.0.0-rc.5; 2.x re-exported the `@chainsafe/enr` class)
+
+### verifyTypedDataSignature
+
+Tag: `pure` (`chain` for a contract-wallet signer). Inputs: `{ address, signature, typedData: { domain?, types,
+primaryType, message }, chainId?: uint, publicClient?, publicClients? }`. Output: `bool`. The 2.x
+`validateAddressSignature` / `validateEOASignature`: `true` iff `signature` recovers to `address` (ECDSA over
+`hashTypedData`), or, with a client for `chainId` (default `typedData.domain.chainId`; a domain without `chainId`,
+such as the terms, needs `chainId` for a contract wallet), `address` is a contract whose EIP-1271
+`isValidSignature` accepts it. An `EIP712Domain` entry in `types` is accepted. Never throws (a malformed signature is
+`false`). Without a client, a contract wallet's signature is `false`. (new in 3.0.0-rc.5)
+
+### @obolnetwork/obol-sdk/blst
+
+Node only (not in the browser build). `loadBlstBackend(): Promise<BlsBackend>` imports the optional peer dependency
+`@chainsafe/blst` (2.x) on its first call (cached) and returns the backend over it; `BLS_BACKEND_UNAVAILABLE` when it
+is not installed or its native binding does not load. `blstBackendFrom(module)` builds the same backend over a module
+the caller imported. Every key and signature is decoded with full validation; `onPolynomial` compares the two
+binomial-weighted sums of each `threshold`-th forward difference; batches use blst's random weights. No other entry
+imports it. `test/cluster/blstCrossCheck.spec.ts` and the lock fuzz compare it with the default backend. (new in
+3.0.0-rc.5)
 
 ### cluster.get / cluster.getLock
 
@@ -310,7 +378,8 @@ Deposit data amounts are wei in the SDK and gwei on the wire. Constants: minimum
 ### deposits.fromLock
 
 Tag: `pure`. Inputs: `lock`, `{ amount: bigint?, verify: bool | "attested" | "full" (true), validators: (uint |
-Pubkey)[]?, yieldMs: uint?, bls: BlsBackend? }`. Output:
+Pubkey)[]?, yieldMs: uint?, bls: BlsBackend?, publicClient: PublicClient?, publicClients? }` (the last two passed to
+`verifyLock`; the bound module passes the client's `publicClient`). Output:
 
 ```
 { lockHash: Hash32, validators: uint[] (lock indexes, ascending), amounts: bigint[] (ascending),
@@ -649,7 +718,8 @@ Checks:
    6. a partial: `0x02` credentials (`PARTIAL_REQUIRES_COMPOUNDING`), `effectiveBalance` ≥ 32 ETH
       (`EFFECTIVE_BALANCE_TOO_LOW`), `balance` > 32 ETH + pending (`NO_EXCESS_BALANCE`); the amount is capped to
       `balance − 32 ETH − pending` (whole gwei), sent capped, with Finding `WITHDRAW_AMOUNT_CAPPED` (info) and
-      `requestedAmount` in the preview; a full pending partial withdrawal queue (known only from a beacon node) →
+      `requestedAmount` in the preview; an excess under 1 gwei, which would cap the amount to 0 (a full exit under
+      EIP-7002), is `NO_EXCESS_BALANCE` too, so a partial request is never sent with amount 0; a full pending partial withdrawal queue (known only from a beacon node) →
       Finding `PARTIAL_WITHDRAWAL_QUEUE_FULL` (warning).
 
    Without a status source: Finding `VALIDATOR_STATUS_UNCHECKED` (info, `checks: ["all"]`). A rule whose data the
@@ -1095,7 +1165,10 @@ version: 1 }` with the domain without `chainId` and posts `{ address, version, t
 Tag: wallet. Input: `Prepared`. Output: `{ hash: Hash32, contractWallet: bool, wait(options?: { onReplaced?,
 timeoutMs?, confirmations? }) }`.
 
-1. `prepared.request.chainId` equals the client chain and the wallet chain, else `CHAIN_MISMATCH`.
+1. `prepared.request.chainId` equals the client chain and the wallet chain, else `CHAIN_MISMATCH`. The client's
+   viem chain is passed to `sendTransaction`, so viem checks the wallet chain again when it sends; a wallet that
+   switched in between is `CHAIN_MISMATCH` too (nothing was sent). A context built by hand without `viemChain` uses a
+   minimal viem chain with the client chain id. (send-time check new in 3.0.0-rc.5)
 2. `kind` is one of the kinds of "Shared types" and the `request` fields are well-formed (`to` an address, `data` hex,
    `value` ≥ 0), else `PREPARED_INVALID`.
 3. The wallet rejects or fails before returning a hash: `TX_REJECTED` (nothing was sent).

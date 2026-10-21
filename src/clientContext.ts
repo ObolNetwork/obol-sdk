@@ -18,7 +18,7 @@ import {
 } from './chains.js';
 import type { Context } from './context.js';
 import { ObolError } from './errors.js';
-import { decode } from './schema.js';
+import { decode, trimTrailingSlashes } from './schema.js';
 
 export interface ObolClientConfig {
   /** viem Chain: mainnet or Hoodi (Gnosis / Sepolia for cluster files only). */
@@ -62,9 +62,9 @@ const chainMismatch = (
 const buildApi = (config: ObolClientConfig['api']): ObolApi | null => {
   if (config === false) return null;
   const settings = decode(ApiSettings, config ?? {}, 'api');
-  const baseUrl = (settings.baseUrl ?? DEFAULT_API_BASE_URL)
-    .trim()
-    .replace(/\/+$/, '');
+  const baseUrl = trimTrailingSlashes(
+    (settings.baseUrl ?? DEFAULT_API_BASE_URL).trim(),
+  );
   const allowLocal = settings.allowLocal === true;
   if (!isAllowedApiBaseUrl(baseUrl, allowLocal)) {
     throw new ObolError(
@@ -99,6 +99,7 @@ export const createObolContext = (config: ObolClientConfig): Context => {
   }
   return {
     chain,
+    viemChain: config.chain,
     publicClient: config.publicClient,
     ...(config.walletClient !== undefined
       ? { walletClient: config.walletClient }

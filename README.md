@@ -122,14 +122,37 @@ const result = await obol.cluster.verifyLock(lock, { level: 'attested', signatur
 // { ok: false, level: 'attested', step: 'deposit_data_invalid', issue: 'signature_invalid', validator: 1 }
 ```
 
-BLS is pure JavaScript by default (about 25 ms per signature). A Node server can pass a native backend instead, for
-example an adapter over `@chainsafe/blst` (the adapter is in the TSDoc of `BlsBackend`):
+BLS is pure JavaScript by default (about 25 ms per signature), which suits pages and scripts. Contract-wallet
+(Safe) definition signatures are checked with EIP-1271 through a public client on the lock's chain: the bound client
+uses its own; standalone calls take `publicClient` or `publicClients` (by chain id). Without one, such a signature
+fails as `definition_signature_unverifiable`.
+
+### Servers
+
+A Node server that verifies locks from users (the Obol API does) should:
+
+- call `isValidLock` (a boolean; `verifyLock` returns an object, always truthy) or check `verifyLock(...).ok`, and map
+  `PAYLOAD_INVALID` (a malformed lock) to a 400;
+- keep `level: 'full'` (the default). **Never `attested` on a server:** it skips share binding and the aggregate
+  signature;
+- pass the native BLS backend from `@obolnetwork/obol-sdk/blst` (install the optional peer `@chainsafe/blst`): a 1k
+  validator lock at `full` takes about 1.3 s instead of 80 s of event-loop time;
+- pass `publicClients` for every chain it serves, so Safe-created clusters verify (2.x had built-in RPCs; v3 has
+  none);
+- apply its own deadline and concurrency limit around the call (there are no workers).
 
 ```typescript
-import { blstBackend } from './blstBackend'; // your adapter; the SDK never imports a native module
+import { isValidLock } from '@obolnetwork/obol-sdk';
+import { loadBlstBackend } from '@obolnetwork/obol-sdk/blst';
 
-await obol.cluster.verifyLock(lock, { bls: blstBackend }); // 1k validators, full: about 1 s instead of a minute
+const bls = await loadBlstBackend(); // once; BLS_BACKEND_UNAVAILABLE if @chainsafe/blst is missing
+const publicClients = { 1: mainnetClient, 560048: hoodiClient };
+
+if (!(await isValidLock(lock, { bls, publicClients }))) throw new BadRequestException('Invalid lock');
 ```
+
+`verifyTypedDataSignature({ address, signature, typedData, chainId?, publicClients })` checks an EIP-712 bearer
+signature (an account by recovery, a Safe by EIP-1271), and `cluster.isValidEnr` / `cluster.parseEnr` validate ENRs.
 
 ## Specification
 

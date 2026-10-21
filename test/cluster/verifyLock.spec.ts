@@ -55,11 +55,33 @@ describe('cluster.verifyLock', () => {
     const operator = lock.cluster_definition.operators[1];
     operator.config_signature =
       lock.cluster_definition.operators[0].config_signature;
-    expect(await verifyLock(lock)).toEqual({
+    // With a client for the chain: the operator is an account, so the
+    // signature of another account is invalid.
+    expect(
+      await verifyLock(lock, { publicClient: fakeChain().publicClient }),
+    ).toEqual({
       ok: false,
       level: 'full',
       step: 'definition_signature_invalid',
       issue: 'operators[1] config_signature',
+    });
+    // Without one, it could be a contract wallet's: unverifiable.
+    expect(await verifyLock(lock)).toEqual({
+      ok: false,
+      level: 'full',
+      step: 'definition_signature_unverifiable',
+      issue: 'operators[1] config_signature',
+    });
+  });
+
+  it('step 2: a known-invalid signature wins over an unverifiable one', async () => {
+    const lock = copy(clusterLockV1X10);
+    const operators = lock.cluster_definition.operators;
+    operators[1].config_signature = operators[0].config_signature;
+    operators[2].config_signature = 'not hex';
+    expect(await verifyLock(lock)).toMatchObject({
+      step: 'definition_signature_invalid',
+      issue: 'operators[2] config_signature',
     });
   });
 
@@ -86,10 +108,44 @@ describe('cluster.verifyLock', () => {
       },
     });
 
-    it('fails without a publicClient', async () => {
-      expect(await verifyLock(copy(clusterLockV1X11))).toMatchObject({
-        step: 'definition_signature_invalid',
+    it('is unverifiable without a client for the chain', async () => {
+      expect(await verifyLock(copy(clusterLockV1X11))).toEqual({
+        ok: false,
+        level: 'full',
+        step: 'definition_signature_unverifiable',
+        issue: 'creator config_signature',
       });
+    });
+
+    it('uses the client for the lock chain from publicClients', async () => {
+      const mainnet = fakeChain({ chainId: 1 }).publicClient;
+      for (const publicClients of [
+        { 1: mainnet, 560048: chain.publicClient },
+        (id: number) => (id === 560048 ? chain.publicClient : mainnet),
+      ]) {
+        expect(
+          await verifyLock(copy(clusterLockV1X11), { publicClients }),
+        ).toEqual({ ok: true, level: 'full' });
+      }
+      // Listed under the wrong chain id: ignored.
+      expect(
+        await verifyLock(copy(clusterLockV1X11), {
+          publicClients: { 560048: mainnet },
+        }),
+      ).toMatchObject({ step: 'definition_signature_unverifiable' });
+      // A client map with none for the chain falls back to publicClient.
+      expect(
+        await verifyLock(copy(clusterLockV1X11), {
+          publicClients: { 1: mainnet },
+          publicClient: chain.publicClient,
+        }),
+      ).toEqual({ ok: true, level: 'full' });
+    });
+
+    it('refuses publicClients that are neither a map nor a function', async () => {
+      await expect(
+        verifyLock(copy(clusterLockV1X11), { publicClients: 'x' as never }),
+      ).rejects.toMatchObject({ code: 'PAYLOAD_INVALID' });
     });
 
     it('passes with the contract confirming the signature', async () => {
@@ -114,7 +170,7 @@ describe('cluster.verifyLock', () => {
         await verifyLock(copy(clusterLockV1X11), {
           publicClient: mainnet.publicClient,
         }),
-      ).toMatchObject({ step: 'definition_signature_invalid' });
+      ).toMatchObject({ step: 'definition_signature_unverifiable' });
     });
   });
 

@@ -37,8 +37,14 @@ import {
 import { toUint64 } from '../internal/verification/sszTypes.js';
 import { createTick, type Tick } from '../internal/yielder.js';
 import { chainIdForForkVersion } from '../chains.js';
+import { isObolError } from '../errors.js';
 import { decode, invalid, T } from '../schema.js';
 import { nobleBls, type BlsBackend } from './blsBackend.js';
+import {
+  assertSignatureClients,
+  type PublicClients,
+  type SignatureClients,
+} from './eip712.js';
 import { isSupportedVersion } from './hash.js';
 import { LockSchema, type ClusterLock } from './schema.js';
 import { invalidDefinitionSignatures } from './verifyDefinition.js';
@@ -47,6 +53,7 @@ export type LockStep =
   | 'definition_flow_unknown'
   | 'definition_invalid'
   | 'definition_signature_invalid'
+  | 'definition_signature_unverifiable'
   | 'hash_mismatch'
   | 'share_layout_invalid'
   | 'share_reconstruction_failed'
@@ -78,8 +85,20 @@ export interface LockVerification {
 }
 
 export interface VerifyLockOptions {
-  /** Needed to check contract-wallet (EIP-1271) definition signatures; must be on the lock's chain. */
+  /**
+   * A client for contract-wallet (EIP-1271) definition signatures, such as a
+   * Safe creator: used for a lock on its own chain only. The SDK has no RPCs
+   * of its own (2.x had built-in ones). See `publicClients`.
+   */
   publicClient?: PublicClient;
+  /**
+   * Clients by chain id (or a function of the chain id), for a caller that
+   * verifies locks of several chains: the one for the lock's chain (from its
+   * `fork_version`) checks contract-wallet signatures. Without a client for
+   * that chain, a definition signature that does not recover to its signer
+   * fails as `definition_signature_unverifiable`.
+   */
+  publicClients?: PublicClients;
   /** Default `full`. */
   level?: LockVerificationLevel;
   /**
@@ -158,7 +177,7 @@ interface Run {
   selected: number[];
   bls: BlsBackend;
   tick: Tick;
-  publicClient?: PublicClient;
+  clients: SignatureClients;
   /** Step 5 (full): decoded group keys, and the sum of every public share. */
   groupKeys?: unknown[];
   sharesSum?: unknown;
@@ -272,11 +291,16 @@ const checkDefinitionSignatures = async (
   const failures = await invalidDefinitionSignatures(
     signed,
     chainId,
-    run.publicClient !== undefined ? { publicClient: run.publicClient } : {},
+    run.clients,
     { creator: true, operators: true },
   );
+  // A signature known to be invalid wins over one that could not be checked.
+  const invalidOne = failures.find(f => f.reason === 'invalid');
+  if (invalidOne !== undefined) {
+    fail('definition_signature_invalid', invalidOne.name);
+  }
   if (failures.length > 0) {
-    fail('definition_signature_invalid', failures[0]);
+    fail('definition_signature_unverifiable', failures[0].name);
   }
 };
 
@@ -597,29 +621,41 @@ const selectedValidators = (
  * reported as `step`, with `validator` for a per-validator one):
  *
  * 1. the definition flow is group, solo or Charon (`definition_flow_unknown`);
- * 2. the definition signatures the flow needs are valid
- *    (`definition_signature_invalid`; contract wallets via EIP-1271 with
- *    `publicClient`);
- * 3. recomputed config, definition and lock hashes equal the stored ones
- *    (`hash_mismatch`);
- * 4. one public share per operator, unique group keys, no repeated share
+ * 2. the definition is one Charon accepts (`definition_invalid`);
+ * 3. the definition signatures the flow needs are valid
+ *    (`definition_signature_invalid`). Contract-wallet signers (a Safe) are
+ *    checked with EIP-1271 and **need a client for the lock's chain**
+ *    (`publicClients`, or `publicClient` on that chain; 2.x had built-in
+ *    RPCs, v3 has none): without one, a signature that does not recover to
+ *    its signer is `definition_signature_unverifiable`;
+ * 4. recomputed config, definition and lock hashes equal the stored ones
+ *    (`hash_mismatch`). `config_hash` is recomputed from the definition
+ *    fields, so the signatures of step 3 (all over `config_hash`) bind to
+ *    the definition's contents;
+ * 5. one public share per operator, unique group keys, no repeated share
  *    (`share_layout_invalid`);
- * 5. `full`: the shares and group key of each validator lie on one
+ * 6. `full`: the shares and group key of each validator lie on one
  *    polynomial of degree below the threshold, every share checked
  *    (`share_reconstruction_failed`);
- * 6. deposit data: amounts, group pubkey, `0x01` / `0x02` credentials to the
+ * 7. deposit data: amounts, group pubkey, `0x01` / `0x02` credentials to the
  *    withdrawal address; BLS signatures for the checked validators
  *    (`deposit_data_invalid`);
- * 7. builder registrations: group pubkey, fee recipient; BLS signatures for
+ * 8. builder registrations: group pubkey, fee recipient; BLS signatures for
  *    the checked validators (`builder_registration_invalid`; from v1.7.0);
- * 8. node signatures by each operator's ENR key over `lock_hash` (from
+ * 9. node signatures by each operator's ENR key over `lock_hash` (from
  *    v1.7.0) and, `full`, `signature_aggregate` over `lock_hash` against all
  *    public shares (`lock_signature_invalid`).
  *
- * `level: 'attested'` skips the BLS work of steps 5 and 8 and checks the
- * step 6 / 7 signatures of the validators in `signatures` only (a 10k
+ * `level: 'attested'` skips the BLS work of steps 6 and 9 and checks the
+ * step 7 / 8 signatures of the validators in `signatures` only (a 10k
  * validator lock: a few seconds, plus about 25 ms per checked signature with
- * the default backend). `full` (default) checks everything.
+ * the default backend). `full` (default) checks everything. **A server that
+ * accepts locks from users must use `full`**: `attested` skips share
+ * binding and `signature_aggregate`. On Node, pass a native backend
+ * (`blstBackend` from `@obolnetwork/obol-sdk/blst`) to keep `full` fast.
+ *
+ * The result is an object, always truthy: test `result.ok`, or use
+ * {@link isValidLock} for a boolean.
  *
  * @throws PAYLOAD_INVALID for a malformed lock or options.
  */
@@ -647,6 +683,7 @@ export const verifyLock = async (
       "level 'full' checks every signature; pass level 'attested' to choose validators",
     );
   }
+  assertSignatureClients(options, 'options');
   const bls = options.bls ?? nobleBls;
   for (const method of BACKEND_METHODS) {
     if (typeof bls[method] !== 'function') {
@@ -663,8 +700,42 @@ export const verifyLock = async (
     ),
     bls,
     tick: createTick(scalars.yieldMs ?? DEFAULT_YIELD_MS),
-    ...(options.publicClient !== undefined
-      ? { publicClient: options.publicClient }
-      : {}),
+    clients: {
+      ...(options.publicClient !== undefined
+        ? { publicClient: options.publicClient }
+        : {}),
+      ...(options.publicClients !== undefined
+        ? { publicClients: options.publicClients }
+        : {}),
+    },
   });
+};
+
+/**
+ * isValidLock (pure; `chain` for a contract-wallet signer): `verifyLock` as
+ * a boolean, the drop-in for the 2.x `validateClusterLock`. Runs at
+ * `level: 'full'` unless `options.level` says otherwise (a server that
+ * accepts locks must keep `full`), with the other options passed through
+ * (`bls`, `publicClient` / `publicClients`, `yieldMs`). A malformed lock
+ * (`PAYLOAD_INVALID`) is `false`, as in 2.x; any other error is thrown.
+ *
+ * @throws PAYLOAD_INVALID only for malformed options (an invalid lock is
+ *   `false`); other errors (a BLS backend failure) propagate.
+ */
+export const isValidLock = async (
+  lock: unknown,
+  options: VerifyLockOptions = {},
+): Promise<boolean> => {
+  try {
+    const result = await verifyLock(lock, { level: 'full', ...options });
+    return result.ok;
+  } catch (error) {
+    if (
+      isObolError(error, 'PAYLOAD_INVALID') &&
+      !error.details.issues.some(issue => issue.path.startsWith('options'))
+    ) {
+      return false;
+    }
+    throw error;
+  }
 };

@@ -86,7 +86,8 @@ export interface FakeChainOptions {
   /** Timestamp returned by eth_getBlockByNumber. */
   blockTimestamp?: bigint;
   walletAccount?: Address;
-  walletChainId?: number;
+  /** The wallet's chain id; a function is asked on every eth_chainId (a wallet that switches). */
+  walletChainId?: number | (() => number);
   /** Called with each eth_sendTransaction; return the hash. */
   onSendTransaction?: (tx: any) => Hex;
 }
@@ -333,7 +334,11 @@ export const fakeChain = (options: FakeChainOptions = {}) => {
           transport: custom({
             request: async (args: { method: string; params?: any[] }) => {
               if (args.method === 'eth_chainId') {
-                return toHex(options.walletChainId ?? chainId);
+                return toHex(
+                  typeof options.walletChainId === 'function'
+                    ? options.walletChainId()
+                    : (options.walletChainId ?? chainId),
+                );
               }
               return await request(args);
             },
@@ -354,6 +359,7 @@ export const fakeChain = (options: FakeChainOptions = {}) => {
     /** A v3 Context on this chain; `api` defaults to disabled. */
     context: (api: ObolApi | null = null): Context => ({
       chain: CHAINS[chainId],
+      viemChain,
       publicClient,
       ...(walletClient !== undefined ? { walletClient } : {}),
       api,

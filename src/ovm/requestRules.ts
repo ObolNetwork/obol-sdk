@@ -314,6 +314,22 @@ export const checkWithdrawalRequests = (
     }
     const excess = ((status.balance - floor) / GWEI) * GWEI;
     const amount = request.amount > excess ? excess : request.amount;
+    if (amount === 0n) {
+      // An excess under 1 gwei rounds down to 0, and a request amount of 0
+      // is a full exit (EIP-7002): never send it for a partial withdrawal.
+      throw new ObolError(
+        'NO_EXCESS_BALANCE',
+        `${status.pubkey} has less than 1 gwei above 32 ETH plus its pending partial withdrawals (${status.balance} wei, ${pending} wei pending): nothing would be withdrawn`,
+        {
+          hint: 'Drop the request; only the balance above 32 ETH can be withdrawn partially',
+          details: {
+            pubkey: status.pubkey,
+            balance: status.balance,
+            pendingPartialWithdrawals: pending,
+          },
+        },
+      );
+    }
     pendingAdded.set(
       request.pubkey,
       (pendingAdded.get(request.pubkey) ?? 0n) + amount,

@@ -5,7 +5,7 @@
 ```ts
 
 import { Address } from 'viem';
-import type { Chain } from 'viem';
+import { Chain } from 'viem';
 import { Hash } from 'viem';
 import { Hex } from 'viem';
 import { PublicClient } from 'viem';
@@ -24,6 +24,7 @@ import { TRecord } from '@sinclair/typebox';
 import { TString } from '@sinclair/typebox';
 import { TUnion } from '@sinclair/typebox';
 import { TypedDataDefinition } from 'viem';
+import { TypedDataDomain } from 'viem';
 import { WalletClient } from 'viem';
 
 // @public
@@ -155,17 +156,26 @@ declare namespace cluster {
         prepareDefinition,
         verifyDefinition,
         verifyLock,
+        isValidLock,
+        isValidEnr,
+        parseEnr,
+        ParsedEnr,
         nobleBls,
         BlsBackend,
         BlsBatch,
         creatorConfigHashTypedData,
         enrTypedData,
         operatorConfigHashTypedData,
+        verifyTypedDataSignature,
+        EIP712TypedData,
+        PublicClients,
+        SignatureClients,
         DEFAULT_DEFINITION_VERSION,
         SUPPORTED_DEFINITION_VERSIONS,
         ClusterDefinition,
         ClusterLock,
         ClusterOperator,
+        ClusterValidator,
         PrepareDefinitionInput,
         PreparedDefinition,
         DefinitionIssue,
@@ -232,6 +242,8 @@ interface ClusterModule {
         lockHash: string;
     }) => Promise<ClusterLock>;
     // (undocumented)
+    isValidLock: (lock: unknown, options?: VerifyLockOptions) => Promise<boolean>;
+    // (undocumented)
     prepareDefinition: (input: {
         chainId?: number;
     } & object) => PreparedDefinition;
@@ -251,6 +263,9 @@ interface ClusterModule {
 //
 // @public (undocumented)
 type ClusterOperator = Static<typeof OperatorSchema>;
+
+// @public
+type ClusterValidator = NonNullable<ClusterDefinition['validators']>[number];
 
 // @public (undocumented)
 interface CompleteOwnershipHandoverInput {
@@ -294,6 +309,7 @@ export interface Context {
     chain: ObolChain;
     // (undocumented)
     publicClient: PublicClient;
+    viemChain?: Chain;
     // (undocumented)
     walletClient?: WalletClient;
 }
@@ -387,7 +403,7 @@ const DEFAULT_SPLIT_SALT: Hex;
 // @public (undocumented)
 interface DefinitionIssue {
     // (undocumented)
-    code: 'config_hash_mismatch' | 'fork_version_mismatch' | 'version_unsupported' | 'signature_invalid';
+    code: 'config_hash_mismatch' | 'fork_version_mismatch' | 'version_unsupported' | 'signature_invalid' | 'signature_unverifiable';
     // (undocumented)
     message: string;
 }
@@ -618,6 +634,21 @@ interface DistributionResult {
 }
 
 // @public
+export interface EIP712TypedData {
+    // (undocumented)
+    domain?: TypedDataDomain;
+    // (undocumented)
+    message: Record<string, unknown>;
+    // (undocumented)
+    primaryType: string;
+    // (undocumented)
+    types: Record<string, ReadonlyArray<{
+        name: string;
+        type: string;
+    }>>;
+}
+
+// @public
 const enrTypedData: (enr: string, chainId: number) => ClusterTypedData;
 
 // @public (undocumented)
@@ -764,6 +795,7 @@ interface FromLockOptions {
     bls?: BlsBackend;
     chainId?: number;
     publicClient?: PublicClient;
+    publicClients?: PublicClients;
     validators?: Array<number | string>;
     verify?: boolean | 'attested' | 'full';
     yieldMs?: number;
@@ -894,6 +926,12 @@ export interface Issue {
     path: string;
 }
 
+// @public
+const isValidEnr: (enr: unknown) => boolean;
+
+// @public
+export const isValidLock: (lock: unknown, options?: VerifyLockOptions) => Promise<boolean>;
+
 declare namespace legacy {
     export {
         createLegacyModule,
@@ -927,7 +965,7 @@ interface LockDeposits {
 }
 
 // @public (undocumented)
-type LockStep = 'definition_flow_unknown' | 'definition_invalid' | 'definition_signature_invalid' | 'hash_mismatch' | 'share_layout_invalid' | 'share_reconstruction_failed' | 'deposit_data_invalid' | 'builder_registration_invalid' | 'lock_signature_invalid';
+type LockStep = 'definition_flow_unknown' | 'definition_invalid' | 'definition_signature_invalid' | 'definition_signature_unverifiable' | 'hash_mismatch' | 'share_layout_invalid' | 'share_reconstruction_failed' | 'deposit_data_invalid' | 'builder_registration_invalid' | 'lock_signature_invalid';
 
 // @public (undocumented)
 interface LockVerification {
@@ -970,7 +1008,7 @@ const MIN_PRINCIPAL_THRESHOLD: bigint;
 const nobleBls: BlsBackend;
 
 // @public
-export const OBOL_ERROR_CODES: readonly ["PAYLOAD_INVALID", "UNSUPPORTED_CHAIN", "CHAIN_MISMATCH", "WALLET_REQUIRED", "BASE_URL_INVALID", "API_DISABLED", "CONTRACT_NOT_AVAILABLE", "CHAIN_READ_FAILED", "API_VALIDATION", "API_UNAUTHORIZED", "API_NOT_FOUND", "API_CONFLICT", "API_RATE_LIMIT", "API_TIMEOUT", "API_ERROR", "API_RESPONSE_MISMATCH", "DEFINITION_INVALID", "ACCOUNT_NOT_OPERATOR", "LOCK_INVALID", "DEPOSIT_INVALID", "DEPOSIT_LOOKS_LIKE_TOP_UP", "DEPOSIT_CONFLICT", "DEPOSIT_TOP_UP_TARGET_MISSING", "DEPOSIT_AMOUNT_NOT_IN_LOCK", "STATUS_UNAVAILABLE", "OVM_NOT_OBOL", "PROVENANCE_UNKNOWN", "OVM_READ_FAILED", "OVM_ROLE_EVENTS_UNAVAILABLE", "OVM_ROLE_MISSING", "OVM_OWNER_REQUIRED", "PUBLIC_FORWARDER_AS_ROLE_HOLDER", "PUBLIC_FORWARDER_AS_OWNER", "PUBLIC_FORWARDER_AS_RECIPIENT", "OWNERSHIP_HANDOVER_NOT_PENDING", "FULL_EXIT_NOT_ACKNOWLEDGED", "CONSOLIDATION_NOT_ACKNOWLEDGED", "FEE_OUT_OF_RANGE", "FEE_READ_FAILED", "VALIDATOR_NOT_ACTIVE", "VALIDATOR_EXITING", "VALIDATOR_TOO_NEW", "CREDENTIALS_NOT_SOURCE", "EXIT_BLOCKED_BY_PENDING_WITHDRAWAL", "PARTIAL_REQUIRES_COMPOUNDING", "EFFECTIVE_BALANCE_TOO_LOW", "NO_EXCESS_BALANCE", "CONSOLIDATION_TARGET_NOT_COMPOUNDING", "CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL", "CONSOLIDATION_ALREADY_COMPOUNDING", "SPLIT_ALREADY_EXISTS", "SPLIT_PARAMS_MISMATCH", "SPLIT_PARAMS_REQUIRED", "SPLIT_NOT_OVM_RECIPIENT", "SPLIT_PAUSED", "NOTHING_TO_DISTRIBUTE", "OVM_CREATE_EVENT_MISSING", "OVM_CREATE_EVENT_AMBIGUOUS", "INCENTIVES_PREFLIGHT_FAILED", "ALREADY_CLAIMED", "EXIT_SHARE_INDEX_INVALID", "EXIT_PAYLOAD_SIGNATURE_INVALID", "EXIT_VALIDATOR_NOT_IN_CLUSTER", "EXIT_VALIDATOR_INDEX_MISMATCH", "EXIT_EPOCH_MISMATCH", "EXIT_SIGNATURE_CONFLICT", "EXIT_PARTIAL_SIGNATURE_INVALID", "EXIT_NOT_ENOUGH_SHARES", "PREPARED_INVALID", "TX_REJECTED", "TX_REVERTED", "TX_REPLACED", "TX_UNCONFIRMED", "SIMULATION_FAILED"];
+export const OBOL_ERROR_CODES: readonly ["PAYLOAD_INVALID", "UNSUPPORTED_CHAIN", "CHAIN_MISMATCH", "WALLET_REQUIRED", "BASE_URL_INVALID", "API_DISABLED", "CONTRACT_NOT_AVAILABLE", "CHAIN_READ_FAILED", "API_VALIDATION", "API_UNAUTHORIZED", "API_NOT_FOUND", "API_CONFLICT", "API_RATE_LIMIT", "API_TIMEOUT", "API_ERROR", "API_RESPONSE_MISMATCH", "DEFINITION_INVALID", "ACCOUNT_NOT_OPERATOR", "LOCK_INVALID", "BLS_BACKEND_UNAVAILABLE", "DEPOSIT_INVALID", "DEPOSIT_LOOKS_LIKE_TOP_UP", "DEPOSIT_CONFLICT", "DEPOSIT_TOP_UP_TARGET_MISSING", "DEPOSIT_AMOUNT_NOT_IN_LOCK", "STATUS_UNAVAILABLE", "OVM_NOT_OBOL", "PROVENANCE_UNKNOWN", "OVM_READ_FAILED", "OVM_ROLE_EVENTS_UNAVAILABLE", "OVM_ROLE_MISSING", "OVM_OWNER_REQUIRED", "PUBLIC_FORWARDER_AS_ROLE_HOLDER", "PUBLIC_FORWARDER_AS_OWNER", "PUBLIC_FORWARDER_AS_RECIPIENT", "OWNERSHIP_HANDOVER_NOT_PENDING", "FULL_EXIT_NOT_ACKNOWLEDGED", "CONSOLIDATION_NOT_ACKNOWLEDGED", "FEE_OUT_OF_RANGE", "FEE_READ_FAILED", "VALIDATOR_NOT_ACTIVE", "VALIDATOR_EXITING", "VALIDATOR_TOO_NEW", "CREDENTIALS_NOT_SOURCE", "EXIT_BLOCKED_BY_PENDING_WITHDRAWAL", "PARTIAL_REQUIRES_COMPOUNDING", "EFFECTIVE_BALANCE_TOO_LOW", "NO_EXCESS_BALANCE", "CONSOLIDATION_TARGET_NOT_COMPOUNDING", "CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL", "CONSOLIDATION_ALREADY_COMPOUNDING", "SPLIT_ALREADY_EXISTS", "SPLIT_PARAMS_MISMATCH", "SPLIT_PARAMS_REQUIRED", "SPLIT_NOT_OVM_RECIPIENT", "SPLIT_PAUSED", "NOTHING_TO_DISTRIBUTE", "OVM_CREATE_EVENT_MISSING", "OVM_CREATE_EVENT_AMBIGUOUS", "INCENTIVES_PREFLIGHT_FAILED", "ALREADY_CLAIMED", "EXIT_SHARE_INDEX_INVALID", "EXIT_PAYLOAD_SIGNATURE_INVALID", "EXIT_VALIDATOR_NOT_IN_CLUSTER", "EXIT_VALIDATOR_INDEX_MISMATCH", "EXIT_EPOCH_MISMATCH", "EXIT_SIGNATURE_CONFLICT", "EXIT_PARTIAL_SIGNATURE_INVALID", "EXIT_NOT_ENOUGH_SHARES", "PREPARED_INVALID", "TX_REJECTED", "TX_REVERTED", "TX_REPLACED", "TX_UNCONFIRMED", "SIMULATION_FAILED"];
 
 // @public (undocumented)
 export class ObolApiError<C extends ApiErrorCode = ApiErrorCode> extends ObolError<C> {
@@ -1098,6 +1136,8 @@ export interface ObolErrorDetails {
     BASE_URL_INVALID: {
         baseUrl: string;
     };
+    // (undocumented)
+    BLS_BACKEND_UNAVAILABLE: Record<string, never>;
     // (undocumented)
     CHAIN_MISMATCH: {
         expectedChainId: number;
@@ -1732,6 +1772,23 @@ interface OwrTranches {
     rewardRecipient: Address;
 }
 
+// @public (undocumented)
+interface ParsedEnr {
+    // (undocumented)
+    ip?: string;
+    nodeId: Hex;
+    publicKey: Hex;
+    // (undocumented)
+    seq: bigint;
+    // (undocumented)
+    tcp?: number;
+    // (undocumented)
+    udp?: number;
+}
+
+// @public
+const parseEnr: (enr: string) => ParsedEnr;
+
 // Warning: (ae-forgotten-export) The symbol "PartialExitBlobSchema" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -1932,6 +1989,9 @@ export interface PreviewResult<P> {
     preview: P;
 }
 
+// @public
+export type PublicClients = Record<number, PublicClient> | ((chainId: number) => PublicClient | undefined);
+
 // @public (undocumented)
 export interface PublicForwarder {
     // (undocumented)
@@ -2104,6 +2164,12 @@ interface ShareRecipient {
     // (undocumented)
     address: string;
     share: number | bigint;
+}
+
+// @public
+export interface SignatureClients {
+    publicClient?: PublicClient;
+    publicClients?: PublicClients;
 }
 
 // @public
@@ -2466,12 +2532,13 @@ interface VerifyLockOptions {
     bls?: BlsBackend;
     level?: LockVerificationLevel;
     publicClient?: PublicClient;
+    publicClients?: PublicClients;
     signatures?: 'all' | 'none' | number[];
     yieldMs?: number;
 }
 
-// @public (undocumented)
-interface VerifyOptions {
+// @public
+interface VerifyOptions extends SignatureClients {
     publicClient?: PublicClient;
 }
 
@@ -2485,6 +2552,14 @@ interface VerifyPartialExitInput {
     existing?: StoredExitBlob[] | Record<string, StoredExitBlob>;
     payload: PartialExitsPayload;
 }
+
+// @public
+export const verifyTypedDataSignature: (input: {
+    address: string;
+    signature: string;
+    typedData: EIP712TypedData;
+    chainId?: number;
+} & SignatureClients) => Promise<boolean>;
 
 // @public
 export const waitForContractWalletExecution: (input: {

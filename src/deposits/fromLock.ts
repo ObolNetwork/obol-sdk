@@ -6,6 +6,7 @@ import { Type } from '@sinclair/typebox';
 import type { Hex, PublicClient } from 'viem';
 import { CHAINS } from '../chains.js';
 import type { BlsBackend } from '../cluster/blsBackend.js';
+import type { PublicClients } from '../cluster/eip712.js';
 import { verifyLock } from '../cluster/verifyLock.js';
 import { LockSchema, type ClusterLock } from '../cluster/schema.js';
 import { ObolError } from '../errors.js';
@@ -30,8 +31,10 @@ export interface FromLockOptions {
   validators?: Array<number | string>;
   /** The chain the deposits are for; the lock's `fork_version` must match it. Set by the client. */
   chainId?: number;
-  /** For contract-wallet definition signatures during verification. */
+  /** For contract-wallet definition signatures during verification (on the lock's chain). */
   publicClient?: PublicClient;
+  /** Passed to `cluster.verifyLock`: clients by chain id for contract-wallet definition signatures. */
+  publicClients?: PublicClients;
   /** Passed to `cluster.verifyLock`. */
   yieldMs?: number;
   /** Passed to `cluster.verifyLock`. */
@@ -228,6 +231,9 @@ export const fromLock = async (
       ...(level === 'attested' ? { signatures: selected } : {}),
       ...(options.publicClient !== undefined
         ? { publicClient: options.publicClient }
+        : {}),
+      ...(options.publicClients !== undefined
+        ? { publicClients: options.publicClients }
         : {}),
       ...(yieldMs !== undefined ? { yieldMs } : {}),
       ...(options.bls !== undefined ? { bls: options.bls } : {}),

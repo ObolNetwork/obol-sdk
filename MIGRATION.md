@@ -5,7 +5,10 @@ each 2.x method to its v3 operation, then lists the breaking changes between the
 of every v3 operation (inputs, checks, outputs, error codes) is in [`spec/operations.md`](spec/operations.md).
 
 - [From 2.x](#from-2x): client, cluster, terms, deposits, splits and OVM, incentives, exits, EOA, errors
+  - [Verifying locks on a server](#verifying-locks-on-a-server) (obol-api)
+  - [Every other 2.x export](#every-other-2x-export) (constants, types, helpers)
 - [From 3.0.0-rc.3 to rc.4](#from-300-rc3-to-rc4)
+- [From 3.0.0-rc.4 to rc.5](#from-300-rc4-to-rc5)
 
 ## From 2.x
 
@@ -53,7 +56,7 @@ const obol = createObolClient({
 | `client.getClusterLock(configHash)` | `obol.cluster.getLock({ configHash })` |
 | `client.getClusterLockByHash(lockHash)` | `obol.cluster.getLock({ lockHash })` |
 | `client.getDepositData(lock, options)` / `depositDataFromLock` | `obol.deposits.fromLock(lock, { amount?, validators? })` |
-| `validateClusterLock(lock)` | `cluster.verifyLock(lock, { level? })` (also bound: `obol.cluster.verifyLock`) |
+| `validateClusterLock(lock)` | `await isValidLock(lock, options?)` (boolean; also `cluster.isValidLock`, bound `obol.cluster.isValidLock`). **Not** a rename to `verifyLock`: see [Verifying locks on a server](#verifying-locks-on-a-server) |
 | `client.createObolRewardsSplit(...)` | `obol.setup.prepareOvmWithSplits(obol.setup.rewardsSplit({ ... }))` |
 | `client.createObolTotalSplit(...)` | `obol.setup.prepareOvmWithSplits(obol.setup.totalSplit({ ... }))` |
 | `client.splits.createValidatorManagerAndRewardsSplit(...)` | `obol.setup.prepareOvmWithSplits(obol.setup.rewardsSplit({ ... }))` |
@@ -70,8 +73,79 @@ const obol = createObolClient({
 | `client.exit.validateExitBlobs(...)` / `verifyPartialExitSignature` / `verifyExitPayloadSignature` | `obol.exits.verifyPartialExit({ cluster, payload, existing })` |
 | `client.exit.recombineExitBlobs(...)` | `obol.exits.aggregate({ validator, exit, threshold })` (threshold aggregation; 2.x summed the partials, which is not a valid exit signature) |
 | `blsVerify` | `exits.blsVerify(pubkey, message, signature)` |
+| `validateAddressSignature({ address, token, data, chainId })` | `await verifyTypedDataSignature({ address, signature: token, typedData: data, chainId, publicClients })`. A contract wallet (Safe) is checked only with a client for `chainId` (2.x used built-in RPCs) |
+| `validateEOASignature({ token, data, address })` | `await verifyTypedDataSignature({ address, signature: token, typedData: data })` (async; `false` instead of a throw for a malformed signature) |
 | `getWithdrawalRequestFee` / `resolveWithdrawalFee` | inside `prepareWithdraw` / `prepareEoaWithdraw` (`fee` input; `FEE_OUT_OF_RANGE`) |
 | OWR / SplitMain creation | removed (reads of existing contracts stay under `experimental.legacy`) |
+
+### Verifying locks on a server
+
+2.x `validateClusterLock` returned a boolean. v3 `verifyLock` returns `{ ok, level, step?, issue?, validator? }`, an
+object that is **always truthy**: renaming the call type-checks and accepts every lock.
+
+```typescript
+// 2.x (obol-api lock.service.ts)
+const isValidLock = await validateClusterLock(dto);
+if (!isValidLock) throw new BadRequestException('Invalid lock');
+
+// 3: the drop-in
+import { isValidLock } from '@obolnetwork/obol-sdk';
+import { loadBlstBackend } from '@obolnetwork/obol-sdk/blst';
+
+const bls = await loadBlstBackend(); // once, at startup (needs @chainsafe/blst installed)
+const publicClients = { 1: mainnetClient, 560048: hoodiClient }; // or (chainId) => client
+if (!(await isValidLock(dto, { bls, publicClients }))) {
+  throw new BadRequestException('Invalid lock');
+}
+
+// 3: with the failing step, for logs or the error body
+import { cluster, isObolError } from '@obolnetwork/obol-sdk';
+try {
+  const result = await cluster.verifyLock(dto, { level: 'full', bls, publicClients });
+  if (!result.ok) throw new BadRequestException(`Invalid lock: ${result.step} (${result.issue})`);
+} catch (error) {
+  // A malformed lock throws PAYLOAD_INVALID where 2.x returned false: map it to a 400, not a 500.
+  if (isObolError(error, 'PAYLOAD_INVALID')) throw new BadRequestException(error.details.issues);
+  throw error;
+}
+```
+
+- `isValidLock` runs `verifyLock` at `level: 'full'` and returns `result.ok`. It maps `PAYLOAD_INVALID` for the
+  lock (a malformed lock) to `false`, as 2.x did; malformed *options* and any other error are thrown.
+- **Use `level: 'full'` on a server, never `attested`.** `attested` skips share binding and `signature_aggregate`;
+  it is for a depositor checking a lock it already trusts (`deposits.fromLock`). Do not drop to it to save CPU.
+- **Pass a native BLS backend.** The default backend is pure JavaScript on the calling thread (about 25 ms per
+  signature, so a 1k-validator lock at `full` is about 80 s of event-loop time; it yields, but throughput under load
+  collapses). `@obolnetwork/obol-sdk/blst` ships the adapter over `@chainsafe/blst` (an optional peer dependency:
+  `yarn add @chainsafe/blst`): `loadBlstBackend()`, or `blstBackendFrom(blst)` with a module you imported. The same
+  lock takes about 1.3 s.
+- **Contract-wallet signatures need a client per chain.** 2.x checked EIP-1271 signatures (Safe-created clusters)
+  through built-in RPCs (`PROVIDER_MAP`); v3 has no RPCs of its own. Pass `publicClients` (by chain id, or a function
+  of the chain id) so a server verifies locks of every chain it serves; `publicClient` alone is used for its own
+  chain only. Without a client for the lock's chain, a definition signature that does not recover to its signer
+  fails as `definition_signature_unverifiable` (not `definition_signature_invalid`), so the missing client shows.
+  The same options apply to `verifyDefinition` (`signature_unverifiable`) and `verifyTypedDataSignature`.
+- There are no workers, time limit or concurrency limit (2.x `ClusterLockValidationTimeoutError` /
+  `ClusterLockValidationBusyError`): apply them around the call.
+
+### Every other 2.x export
+
+The 2.x root re-exported its constants, types and helpers. Each one used by Launchpad or the Obol API maps as follows.
+
+| 2.x | 3 |
+|---|---|
+| `ENR` (`@chainsafe/enr`): `ENR.decodeTxt(enr)` to validate, `.publicKey` | `cluster.isValidEnr(enr)` (boolean), `cluster.parseEnr(enr).publicKey` (compressed key as hex; `PAYLOAD_INVALID` for a bad record). For other fields, import `@chainsafe/enr` yourself |
+| `clusterConfigOrDefinitionHash(definition, true)` / `(definition, false)` | `cluster.computeConfigHash(definition)` / `cluster.computeDefinitionHash(definition)` |
+| `signCreatorConfigHashPayload({ creator_config_hash }, chainId)` | `cluster.creatorConfigHashTypedData(configHash, chainId)` (viem typed data: no `EIP712Domain` in `types`, same hash) |
+| `signOperatorConfigHashPayload`, `signEnrPayload` | `cluster.operatorConfigHashTypedData(configHash, chainId)`, `cluster.enrTypedData(enr, chainId)` |
+| `validateAddressSignature`, `validateEOASignature` | `verifyTypedDataSignature` (see the method table) |
+| `SPLITS_V2_SALT` | `splits.DEFAULT_SPLIT_SALT` (same value) |
+| `PRINCIPAL_THRESHOLD` (`16`, ETH as a number) | `setup.DEFAULT_PRINCIPAL_THRESHOLD` (`16n * 10n ** 18n`, wei as a bigint); `MIN_` / `MAX_PRINCIPAL_THRESHOLD` next to it |
+| `CHAIN_CONFIGURATION[chainId].BATCH_DEPOSIT_CONTRACT.address` (and the other contracts) | `getObolChain(chainId).contracts?.batchDeposit` (`CHAINS`, `ChainContracts`: `ovmFactory`, `warehouse`, `withdrawalRequest`, ...) |
+| type `ClusterValidator` | `cluster.ClusterValidator` (same fields: `fee_recipient_address`, `withdrawal_address`) |
+| type `ClaimableIncentives` (`operator_address`, `amount: string`, `merkle_proof`, ...) | `incentives.Incentives` (`operatorAddress`, `contractAddress`, `index`, `amount: bigint`, `merkleProof`), from `obol.incentives.get` |
+| `Client` | `createObolClient` (see [Client](#client)) |
+| `ClusterLockValidationTimeoutError`, `ClusterLockValidationBusyError` | none (see [Errors](#errors)) |
 
 ### Cluster definitions and locks
 
@@ -162,7 +236,7 @@ const full = obol.exits.aggregate({ validator, exit: storedBlob, threshold });
 | `IncentivesPreflightError` | `INCENTIVES_PREFLIGHT_FAILED` |
 | `ValidationError`, `UnauthorizedError`, `NotFoundError`, `ConflictError`, `RateLimitError`, `RequestTimeoutError` | `API_VALIDATION`, `API_UNAUTHORIZED`, `API_NOT_FOUND`, `API_CONFLICT`, `API_RATE_LIMIT`, `API_TIMEOUT` |
 | `TransactionSubmissionError` | `TX_REVERTED`, `TX_UNCONFIRMED` (from `wait`) |
-| `ClusterLockValidationTimeoutError`, `ClusterLockValidationBusyError` | none: `verifyLock` yields instead of using workers |
+| `ClusterLockValidationTimeoutError`, `ClusterLockValidationBusyError` | none: `verifyLock` yields instead of using workers; a server applies its own deadline and concurrency limit around the call |
 
 The full list, with what to do for each, is [`spec/errors.md`](spec/errors.md).
 
@@ -223,3 +297,20 @@ if (isObolError(error, 'TX_UNCONFIRMED')) watch(error.details.hash); // typed, n
   module entry such as `@obolnetwork/obol-sdk/ovm`.
 - Lock verification follows Charon more closely (a new `definition_invalid` step; 65-byte node signatures; canonical
   point encodings); a lock Charon would refuse is refused.
+
+## From 3.0.0-rc.4 to rc.5
+
+rc.5 is additive except for the two changes below.
+
+- `verifyLock` reports a definition signature it could not check as `definition_signature_unverifiable` (new step):
+  one that does not recover to its signer, when no client for the lock's chain was given to ask a contract wallet
+  (EIP-1271). rc.4 reported `definition_signature_invalid`. `verifyDefinition` (and `cluster.accept`'s
+  `DEFINITION_INVALID`) reports `signature_unverifiable` the same way. A signature known to be invalid (with a
+  client: the signer is an account, or the contract refuses it) is still `definition_signature_invalid`.
+- `send` passes the client's viem chain to `sendTransaction` (was `walletClient.chain ?? null`), so viem re-checks
+  the wallet chain at send time; a wallet that switched after the check is `CHAIN_MISMATCH` (was sent, or
+  `TX_REJECTED`).
+
+New: `isValidLock`, `publicClients` on `verifyLock` / `verifyDefinition`, `verifyTypedDataSignature`,
+`cluster.parseEnr` / `cluster.isValidEnr`, the `cluster.ClusterValidator` type, and the
+`@obolnetwork/obol-sdk/blst` entry (`loadBlstBackend`, `blstBackendFrom`).

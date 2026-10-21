@@ -1,8 +1,8 @@
 /**
  * The BLS12-381 primitives lock and deposit verification need, as an
- * injectable backend. The default is pure JavaScript (`@noble/curves`); the
- * SDK never loads a native module, but a caller (a Node server) can pass an
- * adapter over a native library such as `@chainsafe/blst`.
+ * injectable backend. The default is pure JavaScript (`@noble/curves`); only
+ * the Node entry `@obolnetwork/obol-sdk/blst` loads a native module (the
+ * optional peer `@chainsafe/blst`), and only when the caller asks for it.
  */
 import {
   decodeG1,
@@ -43,57 +43,14 @@ export interface BlsBatch<PublicKey = unknown> {
  * point; the SDK only passes values it got from `decodePublicKey` or
  * `aggregatePublicKeys` back in.
  *
- * An adapter over `@chainsafe/blst` (Node, native):
+ * For Node servers the SDK ships an adapter over `@chainsafe/blst` (native,
+ * an optional peer dependency) in a separate entry, so no other entry and no
+ * browser bundle refers to it:
  *
  * ```ts
- * import * as blst from '@chainsafe/blst';
- * import type { BlsBackend } from '@obolnetwork/obol-sdk';
- *
- * const binomial = (n: number, k: number): number => {
- *   let r = 1;
- *   for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i;
- *   return Math.round(r);
- * };
- * const same = (a: blst.PublicKey, b: blst.PublicKey): boolean =>
- *   Buffer.compare(a.toBytes(), b.toBytes()) === 0;
- *
- * export const blstBackend: BlsBackend<blst.PublicKey> = {
- *   // Native validation is cheap, so every key is fully checked.
- *   decodePublicKey: bytes => blst.PublicKey.fromBytes(bytes, true),
- *   aggregatePublicKeys: keys => blst.aggregatePublicKeys(keys, false),
- *   // t-th forward differences as two sums with binomial multiplicities.
- *   onPolynomial: (points, t) => {
- *     if (t < 1 || points.length < t + 1) return false;
- *     for (let k = 0; k + t < points.length; k++) {
- *       const sides: blst.PublicKey[][] = [[], []];
- *       for (let l = 0; l <= t; l++) {
- *         for (let c = binomial(t, l); c > 0; c--) {
- *           sides[(t - l) % 2].push(points[k + l]);
- *         }
- *       }
- *       const [even, odd] = sides.map(s => blst.aggregatePublicKeys(s, false));
- *       if (!same(even, odd)) return false;
- *     }
- *     return true;
- *   },
- *   verify: (publicKey, message, signature) => {
- *     try {
- *       return blst.verify(message, publicKey, blst.Signature.fromBytes(signature, true));
- *     } catch {
- *       return false;
- *     }
- *   },
- *   createBatch: () => {
- *     const sets: blst.SignatureSet[] = [];
- *     return {
- *       add: (publicKey, message, signature) => {
- *         sets.push({ pk: publicKey, msg: message, sig: blst.Signature.fromBytes(signature, true) });
- *       },
- *       // blst weights each set with a random 64-bit scalar.
- *       verify: () => blst.verifyMultipleAggregateSignatures(sets),
- *     };
- *   },
- * };
+ * import { loadBlstBackend } from '@obolnetwork/obol-sdk/blst';
+ * const bls = await loadBlstBackend(); // or blstBackendFrom(await import('@chainsafe/blst'))
+ * await cluster.isValidLock(lock, { bls });
  * ```
  */
 export interface BlsBackend<PublicKey = unknown> {

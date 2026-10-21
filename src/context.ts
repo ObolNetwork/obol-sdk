@@ -4,9 +4,11 @@
  * (or a test) can build one without the constructor.
  */
 import {
+  defineChain,
   getAddress,
   type Account,
   type Address,
+  type Chain,
   type PublicClient,
   type WalletClient,
 } from 'viem';
@@ -16,6 +18,13 @@ import { ObolError } from './errors.js';
 
 export interface Context {
   chain: ObolChain;
+  /**
+   * The viem Chain the client was built with (`createObolClient({ chain })`).
+   * `send` passes it to `sendTransaction`, so viem re-checks the wallet chain
+   * at send time. Absent on a hand-built context: a minimal viem Chain with
+   * `chain.id` is used instead.
+   */
+  viemChain?: Chain;
   publicClient: PublicClient;
   walletClient?: WalletClient;
   /** null when the client was built with `api: false`. */
@@ -74,6 +83,16 @@ export const requireWallet = async (
   }
   return { walletClient, account };
 };
+
+/** The viem Chain of the context: the one the client was built with, else a minimal one with the same id. */
+export const viemChainOf = (ctx: Context): Chain =>
+  ctx.viemChain ??
+  defineChain({
+    id: ctx.chain.id,
+    name: ctx.chain.name,
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: { default: { http: [] } },
+  });
 
 export const accountAddress = (account: Account | Address): Address =>
   typeof account === 'string' ? account : account.address;

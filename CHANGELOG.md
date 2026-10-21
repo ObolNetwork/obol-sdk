@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.5](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.4...v3.0.0-rc.5)
+
+> 21 October 2026
+
+Review fixes for the obol-api and Launchpad migrations. Additive except for the two changes under **Breaking**.
+[MIGRATION.md](MIGRATION.md) has "Verifying locks on a server", a row for every 2.x export the two consumers use, and
+"From 3.0.0-rc.4 to rc.5".
+
+**Breaking**
+
+- `cluster.verifyLock` reports a definition signature it could not check as the new step
+  `definition_signature_unverifiable` (was `definition_signature_invalid`): one that does not recover to its signer
+  when no public client for the lock's chain was given, so a contract wallet (Safe) could not be asked (EIP-1271).
+  A signature known to be invalid still fails as `definition_signature_invalid`, and wins when both occur.
+  `verifyDefinition` (and `DEFINITION_INVALID` from `cluster.accept`) reports the issue `signature_unverifiable`.
+- `send` passes the client's viem chain to `sendTransaction` (was `walletClient.chain ?? null`), so viem re-checks
+  the wallet chain at send time: a wallet switched after the wallet check is `CHAIN_MISMATCH` (nothing sent).
+  `Context` has an optional `viemChain` (set by `createObolContext`; a hand-built context falls back to a minimal
+  chain with the same id).
+
+**Added**
+
+- `isValidLock(lock, options?)` (root, `cluster`, `/cluster`, bound `obol.cluster.isValidLock`): `verifyLock` at
+  `level: 'full'` as a boolean, the drop-in for 2.x `validateClusterLock`; a malformed lock (`PAYLOAD_INVALID`) is
+  `false`, malformed options and other errors are thrown.
+- `publicClients` on `verifyLock`, `verifyDefinition` and `isValidLock`: public clients by chain id, or a function
+  of the chain id, for EIP-1271 definition signatures of locks on several chains (2.x had built-in RPCs). The bound
+  module adds the client's own `publicClient` for its chain.
+- `@obolnetwork/obol-sdk/blst` (Node only): `loadBlstBackend()` and `blstBackendFrom(module)`, the `BlsBackend` over
+  `@chainsafe/blst`, now an optional peer dependency loaded with a dynamic import by this entry only. New code
+  `BLS_BACKEND_UNAVAILABLE`.
+- `verifyTypedDataSignature({ address, signature, typedData, chainId?, publicClient?, publicClients? })` (root and
+  `cluster`): EIP-712 signature check for an account (recovery) or a contract wallet (EIP-1271), for 2.x
+  `validateAddressSignature` / `validateEOASignature`; types `EIP712TypedData`, `PublicClients`,
+  `SignatureClients`.
+- `cluster.parseEnr(enr)` / `cluster.isValidEnr(enr)` for 2.x `ENR.decodeTxt`; type `cluster.ClusterValidator`.
+- MIGRATION.md: "Verifying locks on a server" (obol-api: `isValidLock`, the blst backend, `publicClients`,
+  `PAYLOAD_INVALID` → 400, `full` only) and "Every other 2.x export" (`ENR`, `clusterConfigOrDefinitionHash`,
+  `signCreatorConfigHashPayload`, `SPLITS_V2_SALT`, `PRINCIPAL_THRESHOLD`, `CHAIN_CONFIGURATION`,
+  `ClaimableIncentives`, `ClusterValidator`, ...). README "Servers".
+
+**Fixed**
+
+- `ovm.prepareWithdraw` / `withdrawals.prepareEoaWithdraw`: a partial withdrawal whose excess balance is under
+  1 gwei is `NO_EXCESS_BALANCE`; the cap could round it to amount 0, which EIP-7002 treats as a full exit.
+- Trailing `/` of `api.baseUrl` and `beaconUrl` are trimmed with a linear scan instead of a regular expression
+  (CodeQL polynomial-regex alerts); the e2e workflow has `permissions: contents: read`.
+- The spec and TSDoc say that `verifyLock` recomputes `config_hash` (it binds the definition signatures to the
+  definition), with tests for an edited definition, a recomputed `config_hash` under old signatures, and a
+  self-consistent lock carrying another cluster's `config_hash`.
+
 #### [v3.0.0-rc.4](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.3...v3.0.0-rc.4)
 
 > 21 October 2026

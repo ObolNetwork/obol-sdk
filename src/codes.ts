@@ -46,6 +46,7 @@ export interface ObolErrorDetails {
     issue?: string;
     index?: number;
   };
+  BLS_BACKEND_UNAVAILABLE: Record<string, never>;
   // Deposits
   DEPOSIT_INVALID: { index: number; issue: string };
   DEPOSIT_LOOKS_LIKE_TOP_UP: { index: number; issue?: string };
@@ -214,6 +215,7 @@ export const OBOL_ERROR_CODES = [
   'DEFINITION_INVALID',
   'ACCOUNT_NOT_OPERATOR',
   'LOCK_INVALID',
+  'BLS_BACKEND_UNAVAILABLE',
   'DEPOSIT_INVALID',
   'DEPOSIT_LOOKS_LIKE_TOP_UP',
   'DEPOSIT_CONFLICT',
