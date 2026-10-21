@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v2.15.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v2.15.1)
+
+> 21 October 2026
 
 - fix(verification): require each signature in a batched BLS check (cluster lock deposit and builder registration signatures, deposit payloads) to be valid on its own; batches are now checked with random weights
 - fix(verification): reject non-canonical BLS point encodings (field elements ≥ p), which consensus clients reject
