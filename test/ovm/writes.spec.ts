@@ -19,6 +19,7 @@ import {
   rolesLog,
   type OvmChainOptions,
 } from './ovmFixture.js';
+import { fakeApi } from '../helpers/fakeChain.js';
 
 const ZERO: Address = '0x0000000000000000000000000000000000000000';
 const codes = (checks: Array<{ code: string }>): string[] =>
@@ -408,17 +409,32 @@ describe('ovm role writes', () => {
     expect(
       (
         await caught(
-          ovmFor().prepareSetPrincipalRecipient({ ovm: OVM, newPrincipalRecipient: OTHER }),
+          ovmFor().prepareSetPrincipalRecipient({
+            ovm: OVM,
+            newPrincipalRecipient: OTHER,
+          }),
         )
       ).code,
     ).toBe('PAYLOAD_INVALID');
   });
 
-  it('throws OVM_READ_FAILED when the OVM does not answer', async () => {
+  it('throws OVM_READ_FAILED when an OVM the API vouches for does not answer', async () => {
+    const api = fakeApi({
+      [`/v1/ovm/hoodi/${OVM}`]: () => ({
+        address: OVM,
+        provenance: {
+          status: 'obol',
+          reason: 'CreateObolValidatorManager event found',
+        },
+      }),
+    });
+    const ovm = createOvmModule(
+      ovmChain({ state: { failing: ['owner'] } }).context(api),
+    );
     expect(
       (
         await caught(
-          ovmFor({ state: { failing: ['owner'] } }).prepareSetPrincipalRecipient({
+          ovm.prepareSetPrincipalRecipient({
             ovm: OVM,
             newPrincipalRecipient: OTHER,
             from: OWNER,
@@ -426,6 +442,22 @@ describe('ovm role writes', () => {
         )
       ).code,
     ).toBe('OVM_READ_FAILED');
+  });
+
+  it('refuses a contract that does not answer the OVM getters as not an Obol OVM', async () => {
+    expect(
+      (
+        await caught(
+          ovmFor({
+            state: { failing: ['owner'] },
+          }).prepareSetPrincipalRecipient({
+            ovm: OVM,
+            newPrincipalRecipient: OTHER,
+            from: OWNER,
+          }),
+        )
+      ).code,
+    ).toBe('OVM_NOT_OBOL');
   });
 });
 
@@ -589,11 +621,8 @@ describe('ovm sweep and pull balances', () => {
     });
     expect(call(ok.request.data).args).toEqual([OTHER, 0n]);
     expect(
-      (
-        await caught(
-          ovm.prepareSweep({ ovm: OVM, to: OTHER, from: HOLDER }),
-        )
-      ).code,
+      (await caught(ovm.prepareSweep({ ovm: OVM, to: OTHER, from: HOLDER })))
+        .code,
     ).toBe('OVM_OWNER_REQUIRED');
   });
 

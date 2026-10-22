@@ -16,14 +16,11 @@ import {
   readRequestFee,
   resolveRequestFee,
 } from '../src/chainUtils.js';
-import {
-  isStale,
-  send,
-  waitForContractWalletExecution,
-} from '../src/send.js';
+import { isStale, send, waitForContractWalletExecution } from '../src/send.js';
 import type { AnyPrepared } from '../src/types.js';
 import { verifyOvm } from '../src/ovm/verify.js';
 import { ovmCreatedLog } from './splits/helpers.js';
+import { OVM, ovmChain } from './ovm/ovmFixture.js';
 import { fakeChain, MULTICALL3 } from './helpers/fakeChain.js';
 
 const caught = (fn: () => unknown): ObolError => {
@@ -234,15 +231,15 @@ describe('v3 core', () => {
     });
 
     it('ovm.verify finds a creation log in a block mined after the last read', async () => {
-      const ovm = '0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f' as Address;
-      const chain = fakeChain({
-        code: { [ovm]: '0x6080604052' },
-        logs: [{ ...ovmCreatedLog(ovm), blockNumber: 2_000_005n }],
+      // An OVM that answers its getters, created in a block after the last read.
+      const chain = ovmChain({
+        provenance: 'notObol',
+        logs: [{ ...ovmCreatedLog(OVM), blockNumber: 2_000_005n }],
       });
       const ctx = chain.context();
       await ctx.publicClient.getBlockNumber();
       chain.setBlockNumber(2_000_005n);
-      expect((await verifyOvm(ctx, ovm)).status).toBe('obol');
+      expect((await verifyOvm(ctx, OVM)).status).toBe('obol');
     });
   });
 

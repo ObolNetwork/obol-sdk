@@ -45,7 +45,10 @@ export const blockNumberCall = (multicall3: Address): ReadCall => ({
 /**
  * Runs `calls` in one `aggregate3` eth_call (every call with
  * `allowFailure: true`). A failing RPC request throws CHAIN_READ_FAILED; a
- * single reverting call only marks its own result `ok: false`.
+ * single reverting call only marks its own result `ok: false`. A read at
+ * `blockNumber` that the RPC refuses (a node without that state, such as a
+ * non-archive node behind a load balancer whose head lags) is retried once at
+ * `latest`.
  */
 export const readMany = async (
   ctx: Context,
@@ -77,7 +80,15 @@ export const readMany = async (
       ...(blockNumber !== undefined ? { blockNumber } : {}),
     }));
   } catch (cause) {
-    throw chainReadFailed(what, cause);
+    if (blockNumber === undefined) throw chainReadFailed(what, cause);
+    try {
+      ({ data: returned } = await ctx.publicClient.call({
+        to: multicall3,
+        data,
+      }));
+    } catch {
+      throw chainReadFailed(what, cause);
+    }
   }
   if (returned === undefined || returned === '0x') {
     throw chainReadFailed(what, new Error('Multicall3 returned no data'));

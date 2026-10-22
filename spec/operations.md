@@ -656,20 +656,24 @@ factoryAddress: Address, reason: string, creationTxHash: Hash32? }`. (2.16 `OVM.
 
 1. `getCode(ovm)`: a read error → `unknown` / chain. Empty code, or an EIP-7702 delegation (`0xef0100…`) → `notObol` /
    chain.
-2. API, the OVM record `GET /v1/ovm/:network/:address`: its `provenance` is used only when the record's `address` is
-   this address and `provenance.factoryAddress` (when present) is the chain's OVM factory: `obol` / api (with
-   `creationTxHash`) or `notObol` / api, with the API's `reason`; `unknown`, a record for another address or no
-   `provenance` → step 3. When that endpoint fails (404 while it is not deployed, or any other API error), the interim
+2. API, the OVM record `GET /v1/ovm/:network/:address`: its `provenance` is used only when it is `obol`, the record's
+   `address` is this address and `provenance.factoryAddress` (when present) is the chain's OVM factory: `obol` / api
+   (with `creationTxHash`), with the API's `reason`. `notObol` (which can be an answer cached before the OVM was
+   deployed or indexed, while step 1 saw code), `unknown`, a record for another address or no `provenance` → step 3
+   (3.0.0-rc.7). When that endpoint fails (404 while it is not deployed, or any other API error), the interim
    `GET /v1/eth/contract-creation/:network/:address`: used only when its `contractAddress` is present and equals this
    address (case-insensitive) and it names a creating factory: `obol` / api when that is the chain's OVM factory, else
    `notObol` / api. A record without `contractAddress`, no record or an API error → step 3.
-3. Chain: `eth_getLogs` on the factory for `CreateObolValidatorManager(address indexed ovm, address indexed owner,
+3. Chain, the OVM getters (`readOvmCore`, one Multicall3 read at head): read, and a required getter reverted →
+   `notObol` / chain ("does not answer the OVM getters"), since every contract the factory creates answers them. A
+   failed read → step 4.
+4. Chain: `eth_getLogs` on the factory for `CreateObolValidatorManager(address indexed ovm, address indexed owner,
    address beneficiary, address rewardRecipient, uint64 principalThreshold)` with `topic1 = ovm`, between the
    factory deployment block and head, newest range first, stopping at the first match: found → `obol` / chain with
    `creationTxHash`; none → `notObol` / chain; any failed range → `unknown` / chain. Ranges follow "Log scans" below.
 
-Never decided by a bytecode or function-signature probe: a look-alike contract would pass. "Could not check" is always
-`unknown`, never `notObol`.
+Never decided `obol` by a bytecode or function-signature probe: a look-alike contract would pass. Step 3 only ever
+concludes `notObol`, which a missing getter proves. "Could not check" is always `unknown`, never `notObol`.
 
 ### ovm.getState
 
@@ -737,7 +741,7 @@ Output also has `findings: Finding[]`. Roles shown come from `rolesOf`, never fr
 
 ### Log scans
 
-Every `eth_getLogs` scan (`ovm.verify` 3, `ovm.getRoleHolders` 1, `splits.getSplit` 3) reads windows of at most 50,000
+Every `eth_getLogs` scan (`ovm.verify` 4, `ovm.getRoleHolders` 1, `splits.getSplit` 3) reads windows of at most 50,000
 blocks, a few at a time. Public RPCs cap the range (often 10,000 blocks) or the size of the answer: when a request is
 refused for that reason (codes -32005 and HTTP 413; -32600 / -32602 / -32000 with a range or limit message; "block
 range", "too many", "limit exceeded", "query returned more than" and the like) the window is halved and that range
@@ -745,6 +749,13 @@ retried, down to 1,000 blocks, and the window that works is remembered for the `
 there. A scan for one event (`ovm.verify`, the split's `SplitCreated` log) reads the newest range first and stops at the
 first range with a match. Any other failure, or a refusal at 1,000 blocks, fails the scan: never read as "no event"
 (`ovm.verify` gives `unknown`, never `notObol`). (3.0.0-rc.4)
+
+### Pinned reads
+
+Reads that must agree with each other are one `aggregate3` call at one block (the block Multicall3 reports, or head).
+When the RPC refuses a read at that block number (a node without that state: a non-archive node, or a load balancer
+whose backends lag each other), it is retried once at `latest`; a second failure is `CHAIN_READ_FAILED`. A reverting
+call inside the batch is never retried. (3.0.0-rc.7)
 
 ### Public forwarders
 

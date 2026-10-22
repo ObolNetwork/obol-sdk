@@ -1616,7 +1616,7 @@
         }
       },
       "accepted": false,
-      "reason": "OVM_READ_FAILED",
+      "reason": "OVM_NOT_OBOL",
       "calls": null,
       "preview": null
     }

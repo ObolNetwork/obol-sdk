@@ -10,6 +10,7 @@ of every v3 operation (inputs, checks, outputs, error codes) is in [`spec/operat
 - [From 3.0.0-rc.3 to rc.4](#from-300-rc3-to-rc4)
 - [From 3.0.0-rc.4 to rc.5](#from-300-rc4-to-rc5)
 - [From 3.0.0-rc.5 to rc.6](#from-300-rc5-to-rc6)
+- [From 3.0.0-rc.6 to rc.7](#from-300-rc6-to-rc7)
 
 ## From 2.x
 
@@ -386,3 +387,16 @@ Also in rc.6 (additive):
 - `exits.blsVerify(pubkey, message, signature, { bls })` verifies with the given backend (blst on a server).
 - `experimental.legacy.getOwrTranches` works on any client chain (was mainnet / Hoodi only: `UNSUPPORTED_CHAIN` on
   Gnosis and Sepolia).
+
+## From 3.0.0-rc.6 to rc.7
+
+No API changes. Three behaviour changes:
+
+- `ovm.verify` returns `notObol` (source `chain`, reason "The contract does not answer the OVM getters") for a
+  contract that does not answer the OVM getters, when the API gives no verdict, instead of scanning the factory logs
+  (which on a public RPC could take long or end `unknown`). It never concludes `obol` that way.
+- `ovm.verify` takes only `obol` from the API OVM record; a `notObol` there (possibly cached before the OVM was
+  deployed or indexed) is checked on the chain, so a just-deployed OVM is no longer `notObol` / api.
+- A Multicall3 read pinned to a block that the RPC refuses (a non-archive node, or a load balancer whose backends lag
+  each other) is retried once at `latest`, so `ovm.getRoleHolders`, `getState` and the OVM writes no longer fail with
+  `CHAIN_READ_FAILED` on such RPCs.

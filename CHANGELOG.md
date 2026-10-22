@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.7](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.6...v3.0.0-rc.7)
+
+> 22 October 2026
+
+Fixes from the Launchpad OVM page on mainnet. No API changes. [MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.6 to rc.7".
+
+**Fixed**
+
+- `ovm.verify`: a contract that does not answer the OVM getters is `notObol` (source `chain`) when the API gives no
+  verdict, without the factory log scan (Multicall3 ended `unknown` after a long scan on public RPCs).
+- `ovm.verify` takes only an `obol` verdict from the API OVM record; its `notObol` goes to the chain checks, since
+  it can be an answer cached before the OVM was deployed or indexed (a just-deployed OVM read `notObol` / api).
+- Multicall3 reads pinned to a block are retried once at `latest` when the RPC refuses that block (public non-archive
+  RPCs behind load balancers), instead of failing with `CHAIN_READ_FAILED` (`ovm.getRoleHolders` showed "couldn't
+  read the role holders").
+
 #### [v3.0.0-rc.6](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.5...v3.0.0-rc.6)
 
 > 21 October 2026

@@ -1,7 +1,8 @@
 /**
  * ovm.verify: was this address created by the chain's Obol OVM factory?
- * (spec/operations.md "ovm.verify"). Never decided by a bytecode or
- * function-signature probe; "could not check" is always `unknown`.
+ * (spec/operations.md "ovm.verify"). Never decided `obol` by a bytecode or
+ * function-signature probe (missing OVM getters only prove `notObol`);
+ * "could not check" is always `unknown`.
  */
 import { Type } from '@sinclair/typebox';
 import type { Address, Hash } from 'viem';
@@ -13,10 +14,11 @@ import {
   scanLogs,
 } from '../chainUtils.js';
 import { requireContracts, type Context } from '../context.js';
-import { ObolError } from '../errors.js';
+import { isObolError, ObolError } from '../errors.js';
 import { checksum, decode, sameAddress, T } from '../schema.js';
 import type { Source } from '../types.js';
 import { fetchOvmApiRecord, type OvmApiRecord } from './apiRecord.js';
+import { readOvmCore } from './read.js';
 import { encodeEventTopics } from 'viem';
 
 export interface OvmVerification {
@@ -40,11 +42,11 @@ interface ApiProvenance {
 }
 
 /**
- * Step 2: the API OVM record's `provenance`, trusted only when the record is
- * for this address and names this chain's factory (if it names one);
- * `unknown` defers to the chain. Without the endpoint (or on an API error),
+ * Step 2: the API OVM record's `provenance` when it is `obol`, for this
+ * address and names this chain's factory (if it names one); `notObol` and
+ * `unknown` defer to the chain. Without the endpoint (or on an API error),
  * the interim creation record, trusted only when its `contractAddress` is
- * this address. Anything else: undefined (step 3).
+ * this address. Anything else: undefined (steps 3 and 4).
  */
 const provenanceFromApi = async (
   ctx: Context,
@@ -65,7 +67,10 @@ const provenanceFromApi = async (
       record.address === undefined ||
       !sameAddress(record.address, ovm) ||
       provenance === undefined ||
-      provenance.status === 'unknown' ||
+      // Only `obol` is taken from the record: its `notObol` can be stale (an
+      // answer cached before the OVM was deployed or indexed), and step 1
+      // already saw code here, so the chain decides.
+      provenance.status !== 'obol' ||
       (provenance.factoryAddress !== undefined &&
         !sameAddress(provenance.factoryAddress, factoryAddress))
     ) {
@@ -165,7 +170,21 @@ export const verifyOvm = async (
     );
   }
 
-  // 3. Factory CreateObolValidatorManager logs with topic1 = ovm.
+  // 3. The OVM getters: a contract that does not answer them is not one the
+  // factory created (it never proves `obol`). A failed read goes on to 4.
+  try {
+    await readOvmCore(ctx, ovm, { what: 'ovm.verify' });
+  } catch (error) {
+    if (isObolError(error, 'OVM_READ_FAILED')) {
+      return result(
+        'notObol',
+        'chain',
+        'The contract does not answer the OVM getters',
+      );
+    }
+  }
+
+  // 4. Factory CreateObolValidatorManager logs with topic1 = ovm.
   try {
     const head = await latestBlockNumber(ctx.publicClient);
     const [topic0] = encodeEventTopics({

@@ -52,21 +52,30 @@ describe('ovm.verify with the API', () => {
       expect(endpoints).toEqual([RECORD]);
     });
 
-    it('trusts notObol for this address', async () => {
-      const { result } = await verifyWith({
-        [RECORD]: () => ({
-          address: OVM,
-          provenance: {
-            status: 'notObol',
-            factoryAddress: HOODI_FACTORY,
-            creationTxHash: null,
-            creationBlock: null,
-            reason: 'No CreateObolValidatorManager event',
-          },
-        }),
+    const notObolRecord = () => ({
+      address: OVM,
+      provenance: {
+        status: 'notObol',
+        factoryAddress: HOODI_FACTORY,
+        creationTxHash: null,
+        creationBlock: null,
+        reason: 'No contract code at the address',
+      },
+    });
+
+    it('lets the chain decide a notObol record', async () => {
+      const { result, endpoints } = await verifyWith({
+        [RECORD]: notObolRecord,
       });
-      expect(result).toMatchObject({ status: 'notObol', source: 'api' });
+      expect(result).toMatchObject({ status: 'notObol', source: 'chain' });
       expect(result.creationTxHash).toBeUndefined();
+      expect(endpoints).toEqual([RECORD]);
+    });
+
+    it('finds an OVM the API answered notObol for before it was deployed', async () => {
+      const api = fakeApi({ [RECORD]: notObolRecord });
+      const result = await verifyOvm(ovmChain().context(api), OVM);
+      expect(result).toMatchObject({ status: 'obol', source: 'chain' });
     });
 
     it.each([
@@ -154,6 +163,41 @@ describe('ovm.verify with the API', () => {
       [INTERIM]: notFound(INTERIM),
     });
     const result = await verifyOvm(ovmChain().context(api), OVM);
+    expect(result).toMatchObject({ status: 'obol', source: 'chain' });
+  });
+
+  it('reads a contract that does not answer the OVM getters as notObol, without a log scan', async () => {
+    const otherRecord = `/v1/ovm/hoodi/${OTHER}`;
+    const otherInterim = `/v1/eth/contract-creation/hoodi/${OTHER}`;
+    const api = fakeApi({
+      [otherRecord]: () => ({
+        address: OTHER,
+        provenance: { status: 'unknown', reason: 'Could not search' },
+      }),
+      [otherInterim]: notFound(otherInterim),
+    });
+    const chain = ovmChain({ raw: { [OTHER]: () => '0x' } });
+    const result = await verifyOvm(chain.context(api), OTHER);
+    expect(result).toMatchObject({
+      status: 'notObol',
+      source: 'chain',
+      reason: 'The contract does not answer the OVM getters',
+    });
+    expect(chain.requests.map(r => r.method)).not.toContain('eth_getLogs');
+  });
+
+  it('scans the factory logs when the getters cannot be read', async () => {
+    const api = fakeApi({
+      [RECORD]: notFound(RECORD),
+      [INTERIM]: notFound(INTERIM),
+    });
+    const chain = ovmChain({
+      onRequest: method => {
+        if (method === 'eth_call') throw new Error('internal error');
+        return undefined;
+      },
+    });
+    const result = await verifyOvm(chain.context(api), OVM);
     expect(result).toMatchObject({ status: 'obol', source: 'chain' });
   });
 });
