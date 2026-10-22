@@ -11,6 +11,7 @@ of every v3 operation (inputs, checks, outputs, error codes) is in [`spec/operat
 - [From 3.0.0-rc.4 to rc.5](#from-300-rc4-to-rc5)
 - [From 3.0.0-rc.5 to rc.6](#from-300-rc5-to-rc6)
 - [From 3.0.0-rc.6 to rc.7](#from-300-rc6-to-rc7)
+- [From 3.0.0-rc.7 to rc.8](#from-300-rc7-to-rc8)
 
 ## From 2.x
 
@@ -400,3 +401,11 @@ No API changes. Three behaviour changes:
 - A Multicall3 read pinned to a block that the RPC refuses (a non-archive node, or a load balancer whose backends lag
   each other) is retried once at `latest`, so `ovm.getRoleHolders`, `getState` and the OVM writes no longer fail with
   `CHAIN_READ_FAILED` on such RPCs.
+
+## From 3.0.0-rc.7 to rc.8
+
+No API changes. Log scans (`ovm.verify`, `ovm.getRoleHolders`, `splits.getSplit`) start at 10,000-block windows instead
+of 50,000 and double after each round that works, up to 50,000, never back to a size the RPC refused. On an RPC that
+caps the range and is slow to refuse (eRPC takes about 28 s), a scan pays at most one refused round per client instead
+of one per halving. If you pass viem's `fallback()` transport, let a log-range refusal throw instead of failing over
+(its `shouldThrow`); otherwise the scan only sees the next transport's error and cannot shrink its window.

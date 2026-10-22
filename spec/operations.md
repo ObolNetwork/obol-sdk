@@ -741,14 +741,16 @@ Output also has `findings: Finding[]`. Roles shown come from `rolesOf`, never fr
 
 ### Log scans
 
-Every `eth_getLogs` scan (`ovm.verify` 4, `ovm.getRoleHolders` 1, `splits.getSplit` 3) reads windows of at most 50,000
-blocks, a few at a time. Public RPCs cap the range (often 10,000 blocks) or the size of the answer: when a request is
-refused for that reason (codes -32005 and HTTP 413; -32600 / -32602 / -32000 with a range or limit message; "block
-range", "too many", "limit exceeded", "query returned more than" and the like) the window is halved and that range
-retried, down to 1,000 blocks, and the window that works is remembered for the `PublicClient`, so later scans start
-there. A scan for one event (`ovm.verify`, the split's `SplitCreated` log) reads the newest range first and stops at the
-first range with a match. Any other failure, or a refusal at 1,000 blocks, fails the scan: never read as "no event"
-(`ovm.verify` gives `unknown`, never `notObol`). (3.0.0-rc.4)
+Every `eth_getLogs` scan (`ovm.verify` 4, `ovm.getRoleHolders` 1, `splits.getSplit` 3) reads windows of 10,000 blocks at
+first, a few at a time, doubling after each round that works, up to 50,000. Public RPCs cap the range (often 10,000
+blocks) or the size of the answer: when a request is refused for that reason (codes -32005 and HTTP 413; -32600 /
+-32602 / -32000 with a range or limit message; "block range", "max allowed range", "too many", "limit exceeded",
+"query returned more than" and the like, whatever the code) the window is halved and that range retried, down to 1,000
+blocks. The window is remembered for the `PublicClient`, and never grows back to a size that was refused, so a proxy
+that is slow to refuse costs about one round per client. A scan for one event (`ovm.verify`, the split's `SplitCreated`
+log) reads the newest range first and stops at the first range with a match. Any other failure, or a refusal at 1,000
+blocks, fails the scan: never read as "no event" (`ovm.verify` gives `unknown`, never `notObol`). (3.0.0-rc.4; start
+and growth 3.0.0-rc.8)
 
 ### Pinned reads
 

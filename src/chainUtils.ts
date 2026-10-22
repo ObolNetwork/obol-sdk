@@ -23,7 +23,10 @@ import type {
 
 const formatRpcLog = (log: RpcLog): Log => formatLog(log);
 
+/** The largest eth_getLogs window, and the "recent blocks" span of a role scan. */
 export const LOG_CHUNK_SIZE = 50_000n;
+/** The window a client's first scan starts at (a common public RPC cap). */
+export const LOG_CHUNK_START = 10_000n;
 export const LOG_CHUNK_CONCURRENCY = 4;
 
 export type CodeKind = 'none' | 'delegated' | 'contract';
@@ -74,8 +77,44 @@ export const addressTopic = (address: Address): Hex =>
 /** The smallest log window `scanLogs` shrinks to before it gives up. */
 export const LOG_CHUNK_FLOOR = 1_000n;
 
-/** The window that last worked, per client: later scans start there. */
-const logWindows = new WeakMap<PublicClient, bigint>();
+/**
+ * Per client: the window to use next, and the smallest window the RPC refused
+ * (never grown back to). Later scans start where the last one ended.
+ */
+const logWindows = new WeakMap<
+  PublicClient,
+  { size: bigint; refused?: bigint }
+>();
+
+const windowOf = (client: PublicClient): bigint =>
+  logWindows.get(client)?.size ?? LOG_CHUNK_START;
+
+/** After a refused range of `size`: halve, but not below the floor. */
+const shrinkWindow = (client: PublicClient, size: bigint): bigint => {
+  const state = logWindows.get(client) ?? { size: LOG_CHUNK_START };
+  const half =
+    (size + 1n) / 2n > LOG_CHUNK_FLOOR ? (size + 1n) / 2n : LOG_CHUNK_FLOOR;
+  logWindows.set(client, {
+    size: half < state.size ? half : state.size,
+    refused:
+      state.refused === undefined || size < state.refused
+        ? size
+        : state.refused,
+  });
+  return half;
+};
+
+/** After a range of the current window worked: double, up to LOG_CHUNK_SIZE and below any refused size. */
+const growWindow = (client: PublicClient): void => {
+  const state = logWindows.get(client) ?? { size: LOG_CHUNK_START };
+  const doubled = state.size * 2n;
+  const next = doubled < LOG_CHUNK_SIZE ? doubled : LOG_CHUNK_SIZE;
+  if (state.refused !== undefined && next >= state.refused) {
+    logWindows.set(client, state);
+    return;
+  }
+  logWindows.set(client, { ...state, size: next });
+};
 
 const RANGE_MESSAGE =
   /range|too many|limit exceeded|query returned more than|exceed|too large|response size|max results/i;
@@ -112,11 +151,13 @@ export const isLogRangeError = (error: unknown): boolean => {
 };
 
 /**
- * Reads logs from `fromBlock` to `toBlock` in windows of at most
- * LOG_CHUNK_SIZE blocks, a few requests at a time. Public RPCs cap the range
- * (often 10,000 blocks) or the number of results: on such a refusal the
- * window is halved and that range retried, down to LOG_CHUNK_FLOOR, and the
- * size that works is remembered for the client. With `stopOnFirst` (a
+ * Reads logs from `fromBlock` to `toBlock` in windows of LOG_CHUNK_START
+ * blocks at first, a few requests at a time, doubling after each round that
+ * works, up to LOG_CHUNK_SIZE. Public RPCs cap the range (often 10,000
+ * blocks) or the number of results: on such a refusal the window is halved
+ * and that range retried, down to LOG_CHUNK_FLOOR, and it never grows back
+ * to the refused size. The window is remembered per client, so a slow
+ * refusal (some proxies take seconds to refuse) is paid about once. With `stopOnFirst` (a
  * "find the event" scan) the ranges are read newest first and the scan stops
  * at the first range with a log, so a recently created contract resolves
  * fast. Any other failure rejects: a partial scan is never returned as
@@ -152,10 +193,7 @@ export const scanLogs = async (
       const size = to - from + 1n;
       if (!isLogRangeError(error) || size <= LOG_CHUNK_FLOOR) throw error;
       // Halves, but not below the floor: a range refused at the floor fails.
-      const half =
-        (size + 1n) / 2n > LOG_CHUNK_FLOOR ? (size + 1n) / 2n : LOG_CHUNK_FLOOR;
-      const known = logWindows.get(client) ?? LOG_CHUNK_SIZE;
-      logWindows.set(client, half < known ? half : known);
+      const half = shrinkWindow(client, size);
       const mid = from + half - 1n;
       const first = await fetchRange(from, mid);
       return [...first, ...(await fetchRange(mid + 1n, to))];
@@ -167,9 +205,10 @@ export const scanLogs = async (
     // Newest first, one range at a time.
     let end = toBlock;
     for (;;) {
-      const size = logWindows.get(client) ?? LOG_CHUNK_SIZE;
+      const size = windowOf(client);
       const start = end - size + 1n > fromBlock ? end - size + 1n : fromBlock;
       const found = await fetchRange(start, end);
+      if (windowOf(client) === size) growWindow(client);
       if (found.length > 0) return found;
       if (start === fromBlock) return [];
       end = start - 1n;
@@ -177,7 +216,7 @@ export const scanLogs = async (
   }
   let next = fromBlock;
   while (next <= toBlock) {
-    const size = logWindows.get(client) ?? LOG_CHUNK_SIZE;
+    const size = windowOf(client);
     const group: Array<[bigint, bigint]> = [];
     while (next <= toBlock && group.length < LOG_CHUNK_CONCURRENCY) {
       const end = next + size - 1n < toBlock ? next + size - 1n : toBlock;
@@ -188,6 +227,7 @@ export const scanLogs = async (
       group.map(async ([from, to]) => await fetchRange(from, to)),
     );
     for (const chunk of results) logs.push(...chunk);
+    if (windowOf(client) === size) growWindow(client);
   }
   return logs;
 };

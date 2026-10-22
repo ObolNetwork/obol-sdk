@@ -246,7 +246,7 @@ export const requireObolOvm = async (
       'PROVENANCE_UNKNOWN',
       `Could not check that ${ovm} was created by the Obol factory: ${verification.reason}`,
       {
-        hint: 'Retry, or use an RPC that serves eth_getLogs over 50,000 blocks',
+        hint: 'Retry, or use an RPC that serves eth_getLogs over at least 1,000 blocks',
         details: { address: ovm },
       },
     );

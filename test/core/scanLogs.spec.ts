@@ -1,10 +1,15 @@
 // chainUtils.scanLogs against RPCs that cap eth_getLogs: by block range
-// (10,000) or by the number of results. The window halves on a refusal and
-// is remembered per client; a genuine failure still rejects.
+// (10,000) or by the number of results. The window starts at
+// LOG_CHUNK_START, doubles after each round that works up to LOG_CHUNK_SIZE,
+// halves on a refusal and never grows back to a refused size; it is
+// remembered per client. A genuine failure still rejects.
 import type { Address, Hex } from 'viem';
 import {
   isLogRangeError,
+  LOG_CHUNK_CONCURRENCY,
   LOG_CHUNK_FLOOR,
+  LOG_CHUNK_SIZE,
+  LOG_CHUNK_START,
   scanLogs,
 } from '../../src/chainUtils.js';
 import { fakeChain, type FakeLog } from '../helpers/fakeChain.js';
@@ -84,11 +89,32 @@ describe('scanLogs', () => {
   });
 
   it('stopOnFirst reads newest first and stops at the first range with a log', async () => {
-    const { client, ranges } = capped([log(1_000_500n), log(1_990_000n)], {});
+    const { client, ranges } = capped([log(1_000_500n), log(1_995_000n)], {});
     const found = await scanLogs(client, filter, 1_000_000n, 2_000_000n, true);
-    expect(found.map(l => l.blockNumber)).toEqual([1_990_000n]);
+    expect(found.map(l => l.blockNumber)).toEqual([1_995_000n]);
     expect(ranges).toHaveLength(1);
     expect(ranges[0][1]).toBe(2_000_000n);
+  });
+
+  it('starts small and grows to the largest window on an uncapped RPC', async () => {
+    const { client, ranges } = capped([], {});
+    await scanLogs(client, filter, 1_000_000n, 2_000_000n);
+    const sizes = ranges.map(([a, b]) => b - a + 1n);
+    expect(sizes[0]).toBe(LOG_CHUNK_START);
+    expect(sizes).toContain(LOG_CHUNK_SIZE);
+    expect(sizes.every(n => n <= LOG_CHUNK_SIZE)).toBe(true);
+  });
+
+  it('pays a slow refusal about once per client, then never grows back to it', async () => {
+    const { client, ranges } = capped([log(1_000_100n)], { cap: 15_000n });
+    const refusedIn = async (): Promise<number> => {
+      ranges.length = 0;
+      await scanLogs(client, filter, 1_000_000n, 1_500_000n);
+      return ranges.filter(([a, b]) => b - a + 1n > 15_000n).length;
+    };
+    // One round grows to 20,000 and is refused, at most once per concurrent range.
+    expect(await refusedIn()).toBeLessThanOrEqual(LOG_CHUNK_CONCURRENCY);
+    expect(await refusedIn()).toBe(0);
   });
 
   it('rejects a genuine failure (never a partial scan)', async () => {
@@ -118,6 +144,12 @@ describe('scanLogs', () => {
         message: 'wrapped',
         cause: rangeError('ranges over 10000 blocks are not supported', 35),
       }),
+    ).toBe(true);
+    // eRPC
+    expect(
+      isLogRangeError(
+        rangeError('getLogs request exceeded max allowed range', -32012),
+      ),
     ).toBe(true);
     expect(
       isLogRangeError(

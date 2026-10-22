@@ -367,7 +367,7 @@ export const getOvmRoleHolders = async (
         'OVM_ROLE_EVENTS_UNAVAILABLE',
         `Could not read the RolesUpdated events of ${ovm}`,
         {
-          hint: 'Retry later, or use an RPC that serves eth_getLogs over 50,000 blocks',
+          hint: 'Retry later, or use an RPC that serves eth_getLogs over at least 1,000 blocks',
           cause,
           details: { address: ovm },
         },

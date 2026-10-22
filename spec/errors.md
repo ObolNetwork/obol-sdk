@@ -83,7 +83,7 @@ with `ABORTED`, which bounds the CPU spent per request; a concurrency limit it a
 | Code | Meaning | Thrown by | Caller should | 2.15 / 2.16 |
 |---|---|---|---|---|
 | `OVM_NOT_OBOL` | `ovm.verify` says the address was not created by the Obol OVM factory (or has no code). Fields: `address`, `source`. | `prepareDeposit`, OVM writes, `prepareDistribution` | check the address; never deposit to it | new |
-| `PROVENANCE_UNKNOWN` | Provenance could not be checked (RPC refused the log scan, API down). Error in `prepareDeposit`; a warning Finding elsewhere. | `prepareDeposit` | retry, or use an RPC that serves `eth_getLogs` over 50,000 blocks | design |
+| `PROVENANCE_UNKNOWN` | Provenance could not be checked (RPC refused the log scan, API down). Error in `prepareDeposit`; a warning Finding elsewhere. | `prepareDeposit` | retry, or use an RPC that serves `eth_getLogs` over at least 1,000 blocks | design |
 | `OVM_READ_FAILED` | The address did not answer the OVM getters. | `ovm.getState`, `ovm.getRoleHolders`, `prepareDistribution`, OVM writes | check the address and chain; run `ovm.verify` | 2.16 `OVM_READ_FAILED` |
 | `OVM_ROLE_EVENTS_UNAVAILABLE` | `RolesUpdated` events could not be read from any source. | `ovm.getRoleHolders` | retry later, or another RPC | 2.16 `OVM_ROLE_EVENTS_UNAVAILABLE` |
 | `OVM_ROLE_MISSING` | The sender is neither the owner nor holds the role the call needs; it would revert. Fields: `from`, `role`. | `prepareDeposit` (ovm), `prepareWithdraw`, `prepareConsolidate`, role-gated writes | send from the owner or a role holder, or `prepareGrantRoles` first | new |

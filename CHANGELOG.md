@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.8](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.7...v3.0.0-rc.8)
+
+> 22 October 2026
+
+Log scans on capped, slow RPCs. No API changes. [MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.7 to rc.8".
+
+**Fixed**
+
+- `eth_getLogs` scans start at 10,000-block windows and double after each round that works, up to 50,000, and never
+  grow back to a refused size (was: 50,000 first, halving on each refusal). On eRPC, which caps the range and takes
+  about 28 s to refuse, `ovm.getRoleHolders` took minutes or failed.
+- The "use an RPC that serves `eth_getLogs`" hints say 1,000 blocks, the smallest window a scan uses (said 50,000).
+
 #### [v3.0.0-rc.7](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.6...v3.0.0-rc.7)
 
 > 22 October 2026
