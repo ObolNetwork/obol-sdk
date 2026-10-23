@@ -338,6 +338,16 @@ export const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
   depositMsgVal.withdrawal_credentials = fromHexString(
     msg.withdrawal_credentials as string,
   );
+  // SSZ would zero-pad a short field or drop the bytes past its end, hashing
+  // a different value than the one given (2.x #253).
+  if (
+    depositMsgVal.pubkey.length !== 48 ||
+    depositMsgVal.withdrawal_credentials.length !== 32
+  ) {
+    throw new Error(
+      'deposit message pubkey must be 48 bytes and withdrawal_credentials 32 bytes',
+    );
+  }
   depositMsgVal.amount = toUint64(msg.amount as string);
   return Buffer.from(depositMessageType.hashTreeRoot(depositMsgVal).buffer);
 };
