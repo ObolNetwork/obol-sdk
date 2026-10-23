@@ -20,6 +20,12 @@ import type {
   StateChange,
 } from './types.js';
 
+/** UTF-16 code-unit order, as the default `sort()`; lowercased hex addresses. */
+const byCodeUnit = (a: string, b: string): number => {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+};
+
 export interface CompareInput {
   tx: SimTx;
   contracts: ChainContracts;
@@ -471,10 +477,10 @@ const creates = (c: Comparer, input: CompareInput, p: Obj): void => {
     }
     c.check(
       'splits created',
-      [...expected].sort().join(','),
+      [...expected].sort(byCodeUnit).join(','),
       splits
         .map(s => lower(s.address))
-        .sort()
+        .sort(byCodeUnit)
         .join(','),
     );
     return;

@@ -249,7 +249,7 @@ export const fetchOvmApiRecord = async (
     if (address === undefined || !sameAddress(address, ovm)) {
       throw new ObolError(
         'API_RESPONSE_MISMATCH',
-        `The Obol API returned the record of ${String(raw.address)} for ${ovm}`,
+        `The Obol API returned the record of ${typeof raw.address === 'string' ? raw.address : JSON.stringify(raw.address)} for ${ovm}`,
         { hint: 'Report it; do not use the answer' },
       );
     }

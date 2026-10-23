@@ -67,10 +67,8 @@ export const formatPercent = (ppm: number | bigint): string => {
     throw invalid('ppm', 'must be an integer in [0, 1000000]');
   }
   const whole = (value / 10_000n).toString();
-  const decimals = (value % 10_000n)
-    .toString()
-    .padStart(4, '0')
-    .replace(/0+$/, '');
+  let decimals = (value % 10_000n).toString().padStart(4, '0');
+  while (decimals.endsWith('0')) decimals = decimals.slice(0, -1);
   return decimals === '' ? whole : `${whole}.${decimals}`;
 };
 

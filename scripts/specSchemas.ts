@@ -131,7 +131,12 @@ const toJson = (schema: unknown): unknown => {
     };
   }
   const out: Record<string, unknown> = {};
-  for (const key of Object.keys(s).sort()) out[key] = toJson(s[key]);
+  // UTF-16 code-unit order (the default sort's), stated so it is not locale dependent.
+  const byCodeUnit = (a: string, b: string): number => {
+    if (a < b) return -1;
+    return a > b ? 1 : 0;
+  };
+  for (const key of Object.keys(s).sort(byCodeUnit)) out[key] = toJson(s[key]);
   return out;
 };
 
