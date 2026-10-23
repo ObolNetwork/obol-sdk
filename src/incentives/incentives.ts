@@ -1,315 +1,435 @@
-import { assertSignerChain } from '../utils.js';
-import { assertAddress } from '../validation.js';
+/** incentives: Obol incentive claims from Merkle distributors (spec "incentives"). */
+import { Type } from '@sinclair/typebox';
+import { encodeFunctionData, type Address, type Hex } from 'viem';
 import {
-  type ClaimableIncentives,
-  type ETH_ADDRESS,
-  FORK_NAMES,
-  type ProviderType,
-  type SignerType,
-  type ClaimIncentivesResponse,
-  type PreflightIssue,
-  type PreflightResult,
-  type WriteOptions,
-} from '../types.js';
+  chainReadFailed,
+  codeKind,
+  finding,
+  latestBlockNumber,
+  prepared,
+} from '../chainUtils.js';
+import { requireApi, requireContracts, type Context } from '../context.js';
+import { isObolError, ObolApiError, ObolError } from '../errors.js';
+import { checksum, decode, isAddressInput, sameAddress, T } from '../schema.js';
+import type { FindingCode } from '../codes.js';
+import type { Finding, Prepared } from '../types.js';
+import { readValues } from '../multicall.js';
 import {
-  claimIncentivesFromMerkleDistributor,
-  isClaimedFromMerkleDistributor,
-} from './incentiveHelpers.js';
-import { preflightIncentivesClaim } from './incentivesPreflight.js';
-import { DEFAULT_BASE_VERSION } from '../constants.js';
-import {
-  IncentivesPreflightError,
-  TransactionSubmissionError,
-  InvalidArgumentError,
-  NotFoundError,
-  SignerRequiredError,
-} from '../errors.js';
+  maskedDistributorCodeHash,
+  merkleDistributorAbi,
+  merkleLeaf,
+  MERKLE_DISTRIBUTOR_RUNTIME,
+  processProof,
+} from './merkle.js';
+
+export interface Incentives {
+  operatorAddress: Address;
+  contractAddress: Address;
+  index: number;
+  /** OBOL base units. */
+  amount: bigint;
+  merkleProof: Hex[];
+}
+
+export interface PreflightResult {
+  ok: boolean;
+  /** Claim issues (severity `warning`); codes as spec/errors.md "Incentive claim issues". */
+  issues: Finding[];
+}
+
+interface ApiIncentives {
+  operator_address?: unknown;
+  contract_address?: unknown;
+  index?: unknown;
+  amount?: unknown;
+  merkle_proof?: unknown;
+}
+
+/** What `prepareClaim` claims. */
+export interface ClaimPreview {
+  /** OBOL base units. */
+  amount: bigint;
+  contractAddress: Address;
+}
+
+const issue = (code: FindingCode, message: string, hint: string): Finding =>
+  finding(code, 'warning', message, { hint });
+
+const endpoint = (ctx: Context, address: Address): string =>
+  `/v1/address/incentives/${ctx.chain.network}/${address}`;
+
+const isBytes32 = (value: unknown): value is Hex =>
+  typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value);
 
 /**
- * The API answers 200 with an empty `contract_address` (and `index` -1) for
- * addresses that have no incentives.
+ * Checks an API record: it is for `address`, and contract address, index,
+ * amount and proof are well-formed. Returns the issues, and the record when
+ * there are none.
  */
-const hasIncentives = (data: ClaimableIncentives | undefined): boolean =>
-  typeof data?.contract_address === 'string' && data.contract_address !== '';
-
-const noIncentivesIssue = (address: string): PreflightIssue => ({
-  code: 'NO_INCENTIVES',
-  message: `No incentives found for address ${address}`,
-  hint: 'Check the address and the client chainId; nothing to claim otherwise.',
-});
-
-/**
- * Manages Obol incentive rewards – querying eligibility and claiming from
- * on-chain Merkle Distributor contracts.
- *
- * Do not instantiate directly; access via `client.incentives`.
- *
- * @example
- * ```typescript
- * const client = new Client({ chainId: 560048 }, signer);
- *
- * // Check claimable incentives
- * const data = await client.incentives.getIncentivesByAddress("0xOperator...");
- *
- * // Check if already claimed
- * const claimed = await client.incentives.isClaimed(data.contract_address, data.index);
- *
- * // Read-only checks before claiming (claimIncentives also runs them)
- * const { ok, issues } = await client.incentives.preflightClaim("0xOperator...");
- *
- * // Claim (sends on-chain transaction)
- * const { txHash } = await client.incentives.claimIncentives("0xOperator...");
- * ```
- */
-export class Incentives {
-  private readonly signer: SignerType | undefined;
-  public readonly chainId: number;
-  private readonly request: (
-    endpoint: string,
-    options?: RequestInit,
-  ) => Promise<any>;
-
-  public readonly provider: ProviderType | undefined | null;
-
-  constructor(
-    signer: SignerType | undefined,
-    chainId: number,
-    request: (endpoint: string, options?: RequestInit) => Promise<any>,
-    provider: ProviderType | undefined | null,
+const checkRecord = (
+  raw: ApiIncentives,
+  address: Address,
+): { issues: Finding[]; data?: Incentives } => {
+  const issues: Finding[] = [];
+  const malformed = (field: string): Finding =>
+    issue(
+      'INCENTIVES_DATA_INVALID',
+      `Incentives data from the API has an invalid ${field}`,
+      'Do not claim; report the address to Obol so the incentives data can be checked',
+    );
+  const {
+    operator_address: operator,
+    contract_address: contract,
+    index,
+    amount,
+  } = raw;
+  const proof = raw.merkle_proof;
+  if (
+    typeof operator !== 'string' ||
+    !isAddressInput(operator) ||
+    !sameAddress(operator, address)
   ) {
-    this.signer = signer;
-    this.chainId = chainId;
-    this.request = request;
-    this.provider = provider;
-  }
-
-  /**
-   * Claims Obol incentives from a Merkle Distributor contract for the given address.
-   *
-   * Automatically fetches incentive data, runs {@link Incentives.preflightClaim}'s
-   * checks, and submits the on-chain claim transaction. Returns `{ txHash: null }`
-   * if incentives were already claimed (idempotent).
-   *
-   * The claim may be sent for any address: the signer pays gas and the tokens are
-   * transferred to `address`.
-   *
-   * @param address - The operator's Ethereum address to claim incentives for.
-   * @param options - Optional `onSent` callback, called with each transaction
-   *   hash as soon as it is broadcast.
-   * @returns The transaction hash, or `{ txHash: null }` if already claimed.
-   * @throws {SignerRequiredError} If no signer was provided.
-   * @throws {ChainMismatchError} If the signer is connected to a different chain.
-   * @throws {IncentivesPreflightError} If the address has no incentives
-   *   (`NO_INCENTIVES`) or a pre-flight check fails (the message lists the
-   *   issue codes; `issues` holds the details).
-   * @throws {TransactionSubmissionError} If the call fails after a transaction
-   *   was broadcast (`txHashes`, `pendingTxHash` and `cause` say what was sent).
-   *
-   * @example
-   * ```typescript
-   * const { txHash } = await client.incentives.claimIncentives("0xOperator...");
-   * if (txHash) {
-   *   console.log("Claimed:", txHash);
-   * } else {
-   *   console.log("Already claimed");
-   * }
-   * ```
-   */
-  async claimIncentives(
-    address: string,
-    options?: WriteOptions,
-  ): Promise<ClaimIncentivesResponse> {
-    if (!this.signer) {
-      throw new SignerRequiredError('claimIncentives');
-    }
-
-    await assertSignerChain(this.signer, this.chainId, 'claimIncentives');
-
-    try {
-      const incentivesData = await this.getIncentivesByAddress(address);
-
-      if (!hasIncentives(incentivesData)) {
-        const issue = noIncentivesIssue(address);
-        throw new IncentivesPreflightError(
-          `Failed to claim incentives: [${issue.code}] ${issue.message}`,
-          [issue],
-        );
-      }
-
-      const { issues } = await preflightIncentivesClaim({
-        requestedAddress: address,
-        incentivesData,
-        chainId: this.chainId,
-        provider: this.provider,
-      });
-
-      const alreadyClaimed = issues.some(i => i.code === 'ALREADY_CLAIMED');
-      const blocking = issues.filter(
-        i =>
-          i.code !== 'ALREADY_CLAIMED' &&
-          !(alreadyClaimed && i.code === 'CLAIM_WINDOW_CLOSED'),
-      );
-
-      if (blocking.length > 0) {
-        throw new IncentivesPreflightError(
-          `Failed to claim incentives: ${blocking.map(i => `[${i.code}] ${i.message}`).join('; ')}`,
-          blocking,
-        );
-      }
-
-      if (alreadyClaimed) {
-        return { txHash: null };
-      }
-
-      const { txHash } = await claimIncentivesFromMerkleDistributor({
-        signer: this.signer,
-        contractAddress: incentivesData.contract_address,
-        index: incentivesData.index,
-        operatorAddress: incentivesData.operator_address,
-        amount: incentivesData.amount,
-        merkleProof: incentivesData.merkle_proof,
-        options,
-      });
-
-      return { txHash };
-    } catch (error: any) {
-      if (
-        error instanceof IncentivesPreflightError ||
-        error instanceof TransactionSubmissionError
-      ) {
-        throw error;
-      }
-      throw new Error(`Failed to claim incentives: ${error.message}`);
-    }
-  }
-
-  /**
-   * Runs read-only checks on the incentives for an address before claiming.
-   * No signer or transaction is needed, but a provider is.
-   *
-   * Checks that:
-   * - the API data is for `address`;
-   * - the contract is a known Obol `MerkleDistributorWithDeadline` and pays out
-   *   the OBOL token for this chain;
-   * - the Merkle proof matches the contract's `merkleRoot`;
-   * - the index is not already claimed and the claim window is open.
-   *
-   * Problems are returned as issues rather than thrown: `NO_INCENTIVES` when
-   * the address has none, `INCENTIVES_NOT_FOUND` for a 404 from the API and
-   * `INCENTIVES_FETCH_FAILED` for other API or network errors. Errors
-   * reaching the provider are thrown.
-   *
-   * @param address - The Ethereum address the incentives are claimed for.
-   * @returns `{ ok, issues }`, where each issue has a `code`, `message` and `hint`.
-   *
-   * @example
-   * ```typescript
-   * const { ok, issues } = await client.incentives.preflightClaim("0xOperator...");
-   * if (!ok) console.log(issues.map(i => i.code));
-   * ```
-   */
-  async preflightClaim(address: string): Promise<PreflightResult> {
-    let incentivesData: ClaimableIncentives;
-    try {
-      incentivesData = await this.getIncentivesByAddress(address);
-    } catch (error: any) {
-      const notFound = error instanceof NotFoundError || error?.status === 404;
-      return {
-        ok: false,
-        issues: [
-          notFound
-            ? {
-                code: 'INCENTIVES_NOT_FOUND',
-                message: `No incentives found for ${address}: ${error?.message}`,
-                hint: 'Check the address and the client chainId.',
-              }
-            : {
-                code: 'INCENTIVES_FETCH_FAILED',
-                message: `Could not fetch incentives for ${address}: ${error?.message}`,
-                hint: 'Retry later; the Obol API or the network may be unavailable.',
-              },
-        ],
-      };
-    }
-
-    if (!hasIncentives(incentivesData)) {
-      return { ok: false, issues: [noIncentivesIssue(address)] };
-    }
-
-    return await preflightIncentivesClaim({
-      requestedAddress: address,
-      incentivesData,
-      chainId: this.chainId,
-      provider: this.provider,
-    });
-  }
-
-  /**
-   * Checks whether incentives have already been claimed for a given operator index.
-   *
-   * Read-only on-chain call – no transaction sent.
-   *
-   * @param contractAddress - Address of the Merkle Distributor contract.
-   * @param index - The operator's index in the Merkle tree (from {@link Incentives.getIncentivesByAddress}).
-   * @returns `true` if the incentives at that index have already been claimed.
-   * @throws {InvalidArgumentError} If `contractAddress` is not an address
-   *   (e.g. the empty address returned for an address without incentives) or
-   *   `index` is not a non-negative integer.
-   *
-   * @example
-   * ```typescript
-   * const claimed = await client.incentives.isClaimed(
-   *   "0xMerkleDistributor...",
-   *   42,
-   * );
-   * ```
-   */
-  async isClaimed(
-    contractAddress: ETH_ADDRESS,
-    index: number,
-  ): Promise<boolean> {
-    assertAddress(contractAddress, 'contractAddress');
-    if (!Number.isSafeInteger(index) || index < 0) {
-      throw new InvalidArgumentError(
-        `Invalid index: expected a non-negative integer, got ${String(index)}`,
-        'index',
-      );
-    }
-    return await isClaimedFromMerkleDistributor(
-      contractAddress,
-      index,
-      this.provider,
+    issues.push(
+      issue(
+        'OPERATOR_ADDRESS_MISMATCH',
+        `Incentives data is for ${String(operator)}, not the requested address ${address}`,
+        'Do not claim; request incentives for the address you intend to claim for',
+      ),
     );
   }
+  if (typeof contract !== 'string' || !isAddressInput(contract)) {
+    issues.push(malformed('contract_address'));
+  }
+  if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0) {
+    issues.push(malformed('index'));
+  }
+  if (typeof amount !== 'string' || !/^[0-9]+$/.test(amount)) {
+    issues.push(malformed('amount'));
+  }
+  if (!Array.isArray(proof) || !proof.every(isBytes32)) {
+    issues.push(malformed('merkle_proof'));
+  }
+  if (issues.length > 0) return { issues };
+  return {
+    issues,
+    data: {
+      operatorAddress: checksum(operator as string),
+      contractAddress: checksum(contract as string),
+      index: index as number,
+      amount: BigInt(amount as string),
+      merkleProof: (proof as Hex[]).map(p => p.toLowerCase() as Hex),
+    },
+  };
+};
 
-  /**
-   * Fetches claimable incentive data for an operator address from the Obol API.
-   *
-   * The returned data includes the Merkle proof, amount, and contract address
-   * needed to claim on-chain. This is a read-only API call.
-   *
-   * @param address - The operator's Ethereum address.
-   * @returns Claimable incentive data including amount, Merkle proof, and
-   *   contract address. For an address without incentives the API returns
-   *   an empty `contract_address` and `index` -1.
-   * @throws {Error} If no incentives are found for the given address (404).
-   * @throws {Error} If `address` is not a 0x-prefixed 20-byte address.
-   *
-   * @example
-   * ```typescript
-   * const incentives = await client.incentives.getIncentivesByAddress("0xOperator...");
-   * console.log(incentives.amount, incentives.contract_address);
-   * ```
-   */
-  async getIncentivesByAddress(address: string): Promise<ClaimableIncentives> {
-    assertAddress(address, 'address');
-    const network = FORK_NAMES[this.chainId];
-    const incentives: ClaimableIncentives = await this.request(
-      `/${DEFAULT_BASE_VERSION}/address/incentives/${network}/${encodeURIComponent(address)}`,
+const hasIncentives = (raw: ApiIncentives | undefined): boolean =>
+  typeof raw?.contract_address === 'string' && raw.contract_address !== '';
+
+/**
+ * The claimable incentives of `address` from the Obol API
+ * (`GET /v1/address/incentives/:network/:address`), or null when it has none
+ * (`contract_address: ""`). A record for another address is
+ * API_RESPONSE_MISMATCH; a malformed one is API_ERROR.
+ */
+export const getIncentives = async (
+  ctx: Context,
+  input: string,
+): Promise<Incentives | null> => {
+  const api = requireApi(ctx, 'incentives.get');
+  const address = checksum(decode(T.Address, input, 'address'));
+  const path = endpoint(ctx, address);
+  const raw = await api.request<ApiIncentives>(path);
+  if (!hasIncentives(raw)) return null;
+  const { issues, data } = checkRecord(raw, address);
+  if (data === undefined) {
+    const http = { status: 200, endpoint: path, method: 'GET', body: raw };
+    if (issues.some(i => i.code === 'OPERATOR_ADDRESS_MISMATCH')) {
+      throw new ObolApiError(
+        'API_RESPONSE_MISMATCH',
+        `The incentives record is not for ${address}`,
+        http,
+        { hint: 'Report it; do not use the answer' },
+      );
+    }
+    throw new ObolApiError(
+      'API_ERROR',
+      'The incentives record is malformed',
+      http,
       {
-        method: 'GET',
+        hint: 'Retry later; report it if it persists',
       },
     );
-    return incentives;
   }
+  return data;
+};
+
+export const IsClaimedInput = Type.Object({
+  contractAddress: T.Address,
+  index: T.Uint,
+});
+
+/** `isClaimed(index)` on a Merkle distributor; CHAIN_READ_FAILED if the call fails. */
+export const isClaimed = async (
+  ctx: Context,
+  input: { contractAddress: string; index: number },
+): Promise<boolean> => {
+  const d = decode(IsClaimedInput, input);
+  requireContracts(ctx.chain.id, 'incentives.isClaimed');
+  try {
+    return await ctx.publicClient.readContract({
+      address: checksum(d.contractAddress),
+      abi: merkleDistributorAbi,
+      functionName: 'isClaimed',
+      args: [BigInt(d.index)],
+    });
+  } catch (cause) {
+    throw chainReadFailed('isClaimed', cause);
+  }
+};
+
+const readFailed = (what: string): Finding =>
+  issue(
+    'CHAIN_READ_FAILED',
+    `Could not read ${what} from the chain`,
+    'Retry, or use another RPC',
+  );
+
+/** Runs the claim checks; `data` and `blockNumber` are set when the chain was read. */
+const runChecks = async (
+  ctx: Context,
+  input: string,
+  operation: string,
+): Promise<{ issues: Finding[]; data?: Incentives; blockNumber?: bigint }> => {
+  const api = requireApi(ctx, operation);
+  const address = checksum(decode(T.Address, input, 'address'));
+  const { obolToken } = requireContracts(ctx.chain.id, operation);
+
+  // 1. API record.
+  let raw: ApiIncentives;
+  try {
+    raw = await api.request<ApiIncentives>(endpoint(ctx, address));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      issues: [
+        isObolError(error, 'API_NOT_FOUND')
+          ? issue(
+              'INCENTIVES_NOT_FOUND',
+              `No incentives found for ${address}: ${message}`,
+              'Check the address and the client chain',
+            )
+          : issue(
+              'INCENTIVES_FETCH_FAILED',
+              `Could not fetch incentives for ${address}: ${message}`,
+              'Retry later; the Obol API or the network may be unavailable',
+            ),
+      ],
+    };
+  }
+  if (!hasIncentives(raw)) {
+    return {
+      issues: [
+        issue(
+          'NO_INCENTIVES',
+          `No incentives found for address ${address}`,
+          'Check the address and the client chain; nothing to claim otherwise',
+        ),
+      ],
+    };
+  }
+
+  // 2. The record is for this address and well-formed.
+  const { issues, data } = checkRecord(raw, address);
+  if (data === undefined) return { issues };
+
+  // 3. The distributor is the reference build.
+  let code: Hex | undefined;
+  try {
+    code = await ctx.publicClient.getCode({ address: data.contractAddress });
+  } catch {
+    return { issues: [readFailed('the distributor code')], data };
+  }
+  if (code === undefined || codeKind(code) !== 'contract') {
+    return {
+      issues: [
+        issue(
+          'CONTRACT_NOT_DEPLOYED',
+          `Merkle distributor contract is not available at ${data.contractAddress}`,
+          'Check that the client chain matches the network of the incentives',
+        ),
+      ],
+      data,
+    };
+  }
+  if (maskedDistributorCodeHash(code) !== MERKLE_DISTRIBUTOR_RUNTIME.codeHash) {
+    return {
+      issues: [
+        issue(
+          'DISTRIBUTOR_UNKNOWN',
+          `Contract at ${data.contractAddress} is not a recognised Obol Merkle distributor`,
+          'Do not claim; report the contract address to Obol',
+        ),
+      ],
+      data,
+    };
+  }
+
+  // 4–6. Token, proof, claimed and deadline, read at one block.
+  let blockNumber: bigint;
+  let reads: unknown[];
+  try {
+    blockNumber = await latestBlockNumber(ctx.publicClient);
+    const target = {
+      address: data.contractAddress,
+      abi: merkleDistributorAbi,
+    } as const;
+    reads = await readValues(
+      ctx,
+      [
+        { ...target, functionName: 'token' },
+        { ...target, functionName: 'merkleRoot' },
+        { ...target, functionName: 'endTime' },
+        { ...target, functionName: 'isClaimed', args: [BigInt(data.index)] },
+      ],
+      'the distributor state',
+      blockNumber,
+    );
+  } catch {
+    return { issues: [readFailed('the distributor state')], data };
+  }
+  const [token, root, endTime, claimed] = reads;
+  if (reads.some(r => r === undefined)) {
+    return { issues: [readFailed('the distributor state')], data, blockNumber };
+  }
+  if (!sameAddress(token as string, obolToken)) {
+    issues.push(
+      issue(
+        'TOKEN_MISMATCH',
+        `Distributor pays out ${String(token)}, not the OBOL token ${obolToken}`,
+        'Do not claim; report the contract address to Obol',
+      ),
+    );
+  }
+  const folded = processProof(
+    merkleLeaf(BigInt(data.index), data.operatorAddress, data.amount),
+    data.merkleProof,
+  );
+  if (folded.toLowerCase() !== (root as string).toLowerCase()) {
+    issues.push(
+      issue(
+        'PROOF_INVALID',
+        'The Merkle proof does not match the distributor root for this index, account and amount',
+        'Do not claim; the incentives data may be stale. Fetch it again or contact Obol',
+      ),
+    );
+  }
+  if (claimed === true) {
+    issues.push(
+      issue(
+        'ALREADY_CLAIMED',
+        `Incentives at index ${data.index} have already been claimed`,
+        'Nothing to do',
+      ),
+    );
+  }
+  try {
+    const block = await ctx.publicClient.getBlock({ blockNumber });
+    if (block.timestamp > (endTime as bigint)) {
+      issues.push(
+        issue(
+          'CLAIM_WINDOW_CLOSED',
+          `The claim window of ${data.contractAddress} ended at ${String(endTime)} (unix time)`,
+          'Unclaimed incentives can no longer be claimed from this distributor',
+        ),
+      );
+    }
+  } catch {
+    issues.push(readFailed('the latest block'));
+  }
+  return { issues, data, blockNumber };
+};
+
+/**
+ * The claim checks of `prepareClaim` without throwing: the API record exists,
+ * is for `address` and well-formed; the distributor has the reference code
+ * (immutables and metadata zeroed); it pays the chain's OBOL token; the proof
+ * folds to `merkleRoot()`; the index is not claimed; the window is open.
+ */
+export const preflight = async (
+  ctx: Context,
+  address: string,
+): Promise<PreflightResult> => {
+  const { issues } = await runChecks(ctx, address, 'incentives.preflight');
+  return { ok: issues.length === 0, issues };
+};
+
+/**
+ * Builds `claim(index, account, amount, merkleProof)` after the `preflight`
+ * checks. Only ALREADY_CLAIMED (possibly with CLAIM_WINDOW_CLOSED) throws
+ * ALREADY_CLAIMED (nothing to do); any other issue throws
+ * INCENTIVES_PREFLIGHT_FAILED with `issues`.
+ */
+export const prepareClaim = async (
+  ctx: Context,
+  address: string,
+): Promise<Prepared<'claim'>> => {
+  const { issues, data, blockNumber } = await runChecks(
+    ctx,
+    address,
+    'incentives.prepareClaim',
+  );
+  const blocking = issues.filter(
+    i => i.code !== 'ALREADY_CLAIMED' && i.code !== 'CLAIM_WINDOW_CLOSED',
+  );
+  const alreadyClaimed = issues.some(i => i.code === 'ALREADY_CLAIMED');
+  if (alreadyClaimed && blocking.length === 0) {
+    throw new ObolError(
+      'ALREADY_CLAIMED',
+      `The incentives of ${address} were already claimed`,
+      {
+        hint: 'Nothing to do; treat as success',
+        details: data !== undefined ? { index: data.index } : {},
+      },
+    );
+  }
+  if (issues.length > 0 || data === undefined) {
+    throw new ObolError(
+      'INCENTIVES_PREFLIGHT_FAILED',
+      `Incentives claim checks failed: ${issues.map(i => `[${i.code}] ${i.message}`).join('; ')}`,
+      { hint: issues[0]?.hint, details: { issues } },
+    );
+  }
+  return prepared(ctx, 'claim', {
+    to: data.contractAddress,
+    data: encodeFunctionData({
+      abi: merkleDistributorAbi,
+      functionName: 'claim',
+      args: [
+        BigInt(data.index),
+        data.operatorAddress,
+        data.amount,
+        data.merkleProof,
+      ],
+    }),
+    preview: { amount: data.amount, contractAddress: data.contractAddress },
+    ...(blockNumber !== undefined ? { blockNumber } : {}),
+  });
+};
+
+/** The incentives module bound to a client context. */
+export interface IncentivesModule {
+  get: (address: string) => Promise<Incentives | null>;
+  isClaimed: (input: {
+    contractAddress: string;
+    index: number;
+  }) => Promise<boolean>;
+  preflight: (address: string) => Promise<PreflightResult>;
+  prepareClaim: (address: string) => Promise<Prepared<'claim'>>;
 }
+
+export const createIncentivesModule = (ctx: Context): IncentivesModule => ({
+  get: async address => await getIncentives(ctx, address),
+  isClaimed: async input => await isClaimed(ctx, input),
+  preflight: async address => await preflight(ctx, address),
+  prepareClaim: async address => await prepareClaim(ctx, address),
+});

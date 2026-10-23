@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/cluster.verifyDefinition.json",
+  "title": "cluster.verifyDefinition",
+  "properties": {
+    "chainId": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "configHash": {
+      "description": "32-byte hex",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "type": "string"
+    },
+    "definition": {
+      "properties": {
+        "compounding": {
+          "type": "boolean"
+        },
+        "config_hash": {
+          "type": "string"
+        },
+        "consensus_protocol": {
+          "type": "string"
+        },
+        "creator": {
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "config_signature": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "type": "object"
+        },
+        "definition_hash": {
+          "type": "string"
+        },
+        "deposit_amounts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dkg_algorithm": {
+          "type": "string"
+        },
+        "fork_version": {
+          "description": "fork version (4 bytes)",
+          "pattern": "^0x[0-9a-fA-F]{8}$",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "num_validators": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "operators": {
+          "anyOf": [
+            {
+              "items": {
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  },
+                  "config_signature": {
+                    "type": "string"
+                  },
+                  "enr": {
+                    "type": "string"
+                  },
+                  "enr_signature": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_gas_limit": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "threshold": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "uuid": {
+          "type": "string"
+        },
+        "validators": {
+          "anyOf": [
+            {
+              "items": {
+                "properties": {
+                  "fee_recipient_address": {
+                    "type": "string"
+                  },
+                  "withdrawal_address": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "fee_recipient_address",
+                  "withdrawal_address"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "num_validators",
+        "threshold",
+        "fork_version",
+        "config_hash",
+        "creator",
+        "operators",
+        "validators"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "definition",
+    "chainId"
+  ],
+  "type": "object"
+}

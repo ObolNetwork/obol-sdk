@@ -2,6 +2,408 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v3.0.0)
+
+> 23 October 2026
+
+The viem-native SDK: prepare, then send. Every operation, its checks, outputs and error codes are specified in
+`spec/`; [MIGRATION.md](MIGRATION.md) maps every 2.x method and export to v3. Identical in behaviour to
+3.0.0-rc.9; the release candidate entries below list each change.
+
+**Changed since rc.9**
+
+- Internal refactors for SonarCloud (smaller functions in deposit, lock and simulation code), with every check, error
+  and finding in the same order. No API or behaviour changes.
+- `.sonarcloud.properties` scopes the analysis to the SDK and its tests (not the fuzz harness or generated files).
+
+#### [v3.0.0-rc.9](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.8...v3.0.0-rc.9)
+
+> 23 October 2026
+
+Obol API request headers, from the obol-api production log review. No API changes.
+[MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.8 to rc.9".
+
+**Changed**
+
+- `Content-Type: application/json` only on requests with a body: a GET from a browser no longer needs a CORS
+  preflight.
+- In Node, `User-Agent: obol-sdk/<version>`, so the API can tell SDK traffic apart. Not set in browsers.
+
+**Fixed**
+
+- Deposit messages are hashed only from a 48-byte pubkey and 32-byte withdrawal credentials (SSZ would zero-pad or
+  truncate others). Inputs were already length-checked by their schemas; the same fix ships in 2.x as #253.
+
+#### [v3.0.0-rc.8](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.7...v3.0.0-rc.8)
+
+> 22 October 2026
+
+Log scans on capped, slow RPCs. No API changes. [MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.7 to rc.8".
+
+**Fixed**
+
+- `eth_getLogs` scans start at 10,000-block windows and double after each round that works, up to 50,000, and never
+  grow back to a refused size (was: 50,000 first, halving on each refusal). On eRPC, which caps the range and takes
+  about 28 s to refuse, `ovm.getRoleHolders` took minutes or failed.
+- The "use an RPC that serves `eth_getLogs`" hints say 1,000 blocks, the smallest window a scan uses (said 50,000).
+
+#### [v3.0.0-rc.7](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.6...v3.0.0-rc.7)
+
+> 22 October 2026
+
+Fixes from the Launchpad OVM page on mainnet. No API changes. [MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.6 to rc.7".
+
+**Fixed**
+
+- `ovm.verify`: a contract that does not answer the OVM getters is `notObol` (source `chain`) when the API gives no
+  verdict, without the factory log scan (Multicall3 ended `unknown` after a long scan on public RPCs).
+- `ovm.verify` takes only an `obol` verdict from the API OVM record; its `notObol` goes to the chain checks, since
+  it can be an answer cached before the OVM was deployed or indexed (a just-deployed OVM read `notObol` / api).
+- Multicall3 reads pinned to a block are retried once at `latest` when the RPC refuses that block (public non-archive
+  RPCs behind load balancers), instead of failing with `CHAIN_READ_FAILED` (`ovm.getRoleHolders` showed "couldn't
+  read the role holders").
+
+#### [v3.0.0-rc.6](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.5...v3.0.0-rc.6)
+
+> 21 October 2026
+
+Queued deposit signatures from the Obol API deposit-status route (obol-api #1047). Additive.
+[MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.5 to rc.6".
+
+**Required for the updated API**
+
+- `deposits.status` asks `POST /v1/validators/:network/deposit-status` for at most 500 pubkeys per request (was
+  1000), the updated API's limit; larger inputs are batched.
+
+**Added**
+
+- `DepositStatus.signaturesPending` and `credentialsConflict`, and `PendingDeposit.signatureValid`, from the Obol
+  API (absent from a source that does not check signatures: a beacon node, the interim `/v1/state`, an older API).
+  A queue-only pubkey's `withdrawalCredentials` are the first validly signed queued deposit's once every deposit
+  before it is checked (as obol-api walks the queue in order), so possibly while `signaturesPending`; absent while
+  an unchecked deposit comes first or when none is valid (rc.5 rejected the API's `null` there as
+  `STATUS_UNAVAILABLE`).
+- `pendingRetry: { tries?, delayMs? }` on `deposits.status` and the writes that read status (`StatusSource`, type
+  `PendingRetry`): while an entry has `signaturesPending`, its batch is re-read (default 3 requests, waiting 8 s then
+  16 s); still pending, the entry is returned as it is.
+- `prepareDeposit` check 5: a queue-only pubkey still `signaturesPending` with undecided credentials is
+  `STATUS_UNAVAILABLE` with details `{ reason: 'signatures_pending', pubkey }` (never guessed); with decided
+  credentials it proceeds, and the unchecked later deposits count as possibly valid for `DEPOSIT_CONFLICT`; queued deposits with `signatureValid: false` are
+  skipped when choosing the credentials that apply (`null` counts as possibly valid), for conflicts, the
+  already-queued count and the 32 ETH cap sum; on `credentialsConflict: true`, `DEPOSIT_CONFLICT` when this
+  deposit's credentials differ from the first validly signed one's, else the new warning finding
+  `QUEUED_CREDENTIALS_CONFLICT` (subject the pubkey). A top-up to a pubkey whose queued deposits are all invalid is
+  `DEPOSIT_TOP_UP_TARGET_MISSING`. The zero-credential top-up rule is unchanged.
+- `deposits.status` checks the new fields for consistency (`STATUS_UNAVAILABLE` otherwise): pending only on a
+  queue-only entry and with `credentialsConflict: null`; the credentials those of the first validly signed deposit
+  when every deposit before it is checked, and `null` otherwise (none valid, or an unchecked one first), pending or
+  not; and `credentialsConflict` agreeing with the deposits. `credentialsMatch` is `null` while the credentials are
+  undecided.
+- EIP-1271: contract-wallet signatures (`verifyTypedDataSignature`, `verifyLock` / `verifyDefinition` definition
+  signatures) also pass with the legacy `isValidSignature(bytes, bytes)` → `0x20c13b0b` of Safes before 1.3.0,
+  called with the 32-byte EIP-712 hash as `data` (as Safe 1.3.0's CompatibilityFallbackHandler forwards it and 2.x's
+  protocol-kit called it). Each magic counts only from its own function.
+- `verifyTypedDataSignature` accepts eth-sig-util's `TypedMessage`: `EIP712TypedData.domain` is looser (`salt` as
+  hex or bytes, converted; `verifyingContract` any string; `chainId` number or bigint) and `primaryType` may be a
+  number (from a `keyof` type). Malformed typed data is `false`, not a throw.
+- `signal?: AbortSignal` on `cluster.verifyLock`, `cluster.isValidLock` and `deposits.verifyDepositData`: checked
+  before the run and at every yield point; an abort throws the new error code `ABORTED` (details `{ operation }`,
+  `cause` the signal's reason; `isValidLock` throws it, never `false`). The way for a server to bound the CPU per
+  request (`AbortSignal.timeout(ms)`); a non-AbortSignal value is `PAYLOAD_INVALID`.
+- `exits.blsVerify(pubkey, message, signature, { bls? })`: verifies with the given `BlsBackend` (blst on a
+  server); type `BlsVerifyOptions`. Documented: malformed hex is `PAYLOAD_INVALID` (2.x returned `false`).
+
+**Changed**
+
+- `experimental.legacy.getOwrTranches` no longer requires a chain with Obol contracts: it reads only the OWR, so it
+  works on any client chain, Gnosis and Sepolia included (was `UNSUPPORTED_CHAIN` there).
+
+**Docs**
+
+- MIGRATION.md (from the obol-api migration): the `blsVerify`, `validateAddressSignature`, hash and ENR rows made
+  precise; servers reuse 2.x's `RPC_MAINNET` / `RPC_HOODI` / `RPC_GNOSIS` / `RPC_SEPOLIA` to build `publicClients`;
+  `signal` for deadlines; blst platforms and warming it at boot; `viem/chains` under `module: commonjs` +
+  `moduleResolution: node10` (ox `.ts` sources type-checked despite `skipLibCheck`: use `defineChain` or `bundler`).
+  README "Create a client" and "Servers" notes to match.
+
+**Unchanged**
+
+- The beacon fallback does not check signatures: every queued deposit counts as possibly valid (spec
+  "deposits.status", source 3), so an invalidly signed queued deposit with other credentials is still a
+  `DEPOSIT_CONFLICT` there.
+
+#### [v3.0.0-rc.5](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.4...v3.0.0-rc.5)
+
+> 21 October 2026
+
+Review fixes for the obol-api and Launchpad migrations. Additive except for the two changes under **Breaking**.
+[MIGRATION.md](MIGRATION.md) has "Verifying locks on a server", a row for every 2.x export the two consumers use, and
+"From 3.0.0-rc.4 to rc.5".
+
+**Breaking**
+
+- `cluster.verifyLock` reports a definition signature it could not check as the new step
+  `definition_signature_unverifiable` (was `definition_signature_invalid`): one that does not recover to its signer
+  when no public client for the lock's chain was given, so a contract wallet (Safe) could not be asked (EIP-1271).
+  A signature known to be invalid still fails as `definition_signature_invalid`, and wins when both occur.
+  `verifyDefinition` (and `DEFINITION_INVALID` from `cluster.accept`) reports the issue `signature_unverifiable`.
+- `send` passes the client's viem chain to `sendTransaction` (was `walletClient.chain ?? null`), so viem re-checks
+  the wallet chain at send time: a wallet switched after the wallet check is `CHAIN_MISMATCH` (nothing sent).
+  `Context` has an optional `viemChain` (set by `createObolContext`; a hand-built context falls back to a minimal
+  chain with the same id).
+
+**Added**
+
+- `isValidLock(lock, options?)` (root, `cluster`, `/cluster`, bound `obol.cluster.isValidLock`): `verifyLock` at
+  `level: 'full'` as a boolean, the drop-in for 2.x `validateClusterLock`; a malformed lock (`PAYLOAD_INVALID`) is
+  `false`, malformed options and other errors are thrown.
+- `publicClients` on `verifyLock`, `verifyDefinition` and `isValidLock`: public clients by chain id, or a function
+  of the chain id, for EIP-1271 definition signatures of locks on several chains (2.x had built-in RPCs). The bound
+  module adds the client's own `publicClient` for its chain.
+- `@obolnetwork/obol-sdk/blst` (Node only): `loadBlstBackend()` and `blstBackendFrom(module)`, the `BlsBackend` over
+  `@chainsafe/blst`, now an optional peer dependency loaded with a dynamic import by this entry only. New code
+  `BLS_BACKEND_UNAVAILABLE`.
+- `verifyTypedDataSignature({ address, signature, typedData, chainId?, publicClient?, publicClients? })` (root and
+  `cluster`): EIP-712 signature check for an account (recovery) or a contract wallet (EIP-1271), for 2.x
+  `validateAddressSignature` / `validateEOASignature`; types `EIP712TypedData`, `PublicClients`,
+  `SignatureClients`.
+- `cluster.parseEnr(enr)` / `cluster.isValidEnr(enr)` for 2.x `ENR.decodeTxt`; type `cluster.ClusterValidator`.
+- MIGRATION.md: "Verifying locks on a server" (obol-api: `isValidLock`, the blst backend, `publicClients`,
+  `PAYLOAD_INVALID` → 400, `full` only) and "Every other 2.x export" (`ENR`, `clusterConfigOrDefinitionHash`,
+  `signCreatorConfigHashPayload`, `SPLITS_V2_SALT`, `PRINCIPAL_THRESHOLD`, `CHAIN_CONFIGURATION`,
+  `ClaimableIncentives`, `ClusterValidator`, ...). README "Servers".
+
+**Fixed**
+
+- `ovm.prepareWithdraw` / `withdrawals.prepareEoaWithdraw`: a partial withdrawal whose excess balance is under
+  1 gwei is `NO_EXCESS_BALANCE`; the cap could round it to amount 0, which EIP-7002 treats as a full exit.
+- Trailing `/` of `api.baseUrl` and `beaconUrl` are trimmed with a linear scan instead of a regular expression
+  (CodeQL polynomial-regex alerts); the e2e workflow has `permissions: contents: read`.
+- The spec and TSDoc say that `verifyLock` recomputes `config_hash` (it binds the definition signatures to the
+  definition), with tests for an edited definition, a recomputed `config_hash` under old signatures, and a
+  self-consistent lock carrying another cluster's `config_hash`.
+
+#### [v3.0.0-rc.4](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.3...v3.0.0-rc.4)
+
+> 21 October 2026
+
+Freezes the public shape before 3.0 and hardens behaviour. **Pin this release exactly: it breaks rc.3 call sites.**
+After rc.4 only additive changes are planned until 3.0. [MIGRATION.md](MIGRATION.md) has before / after snippets.
+
+**Breaking**
+
+- `Prepared` has a `kind` discriminant (`deposit`, `withdraw`, `consolidate`, `distribute`, `distribution`,
+  `createOvm`, `ovmWithSplits`, `createSplit`, `claim`, `eoaWithdraw`, `role`, `ownership`, `recipient`,
+  `principalStake`, `sweep`, `withdrawPullBalance`, `recoverFunds`) and is typed `Prepared<K>` with
+  `preview: PreviewByKind[K]`; `AnyPrepared` is the union. `send` and `simulate` take `AnyPrepared` and refuse a value
+  without a known `kind` (`PREPARED_INVALID`).
+- One preview shape: `ovm.previewDistribute` returns `{ preview, checks, blockNumber }` (was the preview flattened);
+  `DistributionPreview` no longer has `blockNumber` (it is the top-level one).
+- `DistributionPreview` recipients: `toWallet` is replaced by `alreadyWaiting` (Warehouse + SplitMain balance before
+  this transaction) next to `fromThisDistribution`; the preview has `minWithdraw`.
+- `splits.prepareDistribution` / `previewDistribution` withdraw for every split recipient by default, the Obol RAF
+  address included (`includeRaf: false` leaves it out, with `RAF_LEFT_IN_WAREHOUSE`).
+- `ovm.prepareSetBeneficiary({ newBeneficiary })` is `ovm.prepareSetPrincipalRecipient({ newPrincipalRecipient })`;
+  `prepareTransfer` takes `newPrincipalRecipient`; `prepareSweep` takes `to` (was `beneficiary`).
+- `splits.getSplit` returns `null` for an address that is not a split (was `SPLIT_NOT_FOUND`, now removed);
+  `ovm.getState` returns `null` for an address that is not an OVM (was `OVM_READ_FAILED`). Read failures still throw.
+- Null versus absent, one rule: `null` = asked, no data; absent = not asked. `OvmState.principalOnBeaconChain` is
+  `null` when the API had no value; `ovm.getValidators` entries always carry `lockHash`, `beaconStatus` and `balance`
+  (`null` when unknown) and its `blockNumber` is `bigint | null`.
+- Error codes renamed to one pattern (subject first): `INVALID_BASE_URL` → `BASE_URL_INVALID`, `NOT_AN_OPERATOR` →
+  `ACCOUNT_NOT_OPERATOR`, `NOT_OVM_OWNER` → `OVM_OWNER_REQUIRED`, `ROLE_TO_PUBLIC_FORWARDER` →
+  `PUBLIC_FORWARDER_AS_ROLE_HOLDER`, `OWNER_TO_PUBLIC_FORWARDER` → `PUBLIC_FORWARDER_AS_OWNER`,
+  `RECIPIENT_IS_PUBLIC_FORWARDER` → `PUBLIC_FORWARDER_AS_RECIPIENT`, `EXIT_EPOCH_REGRESSION` → `EXIT_EPOCH_MISMATCH`;
+  incentive issues `INVALID_INCENTIVES_DATA` → `INCENTIVES_DATA_INVALID`, `UNKNOWN_DISTRIBUTOR` →
+  `DISTRIBUTOR_UNKNOWN`, `UNEXPECTED_TOKEN` → `TOKEN_MISMATCH`, `INVALID_PROOF` → `PROOF_INVALID`. Removed:
+  `SPLIT_NOT_FOUND`, `EXIT_SIGNATURE_MALFORMED`, and the findings `WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING`,
+  `WITHDRAW_CREDENTIALS_NOT_OVM`, `WITHDRAW_CREDENTIALS_NOT_SENDER`, `WITHDRAW_VALIDATOR_NOT_ACTIVE` (now errors, below).
+- `ovm.prepareWithdraw`, `withdrawals.prepareEoaWithdraw` and `ovm.prepareConsolidate` throw for every request the
+  beacon chain would ignore (Electra `process_withdrawal_request` / `process_consolidation_request`): new codes
+  `VALIDATOR_NOT_ACTIVE`, `VALIDATOR_EXITING`, `VALIDATOR_TOO_NEW`, `CREDENTIALS_NOT_SOURCE`,
+  `EXIT_BLOCKED_BY_PENDING_WITHDRAWAL`, `PARTIAL_REQUIRES_COMPOUNDING`, `EFFECTIVE_BALANCE_TOO_LOW`,
+  `NO_EXCESS_BALANCE`, `CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL`, `CONSOLIDATION_ALREADY_COMPOUNDING`;
+  `CONSOLIDATION_TARGET_NOT_COMPOUNDING` is an error (was a warning). A partial amount above the excess balance is sent
+  capped (`requestedAmount` in the preview, `WITHDRAW_AMOUNT_CAPPED`).
+- `simulate` and `legacy` moved under `experimental`: `obol.experimental.simulate`, `obol.experimental.legacy`, and
+  the `experimental` namespace / `@obolnetwork/obol-sdk/experimental` entry. `FullSimulation.gasUsed` is
+  `gas.used`.
+- Exits use the Obol API wire and storage formats as they are (snake_case): `PartialExitBlob`,
+  `PartialExitsPayload`, `StoredExitBlob` (with `shares_exit_data`, also wrapped in an array), `FullExitResponse`,
+  `FullExitBlob`. `verifyPartialExit` takes `existing` as a list or a map of stored exits and checks each blob against
+  its own pubkey's; the payload root is of the partial exits sorted by validator index; the payload signature must be
+  65 bytes (high-s accepted, as the API does); the epoch must equal the stored one. `aggregate({ validator, exit,
+  threshold })` takes a stored exit or the API's full exit response, verifies each partial against its public share and
+  uses any `threshold` valid ones.
+- Module namespaces and entries export explicit lists of the documented API. Gone from the namespaces: internals
+  (`readOvmCore`, `requestAmountGwei`, `credentialsPointAt`, the merkle helpers, …), the TypeBox schema constants, and
+  the functions that take a `Context` (use the client, or `create<Module>Module(createObolContext(config))`).
+  `ObolClient` is an explicit interface, as is every `<Module>Module`.
+- Inputs take plain `string` for hex and addresses (still checked at runtime); outputs stay `Hex` / `Address`.
+- On-chain integers are `bigint` in outputs: `splits.percent` returns `bigint`; `SPLITS_SCALE` and `RAF_SHARE` are
+  `bigint`. Split allocations accept `number | bigint`.
+- `ObolError` is generic over its code: `ObolError<C>['details']` is `ObolErrorDetails[C]`, and
+  `isObolError(error, code)` narrows it. `Finding.code` is `FindingCode`.
+- `cluster.verifyLock` follows Charon where it differed (found by a differential fuzz of 10k mutated locks against
+  Charon): a new step `definition_invalid` (an unknown fork version for every flow, `num_validators` other than the
+  number of validators, `deposit_amounts` outside Charon's rules); deposits for amounts outside `deposit_amounts` (or
+  Charon's defaults when it is empty, 32 ETH only for v1.6 / v1.7) are `deposit_amount_unexpected`; `compounding` is
+  read from v1.10.0 on only; node signatures must be 65 bytes with a recovery id that recovers the ENR key (high-s
+  accepted, like Charon); point encodings must be canonical.
+
+**Added**
+
+- `ObolErrorCode` / `FindingCode` unions (`OBOL_ERROR_CODES`, `FINDING_CODES`), `ObolErrorDetails`, and
+  `Finding.subject` (`{ pubkey } | { address } | { index }`) on every finding about one item.
+- `isStale(prepared, head, maxAgeBlocks)`.
+- `api: { baseUrl, allowLocal: true }` allows `http(s)://localhost[:port]` and `http(s)://127.0.0.1[:port]`.
+- `deposits.status` reads `activationEpoch`, `exitEpoch` and `pendingPartialWithdrawals` from
+  `POST /v1/validators/:network/deposit-status` (obol-api #1047) and from the beacon fallback (registry epochs,
+  `pending_partial_withdrawals`). Checks the source cannot support are reported as `VALIDATOR_STATUS_UNCHECKED`
+  (info); `PARTIAL_WITHDRAWAL_QUEUE_FULL` (warning) from a beacon node.
+- `ObolChain.genesisTime` (mainnet, Hoodi) and `currentEpoch(chain)`.
+- `simulate` result `gas: { used, baseFeePerGas, priorityFeePerGas, estimatedFee }`; balance changes stay gas-free.
+- `TX_REPLACED` details carry `reason` (`cancelled` / `replaced`) and `replacement`; `send` documents re-keying a
+  stored hash on `repriced` in `onReplaced`.
+- Per-module entry points (`@obolnetwork/obol-sdk/cluster`, `/deposits`, `/ovm`, `/splits`, `/setup`,
+  `/incentives`, `/terms`, `/withdrawals`, `/exits`, `/experimental`) for ESM, CJS and types, with
+  `createObolContext`; `"sideEffects": false`. A reads-only `ovm` import carries no BLS or SSZ code.
+- API Extractor report (`etc/obol-sdk.api.md`, `yarn api:check` in CI), bundle-size budget (`yarn size:check` in CI),
+  JSON Schemas of every operation input (`spec/schemas/`, `yarn spec:schemas`, checked by a test), and a test that
+  `spec/errors.md`, the code unions and the codes in `src/` agree.
+- Mainnet-fork e2e mode (`yarn test:e2e:mainnet`, `E2E_CHAIN=mainnet`, `RPC_MAINNET`).
+- The differential lock fuzz harness (`test/fuzz/`, `yarn test:fuzz`; with a built `charon-oracle` it compares with
+  Charon), its minimized disagreements as regression tests, and a seeded decoder fuzz in `yarn test`.
+- `MIGRATION.md`: every 2.x method mapped to v3, and the rc.3 → rc.4 changes.
+
+**Fixed**
+
+- Log scans (`ovm.verify`, `ovm.getRoleHolders`, `splits.getSplit`) adapt to RPCs that cap `eth_getLogs` by block
+  range or by result count: on a range / limit refusal the window halves (from 50,000 down to 1,000 blocks) and the
+  working size is remembered per `PublicClient`. One-event scans (`ovm.verify`, `SplitCreated`) read newest first, so
+  a recently created OVM resolves in one request. A genuine failure still gives `unknown`, never `notObol`.
+- Non-canonical BLS encodings (a field element at or above the modulus, which the decoder reduced) were accepted for
+  public shares, group keys and signatures in `verifyLock`, `verifyDepositData` and the exit helpers. They are refused,
+  as blst and Charon refuse them.
+- `verifyLock` accepted 64-byte node signatures and a wrong recovery id, and refused a valid high-s signature.
+- Vectors from the 2.16 code were re-run on v3 (`distribution.json`, with the deliberate differences recorded per
+  case), and the runners compare every field.
+
+#### [v3.0.0-rc.3](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.2...v3.0.0-rc.3)
+
+> 21 October 2026
+
+Fixes from the Launchpad integration of rc.2.
+
+**Changed**
+
+- `ovm.prepareWithdraw` and `ovm.prepareConsolidate` default the fee to the top of the accepted range,
+  `max(10 × current fee, 1 gwei) × n`, instead of `2 × current fee × n`. The OVM refunds the excess to
+  `excessFeeRecipient`, so a fee rise before the transaction is mined no longer makes it revert.
+  `withdrawals.prepareEoaWithdraw` keeps exactly the current fee (the predeploy keeps any excess). Vectors
+  `request_fees.json` now give the default as `default: "cap" | "minimum"`.
+- `ovm.verify` reads `provenance` from the Obol API OVM record (`GET /v1/ovm/:network/:address`): `obol` / `notObol`
+  are trusted only for a record of this address (and this chain's factory), `unknown` defers to the chain. When the
+  endpoint is unavailable, the interim `/v1/eth/contract-creation` record is trusted only when its `contractAddress`
+  is present and equals the OVM; otherwise the factory logs decide.
+- `ovm.getRoleHolders` takes candidates from the OVM record's `roles` (re-read with `rolesOf`), falling back to the
+  interim log index, and always checks the chain's public forwarders.
+- `OvmApiRecord` is typed and parsed: `network`, `provenance`, `owner`, `principalRecipient`, `rewardRecipient`,
+  `principalThreshold`, `amountOfPrincipalStake`, `fundsPendingWithdrawal`, `balance`, `version`, `pullBalances`,
+  `roles`, `splits` (with `splitHash`), `validators`, `principalOnBeaconChain` and `notes`; malformed fields are left
+  out, and a record for another address or network is `API_RESPONSE_MISMATCH`. Money values used by `prepare*` are
+  still read on chain. `ovm.getValidators` accepts `new` entries with `beaconStatus: null`.
+- The ESM builds ship `dist/esm/package.json` and `dist/browser/package.json` with `{ "type": "module" }`, so Node
+  loads them as ES modules without the `MODULE_TYPELESS_PACKAGE_JSON` warning.
+
+**Added**
+
+- Public forwarders: `ChainContracts.publicForwarders` (mainnet Multicall3, Multicall2 and Multicall; Hoodi
+  Multicall3). `ovm.prepareGrantRoles` refuses to grant a role to one (`ROLE_TO_PUBLIC_FORWARDER`), and
+  `ovm.prepareTransfer` / `ovm.prepareCompleteOwnershipHandover` refuse one as the new owner
+  (`OWNER_TO_PUBLIC_FORWARDER`): anyone can make calls through them. Creating an OVM or split with a public forwarder as owner or recipient is refused too (`OWNER_TO_PUBLIC_FORWARDER`, `RECIPIENT_IS_PUBLIC_FORWARDER`). `ovm.getState` and `ovm.getRoleHolders` (new
+  `findings` field) warn `PUBLIC_FORWARDER_HOLDS_ROLE` when one already owns the OVM or holds a role.
+- `splits.prepareDistribution` / `previewDistribution`: each recipient row has `fromThisDistribution` (`fromOvm +
+  fromRewardSplit + fromPrincipalSplit + distributorReward`). `toWallet` is documented precisely: it includes the
+  Warehouse (and SplitMain) balance the recipient already had, from any split, when its withdrawal is included.
+
+#### [v3.0.0-rc.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v3.0.0-rc.2)
+
+> 19 October 2026
+
+First release candidate of SDK v3, a rewrite. **Breaking:** nothing from the 2.x API is kept. What every operation
+checks, reads and returns, and every error code, is specified in [`spec/`](spec/README.md). A migration guide from
+2.x follows.
+
+**Changed**
+
+- Built on viem: `createObolClient({ chain, publicClient, walletClient?, api? })` replaces `new Client(config, signer,
+  provider)`. `viem@^2` is a peer dependency.
+- Prepare, then send: every write is a `prepare*` operation that runs its checks and returns a `Prepared` transaction
+  (`request`, `checks` findings, `preview`, `blockNumber`). The caller's wallet layer sends it, or `send` does.
+- Modules: `cluster`, `deposits`, `ovm`, `splits`, `setup`, `incentives`, `exits`, `terms`, `withdrawals` and
+  `legacy`, bound to the client and also exported as namespaces, so pure functions (hashing, lock verification,
+  share math, exit aggregation) work without a client.
+- One error class, `ObolError` (`ObolApiError` for API responses), with a stable `code`, a `hint` and `details`,
+  replaces the 2.x error hierarchy.
+- Inputs are validated with TypeBox schemas instead of AJV.
+- Incentive claims, EOA withdrawals and OWR reads carry over as `incentives.prepareClaim`,
+  `withdrawals.prepareEoaWithdraw` and `legacy.getOwrTranches`.
+- `cluster.verifyLock` is faster on one thread: every point is decoded once, share binding uses finite differences
+  (point subtractions; only the first `threshold` points are subgroup-checked), `signature_aggregate` reuses the
+  decoded shares, and deposit and builder signatures are checked in randomised batches of 32 with a one-by-one
+  fallback. Its result has `level` and, for a per-validator failure, `validator`. A 1k-validator lock: about 80 s
+  instead of 2 minutes in pure JS.
+- `cluster.verifyLock` yields to the event loop every `yieldMs` (default 50) instead of using worker threads.
+- `deposits.fromLock` verifies at level `attested` plus the BLS signatures of the validators it returns
+  (`verify: 'full'` for every check), so a 10k-validator lock takes seconds plus about 25 ms per checked signature;
+  `LOCK_INVALID` carries the failing validator as `index`.
+- `deposits.status` reads `POST /v1/validators/:network/deposit-status` (every queued deposit with its own
+  credentials) and no longer needs `lockHash`; until that route is deployed it falls back to `/v1/state/:lockHash`
+  (with `lockHash`) or the beacon node.
+- `deposits.prepareDeposit`: a queued deposit with all-zero credentials (a top-up) is not a `DEPOSIT_CONFLICT`.
+
+**New**
+
+- `cluster.verifyLock` reports the first failing step; `cluster.watch` follows signatures and the lock.
+- `deposits.status` and the existence checks in `deposits.prepareDeposit` (pending deposits, top-ups, balances).
+- OVM provenance (`ovm.verify`), state, role and validator reads; withdraw, consolidate and distribute with
+  previews; role and ownership writes.
+- SplitV2 integer share math, distribution routing and previews; `setup` flows and presets for OVM with splits.
+- `exits.aggregate` does threshold (Lagrange) aggregation and checks the result against the group key (2.x summed the
+  partials); exit domains come from the chain table (EIP-7044), with no beacon node needed.
+- JSON test vectors in `spec/vectors/`, plus the distributed-validator-specs vectors.
+- `cluster.verifyLock` options `level` (`'attested'` | `'full'`), `signatures` (which validators' BLS signatures
+  `attested` checks), `yieldMs` and `bls`: an injectable `BlsBackend` (default `cluster.nobleBls`, pure JS). The TSDoc
+  has a ~30-line adapter over `@chainsafe/blst` for Node servers; the SDK never imports a native module.
+- `deposits.fromLock` option `validators` (indexes or group pubkeys) and result field `validators`.
+- `deposits.status` option `expectedWithdrawalAddress` and per-pubkey `credentialsMatch`.
+- `simulate(prepared, { from })` (bound as `obol.simulate`): runs any `Prepared` request on the node without sending
+  it (`eth_simulateV1`, else `debug_traceCall`, else `eth_call` only) and returns success or the decoded revert
+  (custom errors of the OVM, factories, splits and Warehouse; the failing call of a Multicall3 batch), gas, ETH and
+  Warehouse balance changes, decoded events, state changes (roles, ownership, recipients, created contracts,
+  `amountOfPrincipalStake` / `fundsPendingWithdrawal`, withdrawal / consolidation requests, deposits), plain-language
+  `summary` lines and `matchesPreview`, a comparison with the operation's own preview. New codes
+  `SIMULATION_FAILED`, `SIMULATION_UNAVAILABLE`, `SIMULATION_REVERTED`, `SIMULATION_PREVIEW_MISMATCH`,
+  `SIMULATION_CONTRACT_WALLET`, `SIMULATION_UNTRUSTED_EVENT`. It simulates on the latest block by default and only
+  interprets events from contracts with a known role in the transaction.
+- `splits.prepareDistribution` / `previewDistribution` recipient rows carry `distributorReward` (the incentives the
+  distributor is credited; 0 for other rows).
+
+**Removed**
+
+- ethers support, and with it `@safe-global/*`, `@metamask/eth-sig-util`, AJV, `semver` and `uuid`.
+- The 2.x `Client` and all its methods and sub-modules (`splits`, `eoa`, `incentives`, `exit`), the standalone
+  `validateClusterLock` and the whole-lock validation worker, and creation of OWR / SplitMain contracts.
+- The lock verification chunk workers (`lockWorker.js` bundle), the per-process concurrency limit
+  (`OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS`) and the `LOCK_VERIFICATION_TIMEOUT` / `LOCK_VERIFICATION_BUSY` codes.
+  A server that needs a deadline or a limit applies it around the call.
+
+**Fixed**
+
+- Batched BLS checks (lock deposit and builder registration signatures, deposit data) require each signature to be
+  valid on its own; batches are checked with random weights. The same fix ships in 2.15.1.
+
 #### [v2.15.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v2.15.1)
 
 > 21 October 2026
