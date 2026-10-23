@@ -2,8 +2,19 @@
 import { fromHexString, toHexString } from '@chainsafe/ssz';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
-import { depositDataContainer } from '../src/verification/sszTypes.js';
-import type { ClusterLock, ValidatorDeposit } from '../src/types.js';
+import {
+  depositDataContainer,
+  depositMessageType,
+} from '../src/verification/sszTypes.js';
+import {
+  depositDomainForFork,
+  signingRoot,
+} from '../src/verification/common.js';
+import {
+  FORK_MAPPING,
+  type ClusterLock,
+  type ValidatorDeposit,
+} from '../src/types.js';
 
 const ls = bls12_381.longSignatures;
 const G2 = bls12_381.G2.Point;
@@ -116,4 +127,50 @@ export const addFieldModulus = (
   encoded[0] |= flags;
   bytes.set(encoded, offset);
   return toHexString(bytes);
+};
+
+const ETH2_DST = 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_';
+
+/**
+ * Deposit for `withdrawalCredentials` signed with a fixed test key for
+ * `chainId`. The credentials are hashed as given, so the root and signature
+ * of a short value match those of its zero-padded 32-byte form, as for a
+ * tool that hashes a raw 20-byte address with SSZ.
+ */
+export const signedDeposit = (
+  chainId: number,
+  withdrawalCredentials: string,
+  amountWei = '32000000000000000000',
+): ValidatorDeposit => {
+  const secretKey = new Uint8Array(32).fill(7);
+  const pubkey = ls.getPublicKey(secretKey).toBytes();
+  const credentials = fromHexString(withdrawalCredentials);
+  const amount = BigInt(amountWei) / BigInt(1_000_000_000);
+  const messageRoot = Buffer.from(
+    depositMessageType.hashTreeRoot({
+      pubkey,
+      withdrawal_credentials: credentials,
+      amount,
+    }),
+  );
+  const message = signingRoot(
+    depositDomainForFork(FORK_MAPPING[chainId] as string),
+    messageRoot,
+  );
+  const signature = ls.Signature.toBytes(
+    ls.sign(ls.hash(message, ETH2_DST), secretKey),
+  );
+  const root = depositDataContainer.hashTreeRoot({
+    pubkey,
+    withdrawal_credentials: credentials,
+    amount,
+    signature,
+  });
+  return {
+    pubkey: toHexString(pubkey),
+    withdrawal_credentials: withdrawalCredentials,
+    signature: toHexString(signature),
+    deposit_data_root: toHexString(root),
+    amount: amountWei,
+  };
 };
