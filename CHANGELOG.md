@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v3.0.0)
+
+> 23 October 2026
+
+The viem-native SDK: prepare, then send. Every operation, its checks, outputs and error codes are specified in
+`spec/`; [MIGRATION.md](MIGRATION.md) maps every 2.x method and export to v3. Identical in behaviour to
+3.0.0-rc.9; the release candidate entries below list each change.
+
+**Changed since rc.9**
+
+- Internal refactors for SonarCloud (smaller functions in deposit, lock and simulation code), with every check, error
+  and finding in the same order. No API or behaviour changes.
+- `.sonarcloud.properties` scopes the analysis to the SDK and its tests (not the fuzz harness or generated files).
+
 #### [v3.0.0-rc.9](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.8...v3.0.0-rc.9)
 
 > 23 October 2026
