@@ -12,6 +12,7 @@ of every v3 operation (inputs, checks, outputs, error codes) is in [`spec/operat
 - [From 3.0.0-rc.5 to rc.6](#from-300-rc5-to-rc6)
 - [From 3.0.0-rc.6 to rc.7](#from-300-rc6-to-rc7)
 - [From 3.0.0-rc.7 to rc.8](#from-300-rc7-to-rc8)
+- [From 3.0.0-rc.8 to rc.9](#from-300-rc8-to-rc9)
 
 ## From 2.x
 
@@ -409,3 +410,9 @@ of 50,000 and double after each round that works, up to 50,000, never back to a 
 caps the range and is slow to refuse (eRPC takes about 28 s), a scan pays at most one refused round per client instead
 of one per halving. If you pass viem's `fallback()` transport, let a log-range refusal throw instead of failing over
 (its `shouldThrow`); otherwise the scan only sees the next transport's error and cannot shrink its window.
+
+## From 3.0.0-rc.8 to rc.9
+
+No API changes. Requests to the Obol API send `Content-Type: application/json` only when they have a body, so a
+browser's cross-origin GET is a simple request (no CORS preflight). In Node they also send
+`User-Agent: obol-sdk/<version>`; browsers send their own. A header you pass in the request still wins.

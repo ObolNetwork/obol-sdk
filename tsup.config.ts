@@ -1,5 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { defineConfig } from 'tsup';
+
+// The User-Agent's version (src/api.ts SDK_VERSION), from package.json.
+const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as {
+  version: string;
+};
+const define = { __OBOL_SDK_VERSION__: JSON.stringify(version) };
 
 // The package has no "type" field, so Node reads `.js` as CommonJS. The ESM
 // builds get their own package.json marking their `.js` files as modules and
@@ -60,6 +67,7 @@ export default defineConfig([
     sourcemap: true,
     noExternal,
     external: ['@chainsafe/blst', '@chainsafe/ssz', 'viem'],
+    define,
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -75,6 +83,7 @@ export default defineConfig([
     outExtension: () => ({ js: '.js' }), // Use .js instead of .mjs
     noExternal,
     external: ['@chainsafe/blst', '@chainsafe/ssz', 'viem'],
+    define,
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -91,9 +100,11 @@ export default defineConfig([
     outExtension: () => ({ js: '.js' }),
     noExternal,
     external: ['@chainsafe/ssz', '@sinclair/typebox', 'viem'],
+    define,
     esbuildOptions(options) {
       options.platform = 'browser';
       options.define = {
+        ...options.define,
         'process.env': '{}',
         'global': 'globalThis'
       };

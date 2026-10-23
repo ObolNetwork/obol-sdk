@@ -35,6 +35,29 @@ const HINT_FOR_CODE: Record<string, string> = {
   API_RATE_LIMIT: 'Back off and retry',
 };
 
+/** Set by the build (tsup `define`) from package.json; `dev` from source. */
+declare const __OBOL_SDK_VERSION__: string | undefined;
+export const SDK_VERSION =
+  typeof __OBOL_SDK_VERSION__ === 'string' ? __OBOL_SDK_VERSION__ : 'dev';
+
+/**
+ * Request headers. `Content-Type` only with a body: on a GET it would make a
+ * browser's cross-origin request non-simple, costing a CORS preflight. A
+ * `User-Agent` naming the SDK only in Node: browsers set their own, and
+ * some refuse a script's.
+ */
+export const requestHeaders = (
+  hasBody: boolean,
+  extra: Record<string, string> = {},
+  isNode: boolean = typeof (
+    globalThis as { process?: { versions?: { node?: unknown } } }
+  ).process?.versions?.node === 'string',
+): Record<string, string> => ({
+  ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+  ...(isNode ? { 'User-Agent': `obol-sdk/${SDK_VERSION}` } : {}),
+  ...extra,
+});
+
 const apiMessage = (body: unknown): string | undefined => {
   if (typeof body === 'string' && body.length > 0) return body.slice(0, 300);
   if (body !== null && typeof body === 'object') {
@@ -73,10 +96,7 @@ export class ObolApi {
       const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
         method,
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers: requestHeaders(options.body !== undefined, options.headers),
         ...(options.body !== undefined
           ? { body: JSON.stringify(options.body) }
           : {}),

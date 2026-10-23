@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.9](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.8...v3.0.0-rc.9)
+
+> 23 October 2026
+
+Obol API request headers, from the obol-api production log review. No API changes.
+[MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.8 to rc.9".
+
+**Changed**
+
+- `Content-Type: application/json` only on requests with a body: a GET from a browser no longer needs a CORS
+  preflight.
+- In Node, `User-Agent: obol-sdk/<version>`, so the API can tell SDK traffic apart. Not set in browsers.
+
 #### [v3.0.0-rc.8](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.7...v3.0.0-rc.8)
 
 > 22 October 2026
