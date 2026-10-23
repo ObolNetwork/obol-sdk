@@ -104,7 +104,7 @@ export const OPERATION_INPUTS: Record<string, TSchema> = {
 /** A TypeBox BigInt bound (a bigint) as its decimal string. */
 const bigintBound = (value: unknown): string => {
   if (typeof value !== 'bigint') {
-    throw new Error(`Expected a bigint schema bound, got ${typeof value}`);
+    throw new TypeError(`Expected a bigint schema bound, got ${typeof value}`);
   }
   return value.toString();
 };

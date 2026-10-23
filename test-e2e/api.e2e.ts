@@ -129,7 +129,8 @@ describeFork('the public Obol API with a Hoodi fork (read-only)', () => {
         functionName: 'balanceOf',
         args: [address],
       });
-      expect(after - before).toBe(prepared.preview.amount);
+      const received: bigint = after - before;
+      expect(received).toBe(prepared.preview.amount);
       expect(
         await obol.incentives.isClaimed({
           contractAddress: record!.contractAddress,

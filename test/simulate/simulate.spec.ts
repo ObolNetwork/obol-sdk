@@ -390,7 +390,7 @@ describe('simulate: backends', () => {
     await simulate(ctx, rec.prepared, options);
     await simulate(ctx, rec.prepared, options);
     expect(calls.filter(m => m === 'eth_simulateV1')).toHaveLength(1);
-    expect(calls.filter(m => m === 'debug_traceCall').length).toBe(4);
+    expect(calls.filter(m => m === 'debug_traceCall')).toHaveLength(4);
   });
 
   it('a forced backend the node lacks is SIMULATION_FAILED', async () => {
