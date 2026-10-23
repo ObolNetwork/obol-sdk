@@ -82,6 +82,161 @@ export interface DepositPreview {
 
 const sum = (amounts: bigint[]): bigint => amounts.reduce((a, b) => a + b, 0n);
 
+/** What the check 5 helpers share for one deposit. */
+interface ExistenceContext {
+  deposit: Deposit;
+  kind: DepositKind;
+  status: DepositStatus;
+  pubkey: Hex;
+  credentials: string;
+  queued: DepositStatus['pendingDeposits'];
+  details: { index: number; pubkey: Hex };
+  subject: { pubkey: Hex };
+  findings: Finding[];
+}
+
+const conflictError = (
+  c: ExistenceContext,
+  existing: Hex | undefined,
+): ObolError =>
+  new ObolError(
+    'DEPOSIT_CONFLICT',
+    existing === undefined
+      ? `A pending deposit for ${c.pubkey} has unknown withdrawal credentials`
+      : `A pending deposit for ${c.pubkey} has different withdrawal credentials (${existing})`,
+    {
+      hint: 'Do not send; find out who queued the other deposit',
+      details: {
+        ...c.details,
+        ...(existing !== undefined ? { existingCredentials: existing } : {}),
+      },
+    },
+  );
+
+/** Validly signed queued deposits disagree: the first one applies. */
+const checkConflictingQueue = (
+  c: ExistenceContext,
+  checkCredentials: boolean,
+): void => {
+  const applies = effectiveCredentials(c.status);
+  if (
+    checkCredentials &&
+    (applies === undefined || applies.toLowerCase() !== c.credentials)
+  ) {
+    throw conflictError(c, applies);
+  }
+  c.findings.push(
+    finding(
+      'QUEUED_CREDENTIALS_CONFLICT',
+      'warning',
+      `Validly signed deposits queued for ${c.pubkey} carry different withdrawal credentials; the first one (${applies ?? 'unknown'}) applies`,
+      {
+        hint: 'Find out who queued the other deposits before adding to this validator',
+        subject: c.subject,
+        details: c.details,
+      },
+    ),
+  );
+};
+
+/** No queued deposit may carry other (or unknown) credentials. */
+const checkAgreeingQueue = (
+  c: ExistenceContext,
+  checkCredentials: boolean,
+): void => {
+  const other = c.queued.find(p => {
+    if (p.withdrawalCredentials === undefined) return true;
+    const existing = p.withdrawalCredentials.toLowerCase();
+    return (
+      existing !== c.credentials &&
+      (existing !== ZERO_CREDENTIALS || p.signatureValid === true)
+    );
+  });
+  if (checkCredentials && other !== undefined) {
+    throw conflictError(c, other.withdrawalCredentials);
+  }
+};
+
+/** Check 5 for a pubkey that is not registered yet but has pending deposits. */
+const pendingDepositChecks = (c: ExistenceContext): void => {
+  if (
+    c.status.signaturesPending === true &&
+    effectiveCredentials(c.status) === undefined
+  ) {
+    // Which queued deposit creates the validator is not known yet. Once
+    // every deposit up to the first validly signed one is checked, it is,
+    // and the checks below treat the unchecked later ones as possibly valid.
+    throw new ObolError(
+      'STATUS_UNAVAILABLE',
+      `The Obol API is still checking the queued deposit signatures for ${c.pubkey}`,
+      {
+        hint: 'Retry in a slot or two; the credentials it will get are not known yet',
+        details: { reason: 'signatures_pending', pubkey: c.pubkey },
+      },
+    );
+  }
+  // The first processed deposit with a valid signature fixes the
+  // credentials. A top-up with all-zero credentials does not care which
+  // ones they are, and an unchecked queued one (no valid signature for a
+  // new validator) does not fix them.
+  const checkCredentials =
+    c.kind === 'deposit' || c.credentials !== ZERO_CREDENTIALS;
+  if (c.status.credentialsConflict === true) {
+    checkConflictingQueue(c, checkCredentials);
+  } else {
+    checkAgreeingQueue(c, checkCredentials);
+  }
+  if (c.queued.length > 0) {
+    c.findings.push(
+      finding(
+        'DEPOSIT_ALREADY_QUEUED',
+        'info',
+        `${c.queued.length} deposit(s) for ${c.pubkey} are already queued`,
+        {
+          hint: 'Make sure this is not a repeat',
+          subject: c.subject,
+          details: c.details,
+        },
+      ),
+    );
+  }
+};
+
+/** Check 5: TOP_UP_ABOVE_EFFECTIVE_CAP for 0x00 / 0x01 credentials. */
+const effectiveCapCheck = (
+  c: ExistenceContext,
+  alreadyInInput: bigint,
+): void => {
+  const prefix = credentialsPrefix(
+    (effectiveCredentials(c.status) ?? c.credentials) as Hex,
+  );
+  if (
+    c.status.status === 'exited' ||
+    (prefix !== '0x00' && prefix !== '0x01')
+  ) {
+    return;
+  }
+  const after =
+    (c.status.balance ?? 0n) +
+    sum(c.queued.map(p => p.amount)) +
+    alreadyInInput +
+    c.deposit.amount;
+  if (after > EFFECTIVE_CAP_0X01) {
+    c.findings.push(
+      finding(
+        'TOP_UP_ABOVE_EFFECTIVE_CAP',
+        'warning',
+        `${c.pubkey} has ${prefix} credentials: with this deposit its balance reaches ${after} wei, above 32 ETH; the excess is swept back to the withdrawal address, not staked`,
+        {
+          hint: 'Deposit at most up to 32 ETH, or consolidate to 0x02 first',
+          subject: c.subject,
+          details: { ...c.details, balanceAfter: after },
+        },
+      ),
+    );
+  }
+};
+
 /** Check 5: existence findings and errors for one deposit. */
 const existenceChecks = (
   deposit: Deposit,
@@ -92,99 +247,25 @@ const existenceChecks = (
 ): Finding[] => {
   const findings: Finding[] = [];
   const pubkey = status.pubkey;
-  const credentials = deposit.withdrawalCredentials.toLowerCase();
   const registered =
     status.status !== 'new' && status.beaconStatus !== 'pending_deposit';
-  const details = { index, pubkey };
-  const subject = { pubkey };
-
-  // Queued deposits whose signature the source found invalid never reach
-  // the validator; unchecked ones are kept (possibly valid).
-  const queued = possiblyValidDeposits(status);
+  const c: ExistenceContext = {
+    deposit,
+    kind,
+    status,
+    pubkey,
+    credentials: deposit.withdrawalCredentials.toLowerCase(),
+    // Queued deposits whose signature the source found invalid never reach
+    // the validator; unchecked ones are kept (possibly valid).
+    queued: possiblyValidDeposits(status),
+    details: { index, pubkey },
+    subject: { pubkey },
+    findings,
+  };
+  const { queued, details, subject } = c;
 
   if (!registered && status.pendingDeposits.length > 0) {
-    if (
-      status.signaturesPending === true &&
-      effectiveCredentials(status) === undefined
-    ) {
-      // Which queued deposit creates the validator is not known yet. Once
-      // every deposit up to the first validly signed one is checked, it is,
-      // and the checks below treat the unchecked later ones as possibly valid.
-      throw new ObolError(
-        'STATUS_UNAVAILABLE',
-        `The Obol API is still checking the queued deposit signatures for ${pubkey}`,
-        {
-          hint: 'Retry in a slot or two; the credentials it will get are not known yet',
-          details: { reason: 'signatures_pending', pubkey },
-        },
-      );
-    }
-    // The first processed deposit with a valid signature fixes the
-    // credentials. A top-up with all-zero credentials does not care which
-    // ones they are, and an unchecked queued one (no valid signature for a
-    // new validator) does not fix them.
-    const checkCredentials =
-      kind === 'deposit' || credentials !== ZERO_CREDENTIALS;
-    const conflict = (existing: Hex | undefined): ObolError =>
-      new ObolError(
-        'DEPOSIT_CONFLICT',
-        existing === undefined
-          ? `A pending deposit for ${pubkey} has unknown withdrawal credentials`
-          : `A pending deposit for ${pubkey} has different withdrawal credentials (${existing})`,
-        {
-          hint: 'Do not send; find out who queued the other deposit',
-          details: {
-            ...details,
-            ...(existing !== undefined
-              ? { existingCredentials: existing }
-              : {}),
-          },
-        },
-      );
-    if (status.credentialsConflict === true) {
-      // Validly signed queued deposits disagree: the first one applies.
-      const applies = effectiveCredentials(status);
-      if (
-        checkCredentials &&
-        (applies === undefined || applies.toLowerCase() !== credentials)
-      ) {
-        throw conflict(applies);
-      }
-      findings.push(
-        finding(
-          'QUEUED_CREDENTIALS_CONFLICT',
-          'warning',
-          `Validly signed deposits queued for ${pubkey} carry different withdrawal credentials; the first one (${applies ?? 'unknown'}) applies`,
-          {
-            hint: 'Find out who queued the other deposits before adding to this validator',
-            subject,
-            details,
-          },
-        ),
-      );
-    } else {
-      const other = queued.find(p => {
-        if (p.withdrawalCredentials === undefined) return true;
-        const existing = p.withdrawalCredentials.toLowerCase();
-        return (
-          existing !== credentials &&
-          (existing !== ZERO_CREDENTIALS || p.signatureValid === true)
-        );
-      });
-      if (checkCredentials && other !== undefined) {
-        throw conflict(other.withdrawalCredentials);
-      }
-    }
-    if (queued.length > 0) {
-      findings.push(
-        finding(
-          'DEPOSIT_ALREADY_QUEUED',
-          'info',
-          `${queued.length} deposit(s) for ${pubkey} are already queued`,
-          { hint: 'Make sure this is not a repeat', subject, details },
-        ),
-      );
-    }
+    pendingDepositChecks(c);
   }
   if (
     kind === 'topUp' &&
@@ -219,30 +300,7 @@ const existenceChecks = (
       ),
     );
   }
-  const prefix = credentialsPrefix(
-    (effectiveCredentials(status) ?? credentials) as Hex,
-  );
-  if (status.status !== 'exited' && (prefix === '0x00' || prefix === '0x01')) {
-    const after =
-      (status.balance ?? 0n) +
-      sum(queued.map(p => p.amount)) +
-      alreadyInInput +
-      deposit.amount;
-    if (after > EFFECTIVE_CAP_0X01) {
-      findings.push(
-        finding(
-          'TOP_UP_ABOVE_EFFECTIVE_CAP',
-          'warning',
-          `${pubkey} has ${prefix} credentials: with this deposit its balance reaches ${after} wei, above 32 ETH; the excess is swept back to the withdrawal address, not staked`,
-          {
-            hint: 'Deposit at most up to 32 ETH, or consolidate to 0x02 first',
-            subject,
-            details: { ...details, balanceAfter: after },
-          },
-        ),
-      );
-    }
-  }
+  effectiveCapCheck(c, alreadyInInput);
   return findings;
 };
 

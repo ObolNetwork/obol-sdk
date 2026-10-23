@@ -169,6 +169,154 @@ const toDeposit = (
   };
 };
 
+type DecodedFromLockOptions = Omit<
+  FromLockOptions,
+  'publicClient' | 'publicClients' | 'bls'
+>;
+
+/** The options `FromLockOptionsSchema` checks, without the clients and backend. */
+const decodeOptions = (options: FromLockOptions): DecodedFromLockOptions =>
+  decode(
+    FromLockOptionsSchema,
+    {
+      ...(options.amount !== undefined ? { amount: options.amount } : {}),
+      ...(options.verify !== undefined ? { verify: options.verify } : {}),
+      ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
+      ...(options.validators !== undefined
+        ? { validators: options.validators }
+        : {}),
+      ...(options.yieldMs !== undefined ? { yieldMs: options.yieldMs } : {}),
+    },
+    'options',
+  );
+
+/** The lock's `fork_version` must be `chainId`'s (when given). */
+const checkForkVersion = (
+  lock: ClusterLock,
+  chainId: number | undefined,
+): void => {
+  const forkVersion = lock.cluster_definition.fork_version.toLowerCase();
+  if (chainId !== undefined && CHAINS[chainId]?.forkVersion !== forkVersion) {
+    throw lockInvalid(
+      `The lock's fork_version ${forkVersion} is not chain ${chainId}'s`,
+      { issue: 'fork_version_mismatch' },
+    );
+  }
+};
+
+/** Runs `cluster.verifyLock` as `verify` asks; throws LOCK_INVALID on failure. */
+const verifyForDeposits = async (
+  lock: ClusterLock,
+  selected: number[],
+  verify: 'attested' | 'full' | true,
+  options: FromLockOptions,
+  yieldMs: number | undefined,
+): Promise<void> => {
+  const level = verify === 'full' ? 'full' : 'attested';
+  const result = await verifyLock(lock, {
+    level,
+    ...(level === 'attested' ? { signatures: selected } : {}),
+    ...(options.publicClient !== undefined
+      ? { publicClient: options.publicClient }
+      : {}),
+    ...(options.publicClients !== undefined
+      ? { publicClients: options.publicClients }
+      : {}),
+    ...(yieldMs !== undefined ? { yieldMs } : {}),
+    ...(options.bls !== undefined ? { bls: options.bls } : {}),
+  });
+  if (!result.ok) {
+    const issue = result.issue !== undefined ? ` (${result.issue})` : '';
+    throw lockInvalid(
+      `Cluster lock failed verification at ${result.step}${issue}`,
+      {
+        step: result.step,
+        issue: result.issue,
+        ...(result.validator !== undefined ? { index: result.validator } : {}),
+      },
+    );
+  }
+};
+
+type LockValidator = ClusterLock['distributed_validators'][number];
+
+/** `partial_deposit_data` when it has entries, else `deposit_data`, else none. */
+const rawDepositData = (validator: LockValidator): RawDeposit[] => {
+  const partial = validator.partial_deposit_data;
+  if (partial !== undefined && partial !== null && partial.length > 0) {
+    return partial;
+  }
+  if (validator.deposit_data !== undefined) return [validator.deposit_data];
+  return [];
+};
+
+/** The selected validators' deposits by amount (wei), in lock order. */
+const collectDeposits = (
+  validators: LockValidator[],
+  selected: number[],
+): Map<bigint, Deposit[]> => {
+  const depositsByAmount = new Map<bigint, Deposit[]>();
+  for (const index of selected) {
+    const validator = validators[index];
+    const raw = rawDepositData(validator);
+    if (raw.length === 0) {
+      throw lockInvalid(`Validator ${index} has no deposit data`, {
+        issue: 'deposit_data_missing',
+        index,
+      });
+    }
+    const seen = new Set<bigint>();
+    for (const data of raw) {
+      const deposit = toDeposit(data, validator.distributed_public_key, index);
+      if (seen.has(deposit.amount)) continue;
+      seen.add(deposit.amount);
+      const list = depositsByAmount.get(deposit.amount) ?? [];
+      list.push(deposit);
+      depositsByAmount.set(deposit.amount, list);
+    }
+  }
+  return depositsByAmount;
+};
+
+const compareBigints = (a: bigint, b: bigint): number => {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+};
+
+/**
+ * One deposit per selected validator for `amount` (throws
+ * DEPOSIT_AMOUNT_NOT_IN_LOCK if not every one has it), or for the only
+ * amount, else none.
+ */
+const pickDeposits = (
+  amount: bigint | undefined,
+  amounts: bigint[],
+  depositsByAmount: Map<bigint, Deposit[]>,
+  selected: number[],
+): Deposit[] | undefined => {
+  if (amount === undefined) {
+    return amounts.length === 1 ? depositsByAmount.get(amounts[0]) : undefined;
+  }
+  const deposits = depositsByAmount.get(amount);
+  if (deposits?.length !== selected.length) {
+    throw new ObolError(
+      'DEPOSIT_AMOUNT_NOT_IN_LOCK',
+      `Not every requested validator in the lock has a deposit of ${amount} wei`,
+      {
+        hint: 'Pick one of the available amounts',
+        details: {
+          amount,
+          available: amounts.filter(
+            a => depositsByAmount.get(a)?.length === selected.length,
+          ),
+        },
+      },
+    );
+  }
+  return deposits;
+};
+
 /**
  * Reads the deposit data of a cluster lock, as wei amounts ready for
  * `deposits.prepareDeposit`.
@@ -201,55 +349,13 @@ export const fromLock = async (
     chainId,
     validators: requested,
     yieldMs,
-  } = decode(
-    FromLockOptionsSchema,
-    {
-      ...(options.amount !== undefined ? { amount: options.amount } : {}),
-      ...(options.verify !== undefined ? { verify: options.verify } : {}),
-      ...(options.chainId !== undefined ? { chainId: options.chainId } : {}),
-      ...(options.validators !== undefined
-        ? { validators: options.validators }
-        : {}),
-      ...(options.yieldMs !== undefined ? { yieldMs: options.yieldMs } : {}),
-    },
-    'options',
-  );
+  } = decodeOptions(options);
   const selected = selectValidators(lock, requested);
 
-  const forkVersion = lock.cluster_definition.fork_version.toLowerCase();
-  if (chainId !== undefined && CHAINS[chainId]?.forkVersion !== forkVersion) {
-    throw lockInvalid(
-      `The lock's fork_version ${forkVersion} is not chain ${chainId}'s`,
-      { issue: 'fork_version_mismatch' },
-    );
-  }
+  checkForkVersion(lock, chainId);
 
   if (verify !== false) {
-    const level = verify === 'full' ? 'full' : 'attested';
-    const result = await verifyLock(lock, {
-      level,
-      ...(level === 'attested' ? { signatures: selected } : {}),
-      ...(options.publicClient !== undefined
-        ? { publicClient: options.publicClient }
-        : {}),
-      ...(options.publicClients !== undefined
-        ? { publicClients: options.publicClients }
-        : {}),
-      ...(yieldMs !== undefined ? { yieldMs } : {}),
-      ...(options.bls !== undefined ? { bls: options.bls } : {}),
-    });
-    if (!result.ok) {
-      throw lockInvalid(
-        `Cluster lock failed verification at ${result.step}${result.issue !== undefined ? ` (${result.issue})` : ''}`,
-        {
-          step: result.step,
-          issue: result.issue,
-          ...(result.validator !== undefined
-            ? { index: result.validator }
-            : {}),
-        },
-      );
-    }
+    await verifyForDeposits(lock, selected, verify, options, yieldMs);
   }
 
   const validators = lock.distributed_validators;
@@ -258,58 +364,10 @@ export const fromLock = async (
       issue: 'deposit_data_missing',
     });
   }
-  const depositsByAmount = new Map<bigint, Deposit[]>();
-  for (const index of selected) {
-    const validator = validators[index];
-    const raw =
-      validator.partial_deposit_data !== undefined &&
-      validator.partial_deposit_data !== null &&
-      validator.partial_deposit_data.length > 0
-        ? validator.partial_deposit_data
-        : validator.deposit_data !== undefined
-          ? [validator.deposit_data]
-          : [];
-    if (raw.length === 0) {
-      throw lockInvalid(`Validator ${index} has no deposit data`, {
-        issue: 'deposit_data_missing',
-        index,
-      });
-    }
-    const seen = new Set<bigint>();
-    for (const data of raw) {
-      const deposit = toDeposit(data, validator.distributed_public_key, index);
-      if (seen.has(deposit.amount)) continue;
-      seen.add(deposit.amount);
-      const list = depositsByAmount.get(deposit.amount) ?? [];
-      list.push(deposit);
-      depositsByAmount.set(deposit.amount, list);
-    }
-  }
+  const depositsByAmount = collectDeposits(validators, selected);
 
-  const amounts = [...depositsByAmount.keys()].sort((a, b) =>
-    a < b ? -1 : a > b ? 1 : 0,
-  );
-  let deposits: Deposit[] | undefined;
-  if (amount !== undefined) {
-    deposits = depositsByAmount.get(amount);
-    if (deposits === undefined || deposits.length !== selected.length) {
-      throw new ObolError(
-        'DEPOSIT_AMOUNT_NOT_IN_LOCK',
-        `Not every requested validator in the lock has a deposit of ${amount} wei`,
-        {
-          hint: 'Pick one of the available amounts',
-          details: {
-            amount,
-            available: amounts.filter(
-              a => depositsByAmount.get(a)?.length === selected.length,
-            ),
-          },
-        },
-      );
-    }
-  } else if (amounts.length === 1) {
-    deposits = depositsByAmount.get(amounts[0]);
-  }
+  const amounts = [...depositsByAmount.keys()].sort(compareBigints);
+  const deposits = pickDeposits(amount, amounts, depositsByAmount, selected);
 
   return {
     lockHash: lock.lock_hash.toLowerCase() as Hex,

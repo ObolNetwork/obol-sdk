@@ -138,8 +138,9 @@ const routeArrival = (
   });
   const principalPart = principalPayout < amount ? principalPayout : amount;
   const rewardPart = amount - principalPart;
-  const routedAs =
-    rewardPart === 0n ? 'principal' : principalPart === 0n ? 'reward' : 'mixed';
+  let routedAs: WithdrawRequestPreview['routedAs'] = 'mixed';
+  if (rewardPart === 0n) routedAs = 'principal';
+  else if (principalPart === 0n) routedAs = 'reward';
   return { routedAs, principalPart, rewardPart };
 };
 

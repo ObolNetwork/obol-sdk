@@ -182,8 +182,18 @@ interface CaseMeta {
 }
 const cases: CaseMeta[] = [];
 const order = [...ALL_MUTATIONS];
-for (let i = 0; cases.length < N; i++) {
-  const mutation = order[i % order.length];
+// Mutations take turns; one that does not apply to the drawn base (null) is
+// retried with the next. The cap only stops a run that can never reach N.
+const maxAttempts = N * ALL_MUTATIONS.length * 100;
+let attempts = 0;
+while (cases.length < N) {
+  if (attempts >= maxAttempts) {
+    throw new Error(
+      `Only ${cases.length} of ${N} cases after ${attempts} mutation attempts`,
+    );
+  }
+  const mutation = order[attempts % order.length];
+  attempts++;
   const b = Math.floor(rng() * bases.length);
   const base = bases[b];
   const out = applyMutation(base, mutation, rng);

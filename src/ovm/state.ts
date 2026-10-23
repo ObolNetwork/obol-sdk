@@ -507,6 +507,6 @@ export const getOvmValidators = async (
   if (record.validators === undefined) {
     throw statusUnavailable('The Obol API OVM record has no validators list');
   }
-  const validators = record.validators.map(parseValidator);
+  const validators = record.validators.map((raw, i) => parseValidator(raw, i));
   return { validators, blockNumber: record.blockNumber ?? null };
 };

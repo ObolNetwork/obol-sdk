@@ -250,13 +250,12 @@ export const fakeChain = (options: FakeChainOptions = {}) => {
           filter.toBlock !== undefined && filter.toBlock !== 'latest'
             ? BigInt(filter.toBlock)
             : blockNumber;
-        const addresses =
-          filter.address === undefined
-            ? undefined
-            : (Array.isArray(filter.address)
-                ? filter.address
-                : [filter.address]
-              ).map(lower);
+        let addresses: string[] | undefined;
+        if (filter.address !== undefined) {
+          addresses = (
+            Array.isArray(filter.address) ? filter.address : [filter.address]
+          ).map(lower);
+        }
         return logs
           .filter(
             l =>

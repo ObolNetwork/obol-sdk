@@ -238,16 +238,16 @@ export const mockBeacon = (
   }> = [],
 ): (() => void) => {
   const real = global.fetch;
+  const rowsFor = (url: string): unknown[] => {
+    if (url.endsWith('/pending_deposits')) return pending;
+    if (url.endsWith('/pending_partial_withdrawals')) return partials;
+    return validators;
+  };
   global.fetch = (async (url: unknown) =>
-    new Response(
-      JSON.stringify({
-        data: String(url).endsWith('/pending_deposits')
-          ? pending
-          : String(url).endsWith('/pending_partial_withdrawals')
-            ? partials
-            : validators,
+    await Promise.resolve(
+      new Response(JSON.stringify({ data: rowsFor(String(url)) }), {
+        status: 200,
       }),
-      { status: 200 },
     )) as unknown as typeof fetch;
   return () => {
     global.fetch = real;

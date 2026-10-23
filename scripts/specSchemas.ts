@@ -101,6 +101,14 @@ export const OPERATION_INPUTS: Record<string, TSchema> = {
   'simulate.options': SimulateOptionsSchema,
 };
 
+/** A TypeBox BigInt bound (a bigint) as its decimal string. */
+const bigintBound = (value: unknown): string => {
+  if (typeof value !== 'bigint') {
+    throw new Error(`Expected a bigint schema bound, got ${typeof value}`);
+  }
+  return value.toString();
+};
+
 const toJson = (schema: unknown): unknown => {
   if (Array.isArray(schema)) return schema.map(toJson);
   if (schema === null || typeof schema !== 'object') {
@@ -114,8 +122,12 @@ const toJson = (schema: unknown): unknown => {
       type: 'string',
       pattern: '^(0|[1-9][0-9]*)$',
       'x-obol-type': 'bigint',
-      ...(minimum !== undefined ? { 'x-obol-minimum': String(minimum) } : {}),
-      ...(maximum !== undefined ? { 'x-obol-maximum': String(maximum) } : {}),
+      ...(minimum !== undefined
+        ? { 'x-obol-minimum': bigintBound(minimum) }
+        : {}),
+      ...(maximum !== undefined
+        ? { 'x-obol-maximum': bigintBound(maximum) }
+        : {}),
     };
   }
   const out: Record<string, unknown> = {};

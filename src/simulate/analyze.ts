@@ -389,119 +389,119 @@ export const createdContracts = (
   return out;
 };
 
-export const stateChanges = (
-  facts: Facts,
-  values: ReadValues,
-): StateChange[] => {
-  const { tx, contracts, events } = facts;
-  const created = createdContracts(events, contracts);
-  const isCreated = (address: string): boolean =>
-    created.some(c => sameAddress(c.address, address));
-  const out: StateChange[] = [...calldataRequests(tx, contracts), ...created];
-  const roles = new Map<
-    string,
-    { ovm: Address; user: Address; after: bigint }
-  >();
-  for (const e of events) {
-    if (!e.known) continue;
-    const a = e.args;
-    switch (e.name) {
-      case 'WithdrawalRequested': {
-        const amount = (a.amount as bigint) * GWEI;
-        out.push({
-          kind: 'withdrawalRequest',
-          source: 'event',
-          via: e.address,
-          pubkey: a.pubKey as Hex,
-          amount,
-          fullExit: amount === 0n,
-          fee: a.fee as bigint,
-        });
-        break;
-      }
-      case 'ConsolidationRequested':
-        out.push({
-          kind: 'consolidationRequest',
-          source: 'event',
-          via: e.address,
-          sourcePubkey: a.srcPubKey as Hex,
-          targetPubkey: a.targetPubKey as Hex,
-          fee: a.fee as bigint,
-        });
-        break;
-      case 'DepositEvent':
-        if (sameAddress(e.address, DEPOSIT_CONTRACT)) {
-          out.push({
-            kind: 'deposit',
-            pubkey: a.pubkey as Hex,
-            withdrawalCredentials: a.withdrawal_credentials as Hex,
-            amount: littleEndian(a.amount as Hex) * GWEI,
-            index: littleEndian(a.index as Hex),
-          });
-        }
-        break;
-      case 'RolesUpdated': {
-        const user = a.user as Address;
-        roles.set(`${key(e.address)}:${key(user)}`, {
-          ovm: e.address,
-          user,
-          after: a.roles as bigint,
-        });
-        break;
-      }
-      case 'OwnershipTransferred':
-        if (!isCreated(e.address)) {
-          out.push({
-            kind: 'ownership',
-            address: e.address,
-            previousOwner: a.oldOwner as Address,
-            newOwner: a.newOwner as Address,
-          });
-        }
-        break;
-      case 'OwnershipHandoverRequested':
-      case 'OwnershipHandoverCanceled':
-        out.push({
-          kind: 'ownershipHandover',
-          address: e.address,
-          pendingOwner: a.pendingOwner as Address,
-          action:
-            e.name === 'OwnershipHandoverRequested' ? 'requested' : 'canceled',
-        });
-        break;
-      case 'BeneficiaryUpdated':
-      case 'RewardRecipientUpdated':
-        out.push({
-          kind: 'recipient',
-          address: e.address,
-          recipient: e.name === 'BeneficiaryUpdated' ? 'principal' : 'reward',
-          newAddress: (a.newBeneficiary ?? a.newRewardRecipient) as Address,
-        });
-        break;
-      case 'SplitUpdated':
-        if (!isCreated(e.address)) {
-          out.push({
-            kind: 'splitUpdated',
-            address: e.address,
-            params: splitParamsOf(a._split),
-          });
-        }
-        break;
-      case 'SetPaused':
-        out.push({
-          kind: 'paused',
-          address: e.address,
-          paused: a.paused as boolean,
-        });
-        break;
+type RoleUpdates = Map<string, { ovm: Address; user: Address; after: bigint }>;
+
+/**
+ * The state change of one known event, pushed to `out` (RolesUpdated goes to
+ * `roles`, the last update per OVM and user).
+ */
+const pushEventChange = (
+  out: StateChange[],
+  roles: RoleUpdates,
+  e: SimulatedEvent,
+  isCreated: (address: string) => boolean,
+): void => {
+  const a = e.args;
+  switch (e.name) {
+    case 'WithdrawalRequested': {
+      const amount = (a.amount as bigint) * GWEI;
+      out.push({
+        kind: 'withdrawalRequest',
+        source: 'event',
+        via: e.address,
+        pubkey: a.pubKey as Hex,
+        amount,
+        fullExit: amount === 0n,
+        fee: a.fee as bigint,
+      });
+      break;
     }
+    case 'ConsolidationRequested':
+      out.push({
+        kind: 'consolidationRequest',
+        source: 'event',
+        via: e.address,
+        sourcePubkey: a.srcPubKey as Hex,
+        targetPubkey: a.targetPubKey as Hex,
+        fee: a.fee as bigint,
+      });
+      break;
+    case 'DepositEvent':
+      if (sameAddress(e.address, DEPOSIT_CONTRACT)) {
+        out.push({
+          kind: 'deposit',
+          pubkey: a.pubkey as Hex,
+          withdrawalCredentials: a.withdrawal_credentials as Hex,
+          amount: littleEndian(a.amount as Hex) * GWEI,
+          index: littleEndian(a.index as Hex),
+        });
+      }
+      break;
+    case 'RolesUpdated': {
+      const user = a.user as Address;
+      roles.set(`${key(e.address)}:${key(user)}`, {
+        ovm: e.address,
+        user,
+        after: a.roles as bigint,
+      });
+      break;
+    }
+    case 'OwnershipTransferred':
+      if (!isCreated(e.address)) {
+        out.push({
+          kind: 'ownership',
+          address: e.address,
+          previousOwner: a.oldOwner as Address,
+          newOwner: a.newOwner as Address,
+        });
+      }
+      break;
+    case 'OwnershipHandoverRequested':
+    case 'OwnershipHandoverCanceled':
+      out.push({
+        kind: 'ownershipHandover',
+        address: e.address,
+        pendingOwner: a.pendingOwner as Address,
+        action:
+          e.name === 'OwnershipHandoverRequested' ? 'requested' : 'canceled',
+      });
+      break;
+    case 'BeneficiaryUpdated':
+    case 'RewardRecipientUpdated':
+      out.push({
+        kind: 'recipient',
+        address: e.address,
+        recipient: e.name === 'BeneficiaryUpdated' ? 'principal' : 'reward',
+        newAddress: (a.newBeneficiary ?? a.newRewardRecipient) as Address,
+      });
+      break;
+    case 'SplitUpdated':
+      if (!isCreated(e.address)) {
+        out.push({
+          kind: 'splitUpdated',
+          address: e.address,
+          params: splitParamsOf(a._split),
+        });
+      }
+      break;
+    case 'SetPaused':
+      out.push({
+        kind: 'paused',
+        address: e.address,
+        paused: a.paused as boolean,
+      });
+      break;
   }
-  for (const { ovm, user, after } of roles.values()) {
+};
+
+/** One `roles` change per OVM and user, against the role bits before. */
+const roleChanges = (roles: RoleUpdates, values: ReadValues): StateChange[] =>
+  [...roles.values()].map(({ ovm, user, after }) => {
     const before = values.roles.find(
       r => sameAddress(r.ovm, ovm) && sameAddress(r.user, user),
     )?.before;
     const prior = before ?? 0n;
-    out.push({
+    return {
       kind: 'roles',
       address: ovm,
       user,
@@ -509,8 +509,12 @@ export const stateChanges = (
       after,
       granted: roleNames(after & ~prior),
       revoked: roleNames(prior & ~after),
-    });
-  }
+    };
+  });
+
+/** One `value` change per OVM value read before and after that differs. */
+const valueChanges = (values: ReadValues): StateChange[] => {
+  const out: StateChange[] = [];
   for (const v of values.values) {
     if (v.before === undefined || v.after === undefined) continue;
     if (v.before === v.after) continue;
@@ -523,6 +527,24 @@ export const stateChanges = (
       delta: v.after - v.before,
     });
   }
+  return out;
+};
+
+export const stateChanges = (
+  facts: Facts,
+  values: ReadValues,
+): StateChange[] => {
+  const { tx, contracts, events } = facts;
+  const created = createdContracts(events, contracts);
+  const isCreated = (address: string): boolean =>
+    created.some(c => sameAddress(c.address, address));
+  const out: StateChange[] = [...calldataRequests(tx, contracts), ...created];
+  const roles: RoleUpdates = new Map();
+  for (const e of events) {
+    if (!e.known) continue;
+    pushEventChange(out, roles, e, isCreated);
+  }
+  out.push(...roleChanges(roles, values), ...valueChanges(values));
   return out;
 };
 
@@ -560,6 +582,98 @@ export const requestFees = (
   return { paid, refund: tx.value - paid, recipient };
 };
 
+type NameOf = (address: string) => string;
+
+const createdLine = (c: Created, name: NameOf): string => {
+  if (c.contract === 'ovm') {
+    return `Creates OVM ${shortAddress(c.address)}: owner ${name(c.owner)}, principal recipient ${name(c.principalRecipient as Address)}, reward recipient ${name(c.rewardRecipient as Address)}, principal threshold ${formatEth(c.principalThreshold ?? 0n)}`;
+  }
+  const owner = sameAddress(c.owner, ZERO_ADDRESS)
+    ? 'none, immutable'
+    : name(c.owner);
+  return `Creates split ${shortAddress(c.address)} with ${c.params?.recipients.length ?? 0} recipients (owner ${owner})`;
+};
+
+/** The summary lines of one state change, pushed to `lines`. */
+const pushChangeLines = (
+  lines: string[],
+  c: StateChange,
+  name: NameOf,
+): void => {
+  switch (c.kind) {
+    case 'created':
+      lines.push(createdLine(c, name));
+      break;
+    case 'withdrawalRequest':
+      lines.push(
+        c.fullExit
+          ? `Validator ${shortPubkey(c.pubkey)} full exit requested (irreversible), fee ${formatEth(c.fee)}`
+          : `Validator ${shortPubkey(c.pubkey)} partial withdrawal of ${formatEth(c.amount)} requested, fee ${formatEth(c.fee)}`,
+      );
+      break;
+    case 'consolidationRequest':
+      lines.push(
+        `Validator ${shortPubkey(c.sourcePubkey)} consolidation into ${shortPubkey(c.targetPubkey)} requested (irreversible: its stake moves to the target), fee ${formatEth(c.fee)}`,
+      );
+      break;
+    case 'deposit':
+      lines.push(
+        `Deposit of ${formatEth(c.amount)} to validator ${shortPubkey(c.pubkey)} (credentials ${c.withdrawalCredentials.slice(0, 4)}…${c.withdrawalCredentials.slice(-8)})`,
+      );
+      break;
+    case 'roles':
+      if (c.granted.length > 0) {
+        lines.push(
+          `${roleList(c.granted)} granted to ${name(c.user)} on OVM ${shortAddress(c.address)}`,
+        );
+      }
+      if (c.revoked.length > 0) {
+        lines.push(
+          `${roleList(c.revoked)} removed from ${name(c.user)} on OVM ${shortAddress(c.address)}`,
+        );
+      }
+      break;
+    case 'ownership':
+      lines.push(
+        sameAddress(c.newOwner, ZERO_ADDRESS)
+          ? `Ownership of ${shortAddress(c.address)} renounced by ${name(c.previousOwner)} (irreversible)`
+          : `Ownership of ${shortAddress(c.address)} moves from ${name(c.previousOwner)} to ${name(c.newOwner)}`,
+      );
+      break;
+    case 'ownershipHandover':
+      lines.push(
+        `Ownership handover of ${shortAddress(c.address)} ${c.action} by ${name(c.pendingOwner)}`,
+      );
+      break;
+    case 'recipient':
+      lines.push(
+        `${c.recipient === 'principal' ? 'Principal' : 'Reward'} recipient of OVM ${shortAddress(c.address)} set to ${name(c.newAddress)}`,
+      );
+      break;
+    case 'splitUpdated':
+      lines.push(
+        `Split ${shortAddress(c.address)} recipients updated (${c.params.recipients.length} recipients)`,
+      );
+      break;
+    case 'paused':
+      lines.push(
+        `Split ${shortAddress(c.address)} ${c.paused ? 'paused' : 'unpaused'}`,
+      );
+      break;
+    case 'value':
+      lines.push(
+        `OVM ${shortAddress(c.address)} ${c.name}: ${formatEth(c.before)} → ${formatEth(c.after)}`,
+      );
+      break;
+  }
+};
+
+/** Largest ETH gain first; equal deltas by address. */
+const byDeltaThenAddress = (a: BalanceChange, b: BalanceChange): number => {
+  if (a.delta === b.delta) return key(a.address) < key(b.address) ? -1 : 1;
+  return a.delta > b.delta ? -1 : 1;
+};
+
 export const summarize = (
   facts: Facts,
   balances: BalanceChange[],
@@ -573,78 +687,7 @@ export const summarize = (
       : shortAddress(address);
   };
   const lines: string[] = [];
-  for (const c of changes) {
-    switch (c.kind) {
-      case 'created':
-        lines.push(
-          c.contract === 'ovm'
-            ? `Creates OVM ${shortAddress(c.address)}: owner ${name(c.owner)}, principal recipient ${name(c.principalRecipient as Address)}, reward recipient ${name(c.rewardRecipient as Address)}, principal threshold ${formatEth(c.principalThreshold ?? 0n)}`
-            : `Creates split ${shortAddress(c.address)} with ${c.params?.recipients.length ?? 0} recipients (owner ${sameAddress(c.owner, ZERO_ADDRESS) ? 'none, immutable' : name(c.owner)})`,
-        );
-        break;
-      case 'withdrawalRequest':
-        lines.push(
-          c.fullExit
-            ? `Validator ${shortPubkey(c.pubkey)} full exit requested (irreversible), fee ${formatEth(c.fee)}`
-            : `Validator ${shortPubkey(c.pubkey)} partial withdrawal of ${formatEth(c.amount)} requested, fee ${formatEth(c.fee)}`,
-        );
-        break;
-      case 'consolidationRequest':
-        lines.push(
-          `Validator ${shortPubkey(c.sourcePubkey)} consolidation into ${shortPubkey(c.targetPubkey)} requested (irreversible: its stake moves to the target), fee ${formatEth(c.fee)}`,
-        );
-        break;
-      case 'deposit':
-        lines.push(
-          `Deposit of ${formatEth(c.amount)} to validator ${shortPubkey(c.pubkey)} (credentials ${c.withdrawalCredentials.slice(0, 4)}…${c.withdrawalCredentials.slice(-8)})`,
-        );
-        break;
-      case 'roles':
-        if (c.granted.length > 0) {
-          lines.push(
-            `${roleList(c.granted)} granted to ${name(c.user)} on OVM ${shortAddress(c.address)}`,
-          );
-        }
-        if (c.revoked.length > 0) {
-          lines.push(
-            `${roleList(c.revoked)} removed from ${name(c.user)} on OVM ${shortAddress(c.address)}`,
-          );
-        }
-        break;
-      case 'ownership':
-        lines.push(
-          sameAddress(c.newOwner, ZERO_ADDRESS)
-            ? `Ownership of ${shortAddress(c.address)} renounced by ${name(c.previousOwner)} (irreversible)`
-            : `Ownership of ${shortAddress(c.address)} moves from ${name(c.previousOwner)} to ${name(c.newOwner)}`,
-        );
-        break;
-      case 'ownershipHandover':
-        lines.push(
-          `Ownership handover of ${shortAddress(c.address)} ${c.action} by ${name(c.pendingOwner)}`,
-        );
-        break;
-      case 'recipient':
-        lines.push(
-          `${c.recipient === 'principal' ? 'Principal' : 'Reward'} recipient of OVM ${shortAddress(c.address)} set to ${name(c.newAddress)}`,
-        );
-        break;
-      case 'splitUpdated':
-        lines.push(
-          `Split ${shortAddress(c.address)} recipients updated (${c.params.recipients.length} recipients)`,
-        );
-        break;
-      case 'paused':
-        lines.push(
-          `Split ${shortAddress(c.address)} ${c.paused ? 'paused' : 'unpaused'}`,
-        );
-        break;
-      case 'value':
-        lines.push(
-          `OVM ${shortAddress(c.address)} ${c.name}: ${formatEth(c.before)} → ${formatEth(c.after)}`,
-        );
-        break;
-    }
-  }
+  for (const c of changes) pushChangeLines(lines, c, name);
   const fees = requestFees(facts.tx, changes);
   if (fees !== null && fees.refund > 0n) {
     const unsent = facts.events.some(
@@ -661,15 +704,7 @@ export const summarize = (
     ...eth.filter(b => sameAddress(b.address, facts.tx.from)),
     ...eth
       .filter(b => !sameAddress(b.address, facts.tx.from))
-      .sort((a, b) =>
-        a.delta === b.delta
-          ? key(a.address) < key(b.address)
-            ? -1
-            : 1
-          : a.delta > b.delta
-            ? -1
-            : 1,
-      ),
+      .sort(byDeltaThenAddress),
   ];
   for (const b of ordered) {
     lines.push(

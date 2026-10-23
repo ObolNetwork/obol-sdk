@@ -20,7 +20,8 @@ const PERCENT = /^(\d{1,3})(?:\.(\d{1,4}))?$/;
 export const compareAddresses = (a: string, b: string): number => {
   const x = a.toLowerCase();
   const y = b.toLowerCase();
-  return x < y ? -1 : x > y ? 1 : 0;
+  if (x < y) return -1;
+  return x > y ? 1 : 0;
 };
 
 /**

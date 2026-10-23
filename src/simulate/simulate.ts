@@ -106,6 +106,27 @@ const revertLine = (reason: RevertReason): string =>
     ? `Reverts: ${reason.message}; call ${reason.inner.index} to ${shortAddress(reason.inner.target)} failed with ${reason.inner.reason.message}`
     : `Reverts: ${reason.message}`;
 
+/** Previews are read by shape: the distribution ones name the recipients. */
+const labelPreview = (labels: Labels, preview: unknown): void => {
+  type Named = Partial<Record<string, string>>;
+  const p = preview as
+    | (Named & { ovm?: Named; splits?: Named[]; recipients?: Named[] })
+    | null
+    | undefined;
+  if (p === null || typeof p !== 'object') return;
+  for (const s of Array.isArray(p.splits) ? p.splits : []) {
+    labels.set(s.address, `${s.kind} split`);
+  }
+  const ovm = typeof p.principalRecipient === 'string' ? p : p.ovm;
+  if (ovm !== undefined && typeof ovm === 'object') {
+    labels.set(ovm.principalRecipient, 'principal recipient');
+    labels.set(ovm.rewardRecipient, 'reward recipient');
+  }
+  for (const r of Array.isArray(p.recipients) ? p.recipients : []) {
+    labels.set(r.address, 'split recipient');
+  }
+};
+
 const labelsFor = (prepared: AnyPrepared, facts: Facts): Labels => {
   const labels = new Labels();
   const c = facts.contracts;
@@ -126,25 +147,7 @@ const labelsFor = (prepared: AnyPrepared, facts: Facts): Labels => {
     );
   }
   for (const ovm of ovmCandidates(facts)) labels.set(ovm, 'OVM');
-  // Previews are read by shape: the distribution ones name the recipients.
-  type Named = Partial<Record<string, string>>;
-  const p = prepared.preview as unknown as
-    | (Named & { ovm?: Named; splits?: Named[]; recipients?: Named[] })
-    | null
-    | undefined;
-  if (p !== null && typeof p === 'object') {
-    for (const s of Array.isArray(p.splits) ? p.splits : []) {
-      labels.set(s.address, `${s.kind} split`);
-    }
-    const ovm = typeof p.principalRecipient === 'string' ? p : p.ovm;
-    if (ovm !== undefined && typeof ovm === 'object') {
-      labels.set(ovm.principalRecipient, 'principal recipient');
-      labels.set(ovm.rewardRecipient, 'reward recipient');
-    }
-    for (const r of Array.isArray(p.recipients) ? p.recipients : []) {
-      labels.set(r.address, 'split recipient');
-    }
-  }
+  labelPreview(labels, prepared.preview);
   const call = decodeCall(ovmAbi, facts.tx.data);
   if (
     call?.functionName === 'withdraw' ||
@@ -156,6 +159,35 @@ const labelsFor = (prepared: AnyPrepared, facts: Facts): Labels => {
     );
   }
   return labels;
+};
+
+/** OVMs, their recipients (splits), splits, created or claimed contracts. */
+const addPreviewAddresses = (
+  add: (a: unknown) => void,
+  preview: unknown,
+): void => {
+  type Named = Partial<Record<string, unknown>>;
+  const p = preview as
+    | (Named & { ovm?: Named; splits?: Named[] })
+    | null
+    | undefined;
+  if (p === null || typeof p !== 'object') return;
+  for (const k of [
+    'principalRecipient',
+    'rewardRecipient',
+    'address',
+    'factory',
+    'contractAddress',
+  ]) {
+    const v = p[k];
+    add(typeof v === 'object' && v !== null ? (v as Named).address : v);
+  }
+  if (p.ovm !== undefined && typeof p.ovm === 'object') {
+    add(p.ovm.address);
+    add(p.ovm.principalRecipient);
+    add(p.ovm.rewardRecipient);
+  }
+  for (const s of Array.isArray(p.splits) ? p.splits : []) add(s.address);
 };
 
 /**
@@ -191,30 +223,7 @@ const trustedAddresses = (
   if (sameAddress(tx.to, contracts.multicall3)) {
     for (const call of decodeAggregate3(tx.data) ?? []) add(call.target);
   }
-  type Named = Partial<Record<string, unknown>>;
-  const p = prepared.preview as unknown as
-    | (Named & { ovm?: Named; splits?: Named[] })
-    | null
-    | undefined;
-  if (p !== null && typeof p === 'object') {
-    // OVMs, their recipients (splits), splits, created or claimed contracts.
-    for (const k of [
-      'principalRecipient',
-      'rewardRecipient',
-      'address',
-      'factory',
-      'contractAddress',
-    ]) {
-      const v = p[k];
-      add(typeof v === 'object' && v !== null ? (v as Named).address : v);
-    }
-    if (p.ovm !== undefined && typeof p.ovm === 'object') {
-      add(p.ovm.address);
-      add(p.ovm.principalRecipient);
-      add(p.ovm.rewardRecipient);
-    }
-    for (const s of Array.isArray(p.splits) ? p.splits : []) add(s.address);
-  }
+  addPreviewAddresses(add, prepared.preview);
   const mark = (e: SimulatedEvent): SimulatedEvent => ({
     ...e,
     trusted: set.has(e.address.toLowerCase()),
@@ -254,16 +263,16 @@ const gasOf = async (
   };
 };
 
-const formatValue = (v: unknown): string =>
-  typeof v === 'bigint'
-    ? v.toString()
-    : Array.isArray(v)
-      ? `[${v.map(formatValue).join(', ')}]`
-      : typeof v === 'object' && v !== null
-        ? JSON.stringify(v, (_, x) =>
-            typeof x === 'bigint' ? x.toString() : x,
-          )
-        : String(v);
+const formatValue = (v: unknown): string => {
+  if (typeof v === 'bigint') return v.toString();
+  if (Array.isArray(v)) return `[${v.map(formatValue).join(', ')}]`;
+  if (typeof v === 'object' && v !== null) {
+    return JSON.stringify(v, (_, x) =>
+      typeof x === 'bigint' ? x.toString() : x,
+    );
+  }
+  return String(v);
+};
 
 const unavailable = (
   skipped: Array<{ backend: string; reason: string }>,

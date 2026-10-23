@@ -102,6 +102,54 @@ const depositInvalid = (
     },
   );
 
+/** At most 2048 ETH for 0x02 credentials and top-ups, else 32 ETH. */
+const checkMaximum = (
+  amount: bigint,
+  index: number,
+  prefix: string,
+  isTopUp: boolean,
+): void => {
+  const maximum =
+    prefix === '0x02' || isTopUp ? MAX_COMPOUNDING_DEPOSIT : MAX_DEPOSIT;
+  if (amount > maximum) {
+    const target = isTopUp ? ' for a top-up' : ` for ${prefix} credentials`;
+    throw depositInvalid(
+      index,
+      'amount_above_maximum',
+      `amount exceeds ${maximum / ETH} ETH${target}`,
+    );
+  }
+};
+
+/**
+ * With an expected withdrawal address, the credentials must be execution
+ * credentials pointing at it (a top-up may leave them zero).
+ */
+const checkCredentialsTarget = (
+  credentials: string,
+  prefix: string,
+  index: number,
+  isTopUp: boolean,
+  expectedWithdrawalAddress: string | undefined,
+): void => {
+  if (
+    expectedWithdrawalAddress === undefined ||
+    (isTopUp && credentials === ZERO_CREDENTIALS)
+  ) {
+    return;
+  }
+  if (
+    prefix === '0x00' ||
+    credentials.slice(-40) !== expectedWithdrawalAddress.toLowerCase().slice(2)
+  ) {
+    throw depositInvalid(
+      index,
+      'credentials_mismatch',
+      `withdrawal credentials do not point at ${expectedWithdrawalAddress}`,
+    );
+  }
+};
+
 const checkDeposit = (
   deposit: Deposit,
   index: number,
@@ -153,32 +201,14 @@ const checkDeposit = (
     );
   }
 
-  const maximum =
-    prefix === '0x02' || isTopUp ? MAX_COMPOUNDING_DEPOSIT : MAX_DEPOSIT;
-  if (amount > maximum) {
-    throw depositInvalid(
-      index,
-      'amount_above_maximum',
-      `amount exceeds ${maximum / ETH} ETH${isTopUp ? ' for a top-up' : ` for ${prefix} credentials`}`,
-    );
-  }
-
-  if (
-    expectedWithdrawalAddress !== undefined &&
-    !(isTopUp && credentials === ZERO_CREDENTIALS)
-  ) {
-    if (
-      prefix === '0x00' ||
-      credentials.slice(-40) !==
-        expectedWithdrawalAddress.toLowerCase().slice(2)
-    ) {
-      throw depositInvalid(
-        index,
-        'credentials_mismatch',
-        `withdrawal credentials do not point at ${expectedWithdrawalAddress}`,
-      );
-    }
-  }
+  checkMaximum(amount, index, prefix, isTopUp);
+  checkCredentialsTarget(
+    credentials,
+    prefix,
+    index,
+    isTopUp,
+    expectedWithdrawalAddress,
+  );
 
   const root = depositDataRoot({ ...deposit, amountGwei: amount / GWEI });
   if (root !== deposit.depositDataRoot.toLowerCase()) {

@@ -126,6 +126,13 @@ const parseRole = (raw: unknown): OvmApiRoleHolder | undefined => {
   };
 };
 
+/**
+ * No entry is `undefined`. `every` skips holes, as the `some` check this
+ * replaces did (`includes(undefined)` would not).
+ */
+const allDefined = <V>(list: Array<V | undefined>): list is V[] =>
+  list.every(v => v !== undefined);
+
 const parseSplit = (raw: unknown): OvmApiSplit | undefined => {
   if (!isObj(raw)) return undefined;
   const address = apiAddress(raw.address);
@@ -146,8 +153,8 @@ const parseSplit = (raw: unknown): OvmApiSplit | undefined => {
     !Array.isArray(raw.recipients) ||
     !Array.isArray(raw.allocations) ||
     recipients.length !== allocations.length ||
-    recipients.some(r => r === undefined) ||
-    allocations.some(a => a === undefined) ||
+    !allDefined(recipients) ||
+    !allDefined(allocations) ||
     typeof incentive !== 'number' ||
     !Number.isSafeInteger(incentive) ||
     incentive < 0
@@ -158,8 +165,8 @@ const parseSplit = (raw: unknown): OvmApiSplit | undefined => {
     address,
     kind: raw.kind,
     splitHash,
-    recipients: recipients as Address[],
-    allocations: allocations as bigint[],
+    recipients,
+    allocations,
     totalAllocation,
     distributionIncentive: incentive,
     ...(raw.source === 'SplitUpdated' || raw.source === 'SplitCreated'

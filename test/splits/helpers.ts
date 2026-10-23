@@ -209,11 +209,9 @@ export const decodeDistributionCalls = (
 /** JSON-comparable form: bigints as decimal strings, hex strings lowercase. */
 export const norm = (value: unknown): unknown =>
   JSON.parse(
-    JSON.stringify(value, (_k, v) =>
-      typeof v === 'bigint'
-        ? v.toString()
-        : typeof v === 'string' && v.startsWith('0x')
-          ? v.toLowerCase()
-          : v,
-    ),
+    JSON.stringify(value, (_k, v: unknown) => {
+      if (typeof v === 'bigint') return v.toString();
+      if (typeof v === 'string' && v.startsWith('0x')) return v.toLowerCase();
+      return v;
+    }),
   );

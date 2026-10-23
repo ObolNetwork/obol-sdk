@@ -439,6 +439,6 @@ describe('parseEnr / isValidEnr (2.x ENR)', () => {
     expect(root.cluster.parseEnr).toBe(parseEnr);
     expect(root.cluster.isValidEnr).toBe(isValidEnr);
     const hex: Hex = parseEnr(enr).publicKey;
-    expect(hex.length).toBe(68);
+    expect(hex).toHaveLength(68);
   });
 });

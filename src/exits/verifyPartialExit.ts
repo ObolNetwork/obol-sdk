@@ -152,12 +152,9 @@ export const storedShares = (
 const storedByPubkey = (
   existing: VerifyPartialExitInput['existing'],
 ): Map<string, StoredExitBlob> => {
-  const list =
-    existing === undefined
-      ? []
-      : Array.isArray(existing)
-        ? existing
-        : Object.values(existing);
+  let list: StoredExitBlob[] = [];
+  if (Array.isArray(existing)) list = existing;
+  else if (existing !== undefined) list = Object.values(existing);
   return new Map(list.map(blob => [blob.publickey.toLowerCase(), blob]));
 };
 

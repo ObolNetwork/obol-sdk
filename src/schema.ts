@@ -122,6 +122,6 @@ export const invalid = (
 /** `value` without trailing `/` characters (a linear scan, no regex). */
 export const trimTrailingSlashes = (value: string): string => {
   let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 0x2f) end--;
+  while (end > 0 && value.codePointAt(end - 1) === 0x2f) end--;
   return value.slice(0, end);
 };
