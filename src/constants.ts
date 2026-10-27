@@ -132,13 +132,20 @@ export const DKG_ALGORITHM = 'default';
 export const CONFIG_VERSION = 'v1.11.0';
 
 /**
- * Cluster definition versions the SDK can hash, and so can create with
- * {@link Client.createClusterDefinition}.
+ * Minimum cluster definition / lock version the SDK creates, joins or
+ * validates. Older versions (v1.6.0 to v1.8.0) are still hashed so existing
+ * locks can be read, but {@link Client.createClusterDefinition},
+ * {@link Client.acceptClusterDefinition} and `validateClusterLock` reject
+ * them. obol-api applies the same minimum.
+ */
+export const MIN_SUPPORTED_CLUSTER_VERSION = 'v1.10.0';
+
+/**
+ * Cluster definition versions {@link Client.createClusterDefinition} can
+ * create: the hashable versions at or above
+ * {@link MIN_SUPPORTED_CLUSTER_VERSION}.
  */
 export const SUPPORTED_DEFINITION_VERSIONS: readonly string[] = [
-  'v1.6.0',
-  'v1.7.0',
-  'v1.8.0',
   'v1.10.0',
   'v1.11.0',
 ];

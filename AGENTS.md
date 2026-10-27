@@ -154,7 +154,7 @@ client.exit.*         // Verify/recombine exit signatures
 |--------|---------|-------------|
 | `hasAcceptedTerms(address?)` | No | Whether `address` (default: the signer's) accepted the latest T&C |
 | `acceptObolLatestTermsAndConditions({ ifNotAccepted? })` | Yes | EIP-712 T&C acceptance (required before writes); `ifNotAccepted: true` skips if already accepted |
-| `createClusterDefinition(payload, version?)` | Yes | Register new cluster, returns `config_hash`; `version` defaults to `CONFIG_VERSION` and must be in `SUPPORTED_DEFINITION_VERSIONS` |
+| `createClusterDefinition(payload, version?)` | Yes | Register new cluster, returns `config_hash`; `version` defaults to `CONFIG_VERSION` and must be in `SUPPORTED_DEFINITION_VERSIONS` (v1.10.0+) |
 | `acceptClusterDefinition(operatorPayload, configHash)` | Yes | Operator joins cluster; verifies the definition first (config hash recomputed, network), fills `version` from it, requires the signer to be an operator; idempotent for the same ENR |
 | `getClusterDefinition(configHash)` | No | Fetch cluster definition |
 | `getClusterLock(configHash)` | No | Fetch cluster lock (post-DKG) |
@@ -196,7 +196,7 @@ client.exit.*         // Verify/recombine exit signatures
 | `validateExitBlobs(config, payload, beaconUrl, existing)` | Comprehensive exit blob validation |
 | `recombineExitBlobs(exitBlob)` | Aggregate partial BLS signatures |
 
-**Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
+**Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, version below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0), or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
 
 **Deposits and top-ups** (`eoa.deposit` / `splits.deposit`):
 - `kind?: 'deposit' | 'topUp'` (default `'deposit'`) says what the payload is. `'deposit'`: every deposit needs a valid BLS signature for the chain and the expected withdrawal credentials, up to 32 ETH (2048 ETH for 0x02 credentials). `'topUp'`: the caller asserts every deposit tops up an existing validator: no BLS check, expected or all-zero credentials, up to 2048 ETH. This is what Launchpad-style top-ups (all-zero credentials and signature) need.
@@ -210,7 +210,7 @@ client.exit.*         // Verify/recombine exit signatures
 
 **`validateClusterLock`** (`import { validateClusterLock } from '@obolnetwork/obol-sdk'`)
 
-Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules.
+Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules. Locks below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0) return `false`: the SDK and obol-api no longer create or accept legacy (v1.6–v1.8) definitions and locks, even though the hashing code for them remains.
 
 ```typescript
 import { validateClusterLock } from '@obolnetwork/obol-sdk';

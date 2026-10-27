@@ -4,7 +4,6 @@ import {
   clusterConfigV1X10,
   clusterLockV1X10,
   enr,
-  nullDepositAmountsClusterLockV1X8,
   clusterLockWithCompoundingWithdrawals,
   clusterLockWithSafe,
   clusterLockSoloV1X10,
@@ -471,10 +470,6 @@ describe('Poll Cluster Lock', () => {
     {
       version: 'Cluster with safe address v1.10.0',
       clusterLock: clusterLockWithSafe,
-    },
-    {
-      version: 'null deposit_amounts v1.8.0',
-      clusterLock: nullDepositAmountsClusterLockV1X8,
     },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
   ])(

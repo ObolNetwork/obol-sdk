@@ -27,6 +27,7 @@ import {
   DOMAIN_DEPOSIT,
   DefinitionFlow,
   GENESIS_VALIDATOR_ROOT,
+  MIN_SUPPORTED_CLUSTER_VERSION,
   signCreatorConfigHashPayload,
   signEnrPayload,
   signOperatorConfigHashPayload,
@@ -616,11 +617,25 @@ export const hasUniqueDistributedKeys = (clusterLock: ClusterLock): boolean => {
   return new Set(dvKeys).size === dvKeys.length;
 };
 
+/**
+ * Whether `version` is a valid semver at or above
+ * {@link MIN_SUPPORTED_CLUSTER_VERSION}. Legacy (< v1.10.0) definitions and
+ * locks are not created, joined or validated by the SDK.
+ */
+export const isSupportedClusterVersion = (version: unknown): boolean =>
+  typeof version === 'string' &&
+  semver.valid(version) !== null &&
+  semver.gte(version, MIN_SUPPORTED_CLUSTER_VERSION);
+
 export const isValidClusterLock = async (
   clusterLock: ClusterLock,
   safeRpcUrl?: SafeRpcUrl,
 ): Promise<boolean> => {
   try {
+    if (!isSupportedClusterVersion(clusterLock.cluster_definition.version)) {
+      return false;
+    }
+
     const definitionType = definitionFlow(clusterLock.cluster_definition);
     if (definitionType == null) {
       return false;

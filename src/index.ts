@@ -5,6 +5,7 @@ import {
   Domain,
   DKG_ALGORITHM,
   CONFIG_VERSION,
+  MIN_SUPPORTED_CLUSTER_VERSION,
   OperatorConfigHashSigningTypes,
   EnrSigningTypes,
   TERMS_AND_CONDITIONS_VERSION,
@@ -39,7 +40,10 @@ import {
   type ProviderType,
   type SignerType,
 } from './types.js';
-import { clusterConfigOrDefinitionHash } from './verification/common.js';
+import {
+  clusterConfigOrDefinitionHash,
+  isSupportedClusterVersion,
+} from './verification/common.js';
 import { validatePayload } from './ajv.js';
 import {
   definitionSchema,
@@ -836,8 +840,9 @@ export class Client extends Base {
    * @throws {InvalidArgumentError} If `configHash` is not a 0x-prefixed
    *   32-byte hex string.
    * @throws {ChainMismatchError} If the signer is connected to a different chain.
-   * @throws {DefinitionVerificationError} If the definition fails verification
-   *   or `operatorPayload.version` differs from the definition's version.
+   * @throws {DefinitionVerificationError} If the definition fails verification,
+   *   its version is below {@link MIN_SUPPORTED_CLUSTER_VERSION}, or
+   *   `operatorPayload.version` differs from the definition's version.
    * @throws {PayloadValidationError} If the operator payload is invalid.
    * @throws {NotAnOperatorError} If the signer is not an operator in the definition.
    *
@@ -865,6 +870,12 @@ export class Client extends Base {
     );
 
     const definition = await this.getVerifiedClusterDefinition(configHash);
+
+    if (!isSupportedClusterVersion(definition.version)) {
+      throw new DefinitionVerificationError(
+        `Cluster definition ${configHash} has version ${definition.version}; the minimum supported version is ${MIN_SUPPORTED_CLUSTER_VERSION}`,
+      );
+    }
 
     if (
       operatorPayload?.version !== undefined &&

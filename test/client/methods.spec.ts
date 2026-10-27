@@ -15,7 +15,10 @@ import {
 } from '../fixtures.js';
 import { SDK_VERSION, CONFIG_VERSION } from '../../src/constants.js';
 import { Base } from '../../src/base.js';
-import { hasUniqueDistributedKeys } from '../../src/verification/common.js';
+import {
+  hasUniqueDistributedKeys,
+  isSupportedClusterVersion,
+} from '../../src/verification/common.js';
 import { clusterConfigOrDefinitionHash } from '../../src/verification/common.js';
 import {
   blsRecoverDistributedPubkeyFromShares,
@@ -130,7 +133,16 @@ describe('Cluster Client', () => {
       .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
     clientInstance['request'] = requestMock as never;
 
-    for (const version of ['v1.9.0', '1.10.0', 'v2.0.0', '']) {
+    // v1.6.0 to v1.8.0 can be hashed but are below the minimum version.
+    for (const version of [
+      'v1.6.0',
+      'v1.7.0',
+      'v1.8.0',
+      'v1.9.0',
+      '1.10.0',
+      'v2.0.0',
+      '',
+    ]) {
       await expect(
         clientInstance.createClusterDefinition(clusterConfigV1X10, version),
       ).rejects.toThrow('Unsupported cluster definition version');
@@ -380,10 +392,6 @@ describe('Cluster Client without a signer', () => {
 
   test.each([
     { version: 'v1.10.0 solo', clusterLock: clusterLockSoloV1X10 },
-    {
-      version: 'null deposit_amounts v1.8.0',
-      clusterLock: nullDepositAmountsClusterLockV1X8,
-    },
     { version: 'v1.10.0', clusterLock: clusterLockV1X10 },
     {
       version: 'v1.10.0 with compounding withdrawals',
@@ -431,6 +439,27 @@ describe('Cluster Client without a signer', () => {
       expect(isValidLock).toEqual(true);
     },
   );
+
+  test.each([
+    ['v1.10.0', true],
+    ['v1.11.0', true],
+    ['v1.12.0', true],
+    ['v1.8.0', false],
+    ['v1.9.0', false],
+    ['v1.6.0', false],
+    ['', false],
+    ['not-a-version', false],
+    [undefined, false],
+  ])('isSupportedClusterVersion(%p) is %p', (version, expected) => {
+    expect(isSupportedClusterVersion(version)).toBe(expected);
+  });
+
+  test('validateClusterLock returns false for cluster lock versions below v1.10.0', async () => {
+    const isValidLock: boolean = await validateClusterLock(
+      nullDepositAmountsClusterLockV1X8,
+    );
+    expect(isValidLock).toEqual(false);
+  });
 
   test('validateCluster should return false for cluster with null deposit_amounts and incorrect partial_deposits', async () => {
     const partialDeposit =
