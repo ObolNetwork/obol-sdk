@@ -13,7 +13,7 @@ of every v3 operation (inputs, checks, outputs, error codes) is in [`spec/operat
 - [From 3.0.0-rc.6 to rc.7](#from-300-rc6-to-rc7)
 - [From 3.0.0-rc.7 to rc.8](#from-300-rc7-to-rc8)
 - [From 3.0.0-rc.8 to rc.9](#from-300-rc8-to-rc9)
-- [From 3.0.0-rc.9 to 3.0.0](#from-300-rc9-to-300)
+- [From 3.0.0-rc.9 to rc.10](#from-300-rc9-to-rc10)
 
 ## From 2.x
 
@@ -418,8 +418,12 @@ No API changes. Requests to the Obol API send `Content-Type: application/json` o
 browser's cross-origin GET is a simple request (no CORS preflight). In Node they also send
 `User-Agent: obol-sdk/<version>`; browsers send their own. A header you pass in the request still wins.
 
-## From 3.0.0-rc.9 to 3.0.0
+## From 3.0.0-rc.9 to rc.10
 
-No API or behaviour changes: 3.0.0 is rc.9 with internal refactors. It is published on npm `latest`, so an unpinned
-`npm install @obolnetwork/obol-sdk` now installs v3; a `^2` range stays on 2.x. Move an npm alias
-(`npm:@obolnetwork/obol-sdk@3.0.0-rc.9`) to `@obolnetwork/obol-sdk@3.0.0`.
+- `prepareDefinition` without `targetGasLimit` now sets 200,000,000 (was 36,000,000), the `charon create cluster`
+  default. Pass `targetGasLimit` to keep the old value; the default is part of the `config_hash`.
+- `ObolApiError` gains `requestId` and `retryAfterSeconds` (also in `details`). Quote `requestId` when reporting a
+  problem with the Obol API, and wait `retryAfterSeconds` before retrying an `API_RATE_LIMIT`. In a browser both
+  need the API to expose the headers (`Access-Control-Expose-Headers`).
+- Deposit data whose pubkey or withdrawal credentials have the wrong length is now rejected (`PAYLOAD_INVALID`, or
+  a failed verification result) rather than hashed after zero-padding or truncation.

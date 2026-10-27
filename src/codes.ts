@@ -185,6 +185,10 @@ export interface ObolErrorDetails {
 export interface ApiErrorDetails {
   status: number;
   endpoint: string;
+  /** The response's `X-Request-Id`; quote it when reporting a problem. */
+  requestId?: string;
+  /** Seconds to wait, from a 429's `Retry-After`. */
+  retryAfterSeconds?: number;
 }
 
 export type ObolErrorCode = keyof ObolErrorDetails;

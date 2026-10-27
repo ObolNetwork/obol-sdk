@@ -1,6 +1,6 @@
 {
   "name": "@obolnetwork/obol-sdk",
-  "version": "3.0.0",
+  "version": "3.0.0-rc.10",
   "description": "TypeScript SDK for creating and managing Obol Distributed Validators, built on viem.",
   "bugs": {
     "url": "https://github.com/obolnetwork/obol-sdk/issues"

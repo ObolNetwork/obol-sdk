@@ -2,20 +2,21 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### [v3.0.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v3.0.0)
+#### [v3.0.0-rc.10](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.9...v3.0.0-rc.10)
 
-> 23 October 2026
+> 27 October 2026
 
-The viem-native SDK: prepare, then send. Every operation, its checks, outputs and error codes are specified in
-`spec/`; [MIGRATION.md](MIGRATION.md) maps every 2.x method and export to v3. Identical in behaviour to
-3.0.0-rc.9 apart from the default target gas limit; the release candidate entries below list each change.
+The last release candidate before 3.0.0. [MIGRATION.md](MIGRATION.md) "From 3.0.0-rc.9 to rc.10".
 
-**Changed since rc.9**
-
-- Internal refactors for SonarCloud (smaller functions in deposit, lock and simulation code), with every check, error
-  and finding in the same order. No API or behaviour changes.
-- `.sonarcloud.properties` scopes the analysis to the SDK and its tests (not the fuzz harness or generated files).
 - `prepareDefinition` defaults `targetGasLimit` to 200,000,000 (was 36,000,000), matching `charon create cluster`.
+  This changes the `config_hash` of a definition prepared with the default.
+- `ObolApiError` carries `requestId` (the response's `X-Request-Id`, also appended to the message) and, on a 429,
+  `retryAfterSeconds` (from `Retry-After`). A 451 (sanctioned address) gets its own hint instead of "retry later".
+- From 2.15.1: `computeDepositMsgRoot` refuses a deposit pubkey or withdrawal credentials of the wrong length instead
+  of letting SSZ zero-pad or truncate them.
+- Internal refactors for SonarCloud (smaller functions in deposit, lock and simulation code), with every check, error
+  and finding in the same order.
+- `.sonarcloud.properties` scopes the analysis to the SDK and its tests (not the fuzz harness or generated files).
 
 #### [v3.0.0-rc.9](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.8...v3.0.0-rc.9)
 

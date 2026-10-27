@@ -39,7 +39,8 @@ Operation names refer to [`operations.md`](operations.md).
 
 ### Obol API
 
-All carry `status`, `endpoint`, `method`, `body`. `API_*` errors only describe the HTTP exchange; a 2xx answer that
+All carry `status`, `endpoint`, `method`, `body`, and `requestId` when the response has an `X-Request-Id` (also in the
+message; quote it when reporting a problem). `API_*` errors only describe the HTTP exchange; a 2xx answer that
 fails a local check raises the check's own code.
 
 | Code | Meaning | Caller should | 2.15 |
@@ -48,9 +49,9 @@ fails a local check raises the check's own code.
 | `API_UNAUTHORIZED` | 401 / 403: signature or address not accepted; also terms not accepted. | check the wallet, chain and `terms.accept` | `UnauthorizedError` |
 | `API_NOT_FOUND` | 404. | check the hash / address and chain; a lock may not exist yet | `NotFoundError` |
 | `API_CONFLICT` | 409: the resource exists (definition, terms acceptance, ENR). | read the existing resource instead | `ConflictError` |
-| `API_RATE_LIMIT` | 429. | back off and retry | `RateLimitError` |
+| `API_RATE_LIMIT` | 429. `retryAfterSeconds` from `Retry-After` when present. | wait `retryAfterSeconds` (else back off), then retry | `RateLimitError` |
 | `API_TIMEOUT` | No response within `timeoutMs`. The API may have processed a write. | read the resource before retrying a write | `RequestTimeoutError` |
-| `API_ERROR` | Any other non-2xx status, or an unparsable body. | retry later | `ObolApiError` |
+| `API_ERROR` | Any other non-2xx status, or an unparsable body. A 451 means an address in the request is sanctioned. | retry later with backoff (not a 451) | `ObolApiError` |
 | `API_RESPONSE_MISMATCH` | A 2xx answer is not for what was asked (a definition or lock whose hash differs from the requested one). | report it; do not use the answer | new |
 
 ### Cluster

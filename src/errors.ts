@@ -71,22 +71,42 @@ export class ObolApiError<
   readonly endpoint: string;
   readonly method: string;
   readonly body: unknown;
+  /** The response's `X-Request-Id`, when the API sent one. */
+  readonly requestId?: string;
+  /** Seconds to wait before retrying, from a 429's `Retry-After`. */
+  readonly retryAfterSeconds?: number;
 
   constructor(
     code: C,
     message: string,
-    http: { status: number; endpoint: string; method: string; body?: unknown },
+    http: {
+      status: number;
+      endpoint: string;
+      method: string;
+      body?: unknown;
+      requestId?: string;
+      retryAfterSeconds?: number;
+    },
     options: { hint?: string; cause?: unknown } = {},
   ) {
     super(code, message, {
       ...options,
-      details: { status: http.status, endpoint: http.endpoint },
+      details: {
+        status: http.status,
+        endpoint: http.endpoint,
+        ...(http.requestId !== undefined ? { requestId: http.requestId } : {}),
+        ...(http.retryAfterSeconds !== undefined
+          ? { retryAfterSeconds: http.retryAfterSeconds }
+          : {}),
+      },
     } as unknown as ObolErrorOptions<C>);
     this.name = 'ObolApiError';
     this.status = http.status;
     this.endpoint = http.endpoint;
     this.method = http.method;
     this.body = http.body;
+    this.requestId = http.requestId;
+    this.retryAfterSeconds = http.retryAfterSeconds;
   }
 }
 

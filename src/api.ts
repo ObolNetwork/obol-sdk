@@ -35,6 +35,28 @@ const HINT_FOR_CODE: Record<string, string> = {
   API_RATE_LIMIT: 'Back off and retry',
 };
 
+/** Statuses whose advice differs from their code's. */
+const HINT_FOR_STATUS: Record<number, string> = {
+  451: 'An address in the request is on a sanctions list; the API will not accept it',
+};
+
+/**
+ * `Retry-After` in seconds: a number of seconds or an HTTP date. Browsers
+ * only expose it (and `X-Request-Id`) if the API lists it in
+ * `Access-Control-Expose-Headers`.
+ */
+export const retryAfterSeconds = (
+  value: string | null,
+  now: number = Date.now(),
+): number | undefined => {
+  if (value === null || value.trim() === '') return undefined;
+  if (/^\d+$/.test(value.trim())) return Number(value.trim());
+  const date = Date.parse(value);
+  return Number.isNaN(date)
+    ? undefined
+    : Math.max(0, Math.ceil((date - now) / 1000));
+};
+
 /** Set by the build (tsup `define`) from package.json; `dev` from source. */
 declare const __OBOL_SDK_VERSION__: string | undefined;
 export const SDK_VERSION =
@@ -117,13 +139,23 @@ export class ObolApi {
       if (response.ok) return body as R;
       const code = CODE_FOR_STATUS[response.status] ?? 'API_ERROR';
       const detail = apiMessage(body);
+      const requestId = response.headers.get('x-request-id') ?? undefined;
       throw new ObolApiError(
         code,
         `Obol API ${method} ${endpoint} failed with ${response.status}${
           detail !== undefined ? `: ${detail}` : ''
-        }`,
-        { ...http, status: response.status, body },
-        { hint: HINT_FOR_CODE[code] },
+        }${requestId !== undefined ? ` (request ${requestId})` : ''}`,
+        {
+          ...http,
+          status: response.status,
+          body,
+          requestId,
+          retryAfterSeconds:
+            response.status === 429
+              ? retryAfterSeconds(response.headers.get('retry-after'))
+              : undefined,
+        },
+        { hint: HINT_FOR_STATUS[response.status] ?? HINT_FOR_CODE[code] },
       );
     } catch (error) {
       if (timedOut) {
