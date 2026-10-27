@@ -20,8 +20,7 @@ import { validateClusterLockInWorker } from './verification/parallelPool.js';
  * @param safeRpcUrl - Optional RPC URL for Safe Wallet signature verification.
  *   If omitted, falls back to the `RPC_MAINNET` / `RPC_HOODI` / etc. env vars.
  * @returns `true` if the lock is cryptographically valid; `false` if invalid
- *   (e.g. missing keys, invalid signatures, hash mismatches) or its version
- *   is below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0).
+ *   (e.g. missing keys, invalid signatures, hash mismatches).
  * @throws {@link ClusterLockValidationTimeoutError} when validation exceeds a
  *   worker deadline (whole-lock or per-chunk BLS workers on large clusters).
  *   HTTP APIs should map this to **504 Gateway Timeout**, not **400**.

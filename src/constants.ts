@@ -132,11 +132,12 @@ export const DKG_ALGORITHM = 'default';
 export const CONFIG_VERSION = 'v1.11.0';
 
 /**
- * Minimum cluster definition / lock version the SDK creates, joins or
- * validates. Older versions (v1.6.0 to v1.8.0) are still hashed so existing
- * locks can be read, but {@link Client.createClusterDefinition},
- * {@link Client.acceptClusterDefinition} and `validateClusterLock` reject
- * them. obol-api applies the same minimum.
+ * Minimum cluster definition version the SDK creates or joins.
+ * {@link Client.createClusterDefinition} and
+ * {@link Client.acceptClusterDefinition} reject older versions. Existing
+ * v1.6.0 to v1.8.0 locks are still hashed and verified by
+ * `validateClusterLock`, so running clusters keep working (e.g.
+ * `getDepositData`). obol-api applies the same minimum to new locks.
  */
 export const MIN_SUPPORTED_CLUSTER_VERSION = 'v1.10.0';
 

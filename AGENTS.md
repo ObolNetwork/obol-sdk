@@ -210,7 +210,7 @@ client.exit.*         // Verify/recombine exit signatures
 
 **`validateClusterLock`** (`import { validateClusterLock } from '@obolnetwork/obol-sdk'`)
 
-Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules. Locks below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0) return `false`: the SDK and obol-api no longer create or accept legacy (v1.6–v1.8) definitions and locks, even though the hashing code for them remains.
+Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules. Existing v1.6–v1.8 locks still validate, so running clusters keep working; only creating or joining a definition below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0) is refused.
 
 ```typescript
 import { validateClusterLock } from '@obolnetwork/obol-sdk';
