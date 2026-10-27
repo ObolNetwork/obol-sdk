@@ -1,8 +1,11 @@
 // @ts-nocheck
 import { Interface, id, AbiCoder } from 'ethers';
 import { OVMFactoryContract } from '../../src/abi/OVM';
+import { splitMainEthereumAbi } from '../../src/abi/SplitMain';
 import {
   extractOvmAddressFromReceipt,
+  extractSplitAddressFromReceipt,
+  predictSplitterAddress,
   receiptMatchesSafeTx,
   resolveOvmAddressFromListenerArgs,
 } from '../../src/splits/splitHelpers';
@@ -195,5 +198,63 @@ describe('receiptMatchesSafeTx', () => {
       false,
     );
     expect(receiptMatchesSafeTx(null, SAFE_ADDRESS, SAFE_TX_HASH)).toBe(false);
+  });
+});
+
+describe('extractSplitAddressFromReceipt', () => {
+  const splitMainInterface = new Interface(splitMainEthereumAbi);
+  const SPLIT_MAIN = CHAIN_CONFIGURATION[560048].SPLITMAIN_CONTRACT.address;
+  const SPLIT = '0x0c89A5ba7FcEfA6e7A67f3F3eC3e2EA9B38924bA';
+  const createSplitLog = (split = SPLIT, address = SPLIT_MAIN) => {
+    const encoded = splitMainInterface.encodeEventLog('CreateSplit', [split]);
+    return { address, topics: encoded.topics, data: encoded.data };
+  };
+
+  it('reads the split from SplitMain among other logs', () => {
+    const receipt = {
+      logs: [
+        { address: TEST_ADDRESSES.SPLIT_OWNER, topics: [id('Other()')] },
+        createSplitLog(),
+      ],
+    };
+    expect(extractSplitAddressFromReceipt(receipt, SPLIT_MAIN)).toBe(SPLIT);
+  });
+
+  it('ignores a CreateSplit event emitted by another contract', () => {
+    const receipt = {
+      logs: [
+        createSplitLog(
+          TEST_ADDRESSES.REWARD_RECIPIENT_1,
+          TEST_ADDRESSES.SPLIT_OWNER,
+        ),
+        createSplitLog(),
+      ],
+    };
+    expect(extractSplitAddressFromReceipt(receipt, SPLIT_MAIN)).toBe(SPLIT);
+  });
+
+  it('throws when SplitMain emitted no CreateSplit event', () => {
+    const receipt = {
+      logs: [createSplitLog(SPLIT, TEST_ADDRESSES.SPLIT_OWNER)],
+    };
+    expect(() => extractSplitAddressFromReceipt(receipt, SPLIT_MAIN)).toThrow(
+      'could not be extracted',
+    );
+  });
+});
+
+describe('predictSplitterAddress', () => {
+  it('refuses to predict a mutable split address', async () => {
+    await expect(
+      predictSplitterAddress({
+        signer: {},
+        accounts: [TEST_ADDRESSES.REWARD_RECIPIENT_1],
+        percentAllocations: [1e6],
+        chainId: 560048,
+        distributorFee: 0,
+        controllerAddress: TEST_ADDRESSES.SPLIT_OWNER,
+        provider: {},
+      }),
+    ).rejects.toThrow('mutable splits');
   });
 });
