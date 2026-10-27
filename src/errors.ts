@@ -11,6 +11,8 @@ const RESERVED_ERROR_FIELDS = new Set([
   'method',
   'body',
   'hint',
+  'requestId',
+  'retryAfterSeconds',
 ]);
 
 /** Options for constructing an {@link ObolApiError}. */
@@ -25,6 +27,11 @@ export interface ObolApiErrorInit {
   body?: unknown;
   /** Short, actionable suggestion for the caller. */
   hint?: string;
+  /**
+   * Response headers, read for `X-Request-Id` ({@link ObolApiError.requestId})
+   * and, on a 429, `Retry-After` ({@link RateLimitError.retryAfterSeconds}).
+   */
+  headers?: Pick<Headers, 'get'>;
 }
 
 /**
@@ -52,6 +59,11 @@ export class ObolApiError extends Error {
   body: unknown;
   /** Short, actionable suggestion for the caller. */
   hint?: string;
+  /**
+   * The response's `X-Request-Id` header, when present. Quote it when
+   * reporting a failed request to Obol so it can be found in the API logs.
+   */
+  requestId?: string;
   /** Status code reported in the error body (Obol API errors include it). */
   statusCode?: number;
   /** Additional fields copied from the error body. */
@@ -66,6 +78,10 @@ export class ObolApiError extends Error {
     this.body = init.body;
     if (init.hint !== undefined) {
       this.hint = init.hint;
+    }
+    const requestId = init.headers?.get('X-Request-Id');
+    if (typeof requestId === 'string' && requestId !== '') {
+      this.requestId = requestId;
     }
     if (isRecord(init.body)) {
       for (const key of Object.keys(init.body)) {
@@ -116,9 +132,20 @@ export class NotFoundError extends ObolApiError {
   }
 }
 
-/** Thrown when the Obol API responds with 429. */
+/**
+ * Thrown when the Obol API responds with 429.
+ *
+ * Wait {@link RateLimitError.retryAfterSeconds} seconds (when set) before
+ * retrying.
+ */
 export class RateLimitError extends ObolApiError {
   name = 'RateLimitError';
+  /**
+   * Seconds to wait before retrying, from the response's `Retry-After` header
+   * (delta-seconds, or an HTTP-date converted to seconds from now, at least
+   * 0). Undefined when the header is absent or unparseable.
+   */
+  retryAfterSeconds?: number;
 
   constructor(init: ObolApiErrorInit) {
     super({
@@ -126,7 +153,39 @@ export class RateLimitError extends ObolApiError {
       ...init,
     });
     Object.setPrototypeOf(this, RateLimitError.prototype);
+    const retryAfterSeconds = parseRetryAfter(init.headers?.get('Retry-After'));
+    if (retryAfterSeconds !== undefined) {
+      this.retryAfterSeconds = retryAfterSeconds;
+    }
   }
+}
+
+/**
+ * Parses a `Retry-After` header value: delta-seconds, or an HTTP-date
+ * converted to whole seconds from `now` (at least 0).
+ */
+function parseRetryAfter(
+  value: string | null | undefined,
+  now: number = Date.now(),
+): number | undefined {
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed === '') {
+    return undefined;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isSafeInteger(seconds) ? seconds : undefined;
+  }
+  // HTTP-dates always name a day or month; this keeps Date.parse from
+  // reading other strings (e.g. `-5`, `1.5`) as dates.
+  if (!/[a-z]/i.test(trimmed)) {
+    return undefined;
+  }
+  const date = Date.parse(trimmed);
+  if (Number.isNaN(date)) {
+    return undefined;
+  }
+  return Math.max(0, Math.ceil((date - now) / 1000));
 }
 
 const DEFAULT_CONFLICT_MESSAGE = 'This Cluster has been already posted.';
