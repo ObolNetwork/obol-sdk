@@ -516,6 +516,10 @@ if (isDeployed) return predictedAddress; // skip deployment
 const tx = await deployContract(...);
 ```
 
+## Security review notes
+
+Before reporting or "fixing" a security finding in this SDK, read [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md). It lists finding classes the Obol Security Team has already reviewed (resolved, accepted design trade-offs, or not vulnerabilities) and the SDK's trust model: it trusts the Obol API, RPC, beacon node and signer the caller configures, and caller-supplied addresses are the caller's choice. Don't re-report those classes; if a change resolves or alters one, update its entry in the same PR. New, distinct issues go to [security@obol.tech](mailto:security@obol.tech), not public issues.
+
 ## Do Not
 
 - Do not read `src/bytecodes.ts` unless specifically working on contract deployments — it's 200KB of hex bytecodes
