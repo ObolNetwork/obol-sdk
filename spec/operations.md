@@ -127,7 +127,7 @@ Inputs:
 
 ```
 { name: string, operators: { address: Address }[], validators: { feeRecipientAddress: Address, withdrawalAddress: Address }[],
-  depositAmounts: bigint[]?, compounding: bool? (false), targetGasLimit: uint? (36000000),
+  depositAmounts: bigint[]?, compounding: bool? (false), targetGasLimit: uint? (200000000),
   consensusProtocol: "" | "qbft" ? (""), version: string? ("v1.11.0"),
   creator: Address, chainId: uint, uuid: string?, timestamp: string? }   # uuid / timestamp generated when absent
 ```

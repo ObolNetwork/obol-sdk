@@ -80,7 +80,7 @@ describe('cluster.prepareDefinition', () => {
       ],
       deposit_amounts: ['32000000000'],
       compounding: false,
-      target_gas_limit: 36_000_000,
+      target_gas_limit: 200_000_000,
       consensus_protocol: '',
       fork_version: '0x10000910',
       dkg_algorithm: 'default',

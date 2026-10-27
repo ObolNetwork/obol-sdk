@@ -17,7 +17,7 @@ import {
 } from './schema.js';
 
 export const DKG_ALGORITHM = 'default';
-export const DEFAULT_TARGET_GAS_LIMIT = 36_000_000;
+export const DEFAULT_TARGET_GAS_LIMIT = 200_000_000;
 
 const DEPOSIT_AMOUNTS = [1n * ETH, 32n * ETH];
 const COMPOUNDING_DEPOSIT_AMOUNTS = [1n * ETH, 8n * ETH, 32n * ETH, 256n * ETH];
