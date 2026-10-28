@@ -19,7 +19,7 @@ If you believe you have found a new, distinct issue, please report it to the Obo
 
 ## Cluster Definitions & Locks
 
-- **Legacy cluster versions (< v1.10.0):** Reports that v1.6.0 to v1.8.0 definitions or locks have weaker signature coverage. The SDK still hashes and verifies them so existing clusters stay readable, and `cluster.prepareDefinition` accepts these versions when asked explicitly (the default is v1.11.0). The Obol API rejects new definitions and locks below v1.10.0, so such a cluster cannot be published through it.
+- **Legacy cluster versions (< v1.10.0):** Reports that v1.6.0 to v1.8.0 definitions or locks have weaker signature coverage. `cluster.prepareDefinition` creates only v1.10.0 and later, and the Obol API rejects new definitions and locks below v1.10.0. The SDK still hashes and verifies the older versions so existing clusters stay readable.
 - **`cluster.verifyLock` versus Charon:** `cluster.verifyLock` and `isValidLock` cover the distributed-validator-specs lock checks implemented in the SDK. Charon applies further runtime rules, so a lock that passes here and is rejected by Charon (or a rule enforced only by Charon) is not a vulnerability. Charon is the final gate before a cluster operates. `level: 'attested'` deliberately skips the BLS checks Charon performed in the DKG before the operators signed the lock hash.
 - **Lock verification cost:** Verifying a large lock is CPU-bound and runs on the calling thread (pure JS by default; the native `@obolnetwork/obol-sdk/blst` backend on Node servers). It yields every `yieldMs` and stops on `signal`, but has no built-in size, time or concurrency limits: those are the responsibility of the service calling it with untrusted input.
 
