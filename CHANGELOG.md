@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v2.15.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v2.15.2)
+
+> 28 October 2026
 
 - fix(verification): `verifyDepositPayloads` (used by `eoa.deposit`, `splits.deposit` and `getDepositData`) requires exact lengths for `pubkey`, `withdrawal_credentials`, `signature` and `deposit_data_root` before hashing, and `computeDepositMsgRoot` for `pubkey` and `withdrawal_credentials`; short or overlong values were padded or truncated by SSZ and could pass with a valid root and signature [`#253`](https://github.com/ObolNetwork/obol-sdk/pull/253)
 - fix: requests send `Content-Type: application/json` only when they have a body, and `User-Agent: Obol-SDK/<version>` only in Node, so a browser GET to the Obol API is a simple CORS request without a preflight; caller headers still override the defaults
