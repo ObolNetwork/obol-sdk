@@ -37,6 +37,10 @@ function assertAllowedBaseUrl(baseUrl: string): string {
   return candidate;
 }
 
+const IS_NODE =
+  typeof (globalThis as { process?: { versions?: { node?: unknown } } }).process
+    ?.versions?.node === 'string';
+
 /** Default Obol API request timeout in milliseconds. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
@@ -119,8 +123,13 @@ export abstract class Base {
       ...options,
       signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': `Obol-SDK/${SDK_VERSION}`,
+        // Content-Type only with a body, and User-Agent only in Node: either
+        // header makes a browser's cross-origin GET non-simple, costing a CORS
+        // preflight (and browsers set their own User-Agent).
+        ...(options?.body != null
+          ? { 'Content-Type': 'application/json' }
+          : {}),
+        ...(IS_NODE ? { 'User-Agent': `Obol-SDK/${SDK_VERSION}` } : {}),
         ...options?.headers,
       },
     };
@@ -142,6 +151,7 @@ export abstract class Base {
         endpoint,
         method,
         body,
+        headers: response.headers,
       });
     } catch (e: any) {
       if (timedOut) {

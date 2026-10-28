@@ -44,6 +44,11 @@ const textResponse = (status: number, text: string): Response =>
     text: async () => text,
   }) as unknown as Response;
 
+const withHeaders = (
+  response: Response,
+  headers: Record<string, string>,
+): Response => ({ ...response, headers: new Headers(headers) }) as Response;
+
 const makeSigner = () => ({
   getAddress: jest.fn().mockResolvedValue(SIGNER_ADDRESS),
   signTypedData: jest.fn().mockResolvedValue('0xsignature'),
@@ -513,5 +518,151 @@ describe('provider-only reads', () => {
       data: '0x',
     });
     expect(resolveWithdrawalFee({ currentFee: BigInt(1) })).toBe(BigInt(2));
+  });
+});
+
+describe('response headers on Obol API errors', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const fetchError = async (response: Response) => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(response);
+    const client = new Client({ baseUrl: BASE_URL, chainId: 560048 });
+    return await client.getClusterDefinition(CONFIG_HASH).catch(e => e);
+  };
+
+  const rateLimited = (headers: Record<string, string>) =>
+    withHeaders(
+      jsonResponse(429, { statusCode: 429, message: 'Too Many Requests' }),
+      headers,
+    );
+
+  it('reads Retry-After delta-seconds on a 429', async () => {
+    const error = await fetchError(rateLimited({ 'Retry-After': '30' }));
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error.retryAfterSeconds).toBe(30);
+  });
+
+  it('converts a Retry-After HTTP-date to seconds from now, at least 0', async () => {
+    jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.parse('Tue, 27 Oct 2026 12:00:00 GMT'));
+
+    const future = await fetchError(
+      rateLimited({ 'Retry-After': 'Tue, 27 Oct 2026 12:02:00 GMT' }),
+    );
+    expect(future.retryAfterSeconds).toBe(120);
+
+    const past = await fetchError(
+      rateLimited({ 'Retry-After': 'Tue, 27 Oct 2026 11:00:00 GMT' }),
+    );
+    expect(past.retryAfterSeconds).toBe(0);
+  });
+
+  it('leaves retryAfterSeconds undefined when Retry-After is absent or unparseable', async () => {
+    const absent = await fetchError(rateLimited({}));
+    expect(absent).toBeInstanceOf(RateLimitError);
+    expect(absent.retryAfterSeconds).toBeUndefined();
+
+    for (const value of ['soon', '-5', '1.5']) {
+      const error = await fetchError(rateLimited({ 'Retry-After': value }));
+      expect(error.retryAfterSeconds).toBeUndefined();
+    }
+
+    // Mocked responses without headers (as before) still work.
+    const noHeaders = await fetchError(
+      jsonResponse(429, { statusCode: 429, message: 'Too Many Requests' }),
+    );
+    expect(noHeaders.retryAfterSeconds).toBeUndefined();
+    expect(noHeaders.requestId).toBeUndefined();
+  });
+
+  it('captures X-Request-Id on a 404', async () => {
+    const error = await fetchError(
+      withHeaders(jsonResponse(404, { statusCode: 404, message: 'nope' }), {
+        'X-Request-Id': '8d2f1c3a9b7e4f00-AMS',
+      }),
+    );
+
+    expect(error).toBeInstanceOf(NotFoundError);
+    expect(error.requestId).toBe('8d2f1c3a9b7e4f00-AMS');
+    expect(error.message).toBe('nope');
+  });
+
+  it('captures X-Request-Id on a 500 with a non-JSON body', async () => {
+    const error = await fetchError(
+      withHeaders(textResponse(500, 'Internal Server Error'), {
+        'x-request-id': 'req-500',
+      }),
+    );
+
+    expect(error).toBeInstanceOf(ObolApiError);
+    expect(error.status).toBe(500);
+    expect(error.body).toBe('Internal Server Error');
+    expect(error.requestId).toBe('req-500');
+  });
+
+  it('does not let body fields named requestId or retryAfterSeconds overwrite the headers', async () => {
+    const body = {
+      statusCode: 429,
+      message: 'slow down',
+      requestId: 'from-body',
+      retryAfterSeconds: 9999,
+    };
+    const error = await fetchError(
+      withHeaders(jsonResponse(429, body), {
+        'X-Request-Id': 'from-header',
+        'Retry-After': '5',
+      }),
+    );
+    expect(error.requestId).toBe('from-header');
+    expect(error.retryAfterSeconds).toBe(5);
+    expect(error.body).toEqual(body);
+
+    // Without the headers, the body fields are not copied either.
+    const bare = await fetchError(jsonResponse(429, body));
+    expect(bare.requestId).toBeUndefined();
+    expect(bare.retryAfterSeconds).toBeUndefined();
+  });
+});
+
+describe('request headers', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const sentHeaders = async (options?: RequestInit) => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(jsonResponse(200, {}));
+    const client = new Client({ baseUrl: BASE_URL, chainId: 560048 });
+    await client['request']('/v1/test', options);
+    return fetchSpy.mock.calls[0][1].headers;
+  };
+
+  it('sends no Content-Type on a GET, so browsers skip the CORS preflight', async () => {
+    const headers = await sentHeaders();
+    expect(headers).not.toHaveProperty('Content-Type');
+    expect(headers['User-Agent']).toMatch(/^Obol-SDK\//);
+  });
+
+  it('sends Content-Type: application/json with a body', async () => {
+    const headers = await sentHeaders({
+      method: 'POST',
+      body: JSON.stringify({ a: 1 }),
+    });
+    expect(headers['Content-Type']).toBe('application/json');
+  });
+
+  it("lets the caller's headers override the defaults", async () => {
+    const headers = await sentHeaders({
+      method: 'POST',
+      body: 'x',
+      headers: { 'Content-Type': 'text/plain', Authorization: 'Bearer 0x01' },
+    });
+    expect(headers['Content-Type']).toBe('text/plain');
+    expect(headers.Authorization).toBe('Bearer 0x01');
   });
 });

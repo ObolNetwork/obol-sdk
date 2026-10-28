@@ -269,7 +269,7 @@ Bench chunk workers after build: `node test/perf/parallelBench.mjs`.
 
 ### Error Classes (`src/errors.ts`)
 
-API responses: **ObolApiError** (`status`, `endpoint`, `method`, `body`, `hint`) with subclasses **ValidationError** (400/422), **UnauthorizedError** (401/403), **NotFoundError** (404), **ConflictError** (409, duplicate resource), **RateLimitError** (429); **RequestTimeoutError** after `timeoutMs`.
+API responses: **ObolApiError** (`status`, `endpoint`, `method`, `body`, `hint`, `requestId` from `X-Request-Id`) with subclasses **ValidationError** (400/422), **UnauthorizedError** (401/403), **NotFoundError** (404), **ConflictError** (409, duplicate resource), **RateLimitError** (429, `retryAfterSeconds` from `Retry-After`); **RequestTimeoutError** after `timeoutMs`.
 
 Local checks extend **ObolSdkError** (`code`, `hint`):
 - **ChainMismatchError**: Signer's provider is on a different chain than the client (checked before every tx / chain-bound EIP-712 signature via `assertSignerChain` in `src/utils.ts`)
