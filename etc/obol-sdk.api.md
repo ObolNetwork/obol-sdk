@@ -53,6 +53,8 @@ export type ApiErrorCode = 'API_VALIDATION' | 'API_UNAUTHORIZED' | 'API_NOT_FOUN
 export interface ApiErrorDetails {
     // (undocumented)
     endpoint: string;
+    requestId?: string;
+    retryAfterSeconds?: number;
     // (undocumented)
     status: number;
 }
@@ -1029,6 +1031,8 @@ export class ObolApiError<C extends ApiErrorCode = ApiErrorCode> extends ObolErr
         endpoint: string;
         method: string;
         body?: unknown;
+        requestId?: string;
+        retryAfterSeconds?: number;
     }, options?: {
         hint?: string;
         cause?: unknown;
@@ -1039,6 +1043,8 @@ export class ObolApiError<C extends ApiErrorCode = ApiErrorCode> extends ObolErr
     readonly endpoint: string;
     // (undocumented)
     readonly method: string;
+    readonly requestId?: string;
+    readonly retryAfterSeconds?: number;
     // (undocumented)
     readonly status: number;
 }
