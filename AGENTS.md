@@ -204,7 +204,7 @@ client.exit.*         // Verify/recombine exit signatures
 - `getWithdrawalRequestFee(provider)` / `resolveWithdrawalFee(...)` (exported) read and bound the EIP-7002 withdrawal request fee. Default fee when omitted: 2× the current fee for `splits.requestWithdrawal` (the OVM refunds the excess), exactly the current fee for `eoa.requestWithdrawal` (the EIP-7002 contract keeps any excess).
 - Contract-wallet signers (a Safe over WalletConnect) are supported on all four deposit / withdrawal methods: the SDK waits for the Safe's `ExecutionSuccess` (up to 30 minutes) and returns the executed hash; `onSent` reports the Safe's own hash with `contractWallet: true`.
 
-**Sent transactions** (`splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal`, `incentives.claimIncentives`): an optional second argument `{ onSent }` (`WriteOptions`) is called with `{ hash, index, contractWallet }` as each transaction is broadcast, before its receipt. If the call fails after something was broadcast it throws `TransactionSubmissionError` with `txHashes` (mined), `pendingTxHash` (sent, not confirmed), `pendingStatus` (`reverted`: nothing moved, retry is safe; `unconfirmed`: may still be mined) and `cause`; failures before sending throw as before. Deploy methods are not covered: they are idempotent (predicted addresses), so re-running them is safe.
+**Sent transactions** (`splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal`, `incentives.claimIncentives`): an optional second argument `{ onSent }` (`WriteOptions`) is called with `{ hash, index, contractWallet }` as each transaction is broadcast, before its receipt. If the call fails after something was broadcast it throws `TransactionSubmissionError` with `txHashes` (mined), `pendingTxHash` (sent, not confirmed), `pendingStatus` (`reverted`: nothing moved, retry is safe; `unconfirmed`: may still be mined) and `cause`; failures before sending throw as before. Deploy methods are not covered: they are idempotent (predicted addresses), so re-running them is safe. The exception is SplitMain (v1) mutable splits (`createObolRewardsSplit` / `createObolTotalSplit` with a `controllerAddress`): their address depends on SplitMain's nonce, so they are never predicted; the split is deployed first and its address read from the `CreateSplit` event, and each call deploys a new one.
 
 ### Standalone Exports
 
@@ -269,7 +269,7 @@ Bench chunk workers after build: `node test/perf/parallelBench.mjs`.
 
 ### Error Classes (`src/errors.ts`)
 
-API responses: **ObolApiError** (`status`, `endpoint`, `method`, `body`, `hint`) with subclasses **ValidationError** (400/422), **UnauthorizedError** (401/403), **NotFoundError** (404), **ConflictError** (409, duplicate resource), **RateLimitError** (429); **RequestTimeoutError** after `timeoutMs`.
+API responses: **ObolApiError** (`status`, `endpoint`, `method`, `body`, `hint`, `requestId` from `X-Request-Id`) with subclasses **ValidationError** (400/422), **UnauthorizedError** (401/403), **NotFoundError** (404), **ConflictError** (409, duplicate resource), **RateLimitError** (429, `retryAfterSeconds` from `Retry-After`); **RequestTimeoutError** after `timeoutMs`.
 
 Local checks extend **ObolSdkError** (`code`, `hint`):
 - **ChainMismatchError**: Signer's provider is on a different chain than the client (checked before every tx / chain-bound EIP-712 signature via `assertSignerChain` in `src/utils.ts`)
@@ -515,6 +515,10 @@ if (isDeployed) return predictedAddress; // skip deployment
 // Deploy if not exists
 const tx = await deployContract(...);
 ```
+
+## Security review notes
+
+Before reporting or "fixing" a security finding in this SDK, read [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md). It lists finding classes the Obol Security Team has already reviewed (resolved, accepted design trade-offs, or not vulnerabilities) and the SDK's trust model: it trusts the Obol API, RPC, beacon node and signer the caller configures, and caller-supplied addresses are the caller's choice. Don't re-report those classes; if a change resolves or alters one, update its entry in the same PR. New, distinct issues go to [security@obol.tech](mailto:security@obol.tech), not public issues.
 
 ## Do Not
 

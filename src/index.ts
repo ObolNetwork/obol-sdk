@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { ZeroAddress } from 'ethers';
 import { Base, type BaseConfig } from './base.js';
 import {
   CreatorConfigHashSigningTypes,
@@ -118,6 +119,14 @@ export {
   type LockDepositData,
 } from './deposits/lockDeposits.js';
 export { ENR } from '@chainsafe/enr';
+
+/**
+ * Whether a SplitMain (v1) split with this controller is mutable. SplitMain
+ * deploys mutable splits with CREATE, so their address cannot be predicted
+ * safely; immutable splits use CREATE2 over their recipients and fees.
+ */
+const isMutableSplit = (controllerAddress: string): boolean =>
+  controllerAddress.toLowerCase() !== ZeroAddress;
 
 /**
  * Primary entrypoint for the Obol SDK. Use this class to create, manage,
@@ -393,6 +402,10 @@ export class Client extends Base {
    * - Automatically appends the Obol Retroactive Funding (RAF) recipient at the
    *   configured percentage (default 1%).
    * - Only supported on Mainnet (1) and Hoodi (560048).
+   * - With a `controllerAddress` (a mutable split), the splitter is deployed
+   *   in its own transaction first and the OWR is created with its address in
+   *   a second one, since a mutable split's address cannot be predicted.
+   *   Without one, an immutable splitter and the OWR are deployed together.
    *
    * @param rewardsSplitPayload - Configuration for the OWR and splitter deployment.
    * @returns The deployed OWR address as `withdrawal_address` and the
@@ -503,25 +516,43 @@ export class Client extends Base {
       copiedSplitRecipients,
     );
 
-    const predictedSplitterAddress = await predictSplitterAddress({
-      signer: this.signer,
-      accounts,
-      percentAllocations,
-      chainId: this.chainId,
-      distributorFee: validatedPayload.distributorFee,
-      controllerAddress: validatedPayload.controllerAddress,
-      provider: this.provider,
-    });
-
-    const isSplitterDeployed = await isContractAvailable(
-      predictedSplitterAddress,
-      this.provider as ProviderType,
-    );
+    // The OWR's reward recipient is immutable, so it must be the split this
+    // call creates. Only immutable splits (no controller) have an address
+    // fixed by their recipients; a mutable split's address depends on
+    // SplitMain's nonce, so it is deployed first and the OWR points at the
+    // address from its CreateSplit event. See KNOWN_ISSUES.md.
+    let predictedSplitterAddress: ETH_ADDRESS;
+    let isSplitterDeployed: boolean;
+    if (isMutableSplit(validatedPayload.controllerAddress)) {
+      predictedSplitterAddress = await deploySplitterContract({
+        signer: this.signer,
+        accounts,
+        percentAllocations,
+        chainId: this.chainId,
+        distributorFee: validatedPayload.distributorFee,
+        controllerAddress: validatedPayload.controllerAddress,
+      });
+      isSplitterDeployed = true;
+    } else {
+      predictedSplitterAddress = await predictSplitterAddress({
+        signer: this.signer,
+        accounts,
+        percentAllocations,
+        chainId: this.chainId,
+        distributorFee: validatedPayload.distributorFee,
+        controllerAddress: validatedPayload.controllerAddress,
+        provider: this.provider,
+      });
+      isSplitterDeployed = !!(await isContractAvailable(
+        predictedSplitterAddress,
+        this.provider as ProviderType,
+      ));
+    }
 
     const { withdrawal_address, fee_recipient_address } =
       await handleDeployOWRAndSplitter({
         signer: this.signer,
-        isSplitterDeployed: !!isSplitterDeployed,
+        isSplitterDeployed,
         predictedSplitterAddress,
         accounts,
         percentAllocations,
@@ -545,8 +576,10 @@ export class Client extends Base {
    *
    * - Requires a `signer` with ETH to pay deployment gas.
    * - Sends an on-chain transaction if the splitter is not already deployed (irreversible).
-   * - If the predicted splitter is already deployed, returns the existing address without
-   *   sending a transaction (idempotent).
+   * - Without a `controllerAddress` (an immutable split), if the predicted
+   *   splitter is already deployed, returns the existing address without
+   *   sending a transaction (idempotent). With one (a mutable split), a new
+   *   splitter is deployed on every call.
    * - Automatically appends the Obol RAF recipient.
    * - Only supported on Mainnet (1) and Hoodi (560048).
    *
@@ -632,39 +665,44 @@ export class Client extends Base {
       copiedSplitRecipients,
     );
 
-    const predictedSplitterAddress = await predictSplitterAddress({
-      signer: this.signer,
-      accounts,
-      percentAllocations,
-      chainId: this.chainId,
-      distributorFee: validatedPayload.distributorFee,
-      controllerAddress: validatedPayload.controllerAddress,
-      provider: this.provider,
-    });
-
-    const isSplitterDeployed = await isContractAvailable(
-      predictedSplitterAddress,
-      this.provider as ProviderType,
-    );
-
-    if (!isSplitterDeployed) {
-      const splitterAddress = await deploySplitterContract({
+    // An immutable split (no controller) has an address fixed by its
+    // recipients, so an existing one is reused. A mutable split's address
+    // depends on SplitMain's nonce: code at a predicted address may be someone
+    // else's split, so it is always deployed. See KNOWN_ISSUES.md.
+    if (!isMutableSplit(validatedPayload.controllerAddress)) {
+      const predictedSplitterAddress = await predictSplitterAddress({
         signer: this.signer,
         accounts,
         percentAllocations,
         chainId: this.chainId,
         distributorFee: validatedPayload.distributorFee,
         controllerAddress: validatedPayload.controllerAddress,
+        provider: this.provider,
       });
-      return {
-        withdrawal_address: splitterAddress,
-        fee_recipient_address: splitterAddress,
-      };
+      if (
+        await isContractAvailable(
+          predictedSplitterAddress,
+          this.provider as ProviderType,
+        )
+      ) {
+        return {
+          withdrawal_address: predictedSplitterAddress,
+          fee_recipient_address: predictedSplitterAddress,
+        };
+      }
     }
 
+    const splitterAddress = await deploySplitterContract({
+      signer: this.signer,
+      accounts,
+      percentAllocations,
+      chainId: this.chainId,
+      distributorFee: validatedPayload.distributorFee,
+      controllerAddress: validatedPayload.controllerAddress,
+    });
     return {
-      withdrawal_address: predictedSplitterAddress,
-      fee_recipient_address: predictedSplitterAddress,
+      withdrawal_address: splitterAddress,
+      fee_recipient_address: splitterAddress,
     };
   }
 
