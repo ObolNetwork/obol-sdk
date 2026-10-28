@@ -30,25 +30,25 @@ SplitParams = { recipients: Address[], allocations: bigint[], totalAllocation: b
 Deposit = { pubkey: Pubkey, withdrawalCredentials: Hex32, signature: Hex96, depositDataRoot: Hash32, amount: bigint }
 ```
 
-| `kind` | Operation | `preview` |
-|---|---|---|
-| `deposit` | `deposits.prepareDeposit` | `DepositPreview` |
-| `withdraw` | `ovm.prepareWithdraw` | `WithdrawPreview` |
-| `consolidate` | `ovm.prepareConsolidate` | `ConsolidatePreview` |
-| `distribute` | `ovm.prepareDistribute` | `DistributePreview` |
-| `distribution` | `splits.prepareDistribution` | `DistributionPreview` |
-| `createOvm` | `setup.prepareCreateOvm` | `{ factory }` |
-| `ovmWithSplits` | `setup.prepareOvmWithSplits` | `OvmWithSplitsPreview` |
-| `createSplit` | `splits.prepareCreateSplit`, `setup.prepareCreateSplit` | `{ address, params }` |
-| `claim` | `incentives.prepareClaim` | `{ amount, contractAddress }` |
-| `eoaWithdraw` | `withdrawals.prepareEoaWithdraw` | `EoaWithdrawPreview` |
-| `role` | `ovm.prepareGrantRoles`, `prepareRevokeRoles`, `prepareRenounceRoles` | `{ function, args }` |
-| `ownership` | `ovm.prepareTransfer`, `prepareRequestOwnershipHandover`, `prepareCancelOwnershipHandover`, `prepareCompleteOwnershipHandover` | `{ function, args }` |
-| `recipient` | `ovm.prepareSetPrincipalRecipient`, `prepareSetRewardRecipient` | `{ function, args }` |
-| `principalStake` | `ovm.prepareSetAmountOfPrincipalStake` | `{ function, args, current, next, delta }` |
-| `sweep` | `ovm.prepareSweep` | `{ function, args }` |
-| `withdrawPullBalance` | `ovm.prepareWithdrawPullBalance` | `{ function, args, amount }` |
-| `recoverFunds` | `ovm.prepareRecoverFunds` | `{ function, args }` |
+| `kind`                | Operation                                                                                                                      | `preview`                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| `deposit`             | `deposits.prepareDeposit`                                                                                                      | `DepositPreview`                           |
+| `withdraw`            | `ovm.prepareWithdraw`                                                                                                          | `WithdrawPreview`                          |
+| `consolidate`         | `ovm.prepareConsolidate`                                                                                                       | `ConsolidatePreview`                       |
+| `distribute`          | `ovm.prepareDistribute`                                                                                                        | `DistributePreview`                        |
+| `distribution`        | `splits.prepareDistribution`                                                                                                   | `DistributionPreview`                      |
+| `createOvm`           | `setup.prepareCreateOvm`                                                                                                       | `{ factory }`                              |
+| `ovmWithSplits`       | `setup.prepareOvmWithSplits`                                                                                                   | `OvmWithSplitsPreview`                     |
+| `createSplit`         | `splits.prepareCreateSplit`, `setup.prepareCreateSplit`                                                                        | `{ address, params }`                      |
+| `claim`               | `incentives.prepareClaim`                                                                                                      | `{ amount, contractAddress }`              |
+| `eoaWithdraw`         | `withdrawals.prepareEoaWithdraw`                                                                                               | `EoaWithdrawPreview`                       |
+| `role`                | `ovm.prepareGrantRoles`, `prepareRevokeRoles`, `prepareRenounceRoles`                                                          | `{ function, args }`                       |
+| `ownership`           | `ovm.prepareTransfer`, `prepareRequestOwnershipHandover`, `prepareCancelOwnershipHandover`, `prepareCompleteOwnershipHandover` | `{ function, args }`                       |
+| `recipient`           | `ovm.prepareSetPrincipalRecipient`, `prepareSetRewardRecipient`                                                                | `{ function, args }`                       |
+| `principalStake`      | `ovm.prepareSetAmountOfPrincipalStake`                                                                                         | `{ function, args, current, next, delta }` |
+| `sweep`               | `ovm.prepareSweep`                                                                                                             | `{ function, args }`                       |
+| `withdrawPullBalance` | `ovm.prepareWithdrawPullBalance`                                                                                               | `{ function, args, amount }`               |
+| `recoverFunds`        | `ovm.prepareRecoverFunds`                                                                                                      | `{ function, args }`                       |
 
 - `request.chainId` is the client chain. `request.value` is `0` unless stated.
 - The head block an operation pins its reads to (and scans logs up to) is read with the viem client's block-number
@@ -134,7 +134,9 @@ Inputs:
 
 Checks:
 
-1. `version` is supported, else `PAYLOAD_INVALID` (path `version`). (2.15)
+1. `version` is v1.10.0 or later (`v1.10.0`, `v1.11.0`), else `PAYLOAD_INVALID` (path `version`). Older versions sign less
+   of the definition: they remain hashable and verifiable (`computeConfigHash`, `verifyLock`) for existing clusters, but
+   are not created, and the Obol API rejects them for new clusters.
 2. At least 4 operators; addresses valid, unique case-insensitively; either all set or all empty (solo / Charon
    flows). Else `PAYLOAD_INVALID`. (2.15 `validateUniqueAddresses`)
 3. At least 1 validator; fee recipient and withdrawal addresses non-zero. (2.15)
@@ -475,7 +477,7 @@ Mapping (beacon names): no registry entry and no pending deposit → `new`; a pe
 `pending_deposits`) and no registry entry, or a registry entry in `pending_initialized` / `pending_queued` → `queued`;
 `active_*` → `active`; `exited_*` / `withdrawal_*` → `exited`.
 
-**Which credentials apply** (the *effective credentials*). A registered validator has its own. For a pubkey only in the
+**Which credentials apply** (the _effective credentials_). A registered validator has its own. For a pubkey only in the
 queue, the beacon chain skips queued deposits with an invalid BLS signature until the first valid one creates the
 validator, so the effective credentials are those of the first queued deposit that is not `signatureValid: false` and
 is either `signatureValid: true` or has non-zero credentials (an unchecked zero-credential top-up has no valid
@@ -513,8 +515,8 @@ Sources, in order:
 
 1. API: `POST /v1/validators/:network/deposit-status` with `{ pubkeys }`, at most 500 distinct pubkeys per request
    (the API's limit; larger inputs are batched). Answer `{ validators: [{ pubkey, status, beaconStatus, index,
-   balance, effectiveBalance, activationEpoch, exitEpoch, pendingPartialWithdrawals, withdrawalCredentials,
-   signaturesPending, credentialsConflict, pendingDeposits: [{ amount, withdrawalCredentials, signatureValid }] }] }`,
+balance, effectiveBalance, activationEpoch, exitEpoch, pendingPartialWithdrawals, withdrawalCredentials,
+signaturesPending, credentialsConflict, pendingDeposits: [{ amount, withdrawalCredentials, signatureValid }] }] }`,
    one entry per requested pubkey, amounts and balances as wei decimal
    strings, epochs as decimal strings (`null` for FAR_FUTURE_EPOCH or no registry entry), `pendingPartialWithdrawals`
    the wei sum (`"0"` when none), `null` where there is nothing (obol-api #1047). A malformed epoch or sum is
@@ -525,7 +527,7 @@ Sources, in order:
    (`null` otherwise is malformed); a queue-only entry with checked deposits has `withdrawalCredentials` equal to the
    first validly signed deposit's when every deposit before it is checked, and `null` otherwise (none valid, or a
    `signatureValid: null` before the first valid one), pending or not; once not pending it has no `signatureValid:
-   null`, and `credentialsConflict` matches its validly signed deposits. A signature check that fails on the API side
+null`, and `credentialsConflict` matches its validly signed deposits. A signature check that fails on the API side
    is an HTTP 502 for the pending entries (not cached), handled as any other API failure below.
 2. While that route answers 404 (not deployed yet): with `lockHash`, the interim `GET /v1/state/:lockHash` (with
    `pending_deposit`), which answers by lock: the lock is fetched first, a pubkey not in it is `PAYLOAD_INVALID` (issue
@@ -534,8 +536,8 @@ Sources, in order:
    `reason: "endpoint_unavailable"`, hint: pass `lockHash` or `beaconUrl`).
 3. Chain fallback with `beaconUrl`, when the API is off, fails (any other API error) or lacks the route without
    `lockHash`: `GET /eth/v1/beacon/states/head/pending_deposits`, then `GET
-   /eth/v1/beacon/states/head/pending_partial_withdrawals` (summed per validator index) and `POST
-   /eth/v1/beacon/states/head/validators` (with `validator.activation_epoch`, `exit_epoch`, `effective_balance`); the
+/eth/v1/beacon/states/head/pending_partial_withdrawals` (summed per validator index) and `POST
+/eth/v1/beacon/states/head/validators` (with `validator.activation_epoch`, `exit_epoch`, `effective_balance`); the
    pending queue is read before the registry so a deposit moving from the queue to the registry is not missed (2.16
    `existingDeposits.ts`). A beacon node does not check queued deposit signatures: the signature fields are absent,
    every queued deposit counts as possibly valid, and a queue-only pubkey's `withdrawalCredentials` are its first
@@ -608,6 +610,7 @@ Checks:
 
    `DEPOSIT_ALREADY_QUEUED` is info because a chunked activation deposit is legitimate. An app may treat it as a stop
    for `beaconStatus = "pending_deposit"`.
+
 6. The target contract has code: the OVM (2.15 implicit), or the chain's batch deposit contract
    (`0xcD7a6C118Ac8F6544BC5076F2D8Fb86D2C546756` mainnet, `0x4c9506eE2fCd962f03022D9d8ebf6f7828abEfaf` Hoodi), else
    `CONTRACT_NOT_AVAILABLE`.
@@ -616,7 +619,7 @@ Output: `Prepared<"deposit">[]` (preview `DepositPreview`):
 
 - via ovm: one per deposit (through Multicall3 the OVM would see Multicall3 as the sender, and anyone can call
   Multicall3, so it must not hold `DEPOSIT_ROLE`), `OVM.deposit(pubkey, withdrawal_credentials,
-  signature, deposit_data_root)`, `value = amount`. (2.15 `depositOVM`)
+signature, deposit_data_root)`, `value = amount`. (2.15 `depositOVM`)
 - via batch: one per 500 deposits, `batchDeposit((pubKey, withdrawalCredentials, signature, amount)[])` (the
   contract computes each deposit data root itself; check 1 has already verified ours), `value` = sum of amounts.
   (2.15 `submitEOABatchDeposit`)
@@ -668,7 +671,7 @@ factoryAddress: Address, reason: string, creationTxHash: Hash32? }`. (2.16 `OVM.
    `notObol` / chain ("does not answer the OVM getters"), since every contract the factory creates answers them. A
    failed read → step 4.
 4. Chain: `eth_getLogs` on the factory for `CreateObolValidatorManager(address indexed ovm, address indexed owner,
-   address beneficiary, address rewardRecipient, uint64 principalThreshold)` with `topic1 = ovm`, between the
+address beneficiary, address rewardRecipient, uint64 principalThreshold)` with `topic1 = ovm`, between the
    factory deployment block and head, newest range first, stopping at the first match: found → `obol` / chain with
    `creationTxHash`; none → `notObol` / chain; any failed range → `unknown` / chain. Ranges follow "Log scans" below.
 
@@ -810,10 +813,10 @@ Checks:
    Without a status source: Finding `VALIDATOR_STATUS_UNCHECKED` (info, `checks: ["all"]`). A rule whose data the
    source did not give (an API answer without the epochs or pending partials) is skipped with
    `VALIDATOR_STATUS_UNCHECKED` naming it, for that validator.
-Output: `Prepared<"withdraw">`, preview `{ requests: { pubkey, amount, requestedAmount?, routedAs?, principalPart?,
+   Output: `Prepared<"withdraw">`, preview `{ requests: { pubkey, amount, requestedAmount?, routedAs?, principalPart?,
 rewardPart? }[], totalFee: bigint, maxFeePerRequest: bigint }` with
-`OVM.withdraw(pubKeys, amounts_gwei, maxFeePerWithdrawal = floor(totalFee / n), excessFeeRecipient)`,
-`value = totalFee`. The contract requires `value ≥ maxFeePerWithdrawal × n` and `currentFee ≤ maxFeePerWithdrawal`.
+   `OVM.withdraw(pubKeys, amounts_gwei, maxFeePerWithdrawal = floor(totalFee / n), excessFeeRecipient)`,
+   `value = totalFee`. The contract requires `value ≥ maxFeePerWithdrawal × n` and `currentFee ≤ maxFeePerWithdrawal`.
 
 `routedAs` (`"principal" | "reward" | "mixed"`) says how a distribution right after this request's ETH arrives would
 route it, if nothing else arrives: the routing above applied to `distributable + amount` (for a full exit, `amount` is
@@ -873,21 +876,21 @@ Shared checks, in order: the input checks of the table (the public forwarder che
 provenance as `prepareWithdraw` 3; the sender's authority as below (`OVM_ROLE_MISSING` / `OVM_OWNER_REQUIRED`), read
 on-chain. (2.16 wrappers; authority and forwarder checks new)
 
-| Operation | Contract call | Authority | Input checks |
-|---|---|---|---|
-| `prepareGrantRoles` | `grantRoles(user, roles)` | owner | `user` non-zero and not a public forwarder (`PUBLIC_FORWARDER_AS_ROLE_HOLDER`); `roles` non-zero subset of `OVM_ROLES` |
-| `prepareRevokeRoles` | `revokeRoles(user, roles)` | owner | same |
-| `prepareRenounceRoles` | `renounceRoles(roles)` | sender holds them | `roles` as above |
-| `prepareRequestOwnershipHandover` | `requestOwnershipHandover()` | anyone (the new owner) | – |
-| `prepareCancelOwnershipHandover` | `cancelOwnershipHandover()` | requester | – |
-| `prepareCompleteOwnershipHandover` | `completeOwnershipHandover(pendingOwner)` | owner | `pendingOwner` non-zero and not a public forwarder (`PUBLIC_FORWARDER_AS_OWNER`); `ownershipHandoverExpiresAt(pendingOwner)` > now, else `OWNERSHIP_HANDOVER_NOT_PENDING` |
-| `prepareTransfer` | `transfer(newPrincipalRecipient, newOwner)` (the contract's `beneficiary`) | owner | both non-zero; `newOwner` not a public forwarder (`PUBLIC_FORWARDER_AS_OWNER`) |
-| `prepareSetPrincipalRecipient` | `setBeneficiary(newPrincipalRecipient)` (the contract calls the principal recipient "beneficiary") | owner or `SET_BENEFICIARY` | non-zero |
-| `prepareSetRewardRecipient` | `setRewardRecipient(newRewardRecipient)` | owner or `SET_REWARD` | non-zero |
-| `prepareSetAmountOfPrincipalStake` | `setAmountOfPrincipalStake(amount)` | owner or `SET_BENEFICIARY` | `amount` uint256 wei |
-| `prepareSweep` | `sweep(to, amount)` (the contract's `beneficiary` argument) | anyone; owner when `to` is set | `amount` ≤ principal recipient's pull balance (0 = all); `to` default zero (= principal recipient) |
-| `prepareWithdrawPullBalance` | `withdrawPullBalance(account)` | anyone | `account` non-zero; pull balance 0 → `NOTHING_TO_DISTRIBUTE` |
-| `prepareRecoverFunds` | `recoverFunds(token, recipient)` | owner or `RECOVER_FUNDS` | both non-zero |
+| Operation                          | Contract call                                                                                      | Authority                      | Input checks                                                                                                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepareGrantRoles`                | `grantRoles(user, roles)`                                                                          | owner                          | `user` non-zero and not a public forwarder (`PUBLIC_FORWARDER_AS_ROLE_HOLDER`); `roles` non-zero subset of `OVM_ROLES`                                                    |
+| `prepareRevokeRoles`               | `revokeRoles(user, roles)`                                                                         | owner                          | same                                                                                                                                                                      |
+| `prepareRenounceRoles`             | `renounceRoles(roles)`                                                                             | sender holds them              | `roles` as above                                                                                                                                                          |
+| `prepareRequestOwnershipHandover`  | `requestOwnershipHandover()`                                                                       | anyone (the new owner)         | –                                                                                                                                                                         |
+| `prepareCancelOwnershipHandover`   | `cancelOwnershipHandover()`                                                                        | requester                      | –                                                                                                                                                                         |
+| `prepareCompleteOwnershipHandover` | `completeOwnershipHandover(pendingOwner)`                                                          | owner                          | `pendingOwner` non-zero and not a public forwarder (`PUBLIC_FORWARDER_AS_OWNER`); `ownershipHandoverExpiresAt(pendingOwner)` > now, else `OWNERSHIP_HANDOVER_NOT_PENDING` |
+| `prepareTransfer`                  | `transfer(newPrincipalRecipient, newOwner)` (the contract's `beneficiary`)                         | owner                          | both non-zero; `newOwner` not a public forwarder (`PUBLIC_FORWARDER_AS_OWNER`)                                                                                            |
+| `prepareSetPrincipalRecipient`     | `setBeneficiary(newPrincipalRecipient)` (the contract calls the principal recipient "beneficiary") | owner or `SET_BENEFICIARY`     | non-zero                                                                                                                                                                  |
+| `prepareSetRewardRecipient`        | `setRewardRecipient(newRewardRecipient)`                                                           | owner or `SET_REWARD`          | non-zero                                                                                                                                                                  |
+| `prepareSetAmountOfPrincipalStake` | `setAmountOfPrincipalStake(amount)`                                                                | owner or `SET_BENEFICIARY`     | `amount` uint256 wei                                                                                                                                                      |
+| `prepareSweep`                     | `sweep(to, amount)` (the contract's `beneficiary` argument)                                        | anyone; owner when `to` is set | `amount` ≤ principal recipient's pull balance (0 = all); `to` default zero (= principal recipient)                                                                        |
+| `prepareWithdrawPullBalance`       | `withdrawPullBalance(account)`                                                                     | anyone                         | `account` non-zero; pull balance 0 → `NOTHING_TO_DISTRIBUTE`                                                                                                              |
+| `prepareRecoverFunds`              | `recoverFunds(token, recipient)`                                                                   | owner or `RECOVER_FUNDS`       | both non-zero                                                                                                                                                             |
 
 Previews and findings on these writes:
 
@@ -960,7 +963,7 @@ warehouseBalance: bigint, params: SplitParams | null, paramsSource: Source | "in
 3. Params: the input `params`; else the API (`GET /v1/ovm/:network/:address` lists the params of the OVM's split
    recipients, and a split endpoint may follow); else the chain: the latest `SplitUpdated(Split)` log of the split, or,
    if it never updated, the factory's `SplitCreated(address indexed split, Split splitParams, …)` log with `topic1 =
-   address` (scanned from the factory deployment block, newest first, as "Log scans"). Whatever the source,
+address` (scanned from the factory deployment block, newest first, as "Log scans"). Whatever the source,
    `keccak256(abi.encode((address[], uint256[], uint256, uint16)))` of the params must equal `splitHash`: for input
    params a mismatch is `SPLIT_PARAMS_MISMATCH`; an API or log answer that does not match is discarded and the next
    source tried. No matching params → `params: null`, `paramsSource: null` (not an error; `prepareDistribution` then
@@ -1013,7 +1016,7 @@ Calls (`aggregate3` on Multicall3, in this order):
 
 1. `distributeFunds()` on the OVM if `distributable ≥ minWithdraw` (`allowFailure: false`).
 2. Per split with `distributable ≥ minWithdraw`: `distribute(params, NATIVE_TOKEN, distributor)` (`allowFailure:
-   false`), where `distributable = max(splitBalance + incoming − 1, 0) + max(warehouseBalance − 1, 0)`.
+false`), where `distributable = max(splitBalance + incoming − 1, 0) + max(warehouseBalance − 1, 0)`.
 3. Per withdrawn recipient whose amount (balance after the distributions, minus the 1 wei left) is `≥ minWithdraw`:
    Warehouse `withdraw(owner, NATIVE_TOKEN)` if withdrawals are not paused for it (or it is the transaction origin);
    SplitMain v1 `withdraw(account, 1, [])`. Both `allowFailure: true`: a zero balance or a paused owner reverts that
@@ -1102,12 +1105,12 @@ than one → `OVM_CREATE_EVENT_AMBIGUOUS`. (2.15 matched the event signature on 
 
 Tag: `pure`. Data on top of the builders; each returns the `prepareOvmWithSplits` input.
 
-| Preset | Reward recipient | Principal recipient |
-|---|---|---|
-| `rewardsSplit({ recipients, principalRecipient, owner })` | split: recipients (sum 990000) + RAF 10000 | the given address |
-| `totalSplit({ recipients, owner, principalRecipients? })` | split: recipients + RAF | split: `principalRecipients` (sum 1e6, no RAF) or Split Everything |
-| `solo({ owner, recipient })` | split: recipient 990000 + RAF | `recipient` |
-| `lidoCsm(...)` | per-chain CSM addresses | per-chain CSM addresses |
+| Preset                                                    | Reward recipient                           | Principal recipient                                                |
+| --------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| `rewardsSplit({ recipients, principalRecipient, owner })` | split: recipients (sum 990000) + RAF 10000 | the given address                                                  |
+| `totalSplit({ recipients, owner, principalRecipients? })` | split: recipients + RAF                    | split: `principalRecipients` (sum 1e6, no RAF) or Split Everything |
+| `solo({ owner, recipient })`                              | split: recipient 990000 + RAF              | `recipient`                                                        |
+| `lidoCsm(...)`                                            | per-chain CSM addresses                    | per-chain CSM addresses                                            |
 
 Share rules (vectors `split_shares.json` `ovm_split_params`): reward shares sum to exactly 990000; RAF added with
 10000; Split Everything gives each reward recipient its reward share plus `floor(10000 / n)`, and `10000 mod n` to the
@@ -1144,7 +1147,7 @@ Checks; each failure is an issue `{ code, message, hint }`:
    hashes to the reference build (`DISTRIBUTOR_UNKNOWN`). Stop here if any.
 4. `token()` is the chain's OBOL token (`TOKEN_MISMATCH`).
 5. Folding the proof (sorted-pair keccak256) over `keccak256(abi.encodePacked(uint256 index, address account, uint256
-   amount))` gives `merkleRoot()` (`PROOF_INVALID`).
+amount))` gives `merkleRoot()` (`PROOF_INVALID`).
 6. `isClaimed(index)` (`ALREADY_CLAIMED`); latest block timestamp ≤ `endTime()` (`CLAIM_WINDOW_CLOSED`;
    `CHAIN_READ_FAILED` if the block cannot be read).
 
@@ -1328,9 +1331,9 @@ Input: `Prepared` and `{ from: Address?, blockNumber: bigint | 'latest'?, backen
    - `eth_call`: success or revert only; the result is `limited: true` with Finding `SIMULATION_UNAVAILABLE` naming
      each skipped backend and why (unless `eth_call` was forced). An `eth_call` error that is not an execution failure
      (a revert, out of gas, insufficient funds) is `SIMULATION_FAILED`, not a revert.
-   A forced backend that the node lacks or that fails is `SIMULATION_FAILED`. No gas is charged in any backend, so
-   balance changes exclude gas fees; `gas` reports it apart: `used` from the backend, `estimatedFee = used ×
-   (baseFeePerGas of the simulated block + eth_maxPriorityFeePerGas)`, `null` when either read fails.
+     A forced backend that the node lacks or that fails is `SIMULATION_FAILED`. No gas is charged in any backend, so
+     balance changes exclude gas fees; `gas` reports it apart: `used` from the backend, `estimatedFee = used ×
+(baseFeePerGas of the simulated block + eth_maxPriorityFeePerGas)`, `null` when either read fails.
 7. A revert is not an error: `success: false`, `revertReason` and Finding `SIMULATION_REVERTED`. Revert data is
    decoded with the custom errors of the OVM (and solady `Ownable` / `SafeTransferLib`), the OVM factory, the
    PullSplit factory, the split wallet, the Warehouse and the Merkle distributor, plus `Error(string)` and
@@ -1351,8 +1354,8 @@ Input: `Prepared` and `{ from: Address?, blockNumber: bigint | 'latest'?, backen
    line, `Unrecognised contract 0x1234…abcd emitted Withdraw(…)`, and Finding `SIMULATION_UNTRUSTED_EVENT`. ETH
    balance changes do not depend on events: they come from the trace.
 10. The comparison with `preview` (below); a difference is Finding `SIMULATION_PREVIEW_MISMATCH`. When the simulated
-   block is not `prepared.blockNumber`, its message says the state moved since prepare and to prepare again
-   (`details.stateMoved`).
+    block is not `prepared.blockNumber`, its message says the state moved since prepare and to prepare again
+    (`details.stateMoved`).
 
 Output (`limited: false`, backends `eth_simulateV1` / `debug_traceCall`):
 
@@ -1392,7 +1395,7 @@ findings, summary }`.
   last `RolesUpdated`, `granted` / `revoked` role names); then `value` changes of `amountOfPrincipalStake` and
   `fundsPendingWithdrawal`.
 - `summary`: one line per state change (created contracts, `Validator 0xabcd1234…ef01 full exit requested
-  (irreversible)`, consolidations, deposits, `Role CONSOLIDATION granted to 0x…`, ownership, recipients, values), the
+(irreversible)`, consolidations, deposits, `Role CONSOLIDATION granted to 0x…`, ownership, recipients, values), the
   excess fee refunded by an OVM withdraw / consolidate, then `0x1234…abcd (label) receives 3.200000 ETH` / `pays …`
   per ETH change and `… is credited … in the Warehouse` per Warehouse change. Amounts have 6 decimals (rounded half
   up), below 0.000001 ETH in wei. Deterministic for a given result; no LLM. A revert is one line: `Reverts: <reason>`.
@@ -1400,16 +1403,16 @@ findings, summary }`.
   `differences` the failures (`<what>: preview <x>, simulation <y>`); a preview with nothing comparable compares
   nothing (`ok: true`, `compared: []`); a revert is `ok: false`.
 
-  | Operation (by the `Prepared` kind) | Compared |
-  |---|---|
-  | `ovm.prepareDistribute` | `DistributeFunds` payouts; `amountOfPrincipalStake` change; push: ETH to each recipient; pull: `fundsPendingWithdrawal` change |
-  | `splits.prepareDistribution` | the OVM payouts; each split's `SplitDistributed` amount (none when skipped); each recipient's Warehouse credit from each split (plus its incentive when it is the distributor), its `distributorReward`, and ETH received (from the withdrawal legs, see `prepareDistribution`) |
-  | `ovm.prepareWithdraw` / `prepareConsolidate` | requests (pubkeys, amounts, sources and targets) in order; `value = totalFee`; no request above `maxFeePerRequest`; fees received by the predeploy; the refund received by `excessFeeRecipient` |
-  | `deposits.prepareDeposit` | deposits (pubkeys in order, total); the deposit contract's ETH change; via the OVM: `amountOfPrincipalStake` change |
-  | `withdrawals.prepareEoaWithdraw` | the request from calldata; the fee received by the predeploy |
-  | OVM role and ownership writes | grant / revoke / renounce: the roles after; `setAmountOfPrincipalStake`: before and after; `withdrawPullBalance`: ETH received; `setBeneficiary` / `setRewardRecipient` / `transfer` / `completeOwnershipHandover`: the new recipient and owner; `sweep`: the `Swept` amount |
-  | `setup.prepareOvmWithSplits` / `prepareCreateOvm` / `prepareCreateSplit` | the OVM created and its recipients; the splits created are exactly those the preview marks `created` |
-  | `incentives.prepareClaim` | the `Claimed` amount |
+  | Operation (by the `Prepared` kind)                                       | Compared                                                                                                                                                                                                                                                                        |
+  | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `ovm.prepareDistribute`                                                  | `DistributeFunds` payouts; `amountOfPrincipalStake` change; push: ETH to each recipient; pull: `fundsPendingWithdrawal` change                                                                                                                                                  |
+  | `splits.prepareDistribution`                                             | the OVM payouts; each split's `SplitDistributed` amount (none when skipped); each recipient's Warehouse credit from each split (plus its incentive when it is the distributor), its `distributorReward`, and ETH received (from the withdrawal legs, see `prepareDistribution`) |
+  | `ovm.prepareWithdraw` / `prepareConsolidate`                             | requests (pubkeys, amounts, sources and targets) in order; `value = totalFee`; no request above `maxFeePerRequest`; fees received by the predeploy; the refund received by `excessFeeRecipient`                                                                                 |
+  | `deposits.prepareDeposit`                                                | deposits (pubkeys in order, total); the deposit contract's ETH change; via the OVM: `amountOfPrincipalStake` change                                                                                                                                                             |
+  | `withdrawals.prepareEoaWithdraw`                                         | the request from calldata; the fee received by the predeploy                                                                                                                                                                                                                    |
+  | OVM role and ownership writes                                            | grant / revoke / renounce: the roles after; `setAmountOfPrincipalStake`: before and after; `withdrawPullBalance`: ETH received; `setBeneficiary` / `setRewardRecipient` / `transfer` / `completeOwnershipHandover`: the new recipient and owner; `sweep`: the `Swept` amount    |
+  | `setup.prepareOvmWithSplits` / `prepareCreateOvm` / `prepareCreateSplit` | the OVM created and its recipients; the splits created are exactly those the preview marks `created`                                                                                                                                                                            |
+  | `incentives.prepareClaim`                                                | the `Claimed` amount                                                                                                                                                                                                                                                            |
 
 Limitations: an untrusted event is shown, not believed; a trusted contract can still behave unexpectedly, which the
 balance changes (from the trace) show. A simulation is of one block's state; anything that changes before the transaction is mined (another

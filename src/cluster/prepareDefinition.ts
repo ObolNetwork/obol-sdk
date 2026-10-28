@@ -7,11 +7,11 @@ import {
   ZERO_ADDRESS,
   sameAddress,
 } from '../schema.js';
-import { definitionHash, isSupportedVersion } from './hash.js';
+import { definitionHash } from './hash.js';
 import {
   DEFAULT_DEFINITION_VERSION,
   PrepareDefinitionSchema,
-  SUPPORTED_DEFINITION_VERSIONS,
+  CREATABLE_DEFINITION_VERSIONS,
   type ClusterDefinition,
   type PreparedDefinition,
 } from './schema.js';
@@ -32,7 +32,7 @@ export const thresholdFor = (operators: number): number =>
  * Builds an unsigned cluster definition and its config hash. Nothing is
  * signed or sent.
  *
- * Checks: a supported `version`; at least 4 operators whose addresses are
+ * Checks: `version` v1.10.0 or later; at least 4 operators whose addresses are
  * unique (case-insensitive) and either all set or all empty (solo and Charon
  * flows); at least 1 validator with non-zero fee recipient and withdrawal
  * addresses; deposit amounts that are whole gwei and one of 1 or 32 ETH (1,
@@ -43,10 +43,10 @@ export const thresholdFor = (operators: number): number =>
 export const prepareDefinition = (input: unknown): PreparedDefinition => {
   const args = decode(PrepareDefinitionSchema, input);
   const version = args.version ?? DEFAULT_DEFINITION_VERSION;
-  if (!isSupportedVersion(version)) {
+  if (!(CREATABLE_DEFINITION_VERSIONS as readonly string[]).includes(version)) {
     throw invalid(
       'version',
-      `must be one of ${SUPPORTED_DEFINITION_VERSIONS.join(', ')}`,
+      `must be one of ${CREATABLE_DEFINITION_VERSIONS.join(', ')}`,
     );
   }
 

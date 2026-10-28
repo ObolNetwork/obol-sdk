@@ -31,6 +31,14 @@ export const SUPPORTED_DEFINITION_VERSIONS = [
   'v1.11.0',
 ] as const;
 
+/**
+ * Versions `prepareDefinition` creates. Older ones sign less of the
+ * definition; they stay in SUPPORTED_DEFINITION_VERSIONS so existing
+ * clusters can be hashed and verified, and the Obol API rejects them for
+ * new clusters.
+ */
+export const CREATABLE_DEFINITION_VERSIONS = ['v1.10.0', 'v1.11.0'] as const;
+
 export const DEFAULT_DEFINITION_VERSION = 'v1.11.0';
 
 export const OperatorSchema = Type.Object({

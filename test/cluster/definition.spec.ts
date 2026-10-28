@@ -112,6 +112,8 @@ describe('cluster.prepareDefinition', () => {
 
   it.each<[string, Record<string, unknown>, string]>([
     ['unsupported version', { version: 'v1.9.0' }, 'version'],
+    ['legacy version v1.8.0', { version: 'v1.8.0' }, 'version'],
+    ['legacy version v1.6.0', { version: 'v1.6.0' }, 'version'],
     [
       '3 operators',
       { operators: OPS.slice(1).map(a => ({ address: a })) },
