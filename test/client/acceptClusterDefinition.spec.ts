@@ -154,6 +154,25 @@ describe('acceptClusterDefinition verification', () => {
     expect(putCalls(fetchSpy)).toHaveLength(0);
   });
 
+  test('rejects a definition below the minimum version before signing', async () => {
+    const def = pendingDefinition();
+    def.version = 'v1.8.0';
+    def.config_hash = clusterConfigOrDefinitionHash(def, true);
+    const fetchSpy = mockApi(def);
+    const signer = mockSigner(SIGNER_ADDRESS, 560048);
+    const client = new Client({ baseUrl, chainId: 560048 }, signer);
+
+    await expect(
+      client.acceptClusterDefinition({ enr: SIGNER_ENR }, def.config_hash),
+    ).rejects.toThrow(
+      new DefinitionVerificationError(
+        `Cluster definition ${def.config_hash} has version v1.8.0; the minimum supported version is v1.10.0`,
+      ),
+    );
+    expect(signer.signTypedData).not.toHaveBeenCalled();
+    expect(putCalls(fetchSpy)).toHaveLength(0);
+  });
+
   test('rejects a definition whose contents do not match config_hash', async () => {
     const def = pendingDefinition();
     def.validators[0].withdrawal_address = TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1;
