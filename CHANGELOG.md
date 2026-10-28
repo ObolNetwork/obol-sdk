@@ -405,6 +405,15 @@ checks, reads and returns, and every error code, is specified in [`spec/`](spec/
 
 - Batched BLS checks (lock deposit and builder registration signatures, deposit data) require each signature to be
   valid on its own; batches are checked with random weights. The same fix ships in 2.15.1.
+#### [v2.15.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v2.15.2)
+
+> 28 October 2026
+
+- fix(verification): `verifyDepositPayloads` (used by `eoa.deposit`, `splits.deposit` and `getDepositData`) requires exact lengths for `pubkey`, `withdrawal_credentials`, `signature` and `deposit_data_root` before hashing, and `computeDepositMsgRoot` for `pubkey` and `withdrawal_credentials`; short or overlong values were padded or truncated by SSZ and could pass with a valid root and signature [`#253`](https://github.com/ObolNetwork/obol-sdk/pull/253)
+- fix: requests send `Content-Type: application/json` only when they have a body, and `User-Agent: Obol-SDK/<version>` only in Node, so a browser GET to the Obol API is a simple CORS request without a preflight; caller headers still override the defaults
+- feat(errors): `ObolApiError` (and its subclasses) has `requestId` from the response `X-Request-Id` header; quote it when reporting a failed request to Obol
+- feat(errors): `RateLimitError` has `retryAfterSeconds` from the response `Retry-After` header (delta-seconds, or an HTTP-date converted to seconds from now, at least 0; undefined when absent or unparseable)
+- feat(errors): `ObolApiErrorInit` takes optional response `headers`; body fields named `requestId` or `retryAfterSeconds` are not copied onto the error (they stay in `body`)
 
 #### [v2.15.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v2.15.1)
 

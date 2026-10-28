@@ -374,6 +374,10 @@ Version bumping follows semantic versioning:
 
 Factories are checked by code hash (`EXPECTED_CODE_HASHES` in `src/splits/chain.ts`, precomputed keccak256 of the runtime code) before predicting or creating contracts; a mismatch is `CONTRACT_NOT_AVAILABLE`. The tests build matching fake contracts from `test/bytecodes.ts`.
 
+## Security review notes
+
+Before reporting or "fixing" a security finding in this SDK, read [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md). It lists finding classes the Obol Security Team has already reviewed (resolved, accepted design trade-offs, or not vulnerabilities) and the SDK's trust model: it trusts the Obol API, RPC, beacon node and signer the caller configures, and caller-supplied addresses are the caller's choice. Don't re-report those classes; if a change resolves or alters one, update its entry in the same PR. New, distinct issues go to [security@obol.tech](mailto:security@obol.tech), not public issues.
+
 ## Do Not
 
 - Do not read `test/bytecodes.ts` unless working on factory code checks — it's ~50KB of hex
