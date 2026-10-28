@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v3.0.0-rc.11](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.10...v3.0.0-rc.11)
+
+> 28 October 2026
 
 - fix(cluster): `cluster.prepareDefinition` creates only v1.10.0 and later definitions (`PAYLOAD_INVALID` at `version` for v1.6.0 to v1.8.0, which sign less of the definition and which the Obol API rejects for new clusters); older versions remain hashable and verifiable for existing clusters
 - docs: `KNOWN_ISSUES.md` describes the 3.x API, with 2.x items in their own section

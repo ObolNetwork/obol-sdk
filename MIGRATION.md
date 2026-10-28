@@ -14,6 +14,7 @@ of every v3 operation (inputs, checks, outputs, error codes) is in [`spec/operat
 - [From 3.0.0-rc.7 to rc.8](#from-300-rc7-to-rc8)
 - [From 3.0.0-rc.8 to rc.9](#from-300-rc8-to-rc9)
 - [From 3.0.0-rc.9 to rc.10](#from-300-rc9-to-rc10)
+- [From 3.0.0-rc.10 to rc.11](#from-300-rc10-to-rc11)
 
 ## From 2.x
 
@@ -427,3 +428,9 @@ browser's cross-origin GET is a simple request (no CORS preflight). In Node they
   need the API to expose the headers (`Access-Control-Expose-Headers`).
 - Deposit data whose pubkey or withdrawal credentials have the wrong length is now rejected (`PAYLOAD_INVALID`, or
   a failed verification result) rather than hashed after zero-padding or truncation.
+
+## From 3.0.0-rc.10 to rc.11
+
+- `cluster.prepareDefinition` creates only v1.10.0 and v1.11.0 definitions: `version` `v1.6.0`, `v1.7.0` or `v1.8.0`
+  is now `PAYLOAD_INVALID` (path `version`). Those versions sign less of the definition and the Obol API rejects them
+  for new clusters. `computeConfigHash`, `verifyDefinition` and `verifyLock` still accept them for existing clusters.
