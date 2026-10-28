@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/ovm.prepareSweep.json",
+  "title": "ovm.prepareSweep",
+  "additionalProperties": false,
+  "properties": {
+    "amount": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "x-obol-type": "bigint",
+      "x-obol-minimum": "0",
+      "x-obol-maximum": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "from": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "ovm": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "to": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ovm"
+  ],
+  "type": "object"
+}

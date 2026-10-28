@@ -2,9 +2,11 @@
     "extends": "./tsconfig.json",
     "compilerOptions": {
       "outDir": "./dist/types",
+      "rootDir": ".",
       "declaration": true,
       "emitDeclarationOnly": true,
       "skipLibCheck": true
     },
-    "exclude": ["node_modules", "dist", "test", "test/sdk-package", "test/nextjs-test-app"]
+    "include": ["src"],
+    "exclude": ["node_modules", "dist", "test"]
   }

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/deposits.verifyDepositData.json",
+  "title": "deposits.verifyDepositData",
+  "properties": {
+    "deposits": {
+      "items": {
+        "properties": {
+          "amount": {
+            "description": "wei",
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "x-obol-type": "bigint",
+            "x-obol-minimum": "0"
+          },
+          "depositDataRoot": {
+            "description": "32-byte hex",
+            "pattern": "^0x[0-9a-fA-F]{64}$",
+            "type": "string"
+          },
+          "pubkey": {
+            "description": "BLS public key (48 bytes)",
+            "pattern": "^0x[0-9a-fA-F]{96}$",
+            "type": "string"
+          },
+          "signature": {
+            "description": "BLS signature (96 bytes)",
+            "pattern": "^0x[0-9a-fA-F]{192}$",
+            "type": "string"
+          },
+          "withdrawalCredentials": {
+            "description": "withdrawal credentials (32 bytes)",
+            "pattern": "^0x[0-9a-fA-F]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pubkey",
+          "withdrawalCredentials",
+          "signature",
+          "depositDataRoot",
+          "amount"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "options": {
+      "properties": {
+        "chainId": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expectedWithdrawalAddress": {
+          "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+          "format": "obol-address",
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "const": "deposit",
+              "type": "string"
+            },
+            {
+              "const": "topUp",
+              "type": "string"
+            }
+          ]
+        },
+        "yieldMs": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "chainId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "deposits",
+    "options"
+  ],
+  "type": "object"
+}

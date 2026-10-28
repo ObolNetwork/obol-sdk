@@ -1,404 +1,127 @@
-import { ZeroAddress } from 'ethers';
+/**
+ * Input schemas (TypeBox) and decoding. Every operation decodes its input
+ * with `decode` first (spec check G1); failures throw PAYLOAD_INVALID with
+ * one issue per failing path.
+ */
 import {
-  DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
-  DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-  PRINCIPAL_THRESHOLD,
-} from './constants.js';
-import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv.js';
+  FormatRegistry,
+  Type,
+  type Static,
+  type TSchema,
+  type TString,
+} from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+import { getAddress, type Address } from 'viem';
+import { payloadInvalid, type Issue, type ObolError } from './errors.js';
 
-export const ADDRESS_PATTERN = '^0x[a-fA-F0-9]{40}$';
-const ZERO_ADDRESS_PATTERN = '^0x0{40}$';
-
-const addressSchema = {
-  type: 'string',
-  pattern: ADDRESS_PATTERN,
+/**
+ * Address input rule (spec/README.md "Encodings"): all-lowercase,
+ * all-uppercase or a valid EIP-55 checksum. Mixed case with a wrong checksum
+ * is rejected, since it usually means a typo.
+ */
+export const isAddressInput = (value: string): boolean => {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(value)) return false;
+  const body = value.slice(2);
+  if (body === body.toLowerCase() || body === body.toUpperCase()) return true;
+  try {
+    return getAddress(value) === value;
+  } catch {
+    return false;
+  }
 };
 
-const nonZeroAddressSchema = {
-  ...addressSchema,
-  not: { pattern: ZERO_ADDRESS_PATTERN },
+FormatRegistry.Set('obol-address', isAddressInput);
+
+export const ZERO_ADDRESS: Address =
+  '0x0000000000000000000000000000000000000000';
+
+const hexBytes = (bytes: number, description: string): TString =>
+  Type.String({
+    pattern: `^0x[0-9a-fA-F]{${bytes * 2}}$`,
+    description,
+  });
+
+export const T = {
+  Address: Type.String({
+    format: 'obol-address',
+    description:
+      'Address: all-lowercase, all-uppercase or valid EIP-55 checksum',
+  }),
+  Hash32: hexBytes(32, '32-byte hex'),
+  Pubkey: hexBytes(48, 'BLS public key (48 bytes)'),
+  BlsSignature: hexBytes(96, 'BLS signature (96 bytes)'),
+  Credentials: hexBytes(32, 'withdrawal credentials (32 bytes)'),
+  Hex: Type.String({ pattern: '^0x([0-9a-fA-F]{2})*$', description: 'hex' }),
+  /** wei, non-negative */
+  Wei: Type.BigInt({ minimum: 0n, description: 'wei' }),
+  Uint: Type.Integer({ minimum: 0 }),
+  /** A non-negative integer as a bigint or a safe integer number (converted with BigInt). */
+  UintLike: Type.Union([
+    Type.BigInt({ minimum: 0n }),
+    Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+  ]),
 };
 
-// Split recipient share, in percent. Must be positive and at most 100.
-const percentAllocationSchema = {
-  type: 'number',
-  exclusiveMinimum: 0,
-  maximum: 100,
+const messageFor = (error: { message: string; schema: TSchema }): string => {
+  if (error.schema.format === 'obol-address') {
+    return 'must be a hex address (all-lowercase, all-uppercase or a valid EIP-55 checksum)';
+  }
+  if (typeof error.schema.description === 'string' && error.schema.pattern) {
+    return `must be ${error.schema.description}`;
+  }
+  return error.message;
 };
 
-export const operatorPayloadSchema = {
-  type: 'object',
-  properties: {
-    version: { type: 'string' },
-    enr: { type: 'string' },
-  },
-  required: ['version', 'enr'],
+const toPath = (pointer: string, base: string): string => {
+  const parts = pointer
+    .split('/')
+    .filter(p => p !== '')
+    .map(p => (/^\d+$/.test(p) ? `[${p}]` : `.${p}`))
+    .join('');
+  const joined = `${base}${parts}`;
+  return joined.startsWith('.') ? joined.slice(1) : joined;
 };
 
-export const definitionSchema = {
-  type: 'object',
-  properties: {
-    name: { type: 'string' },
-    operators: {
-      type: 'array',
-      minItems: 4,
-      items: {
-        type: 'object',
-        properties: {
-          // Empty for solo clusters, where every operator address is ''.
-          address: {
-            type: 'string',
-            pattern: '^(0x[a-fA-F0-9]{40})?$',
-          },
-        },
-        required: ['address'],
-      },
-      validateUniqueAddresses: true,
-    },
-    validators: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'object',
-        properties: {
-          fee_recipient_address: nonZeroAddressSchema,
-          withdrawal_address: nonZeroAddressSchema,
-        },
-        required: ['fee_recipient_address', 'withdrawal_address'],
-      },
-    },
-    deposit_amounts: {
-      type: ['array', 'null'],
-      items: {
-        type: 'string',
-        pattern: '^[0-9]+$',
-      },
-      if: {
-        $data: '1/compounding',
-      },
-      then: {
-        items: {
-          enum: VALID_DEPOSIT_AMOUNTS,
-        },
-      },
-      else: {
-        items: {
-          enum: VALID_NON_COMPOUNDING_AMOUNTS,
-        },
-      },
-      default: null,
-    },
-    compounding: {
-      type: 'boolean',
-      default: false,
-    },
-    target_gas_limit: {
-      type: 'number',
-      minimum: 1,
-      default: 36000000,
-    },
-    consensus_protocol: {
-      type: 'string',
-      enum: ['qbft', ''],
-      default: '',
-    },
-  },
-  required: ['name', 'operators', 'validators'],
-  // The validated payload is spread into the signed cluster config, so only
-  // known fields are accepted.
-  additionalProperties: false,
+/** Validates `value` against `schema`; throws PAYLOAD_INVALID otherwise. */
+export const decode = <S extends TSchema>(
+  schema: S,
+  value: unknown,
+  basePath = '',
+): Static<S> => {
+  if (Value.Check(schema, value)) return value;
+  const issues: Issue[] = [];
+  const seen = new Set<string>();
+  for (const error of Value.Errors(schema, value)) {
+    const path = toPath(error.path, basePath);
+    if (seen.has(path)) continue;
+    seen.add(path);
+    issues.push({ path, message: messageFor(error) });
+  }
+  throw payloadInvalid(issues);
 };
 
-export const totalSplitterPayloadSchema = {
-  type: 'object',
-  properties: {
-    splitRecipients: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          account: addressSchema,
-          percentAllocation: percentAllocationSchema,
-        },
-        required: ['account', 'percentAllocation'],
-      },
-      uniqueRecipientAddresses: 'account',
-    },
-    ObolRAFSplit: {
-      type: 'number',
-      minimum: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-      default: DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
-    },
-    distributorFee: {
-      type: 'number',
-      maximum: 10,
-      multipleOf: 0.01,
-      default: 0,
-    },
-    controllerAddress: {
-      type: 'string',
-      pattern: ADDRESS_PATTERN,
-      default: ZeroAddress,
-    },
-  },
-  validateTotalSplitRecipients: true,
-  required: ['splitRecipients'],
-};
+/** Checksummed form of an address that passed `T.Address`. */
+export const checksum = (address: string): Address =>
+  getAddress(address.toLowerCase());
 
-export const rewardsSplitterPayloadSchema = {
-  type: 'object',
-  properties: {
-    ...totalSplitterPayloadSchema.properties,
-    ObolRAFSplit: {
-      type: 'number',
-      minimum: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
-      default: DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
-    },
-    recoveryAddress: {
-      type: 'string',
-      pattern: ADDRESS_PATTERN,
-      default: ZeroAddress,
-    },
-    etherAmount: { type: 'number' },
-    principalRecipient: {
-      type: 'string',
-      pattern: ADDRESS_PATTERN,
-    },
-  },
-  validateRewardsSplitRecipients: true,
-  required: ['splitRecipients', 'principalRecipient', 'etherAmount'],
-};
+export const sameAddress = (a: string, b: string): boolean =>
+  a.toLowerCase() === b.toLowerCase();
 
-export const ovmBaseSplitPayload = {
-  rewardSplitRecipients: {
-    type: 'array',
-    items: {
-      type: 'object',
-      properties: {
-        address: addressSchema,
-        percentAllocation: percentAllocationSchema,
-      },
-      required: ['address', 'percentAllocation'],
-    },
-    uniqueRecipientAddresses: 'address',
-  },
-  OVMOwnerAddress: {
-    type: 'string',
-    pattern: ADDRESS_PATTERN,
-  },
-  splitOwnerAddress: {
-    type: 'string',
-    pattern: ADDRESS_PATTERN,
-    default: ZeroAddress,
-  },
-  principalThreshold: {
-    type: 'number',
-    minimum: 16,
-    default: PRINCIPAL_THRESHOLD,
-  },
-  // SplitV2 stores the incentive as a uint16 at 1e6 = 100%, so at most
-  // 6.5535%; values are rounded to the nearest 0.0001%.
-  distributorFeePercent: {
-    type: 'number',
-    minimum: 0,
-    maximum: 6.5535,
-    default: 0,
-  },
-};
+/** Hex strings (hashes, pubkeys, signatures) compared case-insensitively. */
+export const sameHex = (a: string, b: string): boolean =>
+  a.toLowerCase() === b.toLowerCase();
 
-export const ovmRewardsSplitPayloadSchema = {
-  type: 'object',
-  properties: {
-    ...ovmBaseSplitPayload,
-    principalRecipient: {
-      type: 'string',
-      pattern: ADDRESS_PATTERN,
-    },
-  },
-  validateOVMRewardsSplitRecipients: true,
-  required: ['rewardSplitRecipients', 'OVMOwnerAddress', 'principalRecipient'],
-};
+/** One-issue PAYLOAD_INVALID, for checks a schema cannot express. */
+export const invalid = (
+  path: string,
+  message: string,
+  issue?: string,
+): ObolError =>
+  payloadInvalid([{ path, message, ...(issue ? { issue } : {}) }]);
 
-export const ovmTotalSplitPayloadSchema = {
-  type: 'object',
-  properties: {
-    ...ovmBaseSplitPayload,
-    principalSplitRecipients: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          address: addressSchema,
-          percentAllocation: percentAllocationSchema,
-        },
-        required: ['address', 'percentAllocation'],
-      },
-      uniqueRecipientAddresses: 'address',
-    },
-  },
-  validateOVMRewardsSplitRecipients: true,
-  validateOVMTotalSplitRecipients: true,
-  required: [
-    'rewardSplitRecipients',
-    'principalSplitRecipients',
-    'OVMOwnerAddress',
-  ],
-};
-
-export const ovmRequestWithdrawalPayloadSchema = {
-  type: 'object',
-  properties: {
-    withdrawalFees: {
-      type: 'string',
-      pattern: '^[0-9]+$',
-    },
-    ovmAddress: {
-      type: 'string',
-      pattern: ADDRESS_PATTERN,
-    },
-    excessFeeRecipient: nonZeroAddressSchema,
-    pubKeys: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'string',
-        pattern: '^0x[a-fA-F0-9]{96}$', // 48 bytes = 96 hex chars + 0x prefix
-      },
-    },
-    amounts: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'string',
-        pattern: '^[0-9]+$',
-      },
-    },
-  },
-  validateOVMRequestWithdrawalPayload: true,
-  required: ['ovmAddress', 'pubKeys', 'amounts'],
-};
-
-export const eoaWithdrawalPayloadSchema = {
-  type: 'object',
-  properties: {
-    pubkey: {
-      type: 'string',
-      pattern: '^0x[a-fA-F0-9]{96}$', // 48 bytes = 96 hex chars + 0x prefix
-    },
-    allocation: {
-      type: 'number',
-      minimum: 0,
-    },
-    requiredFee: {
-      type: 'string',
-      pattern: '^[0-9]+$',
-    },
-  },
-  required: ['pubkey', 'allocation'],
-};
-
-export const ovmDepositPayloadSchema = {
-  type: 'object',
-  properties: {
-    ovmAddress: {
-      type: 'string',
-      pattern: ADDRESS_PATTERN,
-    },
-    deposits: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'object',
-        properties: {
-          pubkey: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{96}$',
-          },
-          withdrawal_credentials: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{64}$',
-            description: '32 bytes withdrawal credentials',
-          },
-          signature: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{192}$',
-            description: '96 bytes signature (190 hex chars + 0x prefix)',
-          },
-          deposit_data_root: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{64}$', // 32 bytes = 64 hex chars + 0x prefix
-          },
-          amount: {
-            type: 'string',
-            pattern: '^[0-9]+$',
-          },
-        },
-        required: [
-          'pubkey',
-          'withdrawal_credentials',
-          'signature',
-          'deposit_data_root',
-          'amount',
-        ],
-      },
-    },
-    kind: {
-      type: 'string',
-      enum: ['deposit', 'topUp'],
-    },
-  },
-  required: ['ovmAddress', 'deposits'],
-};
-
-export const eoaDepositPayloadSchema = {
-  type: 'object',
-  properties: {
-    deposits: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'object',
-        properties: {
-          pubkey: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{96}$',
-          },
-          withdrawal_credentials: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{64}$',
-            description: '32 bytes withdrawal credentials',
-          },
-          signature: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{192}$',
-            description: '96 bytes signature (190 hex chars + 0x prefix)',
-          },
-          deposit_data_root: {
-            type: 'string',
-            pattern: '^0x[a-fA-F0-9]{64}$', // 32 bytes = 64 hex chars + 0x prefix
-          },
-          amount: {
-            type: 'string',
-            pattern: '^[0-9]+$',
-          },
-        },
-        required: [
-          'pubkey',
-          'withdrawal_credentials',
-          'signature',
-          'deposit_data_root',
-          'amount',
-        ],
-      },
-    },
-    expectedWithdrawalAddress: {
-      type: 'string',
-      pattern: '^0x[a-fA-F0-9]{40}$',
-    },
-    kind: {
-      type: 'string',
-      enum: ['deposit', 'topUp'],
-    },
-  },
-  required: ['deposits'],
+/** `value` without trailing `/` characters (a linear scan, no regex). */
+export const trimTrailingSlashes = (value: string): string => {
+  let end = value.length;
+  while (end > 0 && value.codePointAt(end - 1) === 0x2f) end--;
+  return value.slice(0, end);
 };

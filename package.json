@@ -1,7 +1,7 @@
 {
   "name": "@obolnetwork/obol-sdk",
-  "version": "2.15.2",
-  "description": "A package for creating Distributed Validators using the Obol API.",
+  "version": "3.0.0-rc.11",
+  "description": "TypeScript SDK for creating and managing Obol Distributed Validators, built on viem.",
   "bugs": {
     "url": "https://github.com/obolnetwork/obol-sdk/issues"
   },
@@ -9,13 +9,16 @@
   "keywords": [
     "Obol",
     "Distributed Validators",
-    "Ethereum"
+    "Ethereum",
+    "viem"
   ],
   "scripts": {
     "build:clean": "rm -rf ./dist",
     "build": "npm-run-all build:clean build:tsup",
     "build:tsup": "tsup && tsc -b ./tsconfig.types.json",
-    "test": "NODE_OPTIONS=--experimental-vm-modules OBOL_SDK_MAX_CONCURRENT_LOCK_VALIDATIONS=0 jest test/**/**.spec.ts --testPathIgnorePatterns=test/sdk-package/",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --testPathPattern='/test/.*\\.spec\\.ts$'",
+    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest -c jest.e2e.config.cjs --runInBand",
+    "test:e2e:mainnet": "E2E_CHAIN=mainnet yarn -s test:e2e",
     "generate-typedoc": "typedoc",
     "npm:publish": "npm publish --tag latest",
     "npm:publish:next": "npm publish --tag next",
@@ -25,7 +28,14 @@
     "lint-ci": "eslint ./src --ext .ts,.js",
     "prettier-ci": "prettier --check ./src --ext .ts,.js",
     "prettier": "prettier --write \"src/**/*.{js,ts}\"",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "build:types": "tsc -b ./tsconfig.types.json",
+    "api:check": "yarn -s build:types && api-extractor run",
+    "api:update": "yarn -s build:types && api-extractor run --local",
+    "size:check": "node scripts/bundle-size.mjs",
+    "size:update": "node scripts/bundle-size.mjs --update",
+    "spec:schemas": "node scripts/spec-schemas.mjs",
+    "test:fuzz": "FUZZ=1 NODE_OPTIONS=--experimental-vm-modules jest --testPathPattern='/test/fuzz/.*\\.spec\\.ts$'"
   },
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
@@ -43,7 +53,136 @@
         "require": "./dist/cjs/src/index.js"
       },
       "default": "./dist/esm/src/index.js"
-    }
+    },
+    "./cluster": {
+      "types": "./dist/types/src/cluster/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/cluster/index.js",
+        "default": "./dist/browser/src/cluster/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/cluster/index.js",
+        "require": "./dist/cjs/src/cluster/index.js"
+      },
+      "default": "./dist/esm/src/cluster/index.js"
+    },
+    "./deposits": {
+      "types": "./dist/types/src/deposits/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/deposits/index.js",
+        "default": "./dist/browser/src/deposits/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/deposits/index.js",
+        "require": "./dist/cjs/src/deposits/index.js"
+      },
+      "default": "./dist/esm/src/deposits/index.js"
+    },
+    "./ovm": {
+      "types": "./dist/types/src/ovm/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/ovm/index.js",
+        "default": "./dist/browser/src/ovm/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/ovm/index.js",
+        "require": "./dist/cjs/src/ovm/index.js"
+      },
+      "default": "./dist/esm/src/ovm/index.js"
+    },
+    "./splits": {
+      "types": "./dist/types/src/splits/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/splits/index.js",
+        "default": "./dist/browser/src/splits/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/splits/index.js",
+        "require": "./dist/cjs/src/splits/index.js"
+      },
+      "default": "./dist/esm/src/splits/index.js"
+    },
+    "./setup": {
+      "types": "./dist/types/src/setup/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/setup/index.js",
+        "default": "./dist/browser/src/setup/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/setup/index.js",
+        "require": "./dist/cjs/src/setup/index.js"
+      },
+      "default": "./dist/esm/src/setup/index.js"
+    },
+    "./incentives": {
+      "types": "./dist/types/src/incentives/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/incentives/index.js",
+        "default": "./dist/browser/src/incentives/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/incentives/index.js",
+        "require": "./dist/cjs/src/incentives/index.js"
+      },
+      "default": "./dist/esm/src/incentives/index.js"
+    },
+    "./terms": {
+      "types": "./dist/types/src/terms/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/terms/index.js",
+        "default": "./dist/browser/src/terms/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/terms/index.js",
+        "require": "./dist/cjs/src/terms/index.js"
+      },
+      "default": "./dist/esm/src/terms/index.js"
+    },
+    "./withdrawals": {
+      "types": "./dist/types/src/withdrawals/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/withdrawals/index.js",
+        "default": "./dist/browser/src/withdrawals/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/withdrawals/index.js",
+        "require": "./dist/cjs/src/withdrawals/index.js"
+      },
+      "default": "./dist/esm/src/withdrawals/index.js"
+    },
+    "./exits": {
+      "types": "./dist/types/src/exits/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/exits/index.js",
+        "default": "./dist/browser/src/exits/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/exits/index.js",
+        "require": "./dist/cjs/src/exits/index.js"
+      },
+      "default": "./dist/esm/src/exits/index.js"
+    },
+    "./experimental": {
+      "types": "./dist/types/src/experimental/index.d.ts",
+      "browser": {
+        "import": "./dist/browser/src/experimental/index.js",
+        "default": "./dist/browser/src/experimental/index.js"
+      },
+      "node": {
+        "import": "./dist/esm/src/experimental/index.js",
+        "require": "./dist/cjs/src/experimental/index.js"
+      },
+      "default": "./dist/esm/src/experimental/index.js"
+    },
+    "./blst": {
+      "types": "./dist/types/src/blst/index.d.ts",
+      "node": {
+        "import": "./dist/esm/src/blst/index.js",
+        "require": "./dist/cjs/src/blst/index.js"
+      },
+      "default": "./dist/esm/src/blst/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "author": "Obol Labs (https://obol.org)",
   "repository": {
@@ -59,10 +198,10 @@
     "PINNING NOTES:",
     "@chainsafe/ssz MUST stay at ^0.14.x — v0.15+ set type:module (ESM-only), same CJS constraint.",
     "@typescript-eslint/* stays at ^6.x — eslint-config-standard-with-typescript@43 requires plugin ^6; v8 causes peer conflict.",
-    "uuid stays at ^9.x — v11+ sets type:module (ESM-only).",
-    "viem override pins a single resolved version to prevent duplicates across @safe-global/protocol-kit.",
     "@noble/curves replaces @chainsafe/bls — pure-JS CJS+ESM, no native addon, same ETH2 BLS12-381 spec. See CHAINSAFE_MIGRATION_PLAN.md.",
-    "@noble/curves is in devDependencies (not dependencies) because tsup bundles it inline via noExternal. Keeping it in dependencies caused consumers to install @noble/hashes@2.2.0 (major-version 2) which shadowed @noble/hashes@1.x used by ethereum-cryptography, @coinbase/wallet-sdk, etc., breaking their @noble/curves initialisation with 'anumber is not a function'."
+    "@noble/curves is in devDependencies (not dependencies) because tsup bundles it inline via noExternal. Keeping it in dependencies caused consumers to install @noble/hashes@2.2.0 (major-version 2) which shadowed @noble/hashes@1.x used by ethereum-cryptography, @coinbase/wallet-sdk, etc., breaking their @noble/curves initialisation with 'anumber is not a function'.",
+    "viem is a peer dependency (the caller brings its own clients) and a devDependency for tests.",
+    "@chainsafe/blst (native) is an optional peer dependency: only the Node-only `@obolnetwork/obol-sdk/blst` entry loads it, with a dynamic import on loadBlstBackend(); no other entry refers to it and the browser build has no blst entry. It is also a devDependency, for that entry's tests and the cross-check of the pure-JS backend."
   ],
   "resolutions": {
     "ws": "^8.21.0",
@@ -70,30 +209,18 @@
     "**/@typescript-eslint/typescript-estree/minimatch": "^9.0.7",
     "basic-ftp": "6.2.2"
   },
-  "overrides": {
-    "viem": "2.48.7"
-  },
   "dependencies": {
     "@chainsafe/enr": "6.0.1",
     "@chainsafe/ssz": "0.14.3",
-    "@metamask/eth-sig-util": "8.2.0",
-    "@safe-global/protocol-kit": "7.1.0",
-    "@safe-global/types-kit": "3.1.0",
-    "ajv": "8.20.0",
-    "ajv-formats": "3.0.1",
-    "ajv-keywords": "5.1.0",
-    "ethers": "6.17.0",
-    "semver": "7.7.4",
-    "uuid": "9.0.1"
+    "@sinclair/typebox": "0.34.52"
   },
   "devDependencies": {
+    "@chainsafe/blst": "2.2.0",
+    "@microsoft/api-extractor": "7.59.4",
     "@noble/curves": "2.2.0",
     "@release-it/conventional-changelog": "11.0.0",
     "@types/jest": "29.5.14",
     "@types/node": "24.12.2",
-    "@types/semver": "7.7.1",
-    "@types/uuid": "9.0.8",
-    "dotenv": "17.4.2",
     "@typescript-eslint/eslint-plugin": "6.21.0",
     "@typescript-eslint/parser": "6.21.0",
     "eslint": "8.57.1",
@@ -104,8 +231,6 @@
     "husky": "9.1.7",
     "jest": "29.7.0",
     "lint-staged": "16.4.0",
-    "msw": "2.14.2",
-    "nock": "14.0.14",
     "npm-run-all": "4.1.5",
     "prettier": "3.8.3",
     "release-it": "19.2.4",
@@ -113,7 +238,8 @@
     "tsup": "8.5.1",
     "typedoc": "0.28.19",
     "typedoc-plugin-markdown": "4.11.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "viem": "2.57.3"
   },
   "engines": {
     "node": ">= 20"
@@ -121,6 +247,7 @@
   "files": [
     "package.json",
     "README.md",
+    "MIGRATION.md",
     "dist"
   ],
   "release-it": {
@@ -175,7 +302,7 @@
       "json"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!(@chainsafe|ethers|msw|until-async|bn.js|asn1.js|hash.js)/)"
+      "node_modules/(?!(@chainsafe)/)"
     ],
     "testEnvironment": "node",
     "testPathIgnorePatterns": [
@@ -188,5 +315,52 @@
     ],
     "maxWorkers": "50%"
   },
-  "packageManager": "yarn@1.22.22"
+  "packageManager": "yarn@1.22.22",
+  "peerDependencies": {
+    "@chainsafe/blst": "^2.2.0",
+    "viem": "^2.21.0"
+  },
+  "peerDependenciesMeta": {
+    "@chainsafe/blst": {
+      "optional": true
+    }
+  },
+  "sideEffects": false,
+  "typesVersions": {
+    "*": {
+      "cluster": [
+        "./dist/types/src/cluster/index.d.ts"
+      ],
+      "deposits": [
+        "./dist/types/src/deposits/index.d.ts"
+      ],
+      "ovm": [
+        "./dist/types/src/ovm/index.d.ts"
+      ],
+      "splits": [
+        "./dist/types/src/splits/index.d.ts"
+      ],
+      "setup": [
+        "./dist/types/src/setup/index.d.ts"
+      ],
+      "incentives": [
+        "./dist/types/src/incentives/index.d.ts"
+      ],
+      "terms": [
+        "./dist/types/src/terms/index.d.ts"
+      ],
+      "withdrawals": [
+        "./dist/types/src/withdrawals/index.d.ts"
+      ],
+      "exits": [
+        "./dist/types/src/exits/index.d.ts"
+      ],
+      "experimental": [
+        "./dist/types/src/experimental/index.d.ts"
+      ],
+      "blst": [
+        "./dist/types/src/blst/index.d.ts"
+      ]
+    }
+  }
 }
