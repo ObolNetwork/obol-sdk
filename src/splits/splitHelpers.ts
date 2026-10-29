@@ -512,36 +512,29 @@ export const predictSplitterAddress = async ({
       provider ?? signer,
     );
 
-    let predictedSplitterAddress: string;
+    // Only immutable splits (CREATE2 over recipients and fees) have a
+    // predictable address. A mutable split is created with CREATE, so its
+    // address depends on SplitMain's nonce and any createSplit landing first
+    // takes it. Callers deploy mutable splits and read the address from the
+    // CreateSplit event instead. See KNOWN_ISSUES.md.
+    if (controllerAddress.toLowerCase() !== ZeroAddress) {
+      throw new Error(
+        'Failed to predict splitter address: mutable splits (with a controller) have no predictable address; deploy the split and use the address from its CreateSplit event',
+      );
+    }
 
-    if (controllerAddress === ZeroAddress) {
-      try {
-        predictedSplitterAddress =
-          await splitMainContractInstance.predictImmutableSplitAddress(
-            accounts,
-            percentAllocations,
-            distributorFee,
-          );
-      } catch (error: any) {
-        throw new Error(
-          `Failed to predict immutable splitter address: ${error.message ?? 'Contract call failed'}`,
+    let predictedSplitterAddress: string;
+    try {
+      predictedSplitterAddress =
+        await splitMainContractInstance.predictImmutableSplitAddress(
+          accounts,
+          percentAllocations,
+          distributorFee,
         );
-      }
-    } else {
-      try {
-        // It throws on deployed Immutable splitter
-        predictedSplitterAddress =
-          await splitMainContractInstance.createSplit.staticCall(
-            accounts,
-            percentAllocations,
-            distributorFee,
-            controllerAddress,
-          );
-      } catch (error: any) {
-        throw new Error(
-          `Failed to predict mutable splitter address via static call: ${error.message ?? 'Static call failed'}`,
-        );
-      }
+    } catch (error: any) {
+      throw new Error(
+        `Failed to predict immutable splitter address: ${error.message ?? 'Contract call failed'}`,
+      );
     }
 
     return predictedSplitterAddress;
@@ -731,6 +724,34 @@ const createOWRContract = async ({
   }
 };
 
+const CREATE_SPLIT_TOPIC = id('CreateSplit(address)');
+
+/**
+ * Reads the new split's address from SplitMain's `CreateSplit` event in a
+ * `createSplit` receipt. For a mutable split this is the only reliable source
+ * of its address (it depends on SplitMain's nonce), so only logs emitted by
+ * SplitMain itself are considered.
+ */
+export const extractSplitAddressFromReceipt = (
+  receipt: {
+    logs?: ReadonlyArray<{ address?: string; topics?: readonly string[] }>;
+  },
+  splitMainAddress: string,
+): ETH_ADDRESS => {
+  const log = receipt?.logs?.find(
+    l =>
+      l.address?.toLowerCase() === splitMainAddress.toLowerCase() &&
+      l.topics?.[0] === CREATE_SPLIT_TOPIC &&
+      typeof l.topics?.[1] === 'string',
+  );
+  if (!log?.topics) {
+    throw new Error(
+      'Splitter contract creation transaction succeeded but contract address could not be extracted from events',
+    );
+  }
+  return toChecksumAddress('0x' + log.topics[1].slice(26, 66));
+};
+
 export const deploySplitterContract = async ({
   signer,
   accounts,
@@ -782,14 +803,10 @@ export const deploySplitterContract = async ({
       );
     }
 
-    const splitterAddressData = receipt.logs[0]?.topics[1];
-    if (!splitterAddressData) {
-      throw new Error(
-        'Splitter contract creation transaction succeeded but contract address could not be extracted from events',
-      );
-    }
-
-    const formattedSplitterAddress = '0x' + splitterAddressData.slice(26, 66);
+    const formattedSplitterAddress = extractSplitAddressFromReceipt(
+      receipt as TransactionReceipt,
+      getChainConfig(chainId).SPLITMAIN_CONTRACT.address,
+    );
 
     // Basic address validation
     if (
@@ -858,10 +875,24 @@ export const deploySplitterAndOWRContracts = async ({
 
   const executeMultiCalls = await multicall3(executeCalls, signer, chainId);
 
-  const splitAddressData = executeMultiCalls?.logs[0]?.topics[1];
-  const formattedSplitterAddress = '0x' + splitAddressData?.slice(26, 66);
+  const formattedSplitterAddress = extractSplitAddressFromReceipt(
+    executeMultiCalls as TransactionReceipt,
+    getChainConfig(chainId).SPLITMAIN_CONTRACT.address,
+  );
   const owrAddressData = executeMultiCalls?.logs[1]?.topics[1];
   const formattedOwrAddress = '0x' + owrAddressData?.slice(26, 66);
+
+  // The OWR was created with the predicted split as its reward recipient. For
+  // an immutable split the multicall reverts if the prediction was wrong, so
+  // a mismatch here means the OWR pays rewards to another address.
+  if (
+    formattedSplitterAddress.toLowerCase() !==
+    owrArgs.predictedSplitterAddress.toLowerCase()
+  ) {
+    throw new Error(
+      `Failed to deploy splitter at the predicted address: deployed ${formattedSplitterAddress}, OWR ${formattedOwrAddress} pays rewards to ${owrArgs.predictedSplitterAddress}. Do not deposit to this OWR.`,
+    );
+  }
 
   return {
     owrAddress: formattedOwrAddress,

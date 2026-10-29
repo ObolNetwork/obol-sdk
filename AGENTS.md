@@ -154,7 +154,7 @@ client.exit.*         // Verify/recombine exit signatures
 |--------|---------|-------------|
 | `hasAcceptedTerms(address?)` | No | Whether `address` (default: the signer's) accepted the latest T&C |
 | `acceptObolLatestTermsAndConditions({ ifNotAccepted? })` | Yes | EIP-712 T&C acceptance (required before writes); `ifNotAccepted: true` skips if already accepted |
-| `createClusterDefinition(payload, version?)` | Yes | Register new cluster, returns `config_hash`; `version` defaults to `CONFIG_VERSION` and must be in `SUPPORTED_DEFINITION_VERSIONS` |
+| `createClusterDefinition(payload, version?)` | Yes | Register new cluster, returns `config_hash`; `version` defaults to `CONFIG_VERSION` and must be in `SUPPORTED_DEFINITION_VERSIONS` (v1.10.0+) |
 | `acceptClusterDefinition(operatorPayload, configHash)` | Yes | Operator joins cluster; verifies the definition first (config hash recomputed, network), fills `version` from it, requires the signer to be an operator; idempotent for the same ENR |
 | `getClusterDefinition(configHash)` | No | Fetch cluster definition |
 | `getClusterLock(configHash)` | No | Fetch cluster lock (post-DKG) |
@@ -196,7 +196,7 @@ client.exit.*         // Verify/recombine exit signatures
 | `validateExitBlobs(config, payload, beaconUrl, existing)` | Comprehensive exit blob validation |
 | `recombineExitBlobs(exitBlob)` | Aggregate partial BLS signatures |
 
-**Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
+**Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, version below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0), or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
 
 **Deposits and top-ups** (`eoa.deposit` / `splits.deposit`):
 - `kind?: 'deposit' | 'topUp'` (default `'deposit'`) says what the payload is. `'deposit'`: every deposit needs a valid BLS signature for the chain and the expected withdrawal credentials, up to 32 ETH (2048 ETH for 0x02 credentials). `'topUp'`: the caller asserts every deposit tops up an existing validator: no BLS check, expected or all-zero credentials, up to 2048 ETH. This is what Launchpad-style top-ups (all-zero credentials and signature) need.
@@ -204,13 +204,13 @@ client.exit.*         // Verify/recombine exit signatures
 - `getWithdrawalRequestFee(provider)` / `resolveWithdrawalFee(...)` (exported) read and bound the EIP-7002 withdrawal request fee. Default fee when omitted: 2× the current fee for `splits.requestWithdrawal` (the OVM refunds the excess), exactly the current fee for `eoa.requestWithdrawal` (the EIP-7002 contract keeps any excess).
 - Contract-wallet signers (a Safe over WalletConnect) are supported on all four deposit / withdrawal methods: the SDK waits for the Safe's `ExecutionSuccess` (up to 30 minutes) and returns the executed hash; `onSent` reports the Safe's own hash with `contractWallet: true`.
 
-**Sent transactions** (`splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal`, `incentives.claimIncentives`): an optional second argument `{ onSent }` (`WriteOptions`) is called with `{ hash, index, contractWallet }` as each transaction is broadcast, before its receipt. If the call fails after something was broadcast it throws `TransactionSubmissionError` with `txHashes` (mined), `pendingTxHash` (sent, not confirmed), `pendingStatus` (`reverted`: nothing moved, retry is safe; `unconfirmed`: may still be mined) and `cause`; failures before sending throw as before. Deploy methods are not covered: they are idempotent (predicted addresses), so re-running them is safe.
+**Sent transactions** (`splits.deposit`, `splits.requestWithdrawal`, `eoa.deposit`, `eoa.requestWithdrawal`, `incentives.claimIncentives`): an optional second argument `{ onSent }` (`WriteOptions`) is called with `{ hash, index, contractWallet }` as each transaction is broadcast, before its receipt. If the call fails after something was broadcast it throws `TransactionSubmissionError` with `txHashes` (mined), `pendingTxHash` (sent, not confirmed), `pendingStatus` (`reverted`: nothing moved, retry is safe; `unconfirmed`: may still be mined) and `cause`; failures before sending throw as before. Deploy methods are not covered: they are idempotent (predicted addresses), so re-running them is safe. The exception is SplitMain (v1) mutable splits (`createObolRewardsSplit` / `createObolTotalSplit` with a `controllerAddress`): their address depends on SplitMain's nonce, so they are never predicted; the split is deployed first and its address read from the `CreateSplit` event, and each call deploys a new one.
 
 ### Standalone Exports
 
 **`validateClusterLock`** (`import { validateClusterLock } from '@obolnetwork/obol-sdk'`)
 
-Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules.
+Verifies the cryptographic validity of a cluster lock file without requiring a `Client` instance. Checks BLS key aggregates, ECDSA operator signatures, and SSZ merkle proofs. Passing here is **necessary but not sufficient** for Charon — Charon has additional runtime rules. Existing v1.6–v1.8 locks still validate, so running clusters keep working; only creating or joining a definition below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0) is refused.
 
 ```typescript
 import { validateClusterLock } from '@obolnetwork/obol-sdk';
@@ -269,7 +269,7 @@ Bench chunk workers after build: `node test/perf/parallelBench.mjs`.
 
 ### Error Classes (`src/errors.ts`)
 
-API responses: **ObolApiError** (`status`, `endpoint`, `method`, `body`, `hint`) with subclasses **ValidationError** (400/422), **UnauthorizedError** (401/403), **NotFoundError** (404), **ConflictError** (409, duplicate resource), **RateLimitError** (429); **RequestTimeoutError** after `timeoutMs`.
+API responses: **ObolApiError** (`status`, `endpoint`, `method`, `body`, `hint`, `requestId` from `X-Request-Id`) with subclasses **ValidationError** (400/422), **UnauthorizedError** (401/403), **NotFoundError** (404), **ConflictError** (409, duplicate resource), **RateLimitError** (429, `retryAfterSeconds` from `Retry-After`); **RequestTimeoutError** after `timeoutMs`.
 
 Local checks extend **ObolSdkError** (`code`, `hint`):
 - **ChainMismatchError**: Signer's provider is on a different chain than the client (checked before every tx / chain-bound EIP-712 signature via `assertSignerChain` in `src/utils.ts`)
@@ -515,6 +515,10 @@ if (isDeployed) return predictedAddress; // skip deployment
 // Deploy if not exists
 const tx = await deployContract(...);
 ```
+
+## Security review notes
+
+Before reporting or "fixing" a security finding in this SDK, read [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md). It lists finding classes the Obol Security Team has already reviewed (resolved, accepted design trade-offs, or not vulnerabilities) and the SDK's trust model: it trusts the Obol API, RPC, beacon node and signer the caller configures, and caller-supplied addresses are the caller's choice. Don't re-report those classes; if a change resolves or alters one, update its entry in the same PR. New, distinct issues go to [security@obol.tech](mailto:security@obol.tech), not public issues.
 
 ## Do Not
 

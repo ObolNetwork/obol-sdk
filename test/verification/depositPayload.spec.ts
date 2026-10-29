@@ -1,9 +1,16 @@
 import { verifyDepositPayloads } from '../../src/verification/depositPayload';
+import { computeDepositMsgRoot } from '../../src/verification/common';
 import {
   TEST_ADDRESSES,
   hoodiCompoundingDepositPayload,
   mainnetDepositPayload,
 } from '../fixtures';
+import {
+  offsetDepositPair,
+  signatureOutsideSubgroup,
+  signedDeposit,
+  withSignature,
+} from '../blsTestUtils';
 
 const ETH = BigInt('1000000000000000000');
 
@@ -55,6 +62,31 @@ describe('verifyDepositPayloads', () => {
     // The second deposit is signed for Hoodi.
     await expect(
       verifyDepositPayloads([mainnet.deposit, hoodi.deposit], { chainId: 1 }),
+    ).rejects.toThrow('Invalid deposit at index 1: invalid deposit signature');
+  });
+
+  it('requires each signature to be valid on its own', async () => {
+    // Each signature is invalid; their sum is the sum of two valid ones.
+    const [first, second] = offsetDepositPair(mainnet.deposit);
+    await expect(
+      verifyDepositPayloads([first, second], { chainId: mainnet.chainId }),
+    ).rejects.toThrow('Invalid deposit at index 0: invalid deposit signature');
+    await expect(
+      verifyDepositPayloads([mainnet.deposit, second, first], {
+        chainId: mainnet.chainId,
+      }),
+    ).rejects.toThrow('Invalid deposit at index 1: invalid deposit signature');
+  });
+
+  it('rejects a signature outside the prime-order subgroup', async () => {
+    const deposit = withSignature(
+      mainnet.deposit,
+      signatureOutsideSubgroup(mainnet.deposit.signature),
+    );
+    await expect(
+      verifyDepositPayloads([mainnet.deposit, deposit], {
+        chainId: mainnet.chainId,
+      }),
     ).rejects.toThrow('Invalid deposit at index 1: invalid deposit signature');
   });
 
@@ -182,5 +214,113 @@ describe('verifyDepositPayloads', () => {
         { chainId: mainnet.chainId },
       ),
     ).rejects.toThrow('malformed execution withdrawal credentials');
+  });
+
+  describe('field lengths', () => {
+    // A raw 20-byte address, as `charon deposit sign` emits it.
+    const address = '00' + mainnet.withdrawalAddress.toLowerCase().slice(4);
+
+    it('accepts the deposit when the credentials are 32 bytes', async () => {
+      // Same root and signature as the 20-byte form below: SSZ zero-pads it.
+      await expect(
+        verifyDepositPayloads(
+          [signedDeposit(1, '0x' + address + '00'.repeat(12))],
+          {
+            chainId: 1,
+          },
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('rejects 20-byte credentials starting 0x00 with a valid root and signature', async () => {
+      await expect(
+        verifyDepositPayloads([signedDeposit(1, '0x' + address)], {
+          chainId: 1,
+        }),
+      ).rejects.toThrow(
+        'Invalid deposit at index 0: withdrawal_credentials must be 32 bytes',
+      );
+    });
+
+    it('rejects 20-byte credentials for a top-up', async () => {
+      await expect(
+        verifyDepositPayloads([signedDeposit(1, '0x' + address)], {
+          chainId: 1,
+          kind: 'topUp',
+        }),
+      ).rejects.toThrow('withdrawal_credentials must be 32 bytes');
+    });
+
+    it.each([
+      ['20 bytes starting 0x12', '0x12' + 'ab'.repeat(19)],
+      ['31 bytes', mainnet.deposit.withdrawal_credentials.slice(0, 2 + 31 * 2)],
+      ['33 bytes', mainnet.deposit.withdrawal_credentials + '00'],
+      ['no 0x prefix', mainnet.deposit.withdrawal_credentials.slice(2)],
+      ['non-hex characters', '0x01' + '0'.repeat(22) + 'zz'.repeat(20)],
+    ])('rejects withdrawal credentials of %s', async (_label, credentials) => {
+      await expect(
+        verifyDepositPayloads(
+          [{ ...mainnet.deposit, withdrawal_credentials: credentials }],
+          { chainId: mainnet.chainId },
+        ),
+      ).rejects.toThrow(
+        'Invalid deposit at index 0: withdrawal_credentials must be 32 bytes',
+      );
+    });
+
+    it.each([
+      ['pubkey', 47, 'pubkey must be 48 bytes'],
+      ['signature', 95, 'signature must be 96 bytes'],
+      ['deposit_data_root', 31, 'deposit_data_root must be 32 bytes'],
+    ] as const)('rejects a short %s', async (field, bytes, message) => {
+      const deposit = {
+        ...mainnet.deposit,
+        [field]: mainnet.deposit[field].slice(0, 2 + bytes * 2),
+      };
+      await expect(
+        verifyDepositPayloads([deposit], { chainId: mainnet.chainId }),
+      ).rejects.toThrow(`Invalid deposit at index 0: ${message}`);
+    });
+
+    it('still accepts valid 0x01 and 0x02 credentials in any hex case', async () => {
+      await expect(
+        verifyDepositPayloads(
+          [
+            {
+              ...mainnet.deposit,
+              withdrawal_credentials: mainnet.deposit.withdrawal_credentials
+                .toUpperCase()
+                .replace('0X', '0x'),
+            },
+          ],
+          { chainId: mainnet.chainId },
+        ),
+      ).resolves.toBeUndefined();
+      await expect(
+        verifyDepositPayloads([hoodi.deposit], {
+          chainId: hoodi.chainId,
+          expectedWithdrawalAddress: hoodi.withdrawalAddress,
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
+});
+
+describe('computeDepositMsgRoot', () => {
+  const { pubkey, withdrawal_credentials: credentials } =
+    mainnetDepositPayload.deposit;
+
+  it.each([
+    ['20-byte withdrawal credentials', pubkey, credentials.slice(0, 42)],
+    ['33-byte withdrawal credentials', pubkey, credentials + '00'],
+    ['a 47-byte pubkey', pubkey.slice(0, 96), credentials],
+  ])('rejects %s', (_label, key, creds) => {
+    expect(() =>
+      computeDepositMsgRoot({
+        pubkey: key,
+        withdrawal_credentials: creds,
+        amount: '32000000000',
+      }),
+    ).toThrow('must be 48 bytes');
   });
 });

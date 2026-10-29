@@ -47,8 +47,21 @@ const fail = (index: number, reason: string): never => {
   throw new Error(`Invalid deposit at index ${index}: ${reason}`);
 };
 
+// SSZ zero-pads short byte vectors and ignores bytes past the end, so a
+// wrong-length field can still match the root and signature of a valid one.
+const hexOfBytes = (bytes: number): RegExp =>
+  new RegExp(`^0x[0-9a-f]{${bytes * 2}}$`, 'i');
+const HEX_FIELDS = [
+  { key: 'pubkey', bytes: 48, pattern: hexOfBytes(48) },
+  { key: 'withdrawal_credentials', bytes: 32, pattern: hexOfBytes(32) },
+  { key: 'signature', bytes: 96, pattern: hexOfBytes(96) },
+  { key: 'deposit_data_root', bytes: 32, pattern: hexOfBytes(32) },
+] as const;
+
 /**
  * Checks deposit data before ETH is sent to a deposit contract:
+ * - `pubkey`, `withdrawal_credentials`, `signature` and `deposit_data_root`
+ *   are 0x-prefixed hex of exactly 48, 32, 96 and 32 bytes;
  * - `amount` (wei) is a whole number of gwei, at least 1 ETH, and at most
  *   32 ETH (0x00 / 0x01 credentials) or 2048 ETH (0x02 credentials, and
  *   any top-up);
@@ -89,6 +102,13 @@ export const verifyDepositPayloads = async (
   const checkIndexes: number[] = [];
 
   deposits.forEach((deposit, index) => {
+    for (const { key, bytes, pattern } of HEX_FIELDS) {
+      const value: unknown = deposit[key];
+      if (typeof value !== 'string' || !pattern.test(value)) {
+        fail(index, `${key} must be ${bytes} bytes (0x + ${bytes * 2} hex)`);
+      }
+    }
+
     if (!isTopUp && ZERO_SIGNATURE.test(deposit.signature)) {
       throw new ObolSdkError(
         `Invalid deposit at index ${index}: the signature is all zero, as for a top-up to an existing validator`,

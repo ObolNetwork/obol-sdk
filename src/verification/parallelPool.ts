@@ -15,11 +15,10 @@
 import { fromHexString } from '@chainsafe/ssz';
 import {
   blsAggregatePublicKeys,
-  blsAggregateSignatures,
   blsRecoverDistributedPubkeyFromShares,
   blsVerifyAggregate,
+  blsVerifyEach,
   blsVerifyExtraShares,
-  blsVerifyMultiple,
   blsVerifyWithAggregatedPubkey,
 } from '../blsUtils.js';
 // Type-only imports — erased at compile time, so they don't pull node:*
@@ -338,11 +337,11 @@ export async function verifyBlsChecksParallel(
   );
 }
 
-// Verify a batch of (pubkey, message, individual signature) triples.
-// Sync path aggregates all sigs and runs blsVerifyMultiple once (matches the
-// previous behavior). Parallel path splits into chunks; each chunk's sigs are
-// aggregated and verified independently — same total pairing count, K× wall
-// time speedup.
+// Verify a batch of (pubkey, message, individual signature) triples: true only
+// if every signature is valid on its own. Sync path runs blsVerifyEach (a
+// randomly weighted batch check) once. Parallel path splits into chunks, each
+// checked independently with its own weights — same total pairing count, K×
+// wall time speedup.
 export async function verifyBatchParallel(
   pubkeys: Uint8Array[],
   messages: Uint8Array[],
@@ -367,11 +366,7 @@ export async function verifyBatchParallel(
     pubkeys.length < MIN_PARALLEL_BATCH_PAIRS ||
     numWorkers < 2
   ) {
-    return blsVerifyMultiple(
-      pubkeys,
-      messages,
-      blsAggregateSignatures(signatures),
-    );
+    return blsVerifyEach(pubkeys, messages, signatures);
   }
 
   const pkChunks = chunkArrays(pubkeys, numWorkers);

@@ -27,6 +27,7 @@ import {
   DOMAIN_DEPOSIT,
   DefinitionFlow,
   GENESIS_VALIDATOR_ROOT,
+  MIN_SUPPORTED_CLUSTER_VERSION,
   signCreatorConfigHashPayload,
   signEnrPayload,
   signOperatorConfigHashPayload,
@@ -322,6 +323,15 @@ export const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
   depositMsgVal.withdrawal_credentials = fromHexString(
     msg.withdrawal_credentials as string,
   );
+  // SSZ would zero-pad or truncate these to fit, hashing a different value.
+  if (
+    depositMsgVal.pubkey.length !== 48 ||
+    depositMsgVal.withdrawal_credentials.length !== 32
+  ) {
+    throw new Error(
+      'deposit message pubkey must be 48 bytes and withdrawal_credentials 32 bytes',
+    );
+  }
   depositMsgVal.amount = toUint64(msg.amount as string);
   return Buffer.from(depositMessageType.hashTreeRoot(depositMsgVal).buffer);
 };
@@ -606,6 +616,16 @@ export const hasUniqueDistributedKeys = (clusterLock: ClusterLock): boolean => {
   );
   return new Set(dvKeys).size === dvKeys.length;
 };
+
+/**
+ * Whether `version` is a valid semver at or above
+ * {@link MIN_SUPPORTED_CLUSTER_VERSION}. Legacy (< v1.10.0) definitions are
+ * not created or joined by the SDK; existing legacy locks still validate.
+ */
+export const isSupportedClusterVersion = (version: unknown): boolean =>
+  typeof version === 'string' &&
+  semver.valid(version) !== null &&
+  semver.gte(version, MIN_SUPPORTED_CLUSTER_VERSION);
 
 export const isValidClusterLock = async (
   clusterLock: ClusterLock,
