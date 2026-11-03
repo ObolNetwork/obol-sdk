@@ -172,6 +172,16 @@ describe('deposits.fromLock', () => {
     expect(error.details).toEqual({ issue: 'fork_version_mismatch' });
   });
 
+  it('does not read deposit_data from a v1.8.0+ lock (deposit_data_missing)', async () => {
+    const lock = copy(clusterLockV1X10);
+    const validator: any = lock.distributed_validators[0];
+    validator.deposit_data = validator.partial_deposit_data[0];
+    validator.partial_deposit_data = [];
+    const error = await rejection(fromLock(lock, { verify: false }));
+    expect(error.code).toBe('LOCK_INVALID');
+    expect(error.details).toEqual({ issue: 'deposit_data_missing', index: 0 });
+  });
+
   it('reports a validator without deposit data (deposit_data_missing)', async () => {
     const lock = copy(clusterLockV1X10);
     lock.distributed_validators[0].partial_deposit_data = [];

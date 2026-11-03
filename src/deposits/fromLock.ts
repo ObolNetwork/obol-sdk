@@ -241,24 +241,36 @@ const verifyForDeposits = async (
 type LockValidator = ClusterLock['distributed_validators'][number];
 
 /** `partial_deposit_data` when it has entries, else `deposit_data`, else none. */
-const rawDepositData = (validator: LockValidator): RawDeposit[] => {
+const rawDepositData = (
+  validator: LockValidator,
+  legacyLayout: boolean,
+): RawDeposit[] => {
   const partial = validator.partial_deposit_data;
   if (partial !== undefined && partial !== null && partial.length > 0) {
     return partial;
   }
-  if (validator.deposit_data !== undefined) return [validator.deposit_data];
+  // From v1.8.0 a lock's deposits are in partial_deposit_data only; its
+  // deposit_data is not covered by lock verification, so never read it.
+  if (legacyLayout && validator.deposit_data !== undefined) {
+    return [validator.deposit_data];
+  }
   return [];
 };
+
+/** Locks before v1.8.0 keep one `deposit_data` per validator. */
+const isLegacyLayout = (lock: ClusterLock): boolean =>
+  ['v1.6.0', 'v1.7.0'].includes(lock.cluster_definition.version);
 
 /** The selected validators' deposits by amount (wei), in lock order. */
 const collectDeposits = (
   validators: LockValidator[],
   selected: number[],
+  legacyLayout: boolean,
 ): Map<bigint, Deposit[]> => {
   const depositsByAmount = new Map<bigint, Deposit[]>();
   for (const index of selected) {
     const validator = validators[index];
-    const raw = rawDepositData(validator);
+    const raw = rawDepositData(validator, legacyLayout);
     if (raw.length === 0) {
       throw lockInvalid(`Validator ${index} has no deposit data`, {
         issue: 'deposit_data_missing',
@@ -364,7 +376,11 @@ export const fromLock = async (
       issue: 'deposit_data_missing',
     });
   }
-  const depositsByAmount = collectDeposits(validators, selected);
+  const depositsByAmount = collectDeposits(
+    validators,
+    selected,
+    isLegacyLayout(lock),
+  );
 
   const amounts = [...depositsByAmount.keys()].sort(compareBigints);
   const deposits = pickDeposits(amount, amounts, depositsByAmount, selected);

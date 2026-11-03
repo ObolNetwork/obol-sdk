@@ -1,6 +1,7 @@
 /** Definitions for the v3 cluster tests. */
 import type { Hex } from 'viem';
 import {
+  computeConfigHash,
   computeDefinitionHash,
   creatorConfigHashTypedData,
   enrTypedData,
@@ -36,10 +37,18 @@ export const prepareInput = (extra: Record<string, unknown> = {}) => ({
 
 /** A prepared definition signed by the creator and, optionally, the operator. */
 export const signedDefinition = async (
-  options: { operatorSigned?: boolean } = {},
+  options: { operatorSigned?: boolean; version?: string } = {},
 ): Promise<{ definition: any; configHash: Hex }> => {
-  const { definition, configHash }: { definition: any; configHash: Hex } =
+  const prepared: { definition: any; configHash: Hex } =
     prepareDefinition(prepareInput());
+  const { definition } = prepared;
+  let { configHash } = prepared;
+  // An older (not creatable) version, hashed and signed as such.
+  if (options.version !== undefined) {
+    definition.version = options.version;
+    configHash = computeConfigHash(definition) as Hex;
+    definition.config_hash = configHash;
+  }
   definition.creator.config_signature = await creator.signTypedData(
     creatorConfigHashTypedData(configHash, 560048) as any,
   );

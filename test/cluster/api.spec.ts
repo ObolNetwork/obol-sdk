@@ -211,6 +211,7 @@ describe('cluster.accept', () => {
   const setup = async (
     options: {
       operatorSigned?: boolean;
+      version?: string;
       walletKey?: Hex;
       edit?: (d: any) => void;
     } = {},
@@ -312,6 +313,16 @@ describe('cluster.accept', () => {
     const error = await rejection(cluster.accept({ configHash: hash, enr }));
     expect(error.code).toBe('DEFINITION_INVALID');
     expect((error.details.issues as any[]).map(i => i.code)).toContain(code);
+    expect(api.calls.map(c => c.method)).toEqual(['GET']);
+  });
+
+  it('rejects a definition below v1.10.0 (DEFINITION_INVALID)', async () => {
+    const { api, hash, cluster } = await setup({ version: 'v1.8.0' });
+    const error = await rejection(cluster.accept({ configHash: hash, enr }));
+    expect(error.code).toBe('DEFINITION_INVALID');
+    expect((error.details.issues as any[]).map(i => i.code)).toContain(
+      'version_unsupported',
+    );
     expect(api.calls.map(c => c.method)).toEqual(['GET']);
   });
 

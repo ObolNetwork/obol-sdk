@@ -29,6 +29,7 @@ import {
 import { definitionHash } from './hash.js';
 import { prepareDefinition } from './prepareDefinition.js';
 import {
+  CREATABLE_DEFINITION_VERSIONS,
   DefinitionSchema,
   type ClusterDefinition,
   type ClusterLock,
@@ -275,7 +276,8 @@ export const AcceptSchema = Type.Object(
  * Checks, in order: the wallet is on the client chain; the fetched
  * definition passes `verifyDefinition` for the client chain (config hash,
  * fork version, signatures); an explicit `version` equals the definition's;
- * the wallet account is one of the operators. If that operator already
+ * the definition is v1.10.0 or later; the wallet account is one of the
+ * operators. If that operator already
  * signed with the same ENR, the definition is returned without signing.
  *
  * @returns The updated definition.
@@ -310,6 +312,21 @@ export const accept = async (
       {
         code: 'version_mismatch',
         message: `version ${args.version} is not the definition's ${definition.version}`,
+      },
+    ]);
+  }
+
+  // As prepareDefinition: older versions sign less of the definition, and
+  // the Obol API rejects them for new clusters.
+  if (
+    !(CREATABLE_DEFINITION_VERSIONS as readonly string[]).includes(
+      definition.version,
+    )
+  ) {
+    throw definitionInvalid(args.configHash, [
+      {
+        code: 'version_unsupported',
+        message: `version ${definition.version} is below ${CREATABLE_DEFINITION_VERSIONS[0]}, which cluster.accept requires`,
       },
     ]);
   }

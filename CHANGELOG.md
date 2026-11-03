@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix(cluster): `cluster.accept` refuses definitions below v1.10.0 (`DEFINITION_INVALID`, issue `version_unsupported`), as 2.x `acceptClusterDefinition` does since #224
+- fix(deposits): `deposits.fromLock` reads `deposit_data` only from v1.6.0 and v1.7.0 locks, also with `verify: false` (a v1.8.0+ validator without `partial_deposit_data` is `deposit_data_missing`)
+- Includes main through #260 (dependency bumps: undici 6.29.1, fast-uri 3.1.9, markdown-it 14.3.3)
+
 #### [v3.0.0-rc.11](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.10...v3.0.0-rc.11)
 
 > 28 October 2026

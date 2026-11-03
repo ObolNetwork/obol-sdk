@@ -171,8 +171,10 @@ Checks:
 2. Fetch the definition (`GET /v1/definition/:configHash`) and run `verifyDefinition` with the client chain; any
    failure is `DEFINITION_INVALID`. (2.15 `getVerifiedClusterDefinition`)
 3. An explicit `version` in the input equals the definition's version, else `DEFINITION_INVALID`. (2.15)
-4. The wallet account is one of `definition.operators[].address` (case-insensitive), else `ACCOUNT_NOT_OPERATOR`. (2.15)
-5. If that operator already has a `config_signature` and the same ENR, return the definition without signing
+4. The definition's version is v1.10.0 or later, else `DEFINITION_INVALID` (`version_unsupported`): older versions
+   sign less of the definition. (2.15)
+5. The wallet account is one of `definition.operators[].address` (case-insensitive), else `ACCOUNT_NOT_OPERATOR`. (2.15)
+6. If that operator already has a `config_signature` and the same ENR, return the definition without signing
    (idempotent). (2.15)
 
 Then sign `OperatorConfigHash { operator_config_hash: configHash }` and `ENR { enr }` and
@@ -411,8 +413,8 @@ Checks:
    for a per-validator step). A 10k-validator lock costs about 2 s plus about 25 ms per signature checked (the
    deposits and the builder registration of each returned validator).
    (2.15 `getDepositData` ran the full verification)
-2. The lock has at least one validator; each returned one has `partial_deposit_data` (v1.8.0+) or `deposit_data`.
-   Else `LOCK_INVALID` (issue `deposit_data_missing`). (2.15)
+2. The lock has at least one validator; each returned one has `partial_deposit_data` (v1.8.0+; `deposit_data` is
+   not read) or `deposit_data` (v1.6.0, v1.7.0). Else `LOCK_INVALID` (issue `deposit_data_missing`). (2.15)
 3. Each deposit: pubkey, credentials, signature are well-formed hex of the right length, `amount` is a positive
    integer (gwei); the pubkey equals the validator's `distributed_public_key`; a present `deposit_data_root` equals the
    recomputed root (an absent one is computed). Else `LOCK_INVALID` (issue `deposit_data_invalid`). (2.15)
