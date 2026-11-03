@@ -90,6 +90,26 @@ describe('Cluster Client', () => {
     expect(postBodies()[1].version).toEqual(CONFIG_VERSION);
   });
 
+  test('createClusterDefinition gives each definition a fresh v4 uuid', async () => {
+    const requestMock = jest
+      .fn()
+      .mockReturnValue(Promise.resolve({ config_hash: mockConfigHash }));
+    clientInstance['request'] = requestMock as never;
+
+    await clientInstance.createClusterDefinition(clusterConfigV1X10);
+    await clientInstance.createClusterDefinition(clusterConfigV1X10);
+    const uuids = requestMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([, init]) => JSON.parse((init as { body: string }).body).uuid);
+
+    for (const uuid of uuids) {
+      expect(uuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    }
+    expect(uuids[0]).not.toEqual(uuids[1]);
+  });
+
   test('acceptClusterDefinition should return cluster definition', async () => {
     // The signer must be an operator of the (verified) definition.
     const definition = structuredClone(clusterLockV1X10.cluster_definition);

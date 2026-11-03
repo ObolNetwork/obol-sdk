@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { ZeroAddress } from 'ethers';
 import { Base, type BaseConfig } from './base.js';
 import {
@@ -804,7 +803,7 @@ export class Client extends Base {
       fork_version: this.fork_version,
       dkg_algorithm: DKG_ALGORITHM,
       version,
-      uuid: uuidv4(),
+      uuid: globalThis.crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       threshold: Math.ceil((2 * validatedCluster.operators.length) / 3),
       num_validators: validatedCluster.validators.length,
