@@ -98,11 +98,18 @@ const mockClusterConfig: ExitClusterConfig = {
   ],
 };
 
+// This operator's (share_idx 1 -> key '0') signature is already stored.
 const mockExistingBlobData: ExistingExitValidationBlobData = {
   public_key: mockExitBlob.public_key,
   epoch: mockExitMessage.epoch,
   validator_index: mockExitMessage.validator_index,
-  shares_exit_data: [],
+  shares_exit_data: [
+    {
+      '0': {
+        partial_exit_signature: mockExitBlob.signed_exit_message.signature,
+      },
+    },
+  ],
 };
 
 describe('exit', () => {
@@ -445,6 +452,25 @@ describe('exit', () => {
       );
     });
 
+    it('validates a same-epoch blob when this operator has no stored signature', async () => {
+      const existingBlobWithoutThisOperator: ExistingExitValidationBlobData = {
+        public_key: mockExitBlob.public_key,
+        epoch: mockExitMessage.epoch,
+        validator_index: mockExitMessage.validator_index,
+        shares_exit_data: [
+          { '1': { partial_exit_signature: '0x' + 'ee'.repeat(96) } },
+        ],
+      };
+
+      const result = await exit.validateExitBlobs(
+        mockClusterConfig,
+        mockExitPayload,
+        MOCK_BEACON_API_URL,
+        existingBlobWithoutThisOperator,
+      );
+      expect(result).toEqual([mockExitBlob]);
+    });
+
     it('should handle multiple blobs, some new, some already processed', async () => {
       const anotherMockExitBlob: ExitValidationBlob = {
         public_key: '0x' + '11'.repeat(48),
@@ -468,12 +494,20 @@ describe('exit', () => {
         ],
       };
 
-      // Only the first blob has existing data, second is new
+      // Only the first blob has existing data (this operator's signature at
+      // the same epoch), second is new
       const existingBlobDataForFirstOnly: ExistingExitValidationBlobData = {
         public_key: mockExitBlob.public_key,
         epoch: mockExitMessage.epoch,
         validator_index: mockExitMessage.validator_index,
-        shares_exit_data: [],
+        shares_exit_data: [
+          {
+            '0': {
+              partial_exit_signature:
+                mockExitBlob.signed_exit_message.signature,
+            },
+          },
+        ],
       };
 
       const result = await exit.validateExitBlobs(
