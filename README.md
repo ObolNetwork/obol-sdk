@@ -2,169 +2,195 @@
 
 <h1 align="center">Obol SDK</h1>
 
-This repo contains the Obol Software Development Kit, for creating Distributed Validators with the help of the [Obol API](https://docs.obol.org/api).
+TypeScript SDK for creating and managing Obol Distributed Validators: cluster definitions and locks, deposits,
+Obol Validator Managers (OVM), splits, incentives and exits. Version 3 is built on [viem](https://viem.sh) and
+replaces the 2.x `Client` (ethers) entirely; see the [CHANGELOG](CHANGELOG.md).
 
-## Quick Start
+## Install
 
-```typescript
-import { Client } from "@obolnetwork/obol-sdk";
-import { Wallet } from "ethers";
-
-// 1. Create a client (Hoodi testnet)
-const signer = new Wallet(process.env.PRIVATE_KEY!);
-const client = new Client({ chainId: 560048 }, signer);
-
-// 2. Accept terms and conditions (required once per address)
-await client.acceptObolLatestTermsAndConditions();
-
-// 3. Create a cluster definition
-const configHash = await client.createClusterDefinition({
-  name: "my-cluster",
-  operators: [{ address: "0xOperator1..." }, { address: "0xOperator2..." }],
-  validators: [{
-    fee_recipient_address: "0xFeeRecipient...",
-    withdrawal_address: "0xWithdrawal...",
-  }],
-});
-
-// 4. Retrieve the definition / lock (read-only, no signer needed)
-const definition = await client.getClusterDefinition(configHash);
-const lock = await client.getClusterLock(configHash);
+```bash
+npm install @obolnetwork/obol-sdk viem
 ```
 
-### Signers
+`viem@^2` is a peer dependency. Node 20+ (CommonJS or ESM) and browsers (ESM) are supported.
 
-The `signer` can be any ethers v6 `Signer` (`Wallet`, `HDNodeWallet`, `JsonRpcSigner`, `NonceManager`, or a custom `AbstractSigner`).
+## Create a client
 
-## Getting Started
+```typescript
+import { createObolClient } from '@obolnetwork/obol-sdk';
+import { createPublicClient, createWalletClient, custom, http } from 'viem';
+import { hoodi } from 'viem/chains';
 
-Checkout our [docs](https://docs.obol.org/docs/advanced/quickstart-sdk), [examples](https://github.com/ObolNetwork/obol-sdk-examples/), and SDK [reference](https://docs.obol.org/sdk). Further guides and walkthroughs coming soon.
+const publicClient = createPublicClient({ chain: hoodi, transport: http() });
+const walletClient = createWalletClient({
+  chain: hoodi,
+  transport: custom(window.ethereum),
+});
 
-## Terms and Conditions
-To use obol-sdk and in order to be able to create a cluster definition or accept an invite to join a cluster, you must accept the [latest Obol terms and conditions](https://obol.org/terms.pdf) by calling acceptObolLatestTermsAndConditions.
+const obol = createObolClient({
+  chain: hoodi, // mainnet or Hoodi; Gnosis and Sepolia for cluster files only
+  publicClient,
+  walletClient, // optional: needed for EIP-712 signatures and sends
+  // api: false  // chain-only; the default is the Obol API at api.obol.tech
+});
+```
 
-## Security
+TypeScript with `module: commonjs` and `moduleResolution: node10` (a NestJS default): `viem/chains` pulls ox's `.ts`
+sources into `tsc`, whose errors `skipLibCheck` does not hide. Use `moduleResolution: bundler`, or build the chain with
+viem's `defineChain` (the SDK matches chains by `id`); see [MIGRATION.md](MIGRATION.md) "Verifying locks on a
+server".
 
-**API host:** `baseUrl` must be one of `https://api.obol.tech`, `https://obol-api-nonprod-dev.dev.obol.tech`, or `https://obol-api-nonprod-qa.dev.obol.tech` (no path suffix). Endpoints are still called as `/v1/...` as before. Any other value throws `InvalidBaseUrlError`.
+Every module is also exported as a namespace (`cluster`, `deposits`, `ovm`, `splits`, `setup`, `incentives`,
+`exits`, `terms`, `withdrawals`, and `experimental` for `simulate` and `legacy`), so the pure functions (hashing, lock
+verification, share math, exit aggregation) work without a client. Each module is also its own entry point, so a page
+that needs one module loads only that one (a reads-only `ovm` import has no BLS or SSZ code):
 
-**RPC URLs:** Set `RPC_MAINNET`, `RPC_HOODI`, etc. in your own app or pass an explicit provider/RPC to the client. The SDK does not load a `.env` file on import.
+```typescript
+import { createObolContext, createOvmModule } from '@obolnetwork/obol-sdk/ovm';
 
-**Private keys:** If you use a backend signer, store keys securely (KMS, HSM, or env vars your app loads explicitly). Never commit secrets to version control.
+const ovm = createOvmModule(createObolContext({ chain: hoodi, publicClient }));
+const state = await ovm.getState(ovmAddress); // null when the address is not an OVM
+```
 
-## ⚡️ Integration with Safe Wallet
+## Prepare, then send
 
-When integrating the Obol SDK with a **Safe Wallet**, you can either pass an RPC URL OR provide the `RPC_MAINNET` or `RPC_HOODI` environment variable, pointing to the correct network's RPC URL. This is required to interact with Safe kit.
+Writes are split in two. A `prepare*` operation runs every check, reads what it needs from the chain and the API,
+and returns `Prepared` values: a `kind` (which operation), an encoded `request` (`to`, `data`, `value`, `chainId`),
+non-blocking `checks` (findings with a `severity` and, when about one item, a `subject`), a `preview` typed by
+`kind`, and the `blockNumber` it read (`isStale(prepared, head, maxAgeBlocks)` tells when to prepare again). Every
+`preview*` operation returns `{ preview, checks, blockNumber }`. Nothing is sent until you pass it to `send`, or to your own wallet
+layer (wagmi, a Safe, a relayer).
 
+```typescript
+const lock = await obol.cluster.getLock({ configHash });
 
-## Contributing
+// Verified deposits from the lock (amounts in wei).
+const { deposits } = await obol.deposits.fromLock(lock);
 
-Please review the following guidelines:
+// Checks credentials, signatures, OVM provenance and roles, and existing deposits.
+const prepared = await obol.deposits.prepareDeposit({
+  deposits: deposits ?? [],
+  via: { ovm: ovmAddress },
+});
 
-- [How to Report Bugs](#how-to-report-bugs)
-- [How to Propose Changes](#how-to-propose-changes)
-- [Code Review Process](#code-review-process)
-
-### How to Report Bugs
-
-If you encounter a bug or unexpected behavior, please follow these steps to report it:
-
-1. Go to the "Issues" tab of this repository.
-2. Click on the "Get started" button in the Bug report section.
-3. Provide a clear title and description of the issue following the format provided.
-
-### How to Propose Changes
-
-If you'd like to propose improvements or new features, please follow these steps:
-
-1. Fork this repository.
-2. Create a new branch for your changes.
-3. Make your changes and commit them with clear messages.
-4. Open a pull request with a detailed description of the changes.
-
-### Code Review Process
-
-All contributions are reviewed before they are merged into the main branch. Please address any feedback provided during the review process.
-
-Thank you for contributing to Obol-SDK!
-
-## For AI Agents and Code Generators
-
-If you are an LLM, code-generation agent, or tool using this SDK programmatically, follow these guidelines to avoid common mistakes:
-
-- **Primary entrypoint:** `Client` from `@obolnetwork/obol-sdk`.
-- **Constructor:** `new Client({ chainId }, signer?, provider?)` – `chainId` defaults to `560048` (Hoodi). `signer` is any ethers v6 `Signer`; no `as any` cast is needed.
-- **All operations are namespaced** under the client instance. Do **not** construct HTTP requests manually.
-
-### Client API Surface
-
-| Namespace | Method | Description |
-|-----------|--------|-------------|
-| *(root)* | `acceptObolLatestTermsAndConditions()` | Accept T&C (required once before writes) |
-| *(root)* | `createClusterDefinition(payload)` | Create a new cluster → returns `config_hash` |
-| *(root)* | `acceptClusterDefinition(operatorPayload, configHash)` | Join a cluster as an operator (verifies the definition and operator membership first) |
-| *(root)* | `getClusterDefinition(configHash)` | Fetch cluster definition (read-only) |
-| *(root)* | `getClusterLock(configHash)` | Fetch cluster lock by config hash (read-only) |
-| *(root)* | `getClusterLockByHash(lockHash)` | Fetch cluster lock by lock hash (read-only) |
-| *(root)* | `getDepositData(lockHash)` | Validated deposit payloads (wei) from a lock, for `eoa.deposit` / `splits.deposit` (read-only) |
-| *(root)* | `createObolRewardsSplit(payload)` | Deploy OWR + splitter (rewards-only split) |
-| *(root)* | `createObolTotalSplit(payload)` | Deploy splitter (total split) |
-| *(root)* | `getOWRTranches(owrAddress)` | Read OWR tranche info (read-only on-chain) |
-| `client.splits` | `createValidatorManagerAndRewardsSplit(payload)` | Deploy OVM + SplitV2 (rewards-only) |
-| `client.splits` | `createValidatorManagerAndTotalSplit(payload)` | Deploy OVM + SplitV2 (total) |
-| `client.splits` | `requestWithdrawal(payload)` | Request withdrawal from OVM |
-| `client.splits` | `deposit(payload)` | Deposit to OVM contract (verified first; `kind: 'topUp'` for top-ups) |
-| `client.incentives` | `getIncentivesByAddress(address)` | Fetch claimable incentives (read-only) |
-| `client.incentives` | `isClaimed(contractAddress, index)` | Check if incentives claimed (read-only) |
-| `client.incentives` | `claimIncentives(address)` | Claim incentives on-chain |
-| `client.eoa` | `requestWithdrawal(payload)` | Request EOA withdrawal |
-| `client.eoa` | `deposit(payload)` | Batch deposit validators (verified first; `kind: 'topUp'` for top-ups) |
-| `client.exit` | `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
-| `client.exit` | `verifyExitPayloadSignature(...)` | Verify ECDSA exit payload signature |
-| `client.exit` | `validateExitBlobs(...)` | Validate exit blobs against cluster config |
-| `client.exit` | `recombineExitBlobs(...)` | Aggregate partial exit signatures |
-
-### Standalone Utilities
-
-| Export | Description |
-|--------|-------------|
-| `validateClusterLock(lock, safeRpcUrl?)` | Cryptographic verification (signatures, hashes). Does not mirror every Charon runtime check—passing here is necessary, not sufficient, for Charon. |
-
-### Key Rules
-
-1. All request/response types are exported from the package root.
-2. Error types exported: `ConflictError`, `SignerRequiredError`, `UnsupportedChainError`.
-3. Methods that **write** (create, deploy, claim) require a `signer`. Methods that **read** (get, fetch) do not.
-4. Supported chain IDs: `1` (Mainnet), `560048` (Hoodi); `100` (Gnosis) and `11155111` (Sepolia) for cluster definitions and locks only.
-5. Splitter/OVM deployment is only supported on chains 1 and 560048.
-
-## Next.js / SSR Configuration
-
-If using this SDK in **Next.js** or other SSR frameworks, add this minimal config to your `next.config.js`:
-
-```javascript
-webpack: (config, { isServer, webpack }) => {
-  if (!isServer) {
-    config.plugins.push(
-      new webpack.DefinePlugin({
-        'process.stdout.isTTY': 'false',
-        'process.stderr.isTTY': 'false',
-      })
-    );
-  } else {
-    // Server: Externalize native dependencies
-    config.externals = config.externals || [];
-    config.externals.push({
-      '@chainsafe/bls': 'commonjs @chainsafe/bls',
-      'bcrypto': 'commonjs bcrypto',
-    });
-  }
-  
-  // Ignore .node files
-  config.plugins.push(
-    new webpack.IgnorePlugin({ resourceRegExp: /\.node$/ })
-  );
-  
-  return config;
+for (const tx of prepared) {
+  for (const finding of tx.checks) console.warn(finding.code, finding.message);
+  const sent = await obol.send(tx);
+  await sent.wait();
 }
 ```
 
+To show what a transaction will do before the user signs it, simulate it (experimental: the result shape may still
+change). `simulate` runs the request on the node without sending it and returns the balance changes, gas, events,
+state changes, plain-language `summary` lines and a comparison with the operation's own `preview`:
+
+```typescript
+const prepared = await obol.ovm.prepareDistribute({ ovm: ovmAddress });
+const sim = await obol.experimental.simulate(prepared, { from: account });
+
+if (!sim.success) throw new Error(sim.summary[0]); // "Reverts: Unauthorized()"
+sim.summary.forEach(line => console.log(line));
+// 0x1234…abcd (principal recipient) receives 32.000000 ETH
+// 0x5678…ef01 (reward recipient) receives 1.200000 ETH
+if (!sim.limited && !sim.matchesPreview.ok) console.warn(sim.matchesPreview.differences);
+
+await obol.send(prepared);
+```
+
+It uses `eth_simulateV1` (geth, Nethermind, Erigon, Reth, anvil and most public RPCs), else `debug_traceCall`; on a
+node with neither, the result is `limited` (success or revert only). A Safe is simulated as the Safe calling; its own
+signature checks are not. Simulate just before sending: the state can change before the transaction is mined.
+
+Failures throw `ObolError` (or `ObolApiError` for API responses) with a stable `code`, a `hint` and `details`:
+
+```typescript
+import { isObolError } from '@obolnetwork/obol-sdk';
+
+try {
+  await obol.deposits.fromLock(lock);
+} catch (error) {
+  if (isObolError(error, 'LOCK_INVALID')) {
+    // do not deposit: error.details.step says which check failed (typed per code)
+  }
+}
+```
+
+### Lock verification
+
+`cluster.verifyLock` runs on the calling thread and yields to the event loop every `yieldMs` (default 50), so pages
+and servers stay responsive. `level: 'full'` (default) runs every check; `level: 'attested'` relies on the node
+signatures over `lock_hash` for the BLS checks Charon ran during the DKG and checks the deposit signatures of the
+validators you name, which is what `deposits.fromLock` does for the deposits it returns:
+
+```typescript
+const result = await obol.cluster.verifyLock(lock, { level: 'attested', signatures: [0, 1] });
+// { ok: false, level: 'attested', step: 'deposit_data_invalid', issue: 'signature_invalid', validator: 1 }
+```
+
+BLS is pure JavaScript by default (about 25 ms per signature), which suits pages and scripts. Contract-wallet
+(Safe) definition signatures are checked with EIP-1271 through a public client on the lock's chain: the bound client
+uses its own; standalone calls take `publicClient` or `publicClients` (by chain id). Without one, such a signature
+fails as `definition_signature_unverifiable`.
+
+### Servers
+
+A Node server that verifies locks from users (the Obol API does) should:
+
+- call `isValidLock` (a boolean; `verifyLock` returns an object, always truthy) or check `verifyLock(...).ok`, and map
+  `PAYLOAD_INVALID` (a malformed lock) to a 400;
+- keep `level: 'full'` (the default). **Never `attested` on a server:** it skips share binding and the aggregate
+  signature;
+- pass the native BLS backend from `@obolnetwork/obol-sdk/blst` (install the optional peer `@chainsafe/blst`): a 1k
+  validator lock at `full` takes about 1.3 s instead of 80 s of event-loop time;
+- pass `publicClients` for every chain it serves, so Safe-created clusters verify (2.x had built-in RPCs; v3 has
+  none);
+- bound the CPU per request with `signal` (`AbortSignal.timeout(ms)`, or the request's own signal): the run stops at
+  the next yield point with `ABORTED` (map it to a 503, not to "invalid"); racing the promise would leave the work
+  running. Apply a concurrency limit around the call (there are no workers);
+- warm the BLS backend at boot (`await loadBlstBackend()`): there is no fallback if the native binding fails to load
+  (`BLS_BACKEND_UNAVAILABLE`), so fail the deploy rather than the first request.
+
+```typescript
+import { isValidLock } from '@obolnetwork/obol-sdk';
+import { loadBlstBackend } from '@obolnetwork/obol-sdk/blst';
+
+const bls = await loadBlstBackend(); // once; BLS_BACKEND_UNAVAILABLE if @chainsafe/blst is missing
+const publicClients = { 1: mainnetClient, 560048: hoodiClient };
+
+const ok = await isValidLock(lock, {
+  bls,
+  publicClients,
+  signal: AbortSignal.timeout(10_000), // ABORTED after 10 s
+});
+if (!ok) throw new BadRequestException('Invalid lock');
+```
+
+`verifyTypedDataSignature({ address, signature, typedData, chainId?, publicClients })` checks an EIP-712 bearer
+signature (an account by recovery, a Safe by EIP-1271), and `cluster.isValidEnr` / `cluster.parseEnr` validate ENRs.
+
+## Specification
+
+What each operation checks, reads and returns, every error and finding code, and the test vectors are in
+[`spec/`](spec/README.md): [`operations.md`](spec/operations.md), [`errors.md`](spec/errors.md),
+[`lifecycles.md`](spec/lifecycles.md), [`schemas/`](spec/schemas/) and [`vectors/`](spec/vectors/README.md). Moving
+from 2.x, or from an earlier 3.0 release candidate: [MIGRATION.md](MIGRATION.md).
+
+## Terms and Conditions
+
+Creating a cluster definition or accepting an invite needs the [latest Obol terms and conditions](https://obol.org/terms.pdf)
+accepted once per address: `obol.terms.hasAccepted()` and `obol.terms.accept()`.
+
+## Security
+
+- **API host:** `api.baseUrl` must be one of `https://api.obol.tech`, `https://obol-api-nonprod-dev.dev.obol.tech`
+  or `https://obol-api-nonprod-qa.dev.obol.tech`, because EIP-712 signatures are sent to it as bearer tokens. Any
+  other value throws `BASE_URL_INVALID`, except `http(s)://localhost[:port]` and `http(s)://127.0.0.1[:port]` with
+  `api: { baseUrl, allowLocal: true }`, for a local obol-api.
+- **Keys:** the SDK never sees private keys; it uses the viem `walletClient` you pass. Keep backend keys in a KMS or
+  HSM and never commit them.
+
+## Contributing
+
+Report bugs and propose features in [Issues](https://github.com/ObolNetwork/obol-sdk/issues). For changes, fork the
+repo, branch, and open a pull request with a clear description; every PR is reviewed before merge. Development
+notes for humans and agents are in [AGENTS.md](AGENTS.md).

@@ -1,0 +1,730 @@
+{
+  "suite": "split_shares",
+  "description": "Integer split shares at 1e6 = 100% (0xSplits PERCENTAGE_SCALE). percent() parses a decimal percentage with at most 4 decimals into ppm. ovm_split_params turns reward (and optional principal) recipients into the exact SplitV2 parameters the SDK creates: reward shares must sum to 990000 and the chain RAF recipient is added with 10000; for kind \"total\" without principal recipients, each reward recipient gets its reward share plus floor(10000 / n), and 10000 mod n goes to the first recipient in ascending numeric address order (\"Split Everything\"). Recipients are output in ascending numeric address order.",
+  "provenance": {
+    "source": "sdk",
+    "sdk_ref": "obol-sdk feat/sdk-2.16 working tree on 9297307 (staged, unreleased)",
+    "generated_by": "scratch generator running src/splits/splitShares.ts percentToShares and getOVMSplitParams",
+    "note": "Cases mirror test/splits/splitShares.spec.ts (the string-share case is left out: it pins a TypeScript type check, and in these files every input share is a JSON number); seven-recipient and address-ordering cases were added and run through the same code. Rejections in 2.16 are PayloadValidationError (PAYLOAD_INVALID) for shares and InvalidArgumentError for percent; v3 maps both to PAYLOAD_INVALID. The issue slug is derived from the 2.16 message."
+  },
+  "constants": {
+    "scale": "1000000",
+    "rafShare": "10000",
+    "rewardSum": "990000",
+    "rafAddress": "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+    "chainId": 560048
+  },
+  "percent": [
+    {
+      "name": "decimal_string_4dp",
+      "input": {
+        "percent": "33.3333"
+      },
+      "accepted": true,
+      "reason": null,
+      "shares": 333333
+    },
+    {
+      "name": "number_4dp",
+      "input": {
+        "percent": 33.3333
+      },
+      "accepted": true,
+      "reason": null,
+      "shares": 333333
+    },
+    {
+      "name": "one_percent",
+      "input": {
+        "percent": 1
+      },
+      "accepted": true,
+      "reason": null,
+      "shares": 10000
+    },
+    {
+      "name": "smallest",
+      "input": {
+        "percent": "0.0001"
+      },
+      "accepted": true,
+      "reason": null,
+      "shares": 1
+    },
+    {
+      "name": "hundred",
+      "input": {
+        "percent": "100"
+      },
+      "accepted": true,
+      "reason": null,
+      "shares": 1000000
+    },
+    {
+      "name": "two_decimals",
+      "input": {
+        "percent": 24.75
+      },
+      "accepted": true,
+      "reason": null,
+      "shares": 247500
+    },
+    {
+      "name": "zero_number",
+      "input": {
+        "percent": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    },
+    {
+      "name": "zero_string",
+      "input": {
+        "percent": "0"
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    },
+    {
+      "name": "above_hundred",
+      "input": {
+        "percent": 100.0001
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    },
+    {
+      "name": "five_decimals",
+      "input": {
+        "percent": "33.33333"
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    },
+    {
+      "name": "negative",
+      "input": {
+        "percent": -1
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    },
+    {
+      "name": "exponent_notation",
+      "input": {
+        "percent": "1e-5"
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    },
+    {
+      "name": "not_a_number",
+      "input": {
+        "percent": "abc"
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    },
+    {
+      "name": "empty_string",
+      "input": {
+        "percent": ""
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "shares": null
+    }
+  ],
+  "ovm_split_params": [
+    {
+      "name": "rewards_adds_raf",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 490000
+          },
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 500000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+        ],
+        "allocations": ["500000", "490000", "10000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "principalSplit": null,
+      "notes": "The RAF recipient is appended with 10000 and recipients are sorted by address."
+    },
+    {
+      "name": "total_split_everything_remainder_to_first",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x3456789012345678901234567890123456789012",
+            "share": 330000
+          },
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 330000
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 330000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x3456789012345678901234567890123456789012",
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+        ],
+        "allocations": ["330000", "330000", "330000", "10000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "principalSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x3456789012345678901234567890123456789012"
+        ],
+        "allocations": ["333334", "333333", "333333"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "notes": "10000 / 3 = 3333 rem 1; the remainder goes to the lowest address."
+    },
+    {
+      "name": "total_remainder_by_address_not_input_order",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x3456789012345678901234567890123456789012",
+            "share": 500000
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 245000
+          },
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 245000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x3456789012345678901234567890123456789012",
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+        ],
+        "allocations": ["245000", "245000", "500000", "10000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "principalSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x3456789012345678901234567890123456789012"
+        ],
+        "allocations": ["248334", "248333", "503333"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      }
+    },
+    {
+      "name": "total_even_spread",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 495000
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 495000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+        ],
+        "allocations": ["495000", "495000", "10000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "principalSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901"
+        ],
+        "allocations": ["500000", "500000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      }
+    },
+    {
+      "name": "total_single_recipient",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+        ],
+        "allocations": ["990000", "10000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "principalSplit": {
+        "recipients": ["0x1234567890123456789012345678901234567890"],
+        "allocations": ["1000000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      }
+    },
+    {
+      "name": "total_seven_recipients",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x7890123456789012345678901234567890123456",
+            "share": 141432
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 141428
+          },
+          {
+            "address": "0x6789012345678901234567890123456789012345",
+            "share": 141428
+          },
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 141428
+          },
+          {
+            "address": "0x5678901234567890123456789012345678901234",
+            "share": 141428
+          },
+          {
+            "address": "0x4567890123456789012345678901234567890123",
+            "share": 141428
+          },
+          {
+            "address": "0x3456789012345678901234567890123456789012",
+            "share": 141428
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x3456789012345678901234567890123456789012",
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+          "0x4567890123456789012345678901234567890123",
+          "0x5678901234567890123456789012345678901234",
+          "0x6789012345678901234567890123456789012345",
+          "0x7890123456789012345678901234567890123456"
+        ],
+        "allocations": [
+          "141428",
+          "141428",
+          "141428",
+          "10000",
+          "141428",
+          "141428",
+          "141428",
+          "141432"
+        ],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "principalSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x2345678901234567890123456789012345678901",
+          "0x3456789012345678901234567890123456789012",
+          "0x4567890123456789012345678901234567890123",
+          "0x5678901234567890123456789012345678901234",
+          "0x6789012345678901234567890123456789012345",
+          "0x7890123456789012345678901234567890123456"
+        ],
+        "allocations": [
+          "142860",
+          "142856",
+          "142856",
+          "142856",
+          "142856",
+          "142856",
+          "142860"
+        ],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "notes": "10000 / 7 = 1428 rem 4."
+    },
+    {
+      "name": "total_explicit_principal",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          }
+        ],
+        "principalRecipients": [
+          {
+            "address": "0x3456789012345678901234567890123456789012",
+            "share": 250000
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 750000
+          }
+        ],
+        "distributionIncentive": 10000
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x1234567890123456789012345678901234567890",
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5"
+        ],
+        "allocations": ["990000", "10000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 10000
+      },
+      "principalSplit": {
+        "recipients": [
+          "0x2345678901234567890123456789012345678901",
+          "0x3456789012345678901234567890123456789012"
+        ],
+        "allocations": ["750000", "250000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 10000
+      },
+      "notes": "Explicit principal recipients get no RAF share. distributionIncentive is integer ppm (10000 = 1%)."
+    },
+    {
+      "name": "sort_is_numeric_not_checksum_bytes",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0xB000000000000000000000000000000000000000",
+            "share": 495000
+          },
+          {
+            "address": "0xa000000000000000000000000000000000000000",
+            "share": 495000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": true,
+      "reason": null,
+      "issue": null,
+      "rewardSplit": {
+        "recipients": [
+          "0x43F641fA70e09f0326ac66b4Ef0C416EaEcBC6f5",
+          "0xa000000000000000000000000000000000000000",
+          "0xB000000000000000000000000000000000000000"
+        ],
+        "allocations": ["10000", "495000", "495000"],
+        "totalAllocation": "1000000",
+        "distributionIncentive": 0
+      },
+      "principalSplit": null,
+      "notes": "0xa000000000000000000000000000000000000000 < 0xB000000000000000000000000000000000000000 numerically, but a byte-wise compare of the EIP-55 strings puts 'B' (0x42) before 'a' (0x61). Sort by numeric address value (equivalently, by the lower-case hex)."
+    },
+    {
+      "name": "reject_reward_sum_full_scale",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 1000000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "sum_mismatch",
+      "rewardSplit": null,
+      "principalSplit": null,
+      "notes": "Reward shares must leave room for the RAF share (sum 990000)."
+    },
+    {
+      "name": "reject_reward_sum_one_short",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 500000
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 489999
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "sum_mismatch",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_fractional_share",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 500000.5
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 489999.5
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "share_not_positive_integer",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_zero_share",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": 0
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "share_not_positive_integer",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_negative_share",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 1000000
+          },
+          {
+            "address": "0x2345678901234567890123456789012345678901",
+            "share": -10000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "share_not_positive_integer",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_principal_sum",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          }
+        ],
+        "principalRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "sum_mismatch",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_duplicate_case_insensitive",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 495000
+          },
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 495000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "duplicate_address",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_invalid_address",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234",
+            "share": 990000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "invalid_address",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_principal_for_rewards",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          }
+        ],
+        "principalRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 1000000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "principal_not_allowed",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_empty",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "empty_recipients",
+      "rewardSplit": null,
+      "principalSplit": null
+    }
+  ]
+}

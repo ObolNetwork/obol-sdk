@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/exits.aggregate.json",
+  "title": "exits.aggregate",
+  "properties": {
+    "chainId": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "exit": {
+      "anyOf": [
+        {
+          "properties": {
+            "epoch": {
+              "description": "uint64 as a decimal string",
+              "pattern": "^[0-9]{1,20}$",
+              "type": "string"
+            },
+            "lock_hash": {
+              "type": "string"
+            },
+            "publickey": {
+              "description": "BLS public key (48 bytes)",
+              "pattern": "^0x[0-9a-fA-F]{96}$",
+              "type": "string"
+            },
+            "shares_exit_data": {
+              "anyOf": [
+                {
+                  "patternProperties": {
+                    "^[0-9]+$": {
+                      "properties": {
+                        "partial_exit_signature": {
+                          "type": "string"
+                        },
+                        "public_share": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "public_share",
+                        "partial_exit_signature"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "items": {
+                    "patternProperties": {
+                      "^[0-9]+$": {
+                        "properties": {
+                          "partial_exit_signature": {
+                            "type": "string"
+                          },
+                          "public_share": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "public_share",
+                          "partial_exit_signature"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "validator_index": {
+              "description": "uint64 as a decimal string",
+              "pattern": "^[0-9]{1,20}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "publickey",
+            "validator_index",
+            "epoch",
+            "shares_exit_data"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "epoch": {
+              "description": "uint64 as a decimal string",
+              "pattern": "^[0-9]{1,20}$",
+              "type": "string"
+            },
+            "signatures": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "validator_index": {
+              "description": "uint64 as a decimal string",
+              "pattern": "^[0-9]{1,20}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "epoch",
+            "validator_index",
+            "signatures"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "threshold": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "validator": {
+      "properties": {
+        "distributedPublicKey": {
+          "description": "BLS public key (48 bytes)",
+          "pattern": "^0x[0-9a-fA-F]{96}$",
+          "type": "string"
+        },
+        "publicShares": {
+          "items": {
+            "description": "BLS public key (48 bytes)",
+            "pattern": "^0x[0-9a-fA-F]{96}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "distributedPublicKey",
+        "publicShares"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "validator",
+    "exit",
+    "threshold",
+    "chainId"
+  ],
+  "type": "object"
+}

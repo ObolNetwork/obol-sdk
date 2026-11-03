@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/exits.verifyPartialExit.json",
+  "title": "exits.verifyPartialExit",
+  "properties": {
+    "cluster": {
+      "properties": {
+        "forkVersion": {
+          "description": "fork version (4 bytes)",
+          "pattern": "^0x[0-9a-fA-F]{8}$",
+          "type": "string"
+        },
+        "operators": {
+          "items": {
+            "properties": {
+              "enr": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "enr"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "validators": {
+          "items": {
+            "properties": {
+              "distributedPublicKey": {
+                "description": "BLS public key (48 bytes)",
+                "pattern": "^0x[0-9a-fA-F]{96}$",
+                "type": "string"
+              },
+              "publicShares": {
+                "items": {
+                  "description": "BLS public key (48 bytes)",
+                  "pattern": "^0x[0-9a-fA-F]{96}$",
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "distributedPublicKey",
+              "publicShares"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "operators",
+        "forkVersion",
+        "validators"
+      ],
+      "type": "object"
+    },
+    "existing": {
+      "anyOf": [
+        {
+          "items": {
+            "properties": {
+              "epoch": {
+                "description": "uint64 as a decimal string",
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              "lock_hash": {
+                "type": "string"
+              },
+              "publickey": {
+                "description": "BLS public key (48 bytes)",
+                "pattern": "^0x[0-9a-fA-F]{96}$",
+                "type": "string"
+              },
+              "shares_exit_data": {
+                "anyOf": [
+                  {
+                    "patternProperties": {
+                      "^[0-9]+$": {
+                        "properties": {
+                          "partial_exit_signature": {
+                            "type": "string"
+                          },
+                          "public_share": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "public_share",
+                          "partial_exit_signature"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "patternProperties": {
+                        "^[0-9]+$": {
+                          "properties": {
+                            "partial_exit_signature": {
+                              "type": "string"
+                            },
+                            "public_share": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "public_share",
+                            "partial_exit_signature"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "validator_index": {
+                "description": "uint64 as a decimal string",
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "publickey",
+              "validator_index",
+              "epoch",
+              "shares_exit_data"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        {
+          "patternProperties": {
+            "^(.*)$": {
+              "properties": {
+                "epoch": {
+                  "description": "uint64 as a decimal string",
+                  "pattern": "^[0-9]{1,20}$",
+                  "type": "string"
+                },
+                "lock_hash": {
+                  "type": "string"
+                },
+                "publickey": {
+                  "description": "BLS public key (48 bytes)",
+                  "pattern": "^0x[0-9a-fA-F]{96}$",
+                  "type": "string"
+                },
+                "shares_exit_data": {
+                  "anyOf": [
+                    {
+                      "patternProperties": {
+                        "^[0-9]+$": {
+                          "properties": {
+                            "partial_exit_signature": {
+                              "type": "string"
+                            },
+                            "public_share": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "public_share",
+                            "partial_exit_signature"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "items": {
+                        "patternProperties": {
+                          "^[0-9]+$": {
+                            "properties": {
+                              "partial_exit_signature": {
+                                "type": "string"
+                              },
+                              "public_share": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "public_share",
+                              "partial_exit_signature"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  ]
+                },
+                "validator_index": {
+                  "description": "uint64 as a decimal string",
+                  "pattern": "^[0-9]{1,20}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "publickey",
+                "validator_index",
+                "epoch",
+                "shares_exit_data"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "payload": {
+      "properties": {
+        "partial_exits": {
+          "items": {
+            "properties": {
+              "public_key": {
+                "description": "BLS public key (48 bytes)",
+                "pattern": "^0x[0-9a-fA-F]{96}$",
+                "type": "string"
+              },
+              "signed_exit_message": {
+                "properties": {
+                  "message": {
+                    "properties": {
+                      "epoch": {
+                        "description": "uint64 as a decimal string",
+                        "pattern": "^[0-9]{1,20}$",
+                        "type": "string"
+                      },
+                      "validator_index": {
+                        "description": "uint64 as a decimal string",
+                        "pattern": "^[0-9]{1,20}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "epoch",
+                      "validator_index"
+                    ],
+                    "type": "object"
+                  },
+                  "signature": {
+                    "description": "BLS signature (96 bytes)",
+                    "pattern": "^0x[0-9a-fA-F]{192}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message",
+                  "signature"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "public_key",
+              "signed_exit_message"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "share_idx": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "signature": {
+          "description": "hex",
+          "pattern": "^0x([0-9a-fA-F]{2})*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "partial_exits",
+        "share_idx",
+        "signature"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "cluster",
+    "payload"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,127 @@
+{
+ "id": "m63",
+ "version": "v1.8.0",
+ "mutation": "definition_amounts_change_resigned",
+ "detail": {
+  "amounts": []
+ },
+ "expected": true,
+ "lock": {
+  "cluster_definition": {
+   "name": "fuzz-v1.8.0-2-3of4",
+   "uuid": "CD0C8183-1230-45DA-9A1C-44AF605FA7B0",
+   "creator": {
+    "address": "",
+    "config_signature": ""
+   },
+   "version": "v1.8.0",
+   "num_validators": 2,
+   "threshold": 3,
+   "dkg_algorithm": "default",
+   "fork_version": "0x10000910",
+   "timestamp": "2026-10-19T00:00:00Z",
+   "operators": [
+    {
+     "address": "",
+     "enr": "enr:-HW4QCyDqogZfwlxhoLsYOy-bqGOwDT_F53_o7yQ90T5qdm3E6fjaOhaAqXGXsA0HwGqK2Pb3OBFeVScP-zIdm2IJ1wBgmlkgnY0iXNlY3AyNTZrMaECJ02hBgSDbulxbQ--7kpSowyOOKrGkfXvcKzltzQcTkw",
+     "config_signature": "",
+     "enr_signature": ""
+    },
+    {
+     "address": "",
+     "enr": "enr:-HW4QFxRUPnlX3ZtjAqj3onkoyVmBnc0jOimaJgch6l322mxU1Vh1cRrwwjvWYmzDLoCacAF01suSkQg5AOUoiuJ5KABgmlkgnY0iXNlY3AyNTZrMaED27Sd35cSecTX-_x28EeqwZ0rWCVOHfz7Er1sp0XkcH4",
+     "config_signature": "",
+     "enr_signature": ""
+    },
+    {
+     "address": "",
+     "enr": "enr:-HW4QJ6-VrOt6BEZPi8OdhYqjne96nqX_JThyqkRXAdhIlZYbJTGM7wZ12fOElTfTEC6IvyGequ3TJburE13tG8MfFgBgmlkgnY0iXNlY3AyNTZrMaEC3HRIICIj-RmGtV8FfaFlYjKrE7CMwYwrek0C_-3-1Kk",
+     "config_signature": "",
+     "enr_signature": ""
+    },
+    {
+     "address": "",
+     "enr": "enr:-HW4QBAyiTUVq_0Bdczgh8pjF-7U7SQqOn4X-3K1t_EIIXGzQYt1DB4s6jmTL1ExTJ7pazrgfW-55JIeAbUXZ8peqewBgmlkgnY0iXNlY3AyNTZrMaEDhSPqpJPXV56imGCrOkxSVnFEU9KROzQfAq0htQ-5Q3g",
+     "config_signature": "",
+     "enr_signature": ""
+    }
+   ],
+   "validators": [
+    {
+     "fee_recipient_address": "0x630f3a11b649860382d7d6b42d2b310565756e5a",
+     "withdrawal_address": "0xcd61649104d8b1512e1e55e98da3a625225f35a7"
+    },
+    {
+     "fee_recipient_address": "0xa8c1deea701257c774a1d9561bb725a8ab0be67b",
+     "withdrawal_address": "0x598b30c675567c1d0d581082df5df1d04cc8ba57"
+    }
+   ],
+   "deposit_amounts": [],
+   "config_hash": "0x711633b4a82a503c9f31520fcd4df7eaebe9f026bf224643fbcf7dfcda5f4bd8",
+   "definition_hash": "0xe6965487838da252006b91cc2b139f974d39890db10c9c2ac97fea00d9e18c45"
+  },
+  "distributed_validators": [
+   {
+    "distributed_public_key": "0x937b5d545009e60b1ab2b279f32777e2f940564221962fa2940e251328eaa260344cd3db53e8ef88fd3dd8b8ef14ebe9",
+    "public_shares": [
+     "0xa0ef17910bfa758aa98e7fc10f107a7ccab5c441a60b40e46ced134ee85f366962c70e2dcef28dffc1a88a8108e4ac67",
+     "0xb9d200b2b76a49bcc3f4d09bf4901ea35d95f89607f42add200d25a713b4d4d7db8fc37f2762ac20bf53015036084362",
+     "0xb5bc3f1189ea7d5e995713f9fbee84649dbb8dc62087af3535c18e5d5a8bd861298b51a5c82a32778da0f2be4cd44ce6",
+     "0xb4f236332c36725c026b2cf29b2790000eeaea85a59cb0273b6a6163c53213c07f450257c3e9a49db87e316fa6125d67"
+    ],
+    "partial_deposit_data": [
+     {
+      "pubkey": "0x937b5d545009e60b1ab2b279f32777e2f940564221962fa2940e251328eaa260344cd3db53e8ef88fd3dd8b8ef14ebe9",
+      "withdrawal_credentials": "0x010000000000000000000000cd61649104d8b1512e1e55e98da3a625225f35a7",
+      "amount": "32000000000",
+      "signature": "0xa40899bf06a757cf81bb7828bd4acbd55128233c6cdfdf30a66f9d772ca903d295e973025be407c16941a6bf140fae720652cc1253f1c3665e503b425c5da1a00ee02f1c519d9e70d28c8b47a8bd303ae24bacffd6b130c9ad6386c5426fe9e3"
+     }
+    ],
+    "builder_registration": {
+     "message": {
+      "fee_recipient": "0x630f3a11b649860382d7d6b42d2b310565756e5a",
+      "gas_limit": 60000000,
+      "timestamp": 1700000000,
+      "pubkey": "0x937b5d545009e60b1ab2b279f32777e2f940564221962fa2940e251328eaa260344cd3db53e8ef88fd3dd8b8ef14ebe9"
+     },
+     "signature": "0xb4e00101e54f1bf5c391fe0c304a569b1bf507d213e959aef83c4e2f1302aa643d5929adbe3673ed510af55880a88d2a0928a8081771d8649349d0a0c33bbb9a0919452b206cd1a70448543f96666d965f57812ee1c49fd98b1eb62fdff272b7"
+    }
+   },
+   {
+    "distributed_public_key": "0xa8650dbf39aea6bb08802951e7c1194a5d7a35cb3d45c94795fa5b6100d6c418c18faf4f338bda134c9c7b918626e7c3",
+    "public_shares": [
+     "0xa47e27b04d18d211b8d6a398206166cd7f54853848bed3c7863b5f1efd5148714d271ace2f1af6ed129148d1f427ba31",
+     "0x8c5a30cc316a06846d666b04ad766cd07a899c221082d099d21b9acc128b45bc67bf0a15a4567f1c69a638eb48d551d6",
+     "0x88fc92c1d533cf078cbca90f496e19a991e09908cabd7d0b83dde8afae7189c03bc573bddf39f6ec68b2d15e8c1b0cc7",
+     "0xa4c7d2877a35b8b11b107b968c1a07618f593481c05d76186f5b169b4ed82e2c15e79e84e1032462187d14ab117a145b"
+    ],
+    "partial_deposit_data": [
+     {
+      "pubkey": "0xa8650dbf39aea6bb08802951e7c1194a5d7a35cb3d45c94795fa5b6100d6c418c18faf4f338bda134c9c7b918626e7c3",
+      "withdrawal_credentials": "0x010000000000000000000000598b30c675567c1d0d581082df5df1d04cc8ba57",
+      "amount": "32000000000",
+      "signature": "0xa167a9dca127a229e0a06918f68eef04f193c7ef5ea9800227bb06ca68dbeabd6f1957bc7b79e3b4c3f99c68c62b2b0609d12551f9e636963e7b91e2ad96ed227d558b8425b1780e3c962ccd10ff19f2d7cfb3937e6d3476736093a54d4ea7e0"
+     }
+    ],
+    "builder_registration": {
+     "message": {
+      "fee_recipient": "0xa8c1deea701257c774a1d9561bb725a8ab0be67b",
+      "gas_limit": 60000000,
+      "timestamp": 1700000000,
+      "pubkey": "0xa8650dbf39aea6bb08802951e7c1194a5d7a35cb3d45c94795fa5b6100d6c418c18faf4f338bda134c9c7b918626e7c3"
+     },
+     "signature": "0x807a09ca59d85540f65f873525b6bd2c82fe756001d15077c9fc0818f5c55429567a65649b2f394ecf140448ea3ad5420d90a679254f3ceef6e0f41871c254b1f4285f996c1e92a73f604b64c8a316c0aa1ea9ca058747ea2bad8fcf08c8243f"
+    }
+   }
+  ],
+  "signature_aggregate": "0x83cac6d028de9b6705c48ef4ad3d0c9e215a480f59c0a21772f2f4475208acab56b130a90bc508d477ba65c4d34aeb8918fffb9b63b1f964f1a67aef9c382d969c0fe6037820e8c782f876e4f1a334702885aaf79aecc1416ef95690fa9d47ec",
+  "lock_hash": "0x6e0b64ee9b12349d49b34ef1237867451a43e213cfa311080014bb623e8c916c",
+  "node_signatures": [
+   "0x0c78db45d19b986e7546b3f7ec2159478b3815462aa6eb5de1798bbc04d7e04d6b80b8d75ee901bd5c7dc2e6b623db5c9daf3c5a8df9d539905667a9e790e36f01",
+   "0x47f4b0560110e056b2d1838fc19821c98b0ac8238d79b29e9cda7c807195cebb0846837aea73ec25c8284b9ef8859c8ca3d479d8e306f81c3327014957e3771e01",
+   "0xa23aef812b4901a770f9f7e46deafcf4780630a2d1d2cd7813980e249233c3c934b9b1b4f4028d50504f8ab01fbd7db22a702763d0269def533b0625e1b2c5b500",
+   "0x8b1850d6d1590618cea7976342a8a1ccf8a6e7ba749cab17a2546b946354efbc39c2d977b94631caa67d0dffda310001a2751e63188e9db007e6164cea29dcce01"
+  ]
+ },
+ "note": "Kept as accepted: empty deposit_amounts with only the 32 ETH deposit is what locks made by earlier Charon releases contain (test/fixtures.ts nullDepositAmountsClusterLockV1X8); the current DKG makes 1 and 32 ETH, so either is allowed and neither is required."
+}

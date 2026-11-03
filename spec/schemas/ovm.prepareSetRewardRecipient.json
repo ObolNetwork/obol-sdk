@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/ovm.prepareSetRewardRecipient.json",
+  "title": "ovm.prepareSetRewardRecipient",
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "newRewardRecipient": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "ovm": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ovm",
+    "newRewardRecipient"
+  ],
+  "type": "object"
+}

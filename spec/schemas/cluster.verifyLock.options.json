@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/cluster.verifyLock.options.json",
+  "title": "cluster.verifyLock.options",
+  "properties": {
+    "level": {
+      "anyOf": [
+        {
+          "const": "attested",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "type": "string"
+        }
+      ]
+    },
+    "signatures": {
+      "anyOf": [
+        {
+          "const": "all",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "type": "string"
+        },
+        {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "yieldMs": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "type": "object"
+}

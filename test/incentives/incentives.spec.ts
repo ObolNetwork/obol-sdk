@@ -1,679 +1,309 @@
-// @ts-nocheck
 import {
   concat,
-  ethers,
-  getBytes,
-  hexlify,
-  Interface,
-  JsonRpcProvider,
+  decodeFunctionData,
   keccak256,
-  solidityPackedKeccak256,
-} from 'ethers';
-import { jest, describe, beforeEach, test, expect } from '@jest/globals';
-import { type Client } from '../../src/index.js';
+  toHex,
+  type Address,
+  type Hex,
+} from 'viem';
+import { createIncentivesModule } from '../../src/incentives/index.js';
 import {
-  DEFAULT_BASE_VERSION,
+  getIncentives,
+  isClaimed,
+  preflight,
+  prepareClaim,
+} from '../../src/incentives/incentives.js';
+import {
+  merkleDistributorAbi,
+  merkleLeaf,
   MERKLE_DISTRIBUTOR_RUNTIME,
-  OBOL_TOKEN_ADDRESS,
-} from '../../src/constants.js';
-import { MerkleDistributorABI } from '../../src/abi/MerkleDistributorWithDeadline.js';
-import { merkleDistributorRuntimeCode, TEST_ADDRESSES } from '../fixtures.js';
+} from '../../src/incentives/merkle.js';
+import { ObolApiError } from '../../src/errors.js';
+import { merkleDistributorRuntimeCode } from '../fixtures.js';
+import { fakeApi, fakeChain } from '../helpers/fakeChain.js';
+import { addr, caught, HOODI } from '../splits/helpers.js';
 
-const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase ?? '';
-const privateKey = ethers.Wallet.fromPhrase(mnemonic).privateKey;
-const provider = new JsonRpcProvider(
-  process.env.RPC_HOODI || 'https://ethereum-hoodi-rpc.publicnode.com',
-);
-const wallet = new ethers.Wallet(privateKey, provider);
-const mockSigner = wallet.connect(provider);
-const baseUrl = 'https://obol-api-nonprod-dev.dev.obol.tech';
+const OPERATOR = addr(0x0b);
+const DIST = addr(0xd157);
+const AMOUNT = 1_000n * 10n ** 18n;
+const END = 2_000_000_000n;
 
-// Fix the type error by properly typing the mock function
-global.fetch = jest.fn() as any;
-
-// Merkle tree with four claims; the first one (index 0) is the operator's.
-const HOODI_CHAIN_ID = 560048;
-const operatorAddress = TEST_ADDRESSES.REWARD_RECIPIENT_1;
-const claimAmount = '1000000000000000000';
-const hashPair = (a: string, b: string): string =>
-  BigInt(a) < BigInt(b) ? keccak256(concat([a, b])) : keccak256(concat([b, a]));
+const sortedPair = (a: Hex, b: Hex): Hex =>
+  keccak256(BigInt(a) < BigInt(b) ? concat([a, b]) : concat([b, a]));
+// A four-leaf tree; the operator is leaf 2.
 const leaves = [
-  [0, operatorAddress, claimAmount],
-  [1, TEST_ADDRESSES.REWARD_RECIPIENT_2, '2000'],
-  [2, TEST_ADDRESSES.PRINCIPAL_RECIPIENT_1, '3000'],
-  [3, TEST_ADDRESSES.PRINCIPAL_RECIPIENT_2, '4000'],
-].map(leaf => solidityPackedKeccak256(['uint256', 'address', 'uint256'], leaf));
-const merkleRoot = hashPair(
-  hashPair(leaves[0], leaves[1]),
-  hashPair(leaves[2], leaves[3]),
+  merkleLeaf(0n, addr(1), 5n),
+  merkleLeaf(1n, addr(2), 6n),
+  merkleLeaf(2n, OPERATOR, AMOUNT),
+  merkleLeaf(3n, addr(3), 7n),
+];
+const ROOT = sortedPair(
+  sortedPair(leaves[0], leaves[1]),
+  sortedPair(leaves[2], leaves[3]),
 );
-const validIncentivesData = {
-  operator_address: operatorAddress,
-  amount: claimAmount,
-  index: 0,
-  merkle_proof: [leaves[1], hashPair(leaves[2], leaves[3])],
-  contract_address: TEST_ADDRESSES.MERKLE_DISTRIBUTOR,
-};
-const NOW = 1_800_000_000;
-const distributorInterface = new Interface(MerkleDistributorABI.abi);
+const PROOF = [leaves[3], sortedPair(leaves[0], leaves[1])];
 
-const makeDistributorProvider = (
-  overrides: {
-    code?: string;
-    root?: string;
-    token?: string;
-    endTime?: number;
+const record = (change: Record<string, unknown> = {}) => ({
+  operator_address: OPERATOR.toLowerCase(),
+  contract_address: DIST,
+  index: 2,
+  amount: AMOUNT.toString(),
+  merkle_proof: PROOF,
+  ...change,
+});
+
+const path = `/v1/address/incentives/hoodi/${OPERATOR}`;
+
+const setup = (
+  opts: {
+    api?: () => unknown;
+    code?: Hex;
+    token?: Address;
+    root?: Hex;
     claimed?: boolean;
-    timestamp?: number;
+    timestamp?: bigint;
+    revert?: boolean;
+    blockFails?: boolean;
   } = {},
 ) => {
-  const state = {
-    code: merkleDistributorRuntimeCode,
-    root: merkleRoot,
-    token: OBOL_TOKEN_ADDRESS[HOODI_CHAIN_ID],
-    endTime: NOW + 3600,
-    claimed: false,
-    timestamp: NOW,
-    ...overrides,
-  };
-  return {
-    getCode: jest.fn().mockResolvedValue(state.code),
-    getBlock: jest.fn().mockResolvedValue({ timestamp: state.timestamp }),
-    call: jest.fn().mockImplementation(async ({ data }) => {
-      const { name } = distributorInterface.parseTransaction({ data });
-      const value = {
-        merkleRoot: state.root,
-        token: state.token,
-        endTime: state.endTime,
-        isClaimed: state.claimed,
-      }[name];
-      return distributorInterface.encodeFunctionResult(name, [value]);
-    }),
-  };
+  const api = fakeApi({ [path]: opts.api ?? (() => record()) });
+  const chain = fakeChain({
+    contracts: {
+      [DIST]: {
+        abi: merkleDistributorAbi,
+        code: opts.code ?? (merkleDistributorRuntimeCode as Hex),
+        read: {
+          token: () => {
+            if (opts.revert === true) throw new Error('revert');
+            return opts.token ?? HOODI.obolToken;
+          },
+          merkleRoot: () => opts.root ?? ROOT,
+          endTime: () => END,
+          isClaimed: () => opts.claimed ?? false,
+        },
+      },
+    },
+    onRequest: (method, params) => {
+      if (method !== 'eth_getBlockByNumber') return undefined;
+      if (opts.blockFails === true) throw new Error('no block');
+      return {
+        number: params[0],
+        hash: `0x${'12'.repeat(32)}`,
+        parentHash: `0x${'34'.repeat(32)}`,
+        timestamp: toHex(opts.timestamp ?? END - 1n),
+        gasLimit: '0x1',
+        gasUsed: '0x0',
+        baseFeePerGas: '0x1',
+        transactions: [],
+        uncles: [],
+        logsBloom: `0x${'00'.repeat(256)}`,
+        miner: addr(0),
+        difficulty: '0x0',
+        totalDifficulty: '0x0',
+        extraData: '0x',
+        nonce: '0x0000000000000000',
+        sha3Uncles: `0x${'00'.repeat(32)}`,
+        size: '0x1',
+        stateRoot: `0x${'00'.repeat(32)}`,
+        receiptsRoot: `0x${'00'.repeat(32)}`,
+        transactionsRoot: `0x${'00'.repeat(32)}`,
+        mixHash: `0x${'00'.repeat(32)}`,
+      };
+    },
+  });
+  return { api, chain, ctx: chain.context(api) };
 };
 
-// Mock module functions
-let mockClaimIncentivesFromMerkleDistributor: jest.Mock;
-let mockIsClaimedFromMerkleDistributor: jest.Mock;
+const codes = (r: { issues: Array<{ code: string }> }): string[] =>
+  r.issues.map(i => i.code);
 
-describe('Client.incentives', () => {
-  let clientInstance: Client;
-  const mockIncentivesData = {
-    contract_address: '0x1234567890abcdef1234567890abcdef12345678',
-    index: 5,
-    operator_address: '0xabcdef1234567890abcdef1234567890abcdef12',
-    amount: '1000000000000000000',
-    merkle_proof: [
-      '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-    ],
-  };
-
-  beforeEach(async () => {
-    jest.clearAllMocks();
-    jest.resetModules();
-
-    // Mock utils and incentiveHelpers at module level
-    mockClaimIncentivesFromMerkleDistributor = jest.fn();
-    mockIsClaimedFromMerkleDistributor = jest.fn();
-
-    // @ts-expect-error - ESM mocking requires top-level await
-    await jest.unstable_mockModule('../../src/utils.js', () => ({
-      __esModule: true,
-      isContractAvailable: jest.fn(),
-      hexWithout0x: (hex: string) => hex.replace(/^0x/, ''),
-      strToUint8Array: (str: string) => new TextEncoder().encode(str),
-      definitionFlow: jest.fn(),
-      findDeployedBytecode: jest.fn(),
-      getProvider: jest.fn(),
-      assertSignerChain: jest.fn(async () => undefined),
-    }));
-
-    // @ts-expect-error - ESM mocking requires top-level await
-    await jest.unstable_mockModule(
-      '../../src/incentives/incentiveHelpers.js',
-      () => ({
-        __esModule: true,
-        claimIncentivesFromMerkleDistributor:
-          mockClaimIncentivesFromMerkleDistributor,
-        isClaimedFromMerkleDistributor: mockIsClaimedFromMerkleDistributor,
-      }),
-    );
-
-    // Re-import after mocking
-    const { Client: ClientClass } = await import('../../src/index.js');
-    clientInstance = new ClientClass({ baseUrl, chainId: 560048 }, mockSigner);
-    (global.fetch as jest.Mock).mockReset();
-  });
-
-  test('claimIncentives should throw an error without signer', async () => {
-    const { Client: ClientClass } = await import('../../src/index.js');
-    const clientWithoutSigner = new ClientClass({
-      baseUrl,
-      chainId: 560048,
+describe('incentives.get', () => {
+  it('maps the API record', async () => {
+    const { ctx, api } = setup();
+    await expect(getIncentives(ctx, OPERATOR)).resolves.toEqual({
+      operatorAddress: OPERATOR,
+      contractAddress: DIST,
+      index: 2,
+      amount: AMOUNT,
+      merkleProof: PROOF,
     });
+    expect(api.calls[0].endpoint).toBe(path);
+  });
 
+  it('returns null for an empty record', async () => {
+    const { ctx } = setup({
+      api: () => record({ contract_address: '', index: -1 }),
+    });
+    await expect(getIncentives(ctx, OPERATOR)).resolves.toBeNull();
+  });
+
+  it('rejects a record for another address or a malformed one', async () => {
+    const other = setup({ api: () => record({ operator_address: addr(9) }) });
+    const mismatch = await caught(getIncentives(other.ctx, OPERATOR));
+    expect(mismatch.code).toBe('API_RESPONSE_MISMATCH');
+    expect(mismatch).toBeInstanceOf(ObolApiError);
+    const bad = setup({ api: () => record({ amount: '1.5' }) });
+    expect((await caught(getIncentives(bad.ctx, OPERATOR))).code).toBe(
+      'API_ERROR',
+    );
+  });
+
+  it('needs the API', async () => {
+    const { chain } = setup();
+    expect(
+      (await caught(getIncentives(chain.context(null), OPERATOR))).code,
+    ).toBe('API_DISABLED');
+  });
+});
+
+describe('incentives.isClaimed', () => {
+  it('reads isClaimed and reports read failures', async () => {
+    const { ctx } = setup({ claimed: true });
     await expect(
-      clientWithoutSigner.incentives.claimIncentives(
-        mockIncentivesData.operator_address,
-      ),
-    ).rejects.toThrow('Signer is required in claimIncentives');
+      isClaimed(ctx, { contractAddress: DIST, index: 2 }),
+    ).resolves.toBe(true);
+    expect(
+      (await caught(isClaimed(ctx, { contractAddress: addr(0x99), index: 2 })))
+        .code,
+    ).toBe('CHAIN_READ_FAILED');
+    expect(
+      (await caught(isClaimed(ctx, { contractAddress: DIST, index: -1 }))).code,
+    ).toBe('PAYLOAD_INVALID');
   });
+});
 
-  test('incentives should be initialized with the same chainId as client', async () => {
-    const { Client: ClientClass } = await import('../../src/index.js');
-    const customChainId = 1;
-    const clientWithCustomChain = new ClientClass(
-      { baseUrl, chainId: customChainId },
-      mockSigner,
-    );
-
-    expect(clientWithCustomChain.incentives.chainId).toBe(customChainId);
-  });
-
-  test('isClaimed should return true when incentive is claimed', async () => {
-    mockIsClaimedFromMerkleDistributor.mockResolvedValue(true);
-
-    const result = await clientInstance.incentives.isClaimed(
-      mockIncentivesData.contract_address,
-      mockIncentivesData.index,
-    );
-
-    expect(result).toBe(true);
-    expect(mockIsClaimedFromMerkleDistributor).toHaveBeenCalledWith(
-      mockIncentivesData.contract_address,
-      mockIncentivesData.index,
-      {},
-    );
-  });
-
-  test('isClaimed should return false when incentive is not claimed', async () => {
-    mockIsClaimedFromMerkleDistributor.mockResolvedValue(false);
-
-    const result = await clientInstance.incentives.isClaimed(
-      mockIncentivesData.contract_address,
-      mockIncentivesData.index,
-    );
-
-    expect(result).toBe(false);
-  });
-
-  test('isClaimed should throw an error if helper function fails', async () => {
-    mockIsClaimedFromMerkleDistributor.mockRejectedValue(
-      new Error('Helper function error'),
-    );
-
-    await expect(
-      clientInstance.incentives.isClaimed(
-        mockIncentivesData.contract_address,
-        mockIncentivesData.index,
-      ),
-    ).rejects.toThrow('Helper function error');
-  });
-
-  test('isClaimed should work with a provider and a without signer', async () => {
-    const { Client: ClientClass } = await import('../../src/index.js');
-    const clientWithoutSigner = new ClientClass(
-      {
-        baseUrl,
-        chainId: 560048,
-      },
-      undefined,
-      provider,
-    );
-
-    mockIsClaimedFromMerkleDistributor.mockResolvedValue(true);
-
-    const result = await clientWithoutSigner.incentives.isClaimed(
-      mockIncentivesData.contract_address,
-      mockIncentivesData.index,
-    );
-
-    expect(result).toBe(true);
-    expect(mockIsClaimedFromMerkleDistributor).toHaveBeenCalledWith(
-      mockIncentivesData.contract_address,
-      mockIncentivesData.index,
-      provider,
-    );
-  });
-
-  test('getIncentivesByAddress should make the correct API request', async () => {
-    const mockAddress = '0x1234567890abcdef1234567890abcdef12345678';
-    const mockIncentives = {
-      operator_address: '0x8c00157cae72c4ed6a1f8bfb60205601f0252e26',
-      amount: '100',
-      index: 1,
-      merkle_proof: ['hash1', 'hash2'],
-      contract_address: '0xContract',
-    };
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+describe('incentives.preflight / prepareClaim', () => {
+  it('passes a valid claim and builds claim()', async () => {
+    const { ctx } = setup();
+    await expect(preflight(ctx, OPERATOR)).resolves.toEqual({
       ok: true,
-      status: 200,
-      json: async () => mockIncentives,
-      headers: new Headers(),
+      issues: [],
     });
+    const prepared = await createIncentivesModule(ctx).prepareClaim(OPERATOR);
+    expect(prepared.request.to).toBe(DIST);
+    expect(prepared.preview).toEqual({ amount: AMOUNT, contractAddress: DIST });
+    expect(prepared.blockNumber).toBe(2_000_000n);
+    expect(
+      decodeFunctionData({
+        abi: merkleDistributorAbi,
+        data: prepared.request.data,
+      }).args,
+    ).toEqual([2n, OPERATOR, AMOUNT, PROOF]);
+  });
 
-    const result =
-      await clientInstance.incentives.getIncentivesByAddress(mockAddress);
+  it('accepts a distributor with other immutables and metadata', async () => {
+    const bytes = Buffer.from(
+      (merkleDistributorRuntimeCode as string).slice(2),
+      'hex',
+    );
+    for (const offset of MERKLE_DISTRIBUTOR_RUNTIME.immutableOffsets)
+      bytes.fill(0xaa, offset, offset + 32);
+    bytes.fill(0xbb, bytes.length - 40, bytes.length - 10);
+    const { ctx } = setup({ code: `0x${bytes.toString('hex')}` });
+    await expect(preflight(ctx, OPERATOR)).resolves.toEqual({
+      ok: true,
+      issues: [],
+    });
+  });
 
-    expect(result).toEqual(mockIncentives);
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      `${baseUrl}/${DEFAULT_BASE_VERSION}/address/incentives/hoodi/${mockAddress}`,
-      expect.objectContaining({ method: 'GET' }),
+  it.each<[string, Parameters<typeof setup>[0], string[]]>([
+    [
+      'INCENTIVES_NOT_FOUND',
+      {
+        api: () => {
+          throw new ObolApiError('API_NOT_FOUND', 'nf', {
+            status: 404,
+            endpoint: path,
+            method: 'GET',
+          });
+        },
+      },
+      ['INCENTIVES_NOT_FOUND'],
+    ],
+    [
+      'INCENTIVES_FETCH_FAILED',
+      {
+        api: () => {
+          throw new ObolApiError('API_ERROR', 'down', {
+            status: 500,
+            endpoint: path,
+            method: 'GET',
+          });
+        },
+      },
+      ['INCENTIVES_FETCH_FAILED'],
+    ],
+    [
+      'NO_INCENTIVES',
+      { api: () => record({ contract_address: '' }) },
+      ['NO_INCENTIVES'],
+    ],
+    [
+      'OPERATOR_ADDRESS_MISMATCH and INCENTIVES_DATA_INVALID',
+      {
+        api: () =>
+          record({
+            operator_address: addr(9),
+            index: 1.5,
+            merkle_proof: ['0x12'],
+          }),
+      },
+      [
+        'OPERATOR_ADDRESS_MISMATCH',
+        'INCENTIVES_DATA_INVALID',
+        'INCENTIVES_DATA_INVALID',
+      ],
+    ],
+    ['CONTRACT_NOT_DEPLOYED', { code: '0x' }, ['CONTRACT_NOT_DEPLOYED']],
+    ['DISTRIBUTOR_UNKNOWN', { code: '0x6080604052' }, ['DISTRIBUTOR_UNKNOWN']],
+    ['TOKEN_MISMATCH', { token: addr(0x70) }, ['TOKEN_MISMATCH']],
+    ['PROOF_INVALID', { root: `0x${'99'.repeat(32)}` }, ['PROOF_INVALID']],
+    ['CLAIM_WINDOW_CLOSED', { timestamp: END + 1n }, ['CLAIM_WINDOW_CLOSED']],
+    ['CHAIN_READ_FAILED (calls)', { revert: true }, ['CHAIN_READ_FAILED']],
+    ['CHAIN_READ_FAILED (block)', { blockFails: true }, ['CHAIN_READ_FAILED']],
+  ])('%s', async (_name, opts, expected) => {
+    const { ctx } = setup(opts);
+    const result = await preflight(ctx, OPERATOR);
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toEqual(expected);
+    expect(
+      result.issues.every(
+        i => i.severity === 'warning' && typeof i.hint === 'string',
+      ),
+    ).toBe(true);
+    const error = await caught(prepareClaim(ctx, OPERATOR));
+    expect(error.code).toBe('INCENTIVES_PREFLIGHT_FAILED');
+    expect(codes(error.details as { issues: Array<{ code: string }> })).toEqual(
+      expected,
     );
   });
 
-  test('getIncentivesByAddress rejects malformed addresses before fetching', async () => {
-    for (const address of [
-      '0xContract',
-      '../../definition/0x00',
-      '1234567890abcdef1234567890abcdef12345678',
-    ]) {
-      await expect(
-        clientInstance.incentives.getIncentivesByAddress(address),
-      ).rejects.toThrow('Invalid address');
-    }
-    expect(global.fetch).not.toHaveBeenCalled();
+  it('throws ALREADY_CLAIMED when that is the only issue, even with the window closed', async () => {
+    const claimed = setup({ claimed: true, timestamp: END + 1n });
+    expect(codes(await preflight(claimed.ctx, OPERATOR))).toEqual([
+      'ALREADY_CLAIMED',
+      'CLAIM_WINDOW_CLOSED',
+    ]);
+    expect((await caught(prepareClaim(claimed.ctx, OPERATOR))).code).toBe(
+      'ALREADY_CLAIMED',
+    );
+    const withProofIssue = setup({
+      claimed: true,
+      root: `0x${'99'.repeat(32)}`,
+    });
+    expect(
+      (await caught(prepareClaim(withProofIssue.ctx, OPERATOR))).code,
+    ).toBe('INCENTIVES_PREFLIGHT_FAILED');
   });
 
-  test('getIncentivesByAddress should handle API errors', async () => {
-    const mockAddress = '0x1234567890abcdef1234567890abcdef12345678';
-    (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-    await expect(
-      clientInstance.incentives.getIncentivesByAddress(mockAddress),
-    ).rejects.toThrow();
-
-    expect(global.fetch).toHaveBeenCalled();
-  });
-  describe('preflightClaim and claimIncentives checks', () => {
-    const makeClient = async (
-      distributorProvider,
-      chainId = HOODI_CHAIN_ID,
-      signer = mockSigner,
-    ) => {
-      const { Client: ClientClass } = await import('../../src/index.js');
-      return new ClientClass({ baseUrl, chainId }, signer, distributorProvider);
-    };
-
-    const preflight = async (
-      providerOverrides = {},
-      incentivesData = validIncentivesData,
-      chainId = HOODI_CHAIN_ID,
-    ) => {
-      const distributorProvider = makeDistributorProvider(providerOverrides);
-      const client = await makeClient(distributorProvider, chainId);
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(incentivesData);
-      const result = await client.incentives.preflightClaim(operatorAddress);
-      return { result, distributorProvider };
-    };
-
-    const codes = result => result.issues.map(issue => issue.code);
-
-    test('passes for a valid claim', async () => {
-      const { result } = await preflight();
-      expect(result).toEqual({ ok: true, issues: [] });
-    });
-
-    test('accepts the operator address in a different case', async () => {
-      const { result } = await preflight(
-        {},
-        {
-          ...validIncentivesData,
-          operator_address: operatorAddress.toUpperCase().replace('0X', '0x'),
-        },
-      );
-      expect(result.ok).toBe(true);
-    });
-
-    test('accepts a distributor with different immutables', async () => {
-      const code = getBytes(merkleDistributorRuntimeCode);
-      for (const offset of MERKLE_DISTRIBUTOR_RUNTIME.immutableOffsets) {
-        code.fill(0xaa, offset, offset + 32);
-      }
-      code.fill(0xbb, code.length - 40, code.length - 10);
-      const { result } = await preflight({ code: hexlify(code) });
-      expect(result.ok).toBe(true);
-    });
-
-    test('reports issues with code, message and hint', async () => {
-      const { result } = await preflight({ claimed: true });
-      expect(result.ok).toBe(false);
-      expect(result.issues).toEqual([
-        {
-          code: 'ALREADY_CLAIMED',
-          message: expect.any(String),
-          hint: expect.any(String),
-        },
-      ]);
-    });
-
-    test('rejects a proof that does not fold to the root', async () => {
-      const { result } = await preflight(
-        {},
-        {
-          ...validIncentivesData,
-          merkle_proof: [leaves[2], hashPair(leaves[2], leaves[3])],
-        },
-      );
-      expect(codes(result)).toEqual(['INVALID_PROOF']);
-    });
-
-    test('rejects an amount that is not in the tree', async () => {
-      const { result } = await preflight(
-        {},
-        { ...validIncentivesData, amount: '1000000000000000001' },
-      );
-      expect(codes(result)).toEqual(['INVALID_PROOF']);
-    });
-
-    test('rejects when the on-chain root differs', async () => {
-      const { result } = await preflight({ root: leaves[0] });
-      expect(codes(result)).toEqual(['INVALID_PROOF']);
-    });
-
-    test('reports an already claimed index', async () => {
-      const { result } = await preflight({ claimed: true });
-      expect(codes(result)).toEqual(['ALREADY_CLAIMED']);
-    });
-
-    test('reports a closed claim window', async () => {
-      const { result } = await preflight({ endTime: NOW - 1 });
-      expect(codes(result)).toEqual(['CLAIM_WINDOW_CLOSED']);
-    });
-
-    test('allows a claim in the last second of the window', async () => {
-      const { result } = await preflight({ endTime: NOW });
-      expect(result.ok).toBe(true);
-    });
-
-    test('rejects a distributor paying out another token', async () => {
-      const { result } = await preflight({
-        token: TEST_ADDRESSES.OVM_OWNER,
-      });
-      expect(codes(result)).toEqual(['UNEXPECTED_TOKEN']);
-    });
-
-    test('rejects the mainnet OBOL token on Hoodi', async () => {
-      const { result } = await preflight({ token: OBOL_TOKEN_ADDRESS[1] });
-      expect(codes(result)).toEqual(['UNEXPECTED_TOKEN']);
-    });
-
-    test('reports chains without a known OBOL token', async () => {
-      // The Client only accepts mainnet and Hoodi, so call the check directly.
-      const { preflightIncentivesClaim } =
-        await import('../../src/incentives/incentivesPreflight.js');
-      const result = await preflightIncentivesClaim({
-        requestedAddress: operatorAddress,
-        incentivesData: validIncentivesData,
-        chainId: 11155111,
-        provider: makeDistributorProvider(),
-      });
-      expect(codes(result)).toEqual(['UNSUPPORTED_CHAIN']);
-    });
-
-    test('rejects contract code that differs from the reference build', async () => {
-      const code = getBytes(merkleDistributorRuntimeCode);
-      code[100] ^= 0xff;
-      const { result, distributorProvider } = await preflight({
-        code: hexlify(code),
-      });
-      expect(codes(result)).toEqual(['UNKNOWN_DISTRIBUTOR']);
-      expect(distributorProvider.call).not.toHaveBeenCalled();
-    });
-
-    test('rejects contract code of a different length', async () => {
-      const { result } = await preflight({
-        code: merkleDistributorRuntimeCode + '00',
-      });
-      expect(codes(result)).toEqual(['UNKNOWN_DISTRIBUTOR']);
-    });
-
-    test('reports a missing contract', async () => {
-      const { result } = await preflight({ code: '0x' });
-      expect(codes(result)).toEqual(['CONTRACT_NOT_DEPLOYED']);
-    });
-
-    test('rejects data for a different operator address', async () => {
-      const { result, distributorProvider } = await preflight(
-        {},
-        {
-          ...validIncentivesData,
-          operator_address: TEST_ADDRESSES.REWARD_RECIPIENT_2,
-        },
-      );
-      expect(codes(result)).toEqual(['OPERATOR_ADDRESS_MISMATCH']);
-      expect(distributorProvider.getCode).not.toHaveBeenCalled();
-    });
-
-    test('rejects malformed incentives data', async () => {
-      const { result } = await preflight(
-        {},
-        {
-          ...validIncentivesData,
-          index: -1,
-          amount: '1e18',
-          merkle_proof: ['0x1234'],
-        },
-      );
-      expect(codes(result)).toEqual([
-        'INVALID_INCENTIVES_DATA',
-        'INVALID_INCENTIVES_DATA',
-        'INVALID_INCENTIVES_DATA',
-      ]);
-    });
-
-    test('reports a 404 as INCENTIVES_NOT_FOUND', async () => {
-      const { NotFoundError } = await import('../../src/index.js');
-      const client = await makeClient(makeDistributorProvider());
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockRejectedValue(
-          new NotFoundError({ status: 404, endpoint: '/v1/address' }),
-        );
-      const result = await client.incentives.preflightClaim(operatorAddress);
-      expect(codes(result)).toEqual(['INCENTIVES_NOT_FOUND']);
-    });
-
-    test('reports other API errors as INCENTIVES_FETCH_FAILED', async () => {
-      const client = await makeClient(makeDistributorProvider());
-      global.fetch = jest.fn(async () => ({
-        ok: false,
-        status: 503,
-        json: async () => ({ message: 'unavailable' }),
-        text: async () => '{"message":"unavailable"}',
-      }));
-      const result = await client.incentives.preflightClaim(operatorAddress);
-      expect(codes(result)).toEqual(['INCENTIVES_FETCH_FAILED']);
-      expect(result.issues[0].message).toContain('unavailable');
-    });
-
-    describe('address without incentives', () => {
-      // What the API returns (HTTP 200) for an address with no incentives.
-      const noIncentives = {
-        operator_address: operatorAddress,
-        amount: '0',
-        index: -1,
-        merkle_proof: [],
-        contract_address: '',
-      };
-
-      test('preflightClaim reports NO_INCENTIVES without touching the chain', async () => {
-        const { result, distributorProvider } = await preflight(
-          {},
-          noIncentives,
-        );
-        expect(codes(result)).toEqual(['NO_INCENTIVES']);
-        expect(result.ok).toBe(false);
-        expect(distributorProvider.getCode).not.toHaveBeenCalled();
-      });
-
-      test('claimIncentives throws IncentivesPreflightError and does not claim', async () => {
-        const consoleSpy = jest.spyOn(console, 'log');
-        const client = await makeClient(makeDistributorProvider());
-        jest
-          .spyOn(client.incentives, 'getIncentivesByAddress')
-          .mockResolvedValue(noIncentives);
-
-        const error = await client.incentives
-          .claimIncentives(operatorAddress)
-          .catch(e => e);
-        const { IncentivesPreflightError } = await import('../../src/index.js');
-        expect(error).toBeInstanceOf(IncentivesPreflightError);
-        expect(error.issues.map(i => i.code)).toEqual(['NO_INCENTIVES']);
-        expect(error.message).toContain('No incentives found');
-        expect(mockClaimIncentivesFromMerkleDistributor).not.toHaveBeenCalled();
-        expect(consoleSpy).not.toHaveBeenCalled();
-        consoleSpy.mockRestore();
-      });
-
-      test('isClaimed rejects the empty contract address and a negative index', async () => {
-        const { InvalidArgumentError } = await import('../../src/index.js');
-        const client = await makeClient(makeDistributorProvider());
-        await expect(client.incentives.isClaimed('', -1)).rejects.toThrow(
-          InvalidArgumentError,
-        );
-        await expect(
-          client.incentives.isClaimed(TEST_ADDRESSES.MERKLE_DISTRIBUTOR, -1),
-        ).rejects.toThrow('Invalid index');
-        expect(mockIsClaimedFromMerkleDistributor).not.toHaveBeenCalled();
-      });
-    });
-
-    test('claimIncentives claims for an account other than the signer', async () => {
-      const mockTxHash =
-        '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-      const client = await makeClient(makeDistributorProvider());
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(validIncentivesData);
-      mockClaimIncentivesFromMerkleDistributor.mockResolvedValue({
-        txHash: mockTxHash,
-      });
-
-      expect(mockSigner.address).not.toEqual(operatorAddress);
-      const result = await client.incentives.claimIncentives(operatorAddress);
-
-      expect(result).toEqual({ txHash: mockTxHash });
-      expect(mockClaimIncentivesFromMerkleDistributor).toHaveBeenCalledWith({
-        signer: mockSigner,
-        contractAddress: validIncentivesData.contract_address,
-        index: validIncentivesData.index,
-        operatorAddress,
-        amount: validIncentivesData.amount,
-        merkleProof: validIncentivesData.merkle_proof,
-      });
-    });
-
-    test('claimIncentives throws and does not claim when a check fails', async () => {
-      const client = await makeClient(
-        makeDistributorProvider({ root: leaves[0] }),
-      );
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(validIncentivesData);
-
-      const error = await client.incentives
-        .claimIncentives(operatorAddress)
-        .catch(e => e);
-      expect(error.message).toMatch(
-        /^Failed to claim incentives: \[INVALID_PROOF\]/,
-      );
-      const { IncentivesPreflightError, ObolSdkError } =
-        await import('../../src/index.js');
-      expect(error).toBeInstanceOf(IncentivesPreflightError);
-      expect(error).toBeInstanceOf(ObolSdkError);
-      expect(error.code).toBe('INCENTIVES_PREFLIGHT_FAILED');
-      expect(error.issues.map(i => i.code)).toEqual(['INVALID_PROOF']);
-      expect(typeof error.hint).toBe('string');
-      expect(mockClaimIncentivesFromMerkleDistributor).not.toHaveBeenCalled();
-    });
-
-    test('claimIncentives keeps the contract not available message', async () => {
-      const client = await makeClient(makeDistributorProvider({ code: '0x' }));
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(validIncentivesData);
-
-      await expect(
-        client.incentives.claimIncentives(operatorAddress),
-      ).rejects.toThrow(
-        `Merkle Distributor contract is not available at address ${validIncentivesData.contract_address}`,
-      );
-    });
-
-    test('claimIncentives returns a null txHash when already claimed', async () => {
-      const client = await makeClient(
-        makeDistributorProvider({ claimed: true, endTime: NOW - 1 }),
-      );
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(validIncentivesData);
-
-      const result = await client.incentives.claimIncentives(operatorAddress);
-
-      expect(result).toEqual({ txHash: null });
-      expect(mockClaimIncentivesFromMerkleDistributor).not.toHaveBeenCalled();
-    });
-
-    test('claimIncentives throws on a closed claim window', async () => {
-      const client = await makeClient(
-        makeDistributorProvider({ endTime: NOW - 1 }),
-      );
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(validIncentivesData);
-
-      await expect(
-        client.incentives.claimIncentives(operatorAddress),
-      ).rejects.toThrow('[CLAIM_WINDOW_CLOSED]');
-      expect(mockClaimIncentivesFromMerkleDistributor).not.toHaveBeenCalled();
-    });
-
-    test('claimIncentives surfaces claim transaction errors', async () => {
-      const client = await makeClient(makeDistributorProvider());
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(validIncentivesData);
-      mockClaimIncentivesFromMerkleDistributor.mockRejectedValue(
-        new Error('Helper function error'),
-      );
-
-      await expect(
-        client.incentives.claimIncentives(operatorAddress),
-      ).rejects.toThrow('Failed to claim incentives: Helper function error');
-    });
-
-    test('claimIncentives passes onSent through and keeps TransactionSubmissionError', async () => {
-      const { TransactionSubmissionError } =
-        await import('../../src/errors.js');
-      const client = await makeClient(makeDistributorProvider());
-      jest
-        .spyOn(client.incentives, 'getIncentivesByAddress')
-        .mockResolvedValue(validIncentivesData);
-      const failure = new TransactionSubmissionError(
-        'Failed to claim incentives: timeout',
-        {
-          txHashes: [],
-          pendingTxHash: '0xpending',
-          cause: new Error('timeout'),
-        },
-      );
-      mockClaimIncentivesFromMerkleDistributor.mockRejectedValue(failure);
-      const onSent = jest.fn();
-
-      const error = await client.incentives
-        .claimIncentives(operatorAddress, { onSent })
-        .catch(e => e);
-
-      expect(error).toBe(failure);
-      expect(error.pendingTxHash).toBe('0xpending');
-      expect(mockClaimIncentivesFromMerkleDistributor).toHaveBeenCalledWith(
-        expect.objectContaining({ options: { onSent } }),
-      );
-    });
+  it('needs the API and a chain with contracts', async () => {
+    const { chain } = setup();
+    expect((await caught(preflight(chain.context(null), OPERATOR))).code).toBe(
+      'API_DISABLED',
+    );
+    const gnosis = fakeChain({ chainId: 100 });
+    expect(
+      (await caught(prepareClaim(gnosis.context(fakeApi({})), OPERATOR))).code,
+    ).toBe('UNSUPPORTED_CHAIN');
   });
 });
