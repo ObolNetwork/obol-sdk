@@ -1,3 +1,4 @@
+import * as semver from 'semver';
 import { fromHexString } from '@chainsafe/ssz';
 import { depositDataContainer } from '../verification/sszTypes.js';
 import {
@@ -136,7 +137,7 @@ const toValidatorDeposit = (
  * validating it (see {@link Client.getDepositData} for the validated path).
  *
  * Reads `partial_deposit_data` (lock v1.8.0+, possibly several amounts per
- * validator) and falls back to the single `deposit_data` of older locks.
+ * validator), or the single `deposit_data` of locks before v1.8.0.
  * Amounts are converted from gwei (lock format) to wei (payload format) and
  * hex fields are 0x-prefixed (`deposit_data_root` is computed when the lock
  * omits it, and checked against the other fields when present), so the result can be passed to
@@ -147,6 +148,12 @@ const toValidatorDeposit = (
  *   public key, or `amount` is given and some validator has no deposit of
  *   that amount.
  */
+/** Locks before v1.8.0 keep one `deposit_data` per validator. */
+const isLegacyDepositLayout = (lock: ClusterLock): boolean => {
+  const version = semver.valid(lock.cluster_definition?.version);
+  return version !== null && semver.lt(version, 'v1.8.0');
+};
+
 export const depositDataFromLock = (
   lock: ClusterLock,
   { amount }: Pick<GetDepositDataOptions, 'amount'> = {},
@@ -157,12 +164,16 @@ export const depositDataFromLock = (
     throw new Error('Cluster lock has no distributed validators');
   }
 
+  // From v1.8.0 the signed deposits are in partial_deposit_data; a v1.8.0+
+  // lock's deposit_data is not covered by lock verification, so never fall
+  // back to it there.
+  const legacyLayout = isLegacyDepositLayout(lock);
   validators.forEach((validator, index) => {
     const raw =
       validator.partial_deposit_data &&
       validator.partial_deposit_data.length > 0
         ? validator.partial_deposit_data
-        : validator.deposit_data
+        : legacyLayout && validator.deposit_data
           ? [validator.deposit_data]
           : [];
     if (raw.length === 0) {

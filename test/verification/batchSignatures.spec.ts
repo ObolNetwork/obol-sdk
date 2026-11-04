@@ -141,3 +141,15 @@ describe('cluster lock deposit and builder registration signatures', () => {
     expect(await validateClusterLock(tampered)).toBe(false);
   });
 });
+
+describe('verifyDVV1X10 deposit data', () => {
+  it.each([
+    ['empty', (v: Record<string, unknown>) => (v.partial_deposit_data = [])],
+    ['missing', (v: Record<string, unknown>) => delete v.partial_deposit_data],
+  ])('rejects a validator with %s partial_deposit_data', async (_, strip) => {
+    const lock = structuredClone(clusterLockV1X10) as ClusterLock;
+    lock.cluster_definition.deposit_amounts = null as never;
+    strip(lock.distributed_validators[0] as never);
+    expect(await verifyDVV1X10(lock)).toBe(false);
+  });
+});

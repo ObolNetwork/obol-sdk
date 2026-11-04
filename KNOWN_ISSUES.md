@@ -16,9 +16,15 @@ If you believe you have found a new, distinct issue, please report it to the Obo
 
 ## Cluster Definitions & Locks
 
-* **Legacy cluster versions (< v1.10.0):** Reports that legacy (v1.6.0 to v1.8.0) definitions or locks can be created or accepted with weaker signature coverage. The SDK no longer creates, joins or validates definitions and locks below v1.10.0 (`MIN_SUPPORTED_CLUSTER_VERSION`), and the Obol API rejects them for new clusters. Hashing code for legacy versions remains so existing clusters can still be read.
+* **Legacy cluster versions (< v1.10.0):** Reports that legacy (v1.6.0 to v1.8.0) definitions or locks can be created or accepted with weaker signature coverage. The SDK no longer creates or joins definitions below v1.10.0 (`MIN_SUPPORTED_CLUSTER_VERSION`), and the Obol API rejects them for new clusters. Existing legacy locks still hash and validate so running clusters keep working.
 * **`validateClusterLock` versus Charon:** `validateClusterLock` covers the cryptographic and structural checks implemented in the SDK. Charon applies further runtime rules, so a lock that passes here and is rejected by Charon (or a rule enforced only by Charon) is not a vulnerability. Charon is the final gate before a cluster operates.
+* **Lock without partial deposit data falling back to `deposit_data` — resolved:** Reports that a v1.8.0+ lock whose validators have an empty or missing `partial_deposit_data` (with `deposit_amounts: null`) passed `validateClusterLock`, after which `getDepositData` / `depositDataFromLock` used the validator's `deposit_data`, which lock verification does not cover for these versions. Building such a lock needs the cluster's own operators (a solo creator or a colluding threshold). Since 2.15.3 (and in 3.0), validation rejects a v1.8.0+ validator without partial deposit data, and `deposit_data` is only read from locks before v1.8.0.
 * **Lock validation cost:** Validating a large lock is CPU-bound. The SDK runs it in worker threads where available, caps concurrent validations and times out long runs; size limits and rate limiting for untrusted input are the responsibility of the service calling it.
+
+## Exits
+
+* **Exit helpers do not broadcast:** `client.exit.validateExitBlobs` and `recombineExitBlobs` are client-side helpers that return data; the Obol API and Charon run their own exit checks, and the beacon node verifies the aggregate signature. A cluster member submitting exits for a different epoch stalls that validator's exit only for the cluster, and is undone with `charon exit delete`.
+* **Same-epoch exit treated as already processed — resolved:** Reports that `validateExitBlobs` skipped an exit blob as already processed when stored data existed for the same validator and epoch but held no signature from this operator. Since 2.15.3 such a blob is validated as new. This had no security impact: recombination rejects duplicate share indices.
 
 ## Splits & Deployments
 

@@ -286,6 +286,13 @@ export const verifyDVV1X8 = async (
       pubShares.push(share);
     }
 
+    // v1.8.0+ locks carry their (signed) deposits in partial_deposit_data
+    // only; a validator without any has nothing that was verified.
+    const partialDeposits = validator.partial_deposit_data;
+    if (!Array.isArray(partialDeposits) || partialDeposits.length === 0) {
+      return false;
+    }
+
     // Check deposit amounts match exactly if they are defined
     const depositAmounts = clusterLock.cluster_definition.deposit_amounts;
     if (!!depositAmounts && depositAmounts !== null) {

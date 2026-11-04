@@ -409,13 +409,15 @@ export class Exit {
         `New exit epoch ${currentEpoch} is not greater than existing exit epoch ${existingEpoch} for validator ${exitBlob.public_key}.`,
       );
     } else if (currentEpoch === existingEpoch) {
-      const operatorShareIndexString = String(operatorIndex);
-      if (
-        existingBlob.shares_exit_data?.[0]?.[operatorShareIndexString]
-          ?.partial_exit_signature &&
-        existingBlob.shares_exit_data[0][operatorShareIndexString]
-          .partial_exit_signature !== exitBlob.signed_exit_message.signature
-      ) {
+      const storedSignature =
+        existingBlob.shares_exit_data?.[0]?.[String(operatorIndex)]
+          ?.partial_exit_signature;
+      // Same epoch but nothing stored for this operator yet: not processed,
+      // validate it like a new blob.
+      if (!storedSignature) {
+        return false;
+      }
+      if (storedSignature !== exitBlob.signed_exit_message.signature) {
         throw new Error(
           `Signature mismatch for validator ${exitBlob.public_key}, operator index ${operatorIndex} at epoch ${currentEpoch}. Received different signature than existing.`,
         );

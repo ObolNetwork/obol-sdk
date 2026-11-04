@@ -115,8 +115,9 @@ describe('getDepositData', () => {
     expect(result.deposits).toHaveLength(1);
   });
 
-  it('reads the older deposit_data field', async () => {
+  it('reads the deposit_data field of locks before v1.8.0', async () => {
     const legacy = structuredClone(nullDepositAmountsClusterLockV1X8);
+    legacy.cluster_definition.version = 'v1.7.0';
     for (const validator of legacy.distributed_validators) {
       validator.deposit_data = validator.partial_deposit_data[0];
       delete validator.partial_deposit_data;
@@ -138,6 +139,18 @@ describe('getDepositData', () => {
 });
 
 describe('depositDataFromLock', () => {
+  it('does not fall back to deposit_data for a v1.8.0+ lock', () => {
+    for (const version of ['v1.8.0', 'v1.10.0', 'v1.11.0', 'not-a-version']) {
+      const lock = structuredClone(nullDepositAmountsClusterLockV1X8);
+      lock.cluster_definition.version = version;
+      for (const validator of lock.distributed_validators) {
+        validator.deposit_data = validator.partial_deposit_data[0];
+        validator.partial_deposit_data = [];
+      }
+      expect(() => depositDataFromLock(lock)).toThrow('no deposit data');
+    }
+  });
+
   it('rejects missing or mismatched deposit data', () => {
     const noDeposit = structuredClone(clusterLockV1X10);
     delete noDeposit.distributed_validators[0].partial_deposit_data;
