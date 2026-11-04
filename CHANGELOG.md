@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix(verification): `validateClusterLock` rejects a v1.8.0+ lock whose validators have empty or missing `partial_deposit_data`, and `getDepositData` / `depositDataFromLock` read the older `deposit_data` field only from locks before v1.8.0; such a lock's `deposit_data` is not covered by lock verification [`#261`](https://github.com/ObolNetwork/obol-sdk/pull/261)
+- fix(exits): `validateExitBlobs` validates a same-epoch blob as new when the stored exit has no signature from this operator, instead of skipping it as already processed [`#261`](https://github.com/ObolNetwork/obol-sdk/pull/261)
+- fix: `createClusterDefinition` and `acceptClusterDefinition` refuse definitions below v1.10.0 (`MIN_SUPPORTED_CLUSTER_VERSION`); existing v1.6.0 to v1.8.0 locks still validate [`#224`](https://github.com/ObolNetwork/obol-sdk/pull/224)
+- fix(verification): `validateSmartContractSignature` throws when no RPC provider is configured for the chain instead of passing `undefined` to `Safe.init` [`#261`](https://github.com/ObolNetwork/obol-sdk/pull/261)
+- chore(deps): definition uuids come from `crypto.randomUUID()`; the `uuid` dependency is removed. undici 6.29.1, fast-uri 3.1.9, markdown-it 14.3.3 [`#261`](https://github.com/ObolNetwork/obol-sdk/pull/261) [`#258`](https://github.com/ObolNetwork/obol-sdk/pull/258) [`#260`](https://github.com/ObolNetwork/obol-sdk/pull/260) [`#250`](https://github.com/ObolNetwork/obol-sdk/pull/250)
+
 #### [v2.15.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v2.15.2)
 
 > 28 October 2026
