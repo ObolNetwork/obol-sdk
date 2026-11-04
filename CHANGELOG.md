@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. Dates are d
 
 #### Unreleased
 
+- fix(verification): deposit and lock BLS checks work in webpack / Next.js browser builds. webpack defines `__dirname`, so worker discovery called `path.join` on an empty module and threw; `eoa.deposit` / `splits.deposit` then refused every valid deposit with "invalid deposit signature", and `validateClusterLock` threw. Deposits are now rejected only when a signature is invalid on its own
+- fix(verification): BLS checks accept `Buffer` (and other `Uint8Array` subclass) inputs; noble v2 rejected them and every check reported an invalid signature
 - fix(verification): `validateClusterLock` rejects a v1.8.0+ lock whose validators have empty or missing `partial_deposit_data`, and `getDepositData` / `depositDataFromLock` read the older `deposit_data` field only from locks before v1.8.0; such a lock's `deposit_data` is not covered by lock verification [`#261`](https://github.com/ObolNetwork/obol-sdk/pull/261)
 - fix(exits): `validateExitBlobs` validates a same-epoch blob as new when the stored exit has no signature from this operator, instead of skipping it as already processed [`#261`](https://github.com/ObolNetwork/obol-sdk/pull/261)
 - fix: `createClusterDefinition` and `acceptClusterDefinition` refuse definitions below v1.10.0 (`MIN_SUPPORTED_CLUSTER_VERSION`); existing v1.6.0 to v1.8.0 locks still validate [`#224`](https://github.com/ObolNetwork/obol-sdk/pull/224)
