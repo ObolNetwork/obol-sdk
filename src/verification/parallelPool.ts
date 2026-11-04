@@ -104,17 +104,19 @@ function getWorkerPath(filename: string): string | null {
     workerPathByFile.set(filename, null);
     return null;
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const path = require('node:path') as typeof PathNs;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const fs = require('node:fs') as typeof FsNs;
-  // Bundled index.js: __dirname is dist/cjs/src; workers live in verification/.
-  // Standalone parallelPool.js entry: __dirname is already verification/.
-  const candidates = [
-    path.join(__dirname, filename),
-    path.join(__dirname, 'verification', filename),
-  ];
+  // Browser bundlers can define __dirname (webpack: "/") while `path` and
+  // `fs` resolve to empty modules, so everything here may throw: no workers.
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const path = require('node:path') as typeof PathNs;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const fs = require('node:fs') as typeof FsNs;
+    // Bundled index.js: __dirname is dist/cjs/src; workers live in verification/.
+    // Standalone parallelPool.js entry: __dirname is already verification/.
+    const candidates = [
+      path.join(__dirname, filename),
+      path.join(__dirname, 'verification', filename),
+    ];
     for (const candidate of candidates) {
       if (fs.existsSync(candidate)) {
         workerPathByFile.set(filename, candidate);
@@ -264,7 +266,9 @@ function poolSize(
   const wt = loadWorkerThreads();
   const os = loadOs();
   const workerFile = getWorkerPath('lockWorker.js');
-  const numCpus = os ? Math.max(1, os.cpus().length) : 1;
+  // A bundler may resolve `os` to an empty module (no cpus()).
+  const numCpus =
+    typeof os?.cpus === 'function' ? Math.max(1, os.cpus().length) : 1;
   const numWorkers = Math.min(
     MAX_WORKERS,
     Math.max(1, Math.floor(itemCount / minPerWorker)),

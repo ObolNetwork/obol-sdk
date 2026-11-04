@@ -211,7 +211,9 @@ export const verifyDepositPayloads = async (
     return;
   }
 
-  // The batch check failed: find the first invalid signature to report it.
+  // The batch check failed or threw: check each signature on its own, and
+  // reject only if one of them is invalid. A batch that failed for any other
+  // reason (it threw in an unusual runtime) must not refuse valid deposits.
   const badIndex = checks.findIndex(check => {
     try {
       return !blsVerify(check.pubkey, check.message, check.signature);
@@ -219,8 +221,11 @@ export const verifyDepositPayloads = async (
       return true;
     }
   });
+  if (badIndex === -1) {
+    return;
+  }
   fail(
-    badIndex === -1 ? checkIndexes[0] : checkIndexes[badIndex],
+    checkIndexes[badIndex],
     `invalid deposit signature for chain ${chainId}`,
   );
 };

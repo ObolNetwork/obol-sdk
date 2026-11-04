@@ -11,6 +11,18 @@ type G1Point = typeof G1.BASE;
 type G2Point = typeof G2.BASE;
 const { Fp } = bls12_381.fields;
 
+/**
+ * noble v2 accepts only exact Uint8Array instances and throws on subclasses
+ * such as Node / polyfilled `Buffer`, which every check here then reports as
+ * an invalid signature. Callers and bundler polyfills can hand us Buffers, so
+ * every input is copied to a plain Uint8Array first.
+ */
+const plainBytes = (bytes: Uint8Array): Uint8Array =>
+  bytes.constructor === Uint8Array ? bytes : Uint8Array.from(bytes);
+
+const hashMessage = (message: Uint8Array): ReturnType<typeof ls.hash> =>
+  ls.hash(plainBytes(message), ETH2_DST);
+
 const FIELD_BYTES = 48;
 const G1_BYTES = FIELD_BYTES;
 const G2_BYTES = 2 * FIELD_BYTES;
@@ -58,12 +70,14 @@ function assertCanonicalEncoding(bytes: Uint8Array, length: number): void {
 // Decode with full validation: canonical encoding, then on-curve and
 // prime-order subgroup (noble's fromBytes). The identity point is allowed
 // here; decodePubkey and decodeSignature reject it.
-function decodeG1(bytes: Uint8Array): G1Point {
+function decodeG1(input: Uint8Array): G1Point {
+  const bytes = plainBytes(input);
   assertCanonicalEncoding(bytes, G1_BYTES);
   return G1.fromBytes(bytes);
 }
 
-function decodeG2(bytes: Uint8Array): G2Point {
+function decodeG2(input: Uint8Array): G2Point {
+  const bytes = plainBytes(input);
   assertCanonicalEncoding(bytes, G2_BYTES);
   return ls.Signature.fromBytes(bytes);
 }
@@ -88,7 +102,7 @@ export function blsVerify(
   try {
     return ls.verify(
       decodeSignature(signature),
-      ls.hash(message, ETH2_DST),
+      hashMessage(message),
       decodePubkey(pubkey),
     );
   } catch {
@@ -111,7 +125,7 @@ export function blsVerifyAggregate(
   try {
     return ls.verify(
       decodeG2(signature),
-      ls.hash(message, ETH2_DST),
+      hashMessage(message),
       ls.aggregatePublicKeys(pubkeys.map(decodeG1)),
     );
   } catch {
@@ -128,7 +142,7 @@ export function blsVerifyWithAggregatedPubkey(
   try {
     return ls.verify(
       decodeG2(signature),
-      ls.hash(message, ETH2_DST),
+      hashMessage(message),
       decodeG1(aggregatedPubkey),
     );
   } catch {
@@ -201,7 +215,7 @@ export function blsVerifyEach(
     if (pubkeys.length === 0) return true;
     const weights = pubkeys.map(randomWeight);
     const items = pubkeys.map((pubkey, i) => ({
-      message: ls.hash(messages[i], ETH2_DST),
+      message: hashMessage(messages[i]),
       publicKey: decodePubkey(pubkey).multiplyUnsafe(weights[i]),
     }));
     const weightedSignature = sumWeightedSignatures(
@@ -228,7 +242,7 @@ export function blsVerifyMultiple(
   try {
     if (pubkeys.length !== messages.length) return false;
     const items = messages.map((msg, i) => ({
-      message: ls.hash(msg, ETH2_DST),
+      message: hashMessage(msg),
       publicKey: decodeG1(pubkeys[i]),
     }));
     return ls.verifyBatch(decodeG2(signature), items);
