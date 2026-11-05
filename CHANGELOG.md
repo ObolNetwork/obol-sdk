@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v2.15.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.2...v2.15.3)
+
+> 5 November 2026
 
 - fix(verification): deposit and lock BLS checks work in webpack / Next.js browser builds. webpack defines `__dirname`, so worker discovery called `path.join` on an empty module and threw; `eoa.deposit` / `splits.deposit` then refused every valid deposit with "invalid deposit signature", and `validateClusterLock` threw. Deposits are now rejected only when a signature is invalid on its own
 - fix(verification): BLS checks accept `Buffer` (and other `Uint8Array` subclass) inputs; noble v2 rejected them and every check reported an invalid signature
