@@ -202,16 +202,19 @@ export const verifyDepositPayloads = async (
     return;
   }
   let batchValid = false;
+  let batchThrew = false;
   try {
     batchValid = await verifyBlsChecksParallel(checks);
   } catch {
-    // Malformed signature or pubkey (not a curve point): found below.
+    // blsVerifyEach reports bad input as false, so a throw comes from the
+    // environment (e.g. worker discovery in a bundler), not a signature.
+    batchThrew = true;
   }
   if (batchValid) {
     return;
   }
 
-  // The batch check failed: find the first invalid signature to report it.
+  // Find the first invalid signature to report it.
   const badIndex = checks.findIndex(check => {
     try {
       return !blsVerify(check.pubkey, check.message, check.signature);
@@ -219,6 +222,12 @@ export const verifyDepositPayloads = async (
       return true;
     }
   });
+  // The batch could not run: the individual checks decide. The batch ran and
+  // failed although each signature verifies alone: only a BLS fault does
+  // that, so fail closed (as 3.x does).
+  if (badIndex === -1 && batchThrew) {
+    return;
+  }
   fail(
     badIndex === -1 ? checkIndexes[0] : checkIndexes[badIndex],
     `invalid deposit signature for chain ${chainId}`,
