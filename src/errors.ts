@@ -465,6 +465,45 @@ export class InvalidArgumentError extends ObolSdkError {
 }
 
 /**
+ * Thrown by {@link Exit.recombineExitBlobs} when it is given verification
+ * options and cannot produce a valid exit signature.
+ *
+ * - `EXIT_NOT_ENOUGH_SHARES`: fewer than `threshold` partial signatures
+ *   verify against their operators' public shares.
+ * - `EXIT_PARTIAL_SIGNATURE_INVALID`: the aggregate does not verify against
+ *   the validator public key (the public shares are not this validator's).
+ *
+ * `validShares` and `invalidShares` are 1-based share indices (operator
+ * index + 1).
+ */
+export class ExitRecombineError extends ObolSdkError {
+  name = 'ExitRecombineError';
+  declare readonly code:
+    | 'EXIT_NOT_ENOUGH_SHARES'
+    | 'EXIT_PARTIAL_SIGNATURE_INVALID';
+
+  constructor(
+    message: string,
+    code: 'EXIT_NOT_ENOUGH_SHARES' | 'EXIT_PARTIAL_SIGNATURE_INVALID',
+    /** The validator public key of the exit. */
+    public readonly publicKey: string,
+    /** Share indices whose partial signature verified. */
+    public readonly validShares: number[],
+    /** Share indices whose partial signature did not verify. */
+    public readonly invalidShares: number[],
+  ) {
+    super(
+      message,
+      code,
+      code === 'EXIT_NOT_ENOUGH_SHARES'
+        ? 'Wait for more operators to submit partial exits; re-collect the invalid shares.'
+        : 'Check that the public shares are the cluster lock shares of this validator.',
+    );
+    Object.setPrototypeOf(this, ExitRecombineError.prototype);
+  }
+}
+
+/**
  * Thrown when {@link Client} is constructed with a baseUrl that is not an
  * allowed Obol API base URL (see {@link ALLOWED_OBOL_API_BASE_URLS}).
  */

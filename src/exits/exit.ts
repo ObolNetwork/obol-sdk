@@ -17,7 +17,9 @@ import type {
   SignedExitValidationMessage,
   ExistingExitValidationBlobData,
   FullExitBlob,
+  RecombineExitBlobsOptions,
 } from '../types.js';
+import { ExitRecombineError, InvalidArgumentError } from '../errors.js';
 import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils.js';
 import { computeDomain, signingRoot } from './verificationHelpers.js';
 
@@ -191,26 +193,10 @@ export class Exit {
     forkVersion: string,
     genesisValidatorsRootString: string,
   ): Promise<boolean> {
-    const capellaForkVersionString = await getCapellaFork(forkVersion);
-    if (!capellaForkVersionString) {
-      throw new Error(
-        `Could not determine Capella fork version for base fork: ${forkVersion}`,
-      );
-    }
-
-    const partialExitMessageBuffer = Exit.computePartialExitMessageRoot(
+    const messageSigningRoot = await Exit.exitSigningRoot(
       signedExitMessage.message,
-    );
-
-    const exitDomain = computeDomain(
-      fromHexString(DOMAIN_VOLUNTARY_EXIT),
-      capellaForkVersionString,
-      fromHexString(genesisValidatorsRootString),
-    );
-
-    const messageSigningRoot = signingRoot(
-      exitDomain,
-      partialExitMessageBuffer,
+      forkVersion,
+      genesisValidatorsRootString,
     );
 
     return blsVerify(
@@ -218,6 +204,31 @@ export class Exit {
       messageSigningRoot,
       fromHexString(signedExitMessage.signature),
     );
+  }
+
+  /**
+   * The signing root of a voluntary exit message: the message root in the
+   * exit domain of the Capella fork matching `forkVersion` (EIP-7044).
+   */
+  private static async exitSigningRoot(
+    message: ExitValidationMessage,
+    forkVersion: string,
+    genesisValidatorsRootString: string,
+  ): Promise<Uint8Array> {
+    const capellaForkVersionString = await getCapellaFork(forkVersion);
+    if (!capellaForkVersionString) {
+      throw new Error(
+        `Could not determine Capella fork version for base fork: ${forkVersion}`,
+      );
+    }
+
+    const exitDomain = computeDomain(
+      fromHexString(DOMAIN_VOLUNTARY_EXIT),
+      capellaForkVersionString,
+      fromHexString(genesisValidatorsRootString),
+    );
+
+    return signingRoot(exitDomain, Exit.computePartialExitMessageRoot(message));
   }
 
   /**
@@ -557,26 +568,52 @@ export class Exit {
    * This method threshold-aggregates partial exit signatures from multiple operators into a
    * single exit blob, matching Charon's `tbls.ThresholdAggregate`: each partial signature is
    * weighted by its Lagrange coefficient at x=0, where the share index of the signature keyed
-   * by operator index `i` (0-based) is `i + 1`. Every provided partial is used, so the result
-   * is only the validator's signature when at least `threshold` valid partials are present;
-   * verify it against the validator public key before broadcasting.
+   * by operator index `i` (0-based) is `i + 1`.
+   *
+   * **Pass `options` to get a verified result.** With `options`, each partial signature is
+   * verified against its operator's public share (invalid ones are left out), at least
+   * `threshold` valid partials are required, the first `threshold` valid partials by share
+   * index are aggregated, and the result is verified against the validator public key.
+   * Failures throw {@link ExitRecombineError} instead of returning an invalid blob.
+   *
+   * **Without `options`, nothing is verified:** every provided partial is aggregated and the
+   * result is returned as is. With fewer than `threshold` partials, or one invalid partial,
+   * the returned signature is invalid and no error is thrown; verify it against the validator
+   * public key before broadcasting.
    *
    * @param exitBlob - The existing exit blob data containing partial exit signatures
+   * @param options - The cluster (threshold, fork version, public shares) and the genesis
+   *   validators root (or a beacon node API URL to read it from); enables verification
    *
    * @returns Promise resolving to a single exit blob with aggregated signatures
    *
    * @throws {Error} When no valid signatures are found for aggregation
    * @throws {Error} When signature length is invalid
    * @throws {Error} When signature parsing fails or a signature is not a valid G2 point
+   *   (without `options`; with `options` such a partial is left out as invalid)
    * @throws {Error} When a share index key is not a non-negative integer or is duplicated
+   * @throws {InvalidArgumentError} With `options`: the threshold is not a positive integer,
+   *   not exactly one of `genesisValidatorsRoot` / `beaconNodeApiUrl` is given, or the
+   *   validator is not in `clusterConfig`
+   * @throws {ExitRecombineError} With `options`: `EXIT_NOT_ENOUGH_SHARES` when fewer than
+   *   `threshold` partials verify, `EXIT_PARTIAL_SIGNATURE_INVALID` when the aggregate does
+   *   not verify against the validator public key
    *
    * @example
    * ```typescript
+   * // Verified (recommended)
+   * const exitBlob = await exit.recombineExitBlobs(existingBlobData, {
+   *   clusterConfig, // e.g. the ExitClusterConfig passed to validateExitBlobs
+   *   beaconNodeApiUrl: "http://localhost:5052", // or genesisValidatorsRoot
+   * });
+   *
+   * // Unverified: check the signature yourself before broadcasting
    * const aggregatedExitBlob = await exit.recombineExitBlobs(existingBlobData);
    * ```
    */
   async recombineExitBlobs(
     exitBlob: ExistingExitValidationBlobData,
+    options?: RecombineExitBlobsOptions,
   ): Promise<FullExitBlob> {
     // Map to store signatures by their share index (matching Go's map[int]tbls.Signature)
     const signaturesByIndex = new Map<number, Uint8Array>();
@@ -637,6 +674,10 @@ export class Exit {
       throw new Error('No valid signatures found for aggregation');
     }
 
+    if (options) {
+      return await this.recombineVerified(exitBlob, signaturesByIndex, options);
+    }
+
     // Threshold aggregation (equivalent to tbls.ThresholdAggregate in Go):
     // each partial signature is weighted by its Lagrange coefficient at x=0
     // for the set of share indices present, using every provided partial.
@@ -656,6 +697,120 @@ export class Exit {
           epoch: exitBlob.epoch,
           validator_index: exitBlob.validator_index,
         },
+        signature: '0x' + Buffer.from(fullSig).toString('hex'),
+      },
+    };
+  }
+
+  /**
+   * The verified path of {@link Exit.recombineExitBlobs}, following v3's
+   * `exits.aggregate`.
+   */
+  private async recombineVerified(
+    exitBlob: ExistingExitValidationBlobData,
+    signaturesByIndex: Map<number, Uint8Array>,
+    options: RecombineExitBlobsOptions,
+  ): Promise<FullExitBlob> {
+    const { clusterConfig, beaconNodeApiUrl } = options;
+    const { threshold, fork_version: forkVersion } = clusterConfig.definition;
+    if (!Number.isSafeInteger(threshold) || threshold < 1) {
+      throw new InvalidArgumentError(
+        `Invalid threshold ${String(threshold)}: must be a positive integer`,
+        'options.clusterConfig.definition.threshold',
+      );
+    }
+    if (
+      (options.genesisValidatorsRoot === undefined) ===
+      (beaconNodeApiUrl === undefined)
+    ) {
+      throw new InvalidArgumentError(
+        'Pass exactly one of genesisValidatorsRoot or beaconNodeApiUrl',
+        'options',
+      );
+    }
+    const normalizeKey = (key: string): string =>
+      (key.startsWith('0x') ? key : '0x' + key).toLowerCase();
+    const publicKey = normalizeKey(exitBlob.public_key);
+    const validator = clusterConfig.distributed_validators.find(
+      dv => normalizeKey(dv.distributed_public_key) === publicKey,
+    );
+    if (!validator) {
+      throw new InvalidArgumentError(
+        `Public key ${exitBlob.public_key} not found in the cluster's distributed validators.`,
+        'options.clusterConfig',
+      );
+    }
+
+    const genesisValidatorsRoot =
+      options.genesisValidatorsRoot ??
+      (await this.getNetworkParameters(forkVersion, beaconNodeApiUrl as string))
+        .genesisValidatorsRoot;
+
+    const message = {
+      epoch: exitBlob.epoch,
+      validator_index: exitBlob.validator_index,
+    };
+    const root = await Exit.exitSigningRoot(
+      message,
+      forkVersion,
+      genesisValidatorsRoot,
+    );
+
+    // Check each partial against its operator's public share; an invalid one
+    // is left out so one bad stored share does not block the exit.
+    const valid: Array<[number, Uint8Array]> = [];
+    const invalidShares: number[] = [];
+    const shareIndices = [...signaturesByIndex.keys()].sort((a, b) => a - b);
+    for (const shareIdx of shareIndices) {
+      const signature = signaturesByIndex.get(shareIdx) as Uint8Array;
+      const publicShare = validator.public_shares[shareIdx - 1];
+      let ok = false;
+      if (publicShare !== undefined) {
+        try {
+          ok = blsVerify(fromHexString(publicShare), root, signature);
+        } catch {
+          ok = false; // malformed public share hex
+        }
+      }
+      if (ok) {
+        valid.push([shareIdx, signature]);
+      } else {
+        invalidShares.push(shareIdx);
+      }
+    }
+    const validShares = valid.map(([shareIdx]) => shareIdx);
+
+    if (valid.length < threshold) {
+      throw new ExitRecombineError(
+        `${valid.length} valid partial exit signatures for ${publicKey}, ${threshold} needed${
+          invalidShares.length > 0
+            ? ` (invalid: shares ${invalidShares.join(', ')})`
+            : ''
+        }`,
+        'EXIT_NOT_ENOUGH_SHARES',
+        publicKey,
+        validShares,
+        invalidShares,
+      );
+    }
+
+    const fullSig = blsThresholdAggregateSignatures(
+      new Map(valid.slice(0, threshold)),
+    );
+    if (!blsVerify(fromHexString(publicKey), root, fullSig)) {
+      throw new ExitRecombineError(
+        `The aggregated exit signature does not verify against ${publicKey}`,
+        'EXIT_PARTIAL_SIGNATURE_INVALID',
+        publicKey,
+        validShares,
+        invalidShares,
+      );
+    }
+
+    return {
+      public_key: exitBlob.public_key,
+      signed_exit_message: {
+        message,
         signature: '0x' + Buffer.from(fullSig).toString('hex'),
       },
     };

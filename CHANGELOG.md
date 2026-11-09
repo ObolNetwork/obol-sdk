@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix(exits): `recombineExitBlobs` takes an optional second argument, `{ clusterConfig, genesisValidatorsRoot }` or `{ clusterConfig, beaconNodeApiUrl }` (an `ExitClusterConfig` works as `clusterConfig`). With it, each partial signature is verified against its operator's public share and invalid ones are left out, at least `threshold` valid partials are required, the first `threshold` are aggregated and the result is verified against the validator public key; failures throw `ExitRecombineError` (`EXIT_NOT_ENOUGH_SHARES`, `EXIT_PARTIAL_SIGNATURE_INVALID`) instead of returning a blob with an invalid signature. Without it, nothing is verified, as before
+
 #### [v2.15.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.2...v2.15.3)
 
 > 5 November 2026

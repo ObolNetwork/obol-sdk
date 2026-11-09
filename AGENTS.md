@@ -194,7 +194,7 @@ client.exit.*         // Verify/recombine exit signatures
 | `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
 | `verifyExitPayloadSignature(enr, payload)` | Verify ECDSA exit payload signature |
 | `validateExitBlobs(config, payload, beaconUrl, existing)` | Comprehensive exit blob validation |
-| `recombineExitBlobs(exitBlob)` | Aggregate partial BLS signatures |
+| `recombineExitBlobs(exitBlob, options?)` | Aggregate partial BLS signatures; pass `{ clusterConfig, genesisValidatorsRoot \| beaconNodeApiUrl }` to verify partials and result (`ExitRecombineError`), unverified otherwise |
 
 **Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, version below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0), or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
 
@@ -277,7 +277,8 @@ Local checks extend **ObolSdkError** (`code`, `hint`):
 - **NotAnOperatorError**: Signer is not an operator of the definition being accepted
 - **IncentivesPreflightError**: `claimIncentives` pre-flight check failed (`issues`)
 - **PayloadValidationError**: payload failed AJV schema validation (code `PAYLOAD_INVALID`, `errors` = AJV errors; message `Validation failed: ...`)
-- **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`), or unsupported `createClusterDefinition` version
+- **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`), or unsupported `createClusterDefinition` version, or bad `recombineExitBlobs` options
+- **ExitRecombineError**: `exit.recombineExitBlobs` with options could not build a valid exit (code `EXIT_NOT_ENOUGH_SHARES` or `EXIT_PARTIAL_SIGNATURE_INVALID`; `publicKey`, `validShares`, `invalidShares` as 1-based share indices)
 - **TransactionSubmissionError**: a write failed after broadcasting (`txHashes`, `pendingTxHash`, `pendingStatus`, `cause`; code `TX_FAILED_AFTER_SEND`)
 
 Other:

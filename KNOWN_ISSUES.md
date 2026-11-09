@@ -23,7 +23,7 @@ If you believe you have found a new, distinct issue, please report it to the Obo
 
 ## Exits
 
-* **Exit helpers do not broadcast:** `client.exit.validateExitBlobs` and `recombineExitBlobs` are client-side helpers that return data; the Obol API and Charon run their own exit checks, and the beacon node verifies the aggregate signature. A cluster member submitting exits for a different epoch stalls that validator's exit only for the cluster, and is undone with `charon exit delete`.
+* **Exit helpers do not broadcast:** `client.exit.validateExitBlobs` and `recombineExitBlobs` are client-side helpers that return data; the Obol API and Charon run their own exit checks, and the beacon node verifies the aggregate signature. `recombineExitBlobs` verifies the partials and the aggregate only when given its options argument (cluster config and genesis validators root or beacon node URL, since 2.15.4); without it, a blob with too few or invalid partials comes back with an invalid signature and no error. A cluster member submitting exits for a different epoch stalls that validator's exit only for the cluster, and is undone with `charon exit delete`.
 * **Same-epoch exit treated as already processed — resolved:** Reports that `validateExitBlobs` skipped an exit blob as already processed when stored data existed for the same validator and epoch but held no signature from this operator. Since 2.15.3 such a blob is validated as new. This had no security impact: recombination rejects duplicate share indices.
 
 ## Terms and Conditions
