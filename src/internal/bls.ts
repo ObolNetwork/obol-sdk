@@ -15,6 +15,18 @@ type LineCoefficients = ReturnType<
 >;
 type PairingInput = [LineCoefficients, bigint, bigint];
 
+/**
+ * noble v2 accepts only exact Uint8Array instances and throws on subclasses
+ * such as Node / polyfilled `Buffer`, which every check here would then
+ * report as invalid. Callers (a `BlsBackend` user) and bundler polyfills can
+ * hand us Buffers, so inputs are copied to a plain Uint8Array first.
+ */
+const plainBytes = (bytes: Uint8Array): Uint8Array =>
+  bytes.constructor === Uint8Array ? bytes : Uint8Array.from(bytes);
+
+const hashMessage = (message: Uint8Array): ReturnType<typeof ls.hash> =>
+  ls.hash(plainBytes(message), ETH2_DST);
+
 const precomputes = (point: G2Point): LineCoefficients =>
   bls12_381.utils.calcPairingPrecomputes(point);
 
@@ -27,7 +39,8 @@ const NEG_G1 = G1.BASE.negate().toAffine();
  * construction. Throws for a bad length or flags, an x outside the field, an
  * x with no curve point, and the point at infinity.
  */
-export function decodeG1Unchecked(bytes: Uint8Array): G1Point {
+export function decodeG1Unchecked(input: Uint8Array): G1Point {
+  const bytes = plainBytes(input);
   if (bytes.length !== 48) throw new Error('G1 point: expected 48 bytes');
   const flags = bytes[0];
   if ((flags & 0x80) === 0) throw new Error('G1 point: not compressed');
@@ -78,7 +91,8 @@ function assertCanonical(bytes: Uint8Array, length: 48 | 96): void {
  * `subgroupCheck`, the point must be in the prime-order subgroup (noble's
  * full validation); the identity is always rejected.
  */
-export function decodeG1(bytes: Uint8Array, subgroupCheck: boolean): G1Point {
+export function decodeG1(input: Uint8Array, subgroupCheck: boolean): G1Point {
+  const bytes = plainBytes(input);
   if (!subgroupCheck) {
     const point = decodeG1Unchecked(bytes);
     if (point.is0()) throw new Error('G1 point: point at infinity');
@@ -94,7 +108,8 @@ export function decodeG1(bytes: Uint8Array, subgroupCheck: boolean): G1Point {
  * Decodes a G2 signature from its canonical encoding: on the curve, in the
  * subgroup, not the identity.
  */
-export function decodeSignature(bytes: Uint8Array): G2Point {
+export function decodeSignature(input: Uint8Array): G2Point {
+  const bytes = plainBytes(input);
   assertCanonical(bytes, 96);
   const point = ls.Signature.fromBytes(bytes);
   if (point.is0()) throw new Error('signature is the point at infinity');
@@ -148,7 +163,7 @@ export function verifyDecoded(
   try {
     if (publicKey.is0()) return false;
     const S = decodeSignature(signature);
-    const H = ls.hash(message, ETH2_DST);
+    const H = hashMessage(message);
     const pk = publicKey.toAffine();
     return pairingIsOne([
       [precomputes(H), pk.x, pk.y],
@@ -250,7 +265,7 @@ export class NobleSignatureBatch {
     if (publicKey.is0()) throw new Error('public key is the point at infinity');
     const S = decodeSignature(signature);
     const weight = randomWeight();
-    const H = ls.hash(message, ETH2_DST);
+    const H = hashMessage(message);
     const weighted = mulSmall(publicKey, weight).toAffine();
     this.pairs.push([precomputes(H), weighted.x, weighted.y]);
     this.signatures.push(S);
