@@ -93,6 +93,11 @@ export class Incentives {
    * The claim may be sent for any address: the signer pays gas and the tokens are
    * transferred to `address`.
    *
+   * A contract-wallet signer (a Safe over WalletConnect) is supported: the
+   * SDK waits for the Safe's `ExecutionSuccess` (up to 30 minutes) and returns
+   * the executed transaction hash; `onSent` reports the Safe's own hash with
+   * `contractWallet: true`.
+   *
    * @param address - The operator's Ethereum address to claim incentives for.
    * @param options - Optional `onSent` callback, called with each transaction
    *   hash as soon as it is broadcast.
@@ -168,6 +173,7 @@ export class Incentives {
         operatorAddress: incentivesData.operator_address,
         amount: incentivesData.amount,
         merkleProof: incentivesData.merkle_proof,
+        provider: this.provider,
         options,
       });
 
