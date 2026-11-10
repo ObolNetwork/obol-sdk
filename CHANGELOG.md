@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v2.16.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.16.0...v2.16.1)
+
+> 10 November 2026
 
 - fix(deposits): `getDepositData` / `depositDataFromLock` read `partial_deposit_data` only from v1.8.0+ locks and `deposit_data` only from older ones. A v1.6.0 or v1.7.0 lock hashes and signs `deposit_data` alone, so a `partial_deposit_data` entry added to one was returned in its place while the lock still validated
 - fix(verification): `validateClusterLock` rejects a lock before v1.8.0 whose validators carry a non-empty `partial_deposit_data`
