@@ -632,27 +632,36 @@ export interface FullExitBlob {
 }
 
 /**
- * Options for {@link Exit.recombineExitBlobs} that make it verify the
- * partial signatures and the result instead of returning an unchecked blob.
- *
- * Pass the cluster (an {@link ExitClusterConfig} works) and exactly one of
- * `genesisValidatorsRoot` or `beaconNodeApiUrl`.
+ * Options for {@link Exit.recombineExitBlobs}. All are optional: without
+ * them the aggregated signature is still verified against the validator
+ * public key on the client's chain.
  */
 export interface RecombineExitBlobsOptions {
   /**
-   * The cluster from its lock: `definition.threshold`,
-   * `definition.fork_version` (selects the exit domain) and the
-   * `distributed_validators` with their `public_shares` in operator order.
+   * The cluster from its lock (an {@link ExitClusterConfig} works). With it,
+   * each partial signature is verified against its operator's public share
+   * (`distributed_validators[].public_shares`, in operator order), invalid
+   * ones are left out, and at least `definition.threshold` valid ones are
+   * required. `definition.fork_version` must be the genesis fork version of
+   * the client's chain.
    */
-  clusterConfig: {
+  clusterConfig?: {
     definition: Pick<ExitClusterDefinition, 'fork_version' | 'threshold'>;
     distributed_validators: ExitDistributedValidator[];
   };
 
-  /** The chain's genesis validators root (32-byte hex). */
+  /**
+   * The chain's genesis validators root (32-byte hex). Not needed on the
+   * chains in {@link EXIT_NETWORKS}, where it is only compared with the
+   * chain's; required (or `beaconNodeApiUrl`), with `clusterConfig`, on any
+   * other chain. Pass at most one of the two.
+   */
   genesisValidatorsRoot?: string;
 
-  /** A beacon node API URL to read the genesis validators root from. */
+  /**
+   * A beacon node API URL to read the genesis validators root from; see
+   * `genesisValidatorsRoot`.
+   */
   beaconNodeApiUrl?: string;
 }
 
