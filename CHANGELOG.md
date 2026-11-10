@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v2.16.0](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.3...v2.16.0)
+
+> 10 November 2026
 
 - fix(exits): `recombineExitBlobs` always verifies the signature it returns. The aggregate is checked against the validator public key for the exit message, in the voluntary exit domain of the client's chain (new `EXIT_NETWORKS` constants: Capella fork version and genesis validators root of Mainnet, Hoodi, Sepolia and Gnosis; no beacon node needed). Too few partial signatures, an invalid partial, or an exit for another network, epoch or validator index now throw `ExitRecombineError` (`EXIT_PARTIAL_SIGNATURE_INVALID`) instead of returning a blob with an invalid signature. Valid inputs return the same bytes as before. **Callers that relied on getting an (invalid) blob back for an incomplete set of partials now get an error**
 - feat(exits): `recombineExitBlobs` takes an optional second argument. `{ clusterConfig }` (an `ExitClusterConfig` works) also verifies each partial signature against its operator's public share, leaves invalid ones out, requires `threshold` valid ones (`EXIT_NOT_ENOUGH_SHARES`, with `validShares` / `invalidShares`) and fails with `InvalidArgumentError` when the cluster's `fork_version` is not the client chain's. `genesisValidatorsRoot` or `beaconNodeApiUrl` are compared with the chain's root, and supply it (with `clusterConfig`) for an `Exit` constructed for a chain without constants, which otherwise throws `UnsupportedChainError`. The error `hint` names the likely causes: when no partial verifies it points at the network, the cluster lock and the exit message instead of asking to wait for more operators
