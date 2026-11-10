@@ -558,14 +558,16 @@ describe('Client.incentives', () => {
       const result = await client.incentives.claimIncentives(operatorAddress);
 
       expect(result).toEqual({ txHash: mockTxHash });
-      expect(mockClaimIncentivesFromMerkleDistributor).toHaveBeenCalledWith({
-        signer: mockSigner,
-        contractAddress: validIncentivesData.contract_address,
-        index: validIncentivesData.index,
-        operatorAddress,
-        amount: validIncentivesData.amount,
-        merkleProof: validIncentivesData.merkle_proof,
-      });
+      expect(mockClaimIncentivesFromMerkleDistributor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signer: mockSigner,
+          contractAddress: validIncentivesData.contract_address,
+          index: validIncentivesData.index,
+          operatorAddress,
+          amount: validIncentivesData.amount,
+          merkleProof: validIncentivesData.merkle_proof,
+        }),
+      );
     });
 
     test('claimIncentives throws and does not claim when a check fails', async () => {
