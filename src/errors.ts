@@ -464,6 +464,71 @@ export class InvalidArgumentError extends ObolSdkError {
   }
 }
 
+/** The `code` of an {@link ExitRecombineError}. */
+export type ExitRecombineErrorCode =
+  | 'EXIT_NOT_ENOUGH_SHARES'
+  | 'EXIT_PARTIAL_SIGNATURE_INVALID';
+
+/**
+ * Thrown by {@link Exit.recombineExitBlobs} when it cannot produce an exit
+ * signature that verifies against the validator public key. Nothing is
+ * returned in that case.
+ *
+ * The codes are those of v3's `exits.aggregate`:
+ *
+ * - `EXIT_NOT_ENOUGH_SHARES`: with `options.clusterConfig`, fewer than
+ *   `threshold` partial signatures verify against their operators' public
+ *   shares. `validShares` and `invalidShares` say which.
+ * - `EXIT_PARTIAL_SIGNATURE_INVALID`: the aggregated signature does not
+ *   verify against the validator public key. Despite the name this is about
+ *   the aggregate: at least one input of the aggregation is wrong, and the
+ *   SDK cannot tell which. Without `options.clusterConfig` that is too few
+ *   partials, an invalid partial, another network or another exit message;
+ *   with it (the partials did verify) the public shares are not this
+ *   validator's. Also used, without `options.clusterConfig`, for a partial
+ *   that is not a valid signature encoding.
+ *
+ * `hint` names the likely causes for the case at hand. All share lists are
+ * 1-based share indices (operator index + 1).
+ */
+export class ExitRecombineError extends ObolSdkError {
+  name = 'ExitRecombineError';
+  declare readonly code: ExitRecombineErrorCode;
+  /** The validator public key of the exit (0x-prefixed, lowercase). */
+  readonly publicKey: string;
+  /** Share indices a partial signature was provided for. */
+  readonly providedShares: number[];
+  /**
+   * Share indices whose partial signature verified against its public
+   * share. Empty without `options.clusterConfig` (nothing to check against).
+   */
+  readonly validShares: number[];
+  /**
+   * Share indices whose partial signature did not verify against its public
+   * share. Empty without `options.clusterConfig`.
+   */
+  readonly invalidShares: number[];
+
+  constructor(
+    message: string,
+    code: ExitRecombineErrorCode,
+    hint: string,
+    details: {
+      publicKey: string;
+      providedShares: number[];
+      validShares: number[];
+      invalidShares: number[];
+    },
+  ) {
+    super(message, code, hint);
+    Object.setPrototypeOf(this, ExitRecombineError.prototype);
+    this.publicKey = details.publicKey;
+    this.providedShares = details.providedShares;
+    this.validShares = details.validShares;
+    this.invalidShares = details.invalidShares;
+  }
+}
+
 /**
  * Thrown when {@link Client} is constructed with a baseUrl that is not an
  * allowed Obol API base URL (see {@link ALLOWED_OBOL_API_BASE_URLS}).

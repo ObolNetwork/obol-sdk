@@ -334,3 +334,36 @@ export const CAPELLA_FORK_MAPPING: Record<string, string> = {
   '0x90000069': '0x90000072', // Sepolia
   '0x10000910': '0x40000910', // Hoodi
 };
+
+/** The voluntary exit signing domain inputs of a chain. */
+export interface ExitNetwork {
+  /** Network name, for error messages. */
+  name: string;
+  /** Genesis fork version (`definition.fork_version` of a cluster on it). */
+  forkVersion: string;
+  /**
+   * Capella fork version. Since EIP-7044 (Deneb) voluntary exits are always
+   * signed in the Capella exit domain, whatever the current fork.
+   */
+  capellaForkVersion: string;
+  /** Genesis validators root of the beacon chain. */
+  genesisValidatorsRoot: string;
+}
+
+/**
+ * Voluntary exit signing domain inputs by chain ID. `Exit.recombineExitBlobs`
+ * uses the entry for the client's chain to verify the exit signature it
+ * returns, so no beacon node is needed.
+ *
+ * Each entry stands alone: removing a chain's line removes its exit support.
+ */
+export const EXIT_NETWORKS: Readonly<Record<number, ExitNetwork>> = {
+  // prettier-ignore
+  1: { name: 'mainnet', forkVersion: '0x00000000', capellaForkVersion: '0x03000000', genesisValidatorsRoot: '0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95' },
+  // prettier-ignore
+  560048: { name: 'hoodi', forkVersion: '0x10000910', capellaForkVersion: '0x40000910', genesisValidatorsRoot: '0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f' },
+  // prettier-ignore
+  11155111: { name: 'sepolia', forkVersion: '0x90000069', capellaForkVersion: '0x90000072', genesisValidatorsRoot: '0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078' },
+  // prettier-ignore
+  100: { name: 'gnosis', forkVersion: '0x00000064', capellaForkVersion: '0x03000064', genesisValidatorsRoot: '0xf5dcb5564e829aab27264b9becd5dfaa017085611224cb3036f573368dbb9d47' },
+};

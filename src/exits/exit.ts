@@ -6,6 +6,7 @@ import {
   ContainerType,
   fromHexString,
   ListCompositeType,
+  UintBigintType,
   UintNumberType,
 } from '@chainsafe/ssz';
 import type {
@@ -17,7 +18,14 @@ import type {
   SignedExitValidationMessage,
   ExistingExitValidationBlobData,
   FullExitBlob,
+  RecombineExitBlobsOptions,
 } from '../types.js';
+import {
+  ExitRecombineError,
+  InvalidArgumentError,
+  UnsupportedChainError,
+} from '../errors.js';
+import { CAPELLA_FORK_MAPPING, EXIT_NETWORKS } from '../constants.js';
 import { getCapellaFork, getGenesisValidatorsRoot } from './ethUtils.js';
 import { computeDomain, signingRoot } from './verificationHelpers.js';
 
@@ -26,8 +34,8 @@ const DOMAIN_VOLUNTARY_EXIT = '0x04000000';
 
 // SSZ Type Definitions (adapted from obol-api/src/verification/exit.ts)
 const SSZExitMessageType = new ContainerType({
-  epoch: new UintNumberType(8),
-  validator_index: new UintNumberType(8),
+  epoch: new UintBigintType(8),
+  validator_index: new UintBigintType(8),
 });
 
 const SSZPartialExitsPayloadType = new ContainerType({
@@ -36,8 +44,8 @@ const SSZPartialExitsPayloadType = new ContainerType({
       public_key: new ByteVectorType(48),
       signed_exit_message: new ContainerType({
         message: new ContainerType({
-          epoch: new UintNumberType(8),
-          validator_index: new UintNumberType(8),
+          epoch: new UintBigintType(8),
+          validator_index: new UintBigintType(8),
         }),
         signature: new ByteVectorType(96),
       }),
@@ -56,7 +64,7 @@ const SSZPartialExitsPayloadType = new ContainerType({
  * - {@link Exit.verifyPartialExitSignature} – verify a BLS partial exit signature
  * - {@link Exit.verifyExitPayloadSignature} – verify an ECDSA exit payload signature
  * - {@link Exit.validateExitBlobs} – validate exit blobs against cluster config
- * - {@link Exit.recombineExitBlobs} – aggregate partial signatures into a full exit blob
+ * - {@link Exit.recombineExitBlobs} – aggregate partial signatures into a full exit blob, verified against the validator public key
  *
  * All methods are read-only (no on-chain transactions). No signer is required.
  *
@@ -103,23 +111,12 @@ export class Exit {
   }
 
   /**
-   * Safely parse a string integer to number, using BigInt to avoid precision loss
-   * for large values beyond JavaScript's safe integer limit (2^53 - 1).
-   * Throws an error if the value exceeds the safe range for a 64-bit unsigned integer.
+   * Parses a uint64 decimal string. Only decimal digits are accepted (not the
+   * hex, whitespace or sign forms `BigInt()` also parses), and the value stays
+   * a bigint: a JavaScript number loses precision above 2^53 - 1.
    */
-  private static safeParseInt(value: string): number {
-    const bigIntValue = BigInt(value);
-
-    // Check if value is within the range of a 64-bit unsigned integer
-    const MAX_UINT64 = BigInt('0xFFFFFFFFFFFFFFFF');
-    if (bigIntValue < 0 || bigIntValue > MAX_UINT64) {
-      throw new Error(
-        `Value ${value} is outside the valid range for a 64-bit unsigned integer`,
-      );
-    }
-
-    // Convert to number - SSZ library should handle values even if they exceed JS safe integer limits
-    return Number(bigIntValue);
+  private static safeParseInt(value: string, argument: string): bigint {
+    return BigInt(Exit.canonicalUint64(value, argument));
   }
 
   private static computePartialExitMessageRoot(
@@ -127,8 +124,11 @@ export class Exit {
   ): Buffer {
     const sszValue = SSZExitMessageType.defaultValue();
 
-    sszValue.epoch = Exit.safeParseInt(msg.epoch);
-    sszValue.validator_index = Exit.safeParseInt(msg.validator_index);
+    sszValue.epoch = Exit.safeParseInt(msg.epoch, 'epoch');
+    sszValue.validator_index = Exit.safeParseInt(
+      msg.validator_index,
+      'validator_index',
+    );
     return Buffer.from(SSZExitMessageType.hashTreeRoot(sszValue).buffer);
   }
 
@@ -140,9 +140,13 @@ export class Exit {
       public_key: fromHexString(pe.public_key),
       signed_exit_message: {
         message: {
-          epoch: Exit.safeParseInt(pe.signed_exit_message.message.epoch),
+          epoch: Exit.safeParseInt(
+            pe.signed_exit_message.message.epoch,
+            'epoch',
+          ),
           validator_index: Exit.safeParseInt(
             pe.signed_exit_message.message.validator_index,
+            'validator_index',
           ),
         },
         signature: fromHexString(pe.signed_exit_message.signature),
@@ -170,6 +174,7 @@ export class Exit {
    * @returns Promise resolving to true if the signature is valid, false otherwise
    *
    * @throws {Error} When unable to determine the Capella fork version for the given network
+   * @throws {InvalidArgumentError} When `epoch` or `validator_index` is not a decimal uint64 string
    * @throws {Error} When BLS library initialization or verification fails
    *
    * @example
@@ -191,26 +196,10 @@ export class Exit {
     forkVersion: string,
     genesisValidatorsRootString: string,
   ): Promise<boolean> {
-    const capellaForkVersionString = await getCapellaFork(forkVersion);
-    if (!capellaForkVersionString) {
-      throw new Error(
-        `Could not determine Capella fork version for base fork: ${forkVersion}`,
-      );
-    }
-
-    const partialExitMessageBuffer = Exit.computePartialExitMessageRoot(
+    const messageSigningRoot = await Exit.exitSigningRoot(
       signedExitMessage.message,
-    );
-
-    const exitDomain = computeDomain(
-      fromHexString(DOMAIN_VOLUNTARY_EXIT),
-      capellaForkVersionString,
-      fromHexString(genesisValidatorsRootString),
-    );
-
-    const messageSigningRoot = signingRoot(
-      exitDomain,
-      partialExitMessageBuffer,
+      forkVersion,
+      genesisValidatorsRootString,
     );
 
     return blsVerify(
@@ -218,6 +207,42 @@ export class Exit {
       messageSigningRoot,
       fromHexString(signedExitMessage.signature),
     );
+  }
+
+  /**
+   * The signing root of a voluntary exit message: the message root in the
+   * exit domain of the Capella fork matching `forkVersion` (EIP-7044).
+   */
+  private static async exitSigningRoot(
+    message: ExitValidationMessage,
+    forkVersion: string,
+    genesisValidatorsRootString: string,
+  ): Promise<Uint8Array> {
+    const capellaForkVersionString = await getCapellaFork(forkVersion);
+    if (!capellaForkVersionString) {
+      throw new Error(
+        `Could not determine Capella fork version for base fork: ${forkVersion}`,
+      );
+    }
+    return Exit.exitSigningRootForCapella(
+      message,
+      capellaForkVersionString,
+      genesisValidatorsRootString,
+    );
+  }
+
+  private static exitSigningRootForCapella(
+    message: ExitValidationMessage,
+    capellaForkVersion: string,
+    genesisValidatorsRootString: string,
+  ): Uint8Array {
+    const exitDomain = computeDomain(
+      fromHexString(DOMAIN_VOLUNTARY_EXIT),
+      capellaForkVersion,
+      fromHexString(genesisValidatorsRootString),
+    );
+
+    return signingRoot(exitDomain, Exit.computePartialExitMessageRoot(message));
   }
 
   /**
@@ -401,8 +426,9 @@ export class Exit {
 
     const currentEpoch = Exit.safeParseInt(
       exitBlob.signed_exit_message.message.epoch,
+      'epoch',
     );
-    const existingEpoch = Exit.safeParseInt(existingBlob.epoch);
+    const existingEpoch = Exit.safeParseInt(existingBlob.epoch, 'epoch');
 
     if (currentEpoch < existingEpoch) {
       throw new Error(
@@ -493,6 +519,7 @@ export class Exit {
    * @throws {Error} When exit epoch validation fails (new epoch not greater than existing)
    * @throws {Error} When validator index mismatches with existing data
    * @throws {Error} When signature mismatches for the same epoch and operator
+   * @throws {InvalidArgumentError} When an `epoch` or `validator_index` is not a decimal uint64 string
    *
    * @example
    * ```typescript
@@ -552,32 +579,96 @@ export class Exit {
   }
 
   /**
-   * Recombines exit blobs into a single exit blob.
+   * Recombines the partial exit signatures of a validator into its signed
+   * voluntary exit, and verifies it.
    *
-   * This method threshold-aggregates partial exit signatures from multiple operators into a
-   * single exit blob, matching Charon's `tbls.ThresholdAggregate`: each partial signature is
-   * weighted by its Lagrange coefficient at x=0, where the share index of the signature keyed
-   * by operator index `i` (0-based) is `i + 1`. Every provided partial is used, so the result
-   * is only the validator's signature when at least `threshold` valid partials are present;
-   * verify it against the validator public key before broadcasting.
+   * The partial signatures are threshold-aggregated as Charon's
+   * `tbls.ThresholdAggregate` does: each one is weighted by its Lagrange
+   * coefficient at x=0, where the share index of the signature keyed by
+   * operator index `i` (0-based) is `i + 1`.
    *
-   * @param exitBlob - The existing exit blob data containing partial exit signatures
+   * **The returned signature is always verified** against `exitBlob.public_key`
+   * for the exit message, in the voluntary exit domain of the client's chain
+   * (`chainId`; Capella fork version and genesis validators root from
+   * {@link EXIT_NETWORKS}, no beacon node needed). If it does not verify (fewer
+   * than the cluster's threshold of partials, an invalid partial, another
+   * network, another epoch or validator index) the method throws
+   * {@link ExitRecombineError} and returns nothing. There is no way to skip
+   * this check.
    *
-   * @returns Promise resolving to a single exit blob with aggregated signatures
+   * `options` add to that:
+   * - `clusterConfig`: each partial is first verified against its operator's
+   *   public share and invalid ones are left out (and named in the error), at
+   *   least `definition.threshold` valid partials are required, and the first
+   *   `threshold` valid partials by share index are aggregated. Its
+   *   `definition.fork_version` must be the client chain's.
+   * - `genesisValidatorsRoot` or `beaconNodeApiUrl` (at most one): on a chain
+   *   in {@link EXIT_NETWORKS} the root is only compared with the chain's (a
+   *   mismatch throws). On a chain without an entry (possible only when `Exit`
+   *   is constructed directly), one of them and `clusterConfig` are required:
+   *   they supply the exit domain.
    *
-   * @throws {Error} When no valid signatures are found for aggregation
-   * @throws {Error} When signature length is invalid
-   * @throws {Error} When signature parsing fails or a signature is not a valid G2 point
-   * @throws {Error} When a share index key is not a non-negative integer or is duplicated
+   * For a set of valid partials the result is the same with and without
+   * `options`, and the same as before 2.16.0.
+   *
+   * @param exitBlob - The stored exit: validator public key, epoch, validator
+   *   index and the partial exit signatures keyed by 0-based operator index
+   * @param options - Optional cluster (per-partial verification, threshold)
+   *   and genesis validators root source
+   *
+   * @returns Promise resolving to the exit blob with the aggregated, verified
+   *   signature. `epoch` and `validator_index` are returned in canonical
+   *   decimal form (leading zeros removed)
+   *
+   * @throws {ExitRecombineError} `EXIT_PARTIAL_SIGNATURE_INVALID` when the
+   *   aggregate does not verify against the validator public key, or a partial
+   *   is not a valid signature encoding (without `clusterConfig`);
+   *   `EXIT_NOT_ENOUGH_SHARES` when fewer than `threshold` partials verify
+   *   (with `clusterConfig`)
+   * @throws {InvalidArgumentError} `public_key` is not 48 bytes of hex;
+   *   `epoch` or `validator_index` is not a decimal uint64; `options` are
+   *   inconsistent (both root sources, a malformed root, a threshold that is
+   *   not a positive integer, a validator not in `clusterConfig`, a
+   *   `fork_version` or genesis validators root that is not the client
+   *   chain's)
+   * @throws {UnsupportedChainError} The client's chain has no entry in
+   *   {@link EXIT_NETWORKS} and `options` do not supply the exit domain
+   * @throws {Error} No partial signatures; a partial signature that is not 96
+   *   bytes of hex; a share index key that is not a non-negative integer or is
+   *   duplicated; the beacon node did not return a genesis validators root
    *
    * @example
    * ```typescript
-   * const aggregatedExitBlob = await exit.recombineExitBlobs(existingBlobData);
+   * // Verified against the validator public key on the client's chain
+   * const exitBlob = await client.exit.recombineExitBlobs(existingBlobData);
+   *
+   * // Also checks each partial against its public share and the threshold
+   * const exitBlob = await client.exit.recombineExitBlobs(existingBlobData, {
+   *   clusterConfig, // e.g. the ExitClusterConfig passed to validateExitBlobs
+   * });
    * ```
    */
   async recombineExitBlobs(
     exitBlob: ExistingExitValidationBlobData,
+    options: RecombineExitBlobsOptions = {},
   ): Promise<FullExitBlob> {
+    if (
+      typeof exitBlob.public_key !== 'string' ||
+      !/^(0x)?[0-9a-fA-F]{96}$/.test(exitBlob.public_key)
+    ) {
+      throw new InvalidArgumentError(
+        `Invalid public_key: expected 48 bytes of hex, got ${String(exitBlob.public_key)}`,
+        'exitBlob.public_key',
+      );
+    }
+    const message = {
+      epoch: Exit.canonicalUint64(exitBlob.epoch, 'exitBlob.epoch'),
+      validator_index: Exit.canonicalUint64(
+        exitBlob.validator_index,
+        'exitBlob.validator_index',
+      ),
+    };
+
     // Map to store signatures by their share index (matching Go's map[int]tbls.Signature)
     const signaturesByIndex = new Map<number, Uint8Array>();
 
@@ -637,27 +728,358 @@ export class Exit {
       throw new Error('No valid signatures found for aggregation');
     }
 
-    // Threshold aggregation (equivalent to tbls.ThresholdAggregate in Go):
-    // each partial signature is weighted by its Lagrange coefficient at x=0
-    // for the set of share indices present, using every provided partial.
+    const network = await this.resolveExitNetwork(options);
+    const root = Exit.exitSigningRootForCapella(
+      message,
+      network.capellaForkVersion,
+      network.genesisValidatorsRoot,
+    );
+    const publicKey = Exit.normalizeKey(exitBlob.public_key);
+    const providedShares = [...signaturesByIndex.keys()].sort((a, b) => a - b);
+
     let fullSig: Uint8Array;
-    try {
-      fullSig = blsThresholdAggregateSignatures(signaturesByIndex);
-    } catch (err) {
-      throw new Error(
-        `Failed to threshold-aggregate partial signatures: ${String(err)}`,
+    let validShares: number[] = [];
+    let invalidShares: number[] = [];
+    let mismatchHint: string;
+    if (options.clusterConfig === undefined) {
+      // Threshold aggregation (equivalent to tbls.ThresholdAggregate in Go):
+      // each partial signature is weighted by its Lagrange coefficient at x=0
+      // for the set of share indices present, using every provided partial.
+      try {
+        fullSig = blsThresholdAggregateSignatures(signaturesByIndex);
+      } catch (err) {
+        throw new ExitRecombineError(
+          `Failed to threshold-aggregate partial signatures: ${String(err)}`,
+          'EXIT_PARTIAL_SIGNATURE_INVALID',
+          'A partial signature is not a valid BLS signature encoding. Re-collect it, or pass options.clusterConfig to leave invalid partials out.',
+          { publicKey, providedShares, validShares, invalidShares },
+        );
+      }
+      mismatchHint =
+        `Possible causes: fewer partial signatures than the cluster's threshold; an invalid partial signature; the validator is not on ${network.description}; ` +
+        'epoch or validator_index are not the ones the operators signed. ' +
+        'Pass options.clusterConfig to check each partial against its public share and enforce the threshold.';
+    } else {
+      const partials = this.verifiedPartials(
+        options.clusterConfig,
+        publicKey,
+        signaturesByIndex,
+        root,
+        network.description,
+      );
+      validShares = partials.validShares;
+      invalidShares = partials.invalidShares;
+      fullSig = blsThresholdAggregateSignatures(partials.toAggregate);
+      mismatchHint =
+        'The partial signatures verify against the public shares, but the public shares are not those of this validator public key. Check that clusterConfig is the cluster lock of this validator.';
+    }
+
+    // Never return a signature that is not the validator's.
+    if (!blsVerify(fromHexString(publicKey), root, fullSig)) {
+      throw new ExitRecombineError(
+        `The exit signature aggregated from ${
+          options.clusterConfig === undefined ? 'shares' : 'valid shares'
+        } ${(options.clusterConfig === undefined
+          ? providedShares
+          : validShares
+        ).join(
+          ', ',
+        )} does not verify against ${publicKey} on ${network.description}`,
+        'EXIT_PARTIAL_SIGNATURE_INVALID',
+        mismatchHint,
+        { publicKey, providedShares, validShares, invalidShares },
       );
     }
 
     return {
       public_key: exitBlob.public_key,
       signed_exit_message: {
-        message: {
-          epoch: exitBlob.epoch,
-          validator_index: exitBlob.validator_index,
-        },
+        message,
         signature: '0x' + Buffer.from(fullSig).toString('hex'),
       },
+    };
+  }
+
+  private static normalizeKey(key: string): string {
+    return (key.startsWith('0x') ? key : '0x' + key).toLowerCase();
+  }
+
+  /**
+   * A uint64 decimal string in canonical form (no leading zeros), as v3's
+   * `canonicalUint64`. Anything `BigInt()` would also parse (hex, whitespace,
+   * a sign, an empty string) is refused.
+   */
+  private static canonicalUint64(value: string, argument: string): string {
+    if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+      throw new InvalidArgumentError(
+        `Invalid ${argument}: expected a decimal integer string, got ${JSON.stringify(value)}`,
+        argument,
+      );
+    }
+    const n = BigInt(value);
+    if (n > BigInt('0xFFFFFFFFFFFFFFFF')) {
+      throw new InvalidArgumentError(
+        `Invalid ${argument}: ${value} does not fit in a 64-bit unsigned integer`,
+        argument,
+      );
+    }
+    return n.toString();
+  }
+
+  /**
+   * Checks the shape of the domain options of {@link Exit.recombineExitBlobs}
+   * and returns the cluster's fork version, if a cluster was given.
+   */
+  private static checkedDomainOptions(
+    options: RecombineExitBlobsOptions,
+  ): string | undefined {
+    const { clusterConfig, genesisValidatorsRoot, beaconNodeApiUrl } = options;
+    if (genesisValidatorsRoot !== undefined && beaconNodeApiUrl !== undefined) {
+      throw new InvalidArgumentError(
+        'Pass at most one of genesisValidatorsRoot and beaconNodeApiUrl',
+        'options',
+      );
+    }
+    if (
+      genesisValidatorsRoot !== undefined &&
+      !/^(0x)?[0-9a-fA-F]{64}$/.test(genesisValidatorsRoot)
+    ) {
+      throw new InvalidArgumentError(
+        `Invalid genesisValidatorsRoot: expected 32 bytes of hex, got ${String(genesisValidatorsRoot)}`,
+        'options.genesisValidatorsRoot',
+      );
+    }
+    const forkVersion = clusterConfig?.definition.fork_version;
+    if (clusterConfig !== undefined && typeof forkVersion !== 'string') {
+      throw new InvalidArgumentError(
+        'Invalid fork_version: expected a hex string',
+        'options.clusterConfig.definition.fork_version',
+      );
+    }
+    return forkVersion;
+  }
+
+  /** The genesis validators root the options give or point at, if any. */
+  private static async suppliedGenesisRoot(
+    options: RecombineExitBlobsOptions,
+  ): Promise<string | undefined> {
+    const { genesisValidatorsRoot, beaconNodeApiUrl } = options;
+    if (genesisValidatorsRoot !== undefined) {
+      return Exit.normalizeKey(genesisValidatorsRoot);
+    }
+    if (beaconNodeApiUrl === undefined) return undefined;
+    const fetched = await getGenesisValidatorsRoot(beaconNodeApiUrl);
+    if (!fetched || !/^(0x)?[0-9a-fA-F]{64}$/.test(fetched)) {
+      throw new Error('Could not retrieve genesis validators root.');
+    }
+    return Exit.normalizeKey(fetched);
+  }
+
+  /** A cluster's fork version must be the client chain's. */
+  private static requireForkVersion(
+    forkVersion: string | undefined,
+    expected: string,
+    description: string,
+  ): void {
+    if (forkVersion === undefined || forkVersion.toLowerCase() === expected) {
+      return;
+    }
+    throw new InvalidArgumentError(
+      `Invalid fork_version: the cluster's fork_version ${forkVersion} is not ${expected} of ${description}. The cluster is on another network than this client; construct the client with the cluster's chainId.`,
+      'options.clusterConfig.definition.fork_version',
+    );
+  }
+
+  /** A given or fetched genesis validators root must be the client chain's. */
+  private static requireGenesisRoot(
+    root: string | undefined,
+    expected: string,
+    description: string,
+    fromBeaconNode: boolean,
+  ): void {
+    if (root === undefined || root === expected) return;
+    throw new InvalidArgumentError(
+      `Invalid genesis validators root: ${root}${
+        fromBeaconNode ? ' (from the beacon node)' : ''
+      } is not ${expected} of ${description}. ${
+        fromBeaconNode ? 'The beacon node' : 'The root'
+      } is of another network than this client's.`,
+      fromBeaconNode
+        ? 'options.beaconNodeApiUrl'
+        : 'options.genesisValidatorsRoot',
+    );
+  }
+
+  /** Whether a partial signature verifies against its operator's public share. */
+  private static partialVerifies(
+    publicShare: string | undefined,
+    root: Uint8Array,
+    signature: Uint8Array,
+  ): boolean {
+    if (publicShare === undefined) return false;
+    try {
+      return blsVerify(fromHexString(publicShare), root, signature);
+    } catch {
+      return false; // malformed public share hex
+    }
+  }
+
+  /** What to do when fewer than `threshold` partials verify. */
+  private static notEnoughSharesHint(
+    validCount: number,
+    invalidShares: number[],
+    networkDescription: string,
+  ): string {
+    if (validCount === 0) {
+      // Every operator signing badly is unlikely: the inputs are wrong.
+      return (
+        `No partial signature verifies against its public share, which points at the inputs rather than the operators. Check that the validator is on ${networkDescription}, ` +
+        'that clusterConfig is the cluster lock of this validator (public_shares in operator order), ' +
+        'and that epoch and validator_index are the ones the operators signed.'
+      );
+    }
+    if (invalidShares.length > 0) {
+      return `Wait for more operators to submit partial exits, and re-collect the invalid shares (${invalidShares.join(', ')}).`;
+    }
+    return 'Wait for more operators to submit partial exits.';
+  }
+
+  /**
+   * The voluntary exit domain inputs for {@link Exit.recombineExitBlobs}: the
+   * client chain's {@link EXIT_NETWORKS} entry, which `options` must agree
+   * with, or for a chain without an entry what `options` supply.
+   */
+  private async resolveExitNetwork(
+    options: RecombineExitBlobsOptions,
+  ): Promise<{
+    capellaForkVersion: string;
+    genesisValidatorsRoot: string;
+    /** For messages, e.g. `chain 1 (mainnet)`. */
+    description: string;
+  }> {
+    const { genesisValidatorsRoot, beaconNodeApiUrl } = options;
+    const forkVersion = Exit.checkedDomainOptions(options);
+
+    const known = EXIT_NETWORKS[this.chainId];
+    if (known !== undefined) {
+      const description = `chain ${this.chainId} (${known.name})`;
+      Exit.requireForkVersion(forkVersion, known.forkVersion, description);
+      Exit.requireGenesisRoot(
+        await Exit.suppliedGenesisRoot(options),
+        known.genesisValidatorsRoot,
+        description,
+        beaconNodeApiUrl !== undefined,
+      );
+      return {
+        capellaForkVersion: known.capellaForkVersion,
+        genesisValidatorsRoot: known.genesisValidatorsRoot,
+        description,
+      };
+    }
+
+    // No constants for this chain: options must supply the exit domain. The
+    // signature is never returned unverified.
+    const capellaForkVersion =
+      forkVersion === undefined
+        ? undefined
+        : CAPELLA_FORK_MAPPING[forkVersion.toLowerCase()];
+    if (
+      capellaForkVersion === undefined ||
+      (genesisValidatorsRoot === undefined && beaconNodeApiUrl === undefined)
+    ) {
+      throw new UnsupportedChainError(
+        this.chainId,
+        'exit.recombineExitBlobs',
+        `The exit signature cannot be verified without the chain's exit domain. Use one of the chains ${Object.keys(
+          EXIT_NETWORKS,
+        ).join(
+          ', ',
+        )}, or pass options.clusterConfig (its definition.fork_version must have a known Capella fork version) together with options.genesisValidatorsRoot or options.beaconNodeApiUrl`,
+      );
+    }
+    return {
+      capellaForkVersion,
+      genesisValidatorsRoot: (await Exit.suppliedGenesisRoot(
+        options,
+      )) as string,
+      description: `chain ${this.chainId} (fork version ${String(forkVersion)}, the given genesis validators root)`,
+    };
+  }
+
+  /**
+   * Checks each partial signature against its operator's public share, as
+   * v3's `exits.aggregate` does, and requires `threshold` valid ones. An
+   * invalid partial is left out so one bad stored share does not block the
+   * exit.
+   */
+  private verifiedPartials(
+    clusterConfig: NonNullable<RecombineExitBlobsOptions['clusterConfig']>,
+    publicKey: string,
+    signaturesByIndex: Map<number, Uint8Array>,
+    root: Uint8Array,
+    networkDescription: string,
+  ): {
+    toAggregate: Map<number, Uint8Array>;
+    validShares: number[];
+    invalidShares: number[];
+  } {
+    const { threshold } = clusterConfig.definition;
+    if (!Number.isSafeInteger(threshold) || threshold < 1) {
+      throw new InvalidArgumentError(
+        `Invalid threshold ${String(threshold)}: must be a positive integer`,
+        'options.clusterConfig.definition.threshold',
+      );
+    }
+    const validator = clusterConfig.distributed_validators.find(
+      dv => Exit.normalizeKey(dv.distributed_public_key) === publicKey,
+    );
+    if (!validator) {
+      throw new InvalidArgumentError(
+        `Public key ${publicKey} not found in the cluster's distributed validators.`,
+        'options.clusterConfig',
+      );
+    }
+
+    const valid: Array<[number, Uint8Array]> = [];
+    const invalidShares: number[] = [];
+    const providedShares = [...signaturesByIndex.keys()].sort((a, b) => a - b);
+    for (const shareIdx of providedShares) {
+      const signature = signaturesByIndex.get(shareIdx) as Uint8Array;
+      const ok = Exit.partialVerifies(
+        validator.public_shares[shareIdx - 1],
+        root,
+        signature,
+      );
+      if (ok) {
+        valid.push([shareIdx, signature]);
+      } else {
+        invalidShares.push(shareIdx);
+      }
+    }
+    const validShares = valid.map(([shareIdx]) => shareIdx);
+
+    if (valid.length < threshold) {
+      const hint = Exit.notEnoughSharesHint(
+        valid.length,
+        invalidShares,
+        networkDescription,
+      );
+      throw new ExitRecombineError(
+        `${valid.length} valid partial exit signatures for ${publicKey}, ${threshold} needed${
+          invalidShares.length > 0
+            ? ` (invalid: shares ${invalidShares.join(', ')})`
+            : ''
+        }`,
+        'EXIT_NOT_ENOUGH_SHARES',
+        hint,
+        { publicKey, providedShares, validShares, invalidShares },
+      );
+    }
+
+    return {
+      toAggregate: new Map(valid.slice(0, threshold)),
+      validShares,
+      invalidShares,
     };
   }
 }

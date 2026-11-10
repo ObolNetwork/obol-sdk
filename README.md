@@ -121,7 +121,7 @@ If you are an LLM, code-generation agent, or tool using this SDK programmaticall
 | `client.exit` | `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
 | `client.exit` | `verifyExitPayloadSignature(...)` | Verify ECDSA exit payload signature |
 | `client.exit` | `validateExitBlobs(...)` | Validate exit blobs against cluster config |
-| `client.exit` | `recombineExitBlobs(...)` | Aggregate partial exit signatures |
+| `client.exit` | `recombineExitBlobs(...)` | Aggregate partial exit signatures into the signed exit; always verified against the validator public key (throws `ExitRecombineError` otherwise) |
 
 ### Standalone Utilities
 

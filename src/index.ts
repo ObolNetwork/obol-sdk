@@ -81,6 +81,8 @@ export {
   ClusterLockValidationBusyError,
   ClusterLockValidationTimeoutError,
   DefinitionVerificationError,
+  ExitRecombineError,
+  type ExitRecombineErrorCode,
   IncentivesPreflightError,
   InvalidArgumentError,
   InvalidBaseUrlError,

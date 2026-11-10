@@ -194,7 +194,7 @@ client.exit.*         // Verify/recombine exit signatures
 | `verifyPartialExitSignature(...)` | Verify BLS partial exit signature |
 | `verifyExitPayloadSignature(enr, payload)` | Verify ECDSA exit payload signature |
 | `validateExitBlobs(config, payload, beaconUrl, existing)` | Comprehensive exit blob validation |
-| `recombineExitBlobs(exitBlob)` | Aggregate partial BLS signatures |
+| `recombineExitBlobs(exitBlob, options?)` | Aggregate partial BLS signatures into the signed exit. Always verifies the result against the validator public key on the client's chain (`EXIT_NETWORKS` constants, no beacon node) and throws `ExitRecombineError` instead of returning an invalid signature. `options.clusterConfig` adds per-partial checks against public shares (invalid ones skipped and named) and the threshold |
 
 **Create and accept checks**: `createClusterDefinition` checks the version (`InvalidArgumentError`), the payload schema (`PayloadValidationError`: unknown fields, fewer than 4 operators, malformed or duplicate addresses, zero recipients) and the signer chain (`ChainMismatchError`) before signing. `acceptClusterDefinition` checks the config hash format (`InvalidArgumentError`) and signer chain, then fetches the definition and verifies it (`DefinitionVerificationError`: returned or recomputed `config_hash` differs, wrong network, version below `MIN_SUPPORTED_CLUSTER_VERSION` (v1.10.0), or `operatorPayload.version` differs), validates the operator payload, and requires the signer to be an operator (`NotAnOperatorError`). An operator that already accepted with the same ENR gets the definition back without signing. Terms acceptance is enforced by the API, not checked locally.
 
@@ -277,7 +277,8 @@ Local checks extend **ObolSdkError** (`code`, `hint`):
 - **NotAnOperatorError**: Signer is not an operator of the definition being accepted
 - **IncentivesPreflightError**: `claimIncentives` pre-flight check failed (`issues`)
 - **PayloadValidationError**: payload failed AJV schema validation (code `PAYLOAD_INVALID`, `errors` = AJV errors; message `Validation failed: ...`)
-- **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`), or unsupported `createClusterDefinition` version
+- **InvalidArgumentError**: malformed hash / address argument (code `INVALID_ARGUMENT`, `argument`; message `Invalid <name>: ...`), or unsupported `createClusterDefinition` version, or bad `recombineExitBlobs` input (`public_key` not 48 bytes of hex, non-decimal `epoch` / `validator_index`, a `fork_version` or genesis validators root of another network than the client's)
+- **ExitRecombineError**: `exit.recombineExitBlobs` could not build an exit signature that verifies (`publicKey`; `providedShares`, `validShares`, `invalidShares` as 1-based share indices; `hint` lists the likely causes). Codes as in v3: `EXIT_PARTIAL_SIGNATURE_INVALID` when the aggregate does not verify against the validator key (without `clusterConfig`: too few partials, an invalid partial, wrong network or exit message; with it: the public shares are not the validator's), `EXIT_NOT_ENOUGH_SHARES` when, with `clusterConfig`, fewer than `threshold` partials verify
 - **TransactionSubmissionError**: a write failed after broadcasting (`txHashes`, `pendingTxHash`, `pendingStatus`, `cause`; code `TX_FAILED_AFTER_SEND`)
 
 Other:
@@ -499,7 +500,7 @@ Version bumping follows semantic versioning:
 
 ### Adding Support for a New Chain
 
-1. Add chain ID and fork versions to `src/constants.ts` (`FORK_MAPPING`, `CAPELLA_FORK_MAPPING`)
+1. Add chain ID and fork versions to `src/constants.ts` (`FORK_MAPPING`, `CAPELLA_FORK_MAPPING`, and `EXIT_NETWORKS` with the genesis validators root; a test checks the three agree)
 2. Add contract addresses to the chain config objects
 3. Update `FORK_MAPPING` enum in `src/types.ts`
 4. Add RPC env var to `.env.template`
