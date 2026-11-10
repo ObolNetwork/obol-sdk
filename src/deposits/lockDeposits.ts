@@ -136,8 +136,9 @@ const toValidatorDeposit = (
  * Extracts deposit payloads from a cluster lock without fetching or
  * validating it (see {@link Client.getDepositData} for the validated path).
  *
- * Reads `partial_deposit_data` (lock v1.8.0+, possibly several amounts per
- * validator), or the single `deposit_data` of locks before v1.8.0.
+ * Reads `partial_deposit_data` from v1.8.0+ locks (possibly several amounts
+ * per validator) and the single `deposit_data` of locks before v1.8.0, never
+ * the other field: lock verification covers only that one for each version.
  * Amounts are converted from gwei (lock format) to wei (payload format) and
  * hex fields are 0x-prefixed (`deposit_data_root` is computed when the lock
  * omits it, and checked against the other fields when present), so the result can be passed to
@@ -164,18 +165,16 @@ export const depositDataFromLock = (
     throw new Error('Cluster lock has no distributed validators');
   }
 
-  // From v1.8.0 the signed deposits are in partial_deposit_data; a v1.8.0+
-  // lock's deposit_data is not covered by lock verification, so never fall
-  // back to it there.
+  // Lock verification covers one layout per version: deposit_data before
+  // v1.8.0, partial_deposit_data from v1.8.0. Only read the covered field, so
+  // a lock never yields a deposit its hash and signatures do not bind.
   const legacyLayout = isLegacyDepositLayout(lock);
   validators.forEach((validator, index) => {
-    const raw =
-      validator.partial_deposit_data &&
-      validator.partial_deposit_data.length > 0
-        ? validator.partial_deposit_data
-        : legacyLayout && validator.deposit_data
-          ? [validator.deposit_data]
-          : [];
+    const raw = legacyLayout
+      ? validator.deposit_data
+        ? [validator.deposit_data]
+        : []
+      : (validator.partial_deposit_data ?? []);
     if (raw.length === 0) {
       throw new Error(
         `Invalid deposit data for validator ${index} in lock: no deposit data`,

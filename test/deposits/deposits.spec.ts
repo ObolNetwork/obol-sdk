@@ -1,5 +1,8 @@
 // @ts-nocheck
 import { jest } from '@jest/globals';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   clusterLockV1X10,
   clusterLockV1X11,
@@ -9,7 +12,28 @@ import {
 
 jest.setTimeout(20000);
 
-const { Client, depositDataFromLock } = await import('../../src/index.js');
+const { Client, depositDataFromLock, validateClusterLock } =
+  await import('../../src/index.js');
+
+// A mainnet v1.7.0 lock as charon produced it (lock 0x8a187e...c81b).
+const mainnetLockV1X7 = (): any =>
+  JSON.parse(
+    readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '../fixtures/locks/mainnet_v1_7_0.json',
+      ),
+      'utf8',
+    ),
+  );
+
+// A well-formed deposit for the validator's key that the lock does not bind.
+const unboundPartialDeposit = (validator: any): any => ({
+  pubkey: validator.distributed_public_key,
+  withdrawal_credentials: `0x010000000000000000000000${'de'.repeat(20)}`,
+  amount: '32000000000',
+  signature: `0x${'ab'.repeat(96)}`,
+});
 
 const GWEI = BigInt(1_000_000_000);
 
@@ -135,6 +159,62 @@ describe('getDepositData', () => {
     expect(
       result.deposits.every(d => /^0x[0-9a-f]{64}$/.test(d.deposit_data_root)),
     ).toBe(true);
+  });
+
+  describe('locks before v1.8.0 and partial_deposit_data', () => {
+    it('validates a real v1.7.0 lock and returns its deposit_data', async () => {
+      const lock = mainnetLockV1X7();
+      expect(await validateClusterLock(lock)).toBe(true);
+      const client = clientFor(1, lock);
+      const { deposits } = await client.getDepositData(lock.lock_hash);
+      expect(deposits).toHaveLength(1);
+      expect(deposits[0].withdrawal_credentials).toBe(
+        lock.distributed_validators[0].deposit_data.withdrawal_credentials,
+      );
+    });
+
+    it('rejects a v1.7.0 lock that carries partial_deposit_data', async () => {
+      const lock = mainnetLockV1X7();
+      const validator = lock.distributed_validators[0];
+      validator.partial_deposit_data = [unboundPartialDeposit(validator)];
+
+      // The lock hash and signatures do not cover the added entry.
+      expect(await validateClusterLock(lock)).toBe(false);
+      const client = clientFor(1, lock);
+      await expect(client.getDepositData(lock.lock_hash)).rejects.toThrow(
+        'Cluster lock failed validation',
+      );
+    });
+
+    it('accepts an empty partial_deposit_data on a v1.7.0 lock', async () => {
+      const lock = mainnetLockV1X7();
+      lock.distributed_validators[0].partial_deposit_data = [];
+      expect(await validateClusterLock(lock)).toBe(true);
+    });
+
+    it.each(['v1.6.0', 'v1.7.0'])(
+      'never reads partial_deposit_data from a %s lock, also unverified',
+      version => {
+        const lock = mainnetLockV1X7();
+        lock.cluster_definition.version = version;
+        const validator = lock.distributed_validators[0];
+        validator.partial_deposit_data = [unboundPartialDeposit(validator)];
+
+        const { deposits } = depositDataFromLock(lock);
+        expect(deposits).toHaveLength(1);
+        expect(deposits[0].withdrawal_credentials).toBe(
+          validator.deposit_data.withdrawal_credentials,
+        );
+      },
+    );
+
+    it('throws for a legacy lock with only partial_deposit_data', () => {
+      const lock = mainnetLockV1X7();
+      const validator = lock.distributed_validators[0];
+      validator.partial_deposit_data = [unboundPartialDeposit(validator)];
+      delete validator.deposit_data;
+      expect(() => depositDataFromLock(lock)).toThrow('no deposit data');
+    });
   });
 });
 

@@ -207,6 +207,11 @@ export const verifyDVV1X6 = async (
   const threshold = clusterLock.cluster_definition.threshold;
   // Phase 1: cheap structural pre-checks (count + uniqueness) — sync.
   for (const validator of validators) {
+    // Locks before v1.8.0 hash and sign deposit_data only; partial deposit
+    // data on one is not bound by the lock, so refuse it.
+    if ((validator.partial_deposit_data?.length ?? 0) > 0) {
+      return false;
+    }
     if (validator.public_shares.length !== operatorCount) {
       return false;
     }
