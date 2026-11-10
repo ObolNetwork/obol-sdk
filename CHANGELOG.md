@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix(incentives): `claimIncentives` works with a contract-wallet signer (a Safe over WalletConnect). The Safe returns its own transaction hash, which never appears on-chain, so the call waited forever and `onSent` was never called; it now waits for the Safe's `ExecutionSuccess` and returns the executed transaction hash, like the deposit and withdrawal methods
+
 #### [v2.15.3](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.2...v2.15.3)
 
 > 5 November 2026
