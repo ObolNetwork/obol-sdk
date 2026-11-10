@@ -312,7 +312,7 @@ describe('bls_threshold spec vectors', () => {
       it.each(Object.entries(EXIT_NETWORKS))(
         'chain %s agrees with the fork mappings',
         (chainId, network) => {
-          expect(FORK_MAPPING[network.forkVersion as any]).toBe(
+          expect(Number(FORK_MAPPING[network.forkVersion as any])).toBe(
             Number(chainId),
           );
           expect(CAPELLA_FORK_MAPPING[network.forkVersion]).toBe(

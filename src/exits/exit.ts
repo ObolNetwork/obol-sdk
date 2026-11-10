@@ -827,18 +827,12 @@ export class Exit {
   }
 
   /**
-   * The voluntary exit domain inputs for {@link Exit.recombineExitBlobs}: the
-   * client chain's {@link EXIT_NETWORKS} entry, which `options` must agree
-   * with, or for a chain without an entry what `options` supply.
+   * Checks the shape of the domain options of {@link Exit.recombineExitBlobs}
+   * and returns the cluster's fork version, if a cluster was given.
    */
-  private async resolveExitNetwork(
+  private static checkedDomainOptions(
     options: RecombineExitBlobsOptions,
-  ): Promise<{
-    capellaForkVersion: string;
-    genesisValidatorsRoot: string;
-    /** For messages, e.g. `chain 1 (mainnet)`. */
-    description: string;
-  }> {
+  ): string | undefined {
     const { clusterConfig, genesisValidatorsRoot, beaconNodeApiUrl } = options;
     if (genesisValidatorsRoot !== undefined && beaconNodeApiUrl !== undefined) {
       throw new InvalidArgumentError(
@@ -862,43 +856,120 @@ export class Exit {
         'options.clusterConfig.definition.fork_version',
       );
     }
-    const suppliedRoot = async (): Promise<string | undefined> => {
-      if (genesisValidatorsRoot !== undefined) {
-        return Exit.normalizeKey(genesisValidatorsRoot);
-      }
-      if (beaconNodeApiUrl === undefined) return undefined;
-      const fetched = await getGenesisValidatorsRoot(beaconNodeApiUrl);
-      if (!fetched || !/^(0x)?[0-9a-fA-F]{64}$/.test(fetched)) {
-        throw new Error('Could not retrieve genesis validators root.');
-      }
-      return Exit.normalizeKey(fetched);
-    };
+    return forkVersion;
+  }
+
+  /** The genesis validators root the options give or point at, if any. */
+  private static async suppliedGenesisRoot(
+    options: RecombineExitBlobsOptions,
+  ): Promise<string | undefined> {
+    const { genesisValidatorsRoot, beaconNodeApiUrl } = options;
+    if (genesisValidatorsRoot !== undefined) {
+      return Exit.normalizeKey(genesisValidatorsRoot);
+    }
+    if (beaconNodeApiUrl === undefined) return undefined;
+    const fetched = await getGenesisValidatorsRoot(beaconNodeApiUrl);
+    if (!fetched || !/^(0x)?[0-9a-fA-F]{64}$/.test(fetched)) {
+      throw new Error('Could not retrieve genesis validators root.');
+    }
+    return Exit.normalizeKey(fetched);
+  }
+
+  /** A cluster's fork version must be the client chain's. */
+  private static requireForkVersion(
+    forkVersion: string | undefined,
+    expected: string,
+    description: string,
+  ): void {
+    if (forkVersion === undefined || forkVersion.toLowerCase() === expected) {
+      return;
+    }
+    throw new InvalidArgumentError(
+      `Invalid fork_version: the cluster's fork_version ${forkVersion} is not ${expected} of ${description}. The cluster is on another network than this client; construct the client with the cluster's chainId.`,
+      'options.clusterConfig.definition.fork_version',
+    );
+  }
+
+  /** A given or fetched genesis validators root must be the client chain's. */
+  private static requireGenesisRoot(
+    root: string | undefined,
+    expected: string,
+    description: string,
+    fromBeaconNode: boolean,
+  ): void {
+    if (root === undefined || root === expected) return;
+    throw new InvalidArgumentError(
+      `Invalid genesis validators root: ${root}${
+        fromBeaconNode ? ' (from the beacon node)' : ''
+      } is not ${expected} of ${description}. ${
+        fromBeaconNode ? 'The beacon node' : 'The root'
+      } is of another network than this client's.`,
+      fromBeaconNode
+        ? 'options.beaconNodeApiUrl'
+        : 'options.genesisValidatorsRoot',
+    );
+  }
+
+  /** Whether a partial signature verifies against its operator's public share. */
+  private static partialVerifies(
+    publicShare: string | undefined,
+    root: Uint8Array,
+    signature: Uint8Array,
+  ): boolean {
+    if (publicShare === undefined) return false;
+    try {
+      return blsVerify(fromHexString(publicShare), root, signature);
+    } catch {
+      return false; // malformed public share hex
+    }
+  }
+
+  /** What to do when fewer than `threshold` partials verify. */
+  private static notEnoughSharesHint(
+    validCount: number,
+    invalidShares: number[],
+    networkDescription: string,
+  ): string {
+    if (validCount === 0) {
+      // Every operator signing badly is unlikely: the inputs are wrong.
+      return (
+        `No partial signature verifies against its public share, which points at the inputs rather than the operators. Check that the validator is on ${networkDescription}, ` +
+        'that clusterConfig is the cluster lock of this validator (public_shares in operator order), ' +
+        'and that epoch and validator_index are the ones the operators signed.'
+      );
+    }
+    if (invalidShares.length > 0) {
+      return `Wait for more operators to submit partial exits, and re-collect the invalid shares (${invalidShares.join(', ')}).`;
+    }
+    return 'Wait for more operators to submit partial exits.';
+  }
+
+  /**
+   * The voluntary exit domain inputs for {@link Exit.recombineExitBlobs}: the
+   * client chain's {@link EXIT_NETWORKS} entry, which `options` must agree
+   * with, or for a chain without an entry what `options` supply.
+   */
+  private async resolveExitNetwork(
+    options: RecombineExitBlobsOptions,
+  ): Promise<{
+    capellaForkVersion: string;
+    genesisValidatorsRoot: string;
+    /** For messages, e.g. `chain 1 (mainnet)`. */
+    description: string;
+  }> {
+    const { genesisValidatorsRoot, beaconNodeApiUrl } = options;
+    const forkVersion = Exit.checkedDomainOptions(options);
 
     const known = EXIT_NETWORKS[this.chainId];
     if (known !== undefined) {
       const description = `chain ${this.chainId} (${known.name})`;
-      if (
-        forkVersion !== undefined &&
-        forkVersion.toLowerCase() !== known.forkVersion
-      ) {
-        throw new InvalidArgumentError(
-          `Invalid fork_version: the cluster's fork_version ${forkVersion} is not ${known.forkVersion} of ${description}. The cluster is on another network than this client; construct the client with the cluster's chainId.`,
-          'options.clusterConfig.definition.fork_version',
-        );
-      }
-      const root = await suppliedRoot();
-      if (root !== undefined && root !== known.genesisValidatorsRoot) {
-        throw new InvalidArgumentError(
-          `Invalid genesis validators root: ${root}${
-            beaconNodeApiUrl !== undefined ? ' (from the beacon node)' : ''
-          } is not ${known.genesisValidatorsRoot} of ${description}. ${
-            beaconNodeApiUrl !== undefined ? 'The beacon node' : 'The root'
-          } is of another network than this client's.`,
-          beaconNodeApiUrl !== undefined
-            ? 'options.beaconNodeApiUrl'
-            : 'options.genesisValidatorsRoot',
-        );
-      }
+      Exit.requireForkVersion(forkVersion, known.forkVersion, description);
+      Exit.requireGenesisRoot(
+        await Exit.suppliedGenesisRoot(options),
+        known.genesisValidatorsRoot,
+        description,
+        beaconNodeApiUrl !== undefined,
+      );
       return {
         capellaForkVersion: known.capellaForkVersion,
         genesisValidatorsRoot: known.genesisValidatorsRoot,
@@ -928,7 +999,9 @@ export class Exit {
     }
     return {
       capellaForkVersion,
-      genesisValidatorsRoot: (await suppliedRoot()) as string,
+      genesisValidatorsRoot: (await Exit.suppliedGenesisRoot(
+        options,
+      )) as string,
       description: `chain ${this.chainId} (fork version ${String(forkVersion)}, the given genesis validators root)`,
     };
   }
@@ -972,15 +1045,11 @@ export class Exit {
     const providedShares = [...signaturesByIndex.keys()].sort((a, b) => a - b);
     for (const shareIdx of providedShares) {
       const signature = signaturesByIndex.get(shareIdx) as Uint8Array;
-      const publicShare = validator.public_shares[shareIdx - 1];
-      let ok = false;
-      if (publicShare !== undefined) {
-        try {
-          ok = blsVerify(fromHexString(publicShare), root, signature);
-        } catch {
-          ok = false; // malformed public share hex
-        }
-      }
+      const ok = Exit.partialVerifies(
+        validator.public_shares[shareIdx - 1],
+        root,
+        signature,
+      );
       if (ok) {
         valid.push([shareIdx, signature]);
       } else {
@@ -990,18 +1059,11 @@ export class Exit {
     const validShares = valid.map(([shareIdx]) => shareIdx);
 
     if (valid.length < threshold) {
-      let hint: string;
-      if (valid.length === 0) {
-        // Every operator signing badly is unlikely: the inputs are wrong.
-        hint =
-          `No partial signature verifies against its public share, which points at the inputs rather than the operators. Check that the validator is on ${networkDescription}, ` +
-          'that clusterConfig is the cluster lock of this validator (public_shares in operator order), ' +
-          'and that epoch and validator_index are the ones the operators signed.';
-      } else if (invalidShares.length > 0) {
-        hint = `Wait for more operators to submit partial exits, and re-collect the invalid shares (${invalidShares.join(', ')}).`;
-      } else {
-        hint = 'Wait for more operators to submit partial exits.';
-      }
+      const hint = Exit.notEnoughSharesHint(
+        valid.length,
+        invalidShares,
+        networkDescription,
+      );
       throw new ExitRecombineError(
         `${valid.length} valid partial exit signatures for ${publicKey}, ${threshold} needed${
           invalidShares.length > 0
