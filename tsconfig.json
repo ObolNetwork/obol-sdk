@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es2016",
+    "target": "es2020",
+    "module": "es2020",
     "outDir": "./dist",
     "esModuleInterop": true,
     "resolveJsonModule": true,
@@ -8,10 +9,7 @@
     "strict": true,
     "skipLibCheck": true,
     "moduleResolution":"node",
-    "baseUrl": "./",
-    "paths": {
-      "@safe-global/types-kit/types": ["node_modules/@safe-global/types-kit/dist/src/types.d.ts"]
-    }
+    "baseUrl": "./"
   },
-  "exclude": ["node_modules", "dist", "test", "test/sdk-package", "test/nextjs-test-app"]
+  "exclude": ["node_modules", "dist", "test", "test-e2e"]
 }
