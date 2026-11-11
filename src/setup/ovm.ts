@@ -128,8 +128,8 @@ export const recipientCodeFindings = async (
   ctx: Context,
   addresses: Address[],
   blockNumber: bigint,
-): Promise<Finding[]> => {
-  const checks: Finding[] = [];
+): Promise<Array<Finding<'RECIPIENT_NOT_CONTRACT'>>> => {
+  const checks: Array<Finding<'RECIPIENT_NOT_CONTRACT'>> = [];
   const seen = new Set<string>();
   for (const address of addresses) {
     if (seen.has(address.toLowerCase())) continue;
@@ -144,7 +144,6 @@ export const recipientCodeFindings = async (
       checks.push(
         finding(
           'RECIPIENT_NOT_CONTRACT',
-          'info',
           `OVM recipient ${address} has no contract code (an EOA, or a split not created yet)`,
           {
             hint: 'If it should be a split, create it first or use prepareOvmWithSplits',

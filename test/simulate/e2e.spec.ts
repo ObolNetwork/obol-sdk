@@ -32,7 +32,7 @@ import { hoodi } from 'viem/chains';
 import { NATIVE_TOKEN, multicall3Abi, splitWalletAbi } from '../../src/abi.js';
 import { CHAINS } from '../../src/chains.js';
 import { createObolClient } from '../../src/client.js';
-import { depositDataRoot } from '../../src/deposits/verifyDepositData.js';
+import { depositDataRoot } from '../../src/deposits/assertDepositData.js';
 import {
   depositDomainForFork,
   depositSigningRoot,
@@ -179,7 +179,10 @@ const simulateAll = async (
   const exchanges: Record<string, Exchange[]> = {};
   for (const backend of BACKENDS) {
     log = [];
-    results[backend] = await obol.experimental.simulate(prepared, { from, backend });
+    results[backend] = await obol.experimental.simulate(prepared, {
+      from,
+      backend,
+    });
     exchanges[backend] = log;
     log = null;
   }
@@ -320,7 +323,7 @@ run('simulate on an anvil Hoodi fork', () => {
     await sendAs(OWNER, prepared);
   });
 
-  it('ovm.prepareDistribute and splits.prepareDistribution', async () => {
+  it('ovm.prepareDistribute and splits.prepareDistributeAll', async () => {
     await upstream('anvil_setBalance', [ovm, toHex(parseEther('33.2'))]);
     const distribute = await obol.ovm.prepareDistribute({ ovm });
     const sim = await simulateAll('ovmDistribute', distribute, STRANGER, meta);
@@ -333,7 +336,7 @@ run('simulate on an anvil Hoodi fork', () => {
         { address: R2, share: 495_000 },
       ],
     });
-    const distribution = await obol.splits.prepareDistribution({
+    const distribution = await obol.splits.prepareDistributeAll({
       ovm,
       rewardSplit: params,
       from: OPERATOR,
@@ -352,7 +355,7 @@ run('simulate on an anvil Hoodi fork', () => {
       allocations: [...params.allocations].reverse(),
     };
     const bad = {
-      kind: 'distribution',
+      kind: 'distributeAll',
       request: {
         to: HOODI.multicall3,
         data: encodeFunctionData({
@@ -429,7 +432,6 @@ run('simulate on an anvil Hoodi fork', () => {
     const consolidate = await obol.ovm.prepareConsolidate({
       ovm,
       requests: [{ sources: [pubkey], target }],
-      acknowledgeStakeMovesToTarget: true,
       from: OPERATOR,
     });
     expect(
@@ -457,7 +459,7 @@ run('simulate on an anvil Hoodi fork', () => {
     ).toMatchObject({ ok: true });
   });
 
-  it('splits.prepareDistribution: total split with a distribution incentive', async () => {
+  it('splits.prepareDistributeAll: total split with a distribution incentive', async () => {
     const recipients = [
       { address: R1, share: 495_000 },
       { address: R2, share: 495_000 },
@@ -487,7 +489,7 @@ run('simulate on an anvil Hoodi fork', () => {
       rewardRecipients: recipients,
       distributionIncentive: 10_000,
     });
-    const prepared = await obol.splits.prepareDistribution({
+    const prepared = await obol.splits.prepareDistributeAll({
       ovm: total,
       rewardSplit: reward,
       principalSplit,

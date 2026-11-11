@@ -56,7 +56,11 @@ import {
   type OvmState,
   type OvmValidators,
 } from './state.js';
-import { verifyOvm, type OvmVerification } from './verify.js';
+import {
+  getOvmProvenance,
+  type OvmProvenance,
+  type OvmProvenanceOptions,
+} from './provenance.js';
 import {
   prepareConsolidate,
   prepareWithdraw,
@@ -105,7 +109,7 @@ export type {
   OvmValidator,
   OvmValidators,
 } from './state.js';
-export type { OvmVerification } from './verify.js';
+export type { OvmProvenance, OvmProvenanceOptions } from './provenance.js';
 export type {
   ConsolidatePreview,
   PrepareConsolidateInput,
@@ -121,8 +125,11 @@ export interface OvmModule {
   roleNames: (roles: bigint) => OvmRoleName[];
   routing: (input: OvmRoutingInput) => OvmRouting;
   expectedWithdrawalCredentials: typeof expectedWithdrawalCredentials;
-  verify: (ovm: string) => Promise<OvmVerification>;
-  /** null when the address is not an OVM; checks shape, not origin (use `verify`). */
+  getProvenance: (
+    ovm: string,
+    options?: OvmProvenanceOptions,
+  ) => Promise<OvmProvenance>;
+  /** null when the address is not an OVM; checks shape, not origin (use `getProvenance`). */
   getState: (ovm: string) => Promise<OvmState | null>;
   getRoleHolders: (ovm: string) => Promise<OvmRoleHolders>;
   getValidators: (ovm: string) => Promise<OvmValidators>;
@@ -179,7 +186,8 @@ export const createOvmModule = (ctx: Context): OvmModule => ({
   roleNames,
   routing: ovmRouting,
   expectedWithdrawalCredentials,
-  verify: async ovm => await verifyOvm(ctx, ovm),
+  getProvenance: async (ovm, options) =>
+    await getOvmProvenance(ctx, ovm, options),
   getState: async ovm => await getOvmState(ctx, ovm),
   getRoleHolders: async ovm => await getOvmRoleHolders(ctx, ovm),
   getValidators: async ovm => await getOvmValidators(ctx, ovm),

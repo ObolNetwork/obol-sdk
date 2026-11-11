@@ -1,7 +1,8 @@
 /** Result types of `simulate` (spec/operations.md "simulate"). */
 import type { Address, Hex } from 'viem';
 import type { OvmRoleName } from '../ovm/routing.js';
-import type { Finding, SplitParams } from '../types.js';
+import type { SimulationFindingCode } from '../findings.js';
+import type { Finding, PreparedRequest, SplitParams } from '../types.js';
 
 /** How the transaction was simulated, best first. */
 export type SimulationBackend =
@@ -136,11 +137,22 @@ export type StateChange =
     };
 
 export interface PreviewComparison {
-  /** No differences in what was compared. */
+  /**
+   * - `match`: at least one thing was compared, everything the preview says
+   *   was compared, and nothing differs.
+   * - `mismatch`: something differs (`differences`).
+   * - `notCompared`: no difference was found, but the comparison is not
+   *   complete: nothing in this preview is comparable (`compared` is empty),
+   *   or a value it needed could not be read (`notCompared`).
+   */
+  status: 'match' | 'mismatch' | 'notCompared';
+  /** `status === 'match'`. Never true when nothing was compared. */
   ok: boolean;
   differences: string[];
   /** What was compared (empty when the preview has nothing comparable). */
   compared: string[];
+  /** What should have been compared and could not be (a value was not read). */
+  notCompared: string[];
 }
 
 export interface SimulatedGas {
@@ -154,14 +166,22 @@ export interface SimulatedGas {
 }
 
 interface SimulationBase {
+  /**
+   * The request that was simulated (`prepared.request`). `send(prepared,
+   * { simulation })` refuses a simulation of another request.
+   */
+  request: PreparedRequest;
   from: Address;
   /** The block simulated on top of. */
   blockNumber: bigint;
   backend: SimulationBackend;
   success: boolean;
   revertReason?: RevertReason;
-  /** SIMULATION_* findings. */
-  findings: Finding[];
+  /**
+   * SIMULATION_* findings. Pass the simulation to `send(prepared, { simulation })`
+   * and its warnings need acknowledging like the prepared ones.
+   */
+  findings: Array<Finding<SimulationFindingCode>>;
   /** Plain-language lines built from the result (deterministic). */
   summary: string[];
 }

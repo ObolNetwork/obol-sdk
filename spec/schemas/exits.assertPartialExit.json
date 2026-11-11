@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/exits.verifyPartialExit.json",
-  "title": "exits.verifyPartialExit",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/exits.assertPartialExit.json",
+  "title": "exits.assertPartialExit",
+  "additionalProperties": false,
   "properties": {
     "cluster": {
       "properties": {

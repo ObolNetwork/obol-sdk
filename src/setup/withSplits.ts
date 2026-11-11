@@ -12,7 +12,7 @@ import {
   T,
   ZERO_ADDRESS,
 } from '../schema.js';
-import type { Finding, Prepared, SplitParams } from '../types.js';
+import type { FindingsOf, Prepared, SplitParams } from '../types.js';
 import { EXPECTED_CODE_HASHES, requireExpectedCode } from '../splits/chain.js';
 import {
   CreateSplitInputSchema,
@@ -20,6 +20,7 @@ import {
   encodeCreateSplit,
   predictSplit,
   refuseSplitForwarders,
+  refuseUnusableRecipients,
 } from '../splits/create.js';
 import { splitParams, type ShareRecipient } from '../splits/shares.js';
 import {
@@ -143,10 +144,17 @@ export const prepareOvmWithSplits = async (
         : ZERO_ADDRESS;
     const salt = (side.split.salt as Hex | undefined) ?? DEFAULT_SPLIT_SALT;
     refuseSplitForwarders(ctx.chain.id, p, owner);
+    refuseUnusableRecipients(ctx.chain.id, p, `${key}.split.recipients`);
     const { address, exists } = await predictSplit(
       ctx,
       { params: p, owner, salt },
       blockNumber,
+    );
+    refuseUnusableRecipients(
+      ctx.chain.id,
+      p,
+      `${key}.split.recipients`,
+      address,
     );
     return {
       address,
@@ -199,13 +207,12 @@ export const prepareOvmWithSplits = async (
     );
   }
 
-  const checks: Finding[] = [];
+  const checks: FindingsOf<'ovmWithSplits'> = [];
   for (const side of sameSplit ? [reward] : [reward, principal]) {
     if (side.split && side.create === undefined) {
       checks.push(
         finding(
           'SPLIT_REUSED',
-          'info',
           `The split ${side.address} already exists and is reused`,
           {
             subject: { address: side.address },

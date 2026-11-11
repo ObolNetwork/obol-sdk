@@ -12,7 +12,11 @@ import {
 import { publicForwarder } from './chains.js';
 import type { Context } from './context.js';
 import { ObolError } from './errors.js';
-import type { FindingCode } from './codes.js';
+import {
+  findingSeverity,
+  type FindingCode,
+  type FindingCodeFor,
+} from './findings.js';
 import type {
   Finding,
   FindingSubject,
@@ -252,16 +256,24 @@ export const contractNotAvailable = (
     details: { address },
   });
 
-export const finding = (
-  code: FindingCode,
-  severity: Finding['severity'],
+/**
+ * A finding of `code`; its severity comes from the catalogue (`findingSeverity`),
+ * so a code has one severity everywhere.
+ */
+export const finding = <C extends FindingCode>(
+  code: C,
   message: string,
   extra: {
     hint?: string;
     subject?: FindingSubject;
     details?: Record<string, unknown>;
   } = {},
-): Finding => ({ code, severity, message, ...extra });
+): Finding<C> => ({
+  code,
+  severity: findingSeverity(code),
+  message,
+  ...extra,
+});
 
 export const prepared = <K extends PreparedKind>(
   ctx: Context,
@@ -270,7 +282,7 @@ export const prepared = <K extends PreparedKind>(
     to: Address;
     data: Hex;
     value?: bigint;
-    checks?: Finding[];
+    checks?: Array<Finding<FindingCodeFor<K>>>;
     preview: PreviewByKind[K];
     blockNumber?: bigint;
   },

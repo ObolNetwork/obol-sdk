@@ -15,6 +15,7 @@ import {
 
 import { createObolClient } from '../src/index.js';
 import { OVM_ROLES } from '../src/ovm/index.js';
+import type { AnyPrepared } from '../src/types.js';
 import {
   ANVIL_URL,
   codes,
@@ -26,6 +27,7 @@ import {
   randomAddress,
   signer,
   type Signer,
+  warningCodes,
 } from './helpers/fork.js';
 import { deployOvm } from './helpers/ovm.js';
 
@@ -45,7 +47,7 @@ describeFork(
       s = await signer(14);
     });
 
-    test('ovm.verify sees an OVM created in the latest block', async () => {
+    test('ovm.getProvenance sees an OVM created in the latest block', async () => {
       const client = appClient();
       const obol = createObolClient({
         chain: CHAIN,
@@ -62,12 +64,14 @@ describeFork(
         principalRecipient: randomAddress(),
       });
       const prepared = await obol.setup.prepareOvmWithSplits(input);
-      const sent = await obol.send(prepared);
+      const sent = await obol.send(prepared, {
+        acknowledge: warningCodes(prepared as AnyPrepared),
+      });
       const receipt = await publicClient.waitForTransactionReceipt({
         hash: sent.hash,
       });
       const { ovm } = obol.setup.ovmFromReceipt(receipt);
-      expect(await obol.ovm.verify(ovm)).toMatchObject({
+      expect(await obol.ovm.getProvenance(ovm)).toMatchObject({
         status: 'obol',
         creationTxHash: receipt.transactionHash,
       });
@@ -88,13 +92,15 @@ describeFork(
         user,
         roles: OVM_ROLES.DEPOSIT,
       });
-      const sent = await obol.send(prepared);
+      const sent = await obol.send(prepared, {
+        acknowledge: warningCodes(prepared as AnyPrepared),
+      });
       await publicClient.waitForTransactionReceipt({ hash: sent.hash });
       const { holders } = await obol.ovm.getRoleHolders(d.ovm);
       expect(holders.map(h => h.address)).toEqual([s.address, user]);
     });
 
-    test('splits.prepareDistribution sees a Warehouse pause set in the latest block', async () => {
+    test('splits.prepareDistributeAll sees a Warehouse pause set in the latest block', async () => {
       const recipient = randomAddress();
       const d = await deployOvm(s, {
         recipients: [
@@ -118,7 +124,7 @@ describeFork(
         walletClient: s.walletClient,
         api: false,
       });
-      await obol.splits.previewDistribution({ ovm: d.ovm });
+      await obol.splits.previewDistributeAll({ ovm: d.ovm });
       const paused = await impersonate(recipient);
       const hash = await paused.walletClient.sendTransaction({
         account: recipient,
@@ -133,7 +139,7 @@ describeFork(
         }),
       });
       await publicClient.waitForTransactionReceipt({ hash });
-      const prepared = await obol.splits.prepareDistribution({ ovm: d.ovm });
+      const prepared = await obol.splits.prepareDistributeAll({ ovm: d.ovm });
       expect(codes(prepared.checks)).toEqual(['RECIPIENT_WITHDRAW_PAUSED']);
     });
   },

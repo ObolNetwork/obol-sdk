@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/splits.prepareDistribution.json",
-  "title": "splits.prepareDistribution",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/splits.prepareDistributeAll.json",
+  "title": "splits.prepareDistributeAll",
   "additionalProperties": false,
   "properties": {
     "distributor": {

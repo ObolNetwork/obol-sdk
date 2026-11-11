@@ -1,9 +1,21 @@
 import { parseEther } from 'viem';
 import { computeLockHash } from '../../src/cluster/index.js';
 import { fromLock } from '../../src/deposits/fromLock.js';
-import { verifyDepositData } from '../../src/deposits/verifyDepositData.js';
+import { assertDepositData } from '../../src/deposits/assertDepositData.js';
 import type { ObolError } from '../../src/errors.js';
-import { charonCreateClusterLockV1X10, clusterLockV1X10 } from '../fixtures.js';
+import {
+  charonCreateClusterLockV1X10,
+  charonCreateDkgLockV1X10,
+  clusterLockV1X10,
+} from '../fixtures.js';
+import { verifyLock } from '../../src/cluster/verifyLock.js';
+import { clone, generate } from '../fuzz/generator.js';
+
+/** Genesis fork version → chain id (mainnet, Hoodi). */
+const CHAINS_BY_FORK: Record<string, number> = {
+  '0x00000000': 1,
+  '0x10000910': 560048,
+};
 import { fromHexString } from '@chainsafe/ssz';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { hex, syntheticLock } from '../helpers/syntheticLock.js';
@@ -39,29 +51,162 @@ describe('deposits.fromLock', () => {
       }),
     );
     // The output passes the deposit checks for the lock's withdrawal address.
-    await verifyDepositData(result.deposits ?? [], {
+    await assertDepositData(result.deposits, {
       chainId: 560048,
       expectedWithdrawalAddress:
         lock.cluster_definition.validators[0].withdrawal_address,
     });
   });
 
-  it('groups several amounts and needs `amount` to pick one', async () => {
-    const lock = copy(charonCreateClusterLockV1X10);
-    const all = await fromLock(lock);
-    expect(all.amounts).toEqual([parseEther('1'), parseEther('32')]);
-    expect(all.deposits).toBeUndefined();
-    expect(all.depositsByAmount.get(parseEther('1'))).toHaveLength(
-      lock.distributed_validators.length,
-    );
-    const one = await fromLock(lock, {
-      amount: parseEther('1'),
-      verify: false,
-    });
-    expect(one.deposits?.map(d => d.amount)).toEqual(
-      lock.distributed_validators.map(() => parseEther('1')),
-    );
+  // Locks made by Charon itself with its default deposit amounts (1 ETH and
+  // 32 ETH per validator): `charon create cluster`, `charon create dkg` +
+  // `charon dkg`.
+  describe.each([
+    ['charon create cluster (v1.10.0)', charonCreateClusterLockV1X10],
+    ['charon dkg (v1.10.0)', charonCreateDkgLockV1X10],
+  ])(
+    'a default Charon lock with 1 ETH and 32 ETH deposits: %s',
+    (_n, fixture) => {
+      const count = fixture.distributed_validators.length;
+
+      it('throws DEPOSIT_AMOUNT_REQUIRED without `amount`, never picking one', async () => {
+        const error = await rejection(fromLock(copy(fixture)));
+        expect(error.code).toBe('DEPOSIT_AMOUNT_REQUIRED');
+        expect(error.details).toEqual({
+          available: [parseEther('1'), parseEther('32')],
+        });
+        // Also when verification is off.
+        expect(
+          (await rejection(fromLock(copy(fixture), { verify: false }))).code,
+        ).toBe('DEPOSIT_AMOUNT_REQUIRED');
+      });
+
+      it.each([parseEther('32'), parseEther('1')])(
+        'returns exactly the %s wei deposits with `amount`, verified',
+        async amount => {
+          const lock = copy(fixture);
+          const result = await fromLock(lock, { amount });
+          expect(result.amounts).toEqual([parseEther('1'), parseEther('32')]);
+          expect(result.deposits).toHaveLength(count);
+          expect(result.deposits.map(d => d.amount)).toEqual(
+            Array.from({ length: count }, () => amount),
+          );
+          // The lock's own entries of that amount, in lock order.
+          expect(result.deposits.map(d => d.signature)).toEqual(
+            lock.distributed_validators.map((v: any) =>
+              `0x${v.partial_deposit_data
+                .find((d: any) => BigInt(d.amount) * 10n ** 9n === amount)
+                .signature.replace(/^0x/, '')}`.toLowerCase(),
+            ),
+          );
+          expect(result.depositsByAmount.get(amount)).toEqual(result.deposits);
+          // What deposits.prepareDeposit runs first.
+          await assertDepositData(result.deposits, {
+            chainId: CHAINS_BY_FORK[lock.cluster_definition.fork_version],
+            expectedWithdrawalAddress:
+              lock.cluster_definition.validators[0].withdrawal_address,
+          });
+        },
+      );
+    },
+  );
+
+  it('`deposits` is always present: the only amount when there is one', async () => {
+    const result = await fromLock(copy(clusterLockV1X10), { verify: false });
+    expect(result.amounts).toEqual([parseEther('32')]);
+    expect(result.deposits.length).toBeGreaterThan(0);
   });
+
+  it('rejects an unknown option key instead of ignoring it', async () => {
+    const error = await rejection(
+      fromLock(copy(clusterLockV1X10), {
+        verify: false,
+        ammount: parseEther('32'),
+      } as any),
+    );
+    expect(error.code).toBe('PAYLOAD_INVALID');
+    expect(error.details.issues).toEqual([
+      expect.objectContaining({
+        path: 'options.ammount',
+        issue: 'unknown_key',
+        message: expect.stringContaining('allowed keys: amount, bls, chainId'),
+      }),
+    ]);
+  });
+
+  // v1.6.0 / v1.7.0 locks hash and sign only `deposit_data`. Charon drops
+  // `partial_deposit_data` when it reads one; the SDK refuses the lock.
+  describe.each(['v1.6.0', 'v1.7.0'] as const)(
+    'a legacy %s lock (deposit_data only)',
+    version => {
+      const base = generate({
+        version,
+        validators: 2,
+        operators: 4,
+        threshold: 3,
+      });
+      const injected = (): any => {
+        const lock = clone(base.lock);
+        // An attacker-chosen entry: other credentials, another amount.
+        lock.distributed_validators[1].partial_deposit_data = [
+          {
+            ...lock.distributed_validators[1].deposit_data,
+            withdrawal_credentials: `0x01${'00'.repeat(11)}${'ee'.repeat(20)}`,
+            amount: '1000000000',
+          },
+        ];
+        return lock;
+      };
+
+      it('reads deposit_data from the untouched lock', async () => {
+        const lock = clone(base.lock);
+        expect((await verifyLock(lock)).ok).toBe(true);
+        const result = await fromLock(lock);
+        expect(result.deposits.map(d => d.signature)).toEqual(
+          lock.distributed_validators.map((v: any) =>
+            `0x${v.deposit_data.signature.replace(/^0x/, '')}`.toLowerCase(),
+          ),
+        );
+      });
+
+      it('an injected partial_deposit_data entry does not change the lock hash', () => {
+        expect(computeLockHash(injected())).toBe(computeLockHash(base.lock));
+      });
+
+      it('cluster.verifyLock rejects it (partial_deposit_data_unexpected)', async () => {
+        for (const level of ['full', 'attested'] as const) {
+          expect(await verifyLock(injected(), { level })).toEqual({
+            ok: false,
+            level,
+            step: 'deposit_data_invalid',
+            issue: 'partial_deposit_data_unexpected',
+            validator: 1,
+          });
+        }
+      });
+
+      it.each([true, 'full', false] as const)(
+        'fromLock never returns the injected entry (verify: %s)',
+        async verify => {
+          const error = await rejection(fromLock(injected(), { verify }));
+          expect(error.code).toBe('LOCK_INVALID');
+          expect(error.details).toMatchObject({
+            issue: 'partial_deposit_data_unexpected',
+            index: 1,
+          });
+        },
+      );
+
+      it('an empty or null partial_deposit_data is not an injection', async () => {
+        for (const empty of [[], null]) {
+          const lock = clone(base.lock);
+          lock.distributed_validators[0].partial_deposit_data = empty;
+          expect((await verifyLock(lock)).ok).toBe(true);
+          expect((await fromLock(lock)).deposits).toHaveLength(2);
+        }
+      });
+    },
+  );
 
   it('throws DEPOSIT_AMOUNT_NOT_IN_LOCK with the available amounts', async () => {
     const error = await rejection(
@@ -214,10 +359,10 @@ describe('deposits.fromLock', () => {
     deposits.push({ ...deposits[0], signature: `0x${'00'.repeat(96)}` });
     lock.lock_hash = computeLockHash(lock);
     const result = await fromLock(lock, { verify: false });
-    expect(result.deposits?.[0].depositDataRoot).toBe(
+    expect(result.deposits[0].depositDataRoot).toBe(
       `0x${root.replace(/^0x/, '')}`,
     );
-    expect(result.deposits?.[0].signature).toBe(deposits[0].signature);
+    expect(result.deposits[0].signature).toBe(deposits[0].signature);
   });
 
   it('rejects a malformed lock or options (PAYLOAD_INVALID)', async () => {

@@ -12,9 +12,9 @@ import {
   blsVerify,
 } from './bls.js';
 import {
-  verifyPartialExit,
-  type VerifyPartialExitInput,
-} from './verifyPartialExit.js';
+  assertPartialExit,
+  type AssertPartialExitInput,
+} from './assertPartialExit.js';
 
 export {
   aggregate,
@@ -22,11 +22,11 @@ export {
   blsRecoverPubkey,
   blsThresholdAggregate,
   blsVerify,
-  verifyPartialExit,
+  assertPartialExit,
 };
-export type { AggregateInput, VerifyPartialExitInput };
+export type { AggregateInput, AssertPartialExitInput };
 export type { BlsVerifyOptions } from './bls.js';
-export type { ExitCluster } from './verifyPartialExit.js';
+export type { ExitCluster } from './assertPartialExit.js';
 export type {
   ExitMessage,
   FullExitBlob,
@@ -42,7 +42,7 @@ export type {
  * from the client.
  */
 export interface ExitsModule {
-  verifyPartialExit: typeof verifyPartialExit;
+  assertPartialExit: typeof assertPartialExit;
   aggregate: (input: Omit<AggregateInput, 'chainId'>) => FullExitBlob;
   blsVerify: typeof blsVerify;
   blsAggregate: typeof blsAggregate;
@@ -51,7 +51,7 @@ export interface ExitsModule {
 }
 
 export const createExitsModule = (ctx: Context): ExitsModule => ({
-  verifyPartialExit,
+  assertPartialExit,
   aggregate: (input: Omit<AggregateInput, 'chainId'>) =>
     aggregate({ ...input, chainId: ctx.chain.id }),
   blsVerify,

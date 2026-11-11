@@ -6,6 +6,7 @@ import { parseEther, toEventSelector, type Address } from 'viem';
 import { CHAINS } from '../../src/chains.js';
 import { shortAddress } from '../../src/simulate/analyze.js';
 import { formatEth, simulate } from '../../src/simulate/index.js';
+import { findingsToAcknowledge } from '../../src/send.js';
 import type {
   FullSimulation,
   SimulationBackend,
@@ -139,7 +140,7 @@ describe('simulate: recorded operations', () => {
     );
   });
 
-  it('splits.prepareDistribution: split amounts, Warehouse credits and withdrawals', async () => {
+  it('splits.prepareDistributeAll: split amounts, Warehouse credits and withdrawals', async () => {
     const { sim, rec } = await full('splitDistribution');
     const preview = rec.prepared.preview as any;
     const { R1, R2 } = rec.meta;
@@ -363,6 +364,15 @@ describe('simulate: backends', () => {
       success: true,
     });
     expect(sim.findings.map(f => f.code)).toEqual(['SIMULATION_UNAVAILABLE']);
+    // rc.12: a warning, so send needs "could not simulate" acknowledged when
+    // the simulation is passed to it.
+    expect(sim.findings[0].severity).toBe('warning');
+    expect(
+      findingsToAcknowledge(rec.prepared, {
+        simulation: sim,
+        acknowledge: ['ROLE_GRANT_CONSOLIDATION'],
+      }).map(f => f.code),
+    ).toEqual(['SIMULATION_UNAVAILABLE']);
     expect('balanceChanges' in sim).toBe(false);
   });
 
@@ -491,11 +501,147 @@ describe('simulate: preview comparison', () => {
         preview: undefined as never,
       },
     );
+    // rc.12: nothing compared is `notCompared`, never `ok`.
     expect((result as FullSimulation).matchesPreview).toEqual({
-      ok: true,
+      status: 'notCompared',
+      ok: false,
       differences: [],
       compared: [],
+      notCompared: [],
     });
+  });
+
+  it('a full match is status match, with nothing left uncompared', async () => {
+    const { sim } = await full('ovmDistribute');
+    expect(sim.matchesPreview.status).toBe('match');
+    expect(sim.matchesPreview.ok).toBe(true);
+    expect(sim.matchesPreview.notCompared).toEqual([]);
+  });
+
+  it('a mismatch is status mismatch', async () => {
+    const rec = loadRecording('ovmDistribute');
+    const preview = rec.prepared.preview as any;
+    const { result } = await run(rec, 'eth_simulateV1', {}, {
+      ...rec.prepared,
+      preview: { ...preview, rewardPayout: preview.rewardPayout + 1n },
+    } as never);
+    expect((result as FullSimulation).matchesPreview.status).toBe('mismatch');
+  });
+});
+
+/**
+ * rc.12: a before / after read that fails must not vanish. In rc.11 the
+ * unread values were dropped, so "not read" looked like "unchanged" and
+ * `matchesPreview.ok` could be true with nothing compared.
+ */
+describe('simulate: failed reads fail closed', () => {
+  /** The recording with its before / after read answers replaced. */
+  const withReads = (
+    name: string,
+    backend: 'eth_simulateV1' | 'debug_traceCall',
+    edit: 'before' | 'after' | 'both',
+  ): Recording => {
+    const rec = loadRecording(name);
+    const exchanges = rec.backends[backend]!.map(e => ({ ...e }));
+    if (backend === 'eth_simulateV1') {
+      // The second eth_simulateV1 call is [read, transaction, read].
+      const reads = exchanges.find(
+        e =>
+          e.method === 'eth_simulateV1' &&
+          (e.result as any)[0].calls.length === 3,
+      )!;
+      const result = JSON.parse(JSON.stringify(reads.result));
+      const failed = {
+        status: '0x0',
+        returnData: '0x',
+        gasUsed: '0x0',
+        logs: [],
+      };
+      if (edit !== 'after') result[0].calls[0] = failed;
+      if (edit !== 'before') result[0].calls[2] = failed;
+      reads.result = result;
+    } else {
+      // debug_traceCall reads with two eth_calls: before (no override) and
+      // after (state override). The node refuses one or both.
+      for (const e of exchanges.filter(x => x.method === 'eth_call')) {
+        const isAfter = e.params.length === 3;
+        if (edit === 'both' || (edit === 'after') === isAfter) {
+          delete e.result;
+          e.error = { code: -32000, message: 'missing trie node' };
+        }
+      }
+    }
+    return { ...rec, backends: { ...rec.backends, [backend]: exchanges } };
+  };
+  const overridesFor = (backend: string): Record<string, () => unknown> =>
+    backend === 'debug_traceCall'
+      ? { eth_simulateV1: methodNotFound('eth_simulateV1') }
+      : {};
+
+  describe.each(['eth_simulateV1', 'debug_traceCall'] as const)(
+    '%s',
+    backend => {
+      it.each(['before', 'after', 'both'] as const)(
+        'ovm.prepareDistribute with the %s read failing: a finding, and not a match',
+        async edit => {
+          const rec = withReads('ovmDistribute', backend, edit);
+          const { result } = await run(rec, backend, overridesFor(backend));
+          const sim = result as FullSimulation;
+          expect(sim.success).toBe(true);
+          expect(sim.findings.map(f => f.code)).toContain(
+            'SIMULATION_READS_INCOMPLETE',
+          );
+          const finding = sim.findings.find(
+            f => f.code === 'SIMULATION_READS_INCOMPLETE',
+          )!;
+          expect(finding.severity).toBe('warning');
+          expect((finding.details!.unread as string[]).length).toBeGreaterThan(
+            0,
+          );
+          expect(sim.matchesPreview.ok).toBe(false);
+          expect(sim.matchesPreview.status).not.toBe('match');
+          expect(sim.matchesPreview.notCompared.length).toBeGreaterThan(0);
+          // The balances that could not be read are not reported as changes.
+          expect(sim.balanceChanges).toEqual([]);
+        },
+      );
+
+      it.each(['withdrawPullBalance', 'grantRoles', 'transfer', 'consolidate'])(
+        '%s with both reads failing is never ok',
+        async name => {
+          const rec = withReads(name, backend, 'both');
+          const { result } = await run(rec, backend, overridesFor(backend));
+          const sim = result as FullSimulation;
+          expect(sim.matchesPreview.ok).toBe(false);
+          expect(sim.findings.map(f => f.code)).toContain(
+            'SIMULATION_READS_INCOMPLETE',
+          );
+        },
+      );
+    },
+  );
+
+  it('send refuses the simulation until SIMULATION_READS_INCOMPLETE is acknowledged', async () => {
+    const rec = withReads('ovmDistribute', 'eth_simulateV1', 'both');
+    const { result } = await run(rec);
+    expect(result.request).toEqual(rec.prepared.request);
+    expect(
+      findingsToAcknowledge(rec.prepared, { simulation: result }).map(
+        f => f.code,
+      ),
+    ).toEqual(['SIMULATION_READS_INCOMPLETE']);
+    expect(
+      findingsToAcknowledge(rec.prepared, {
+        simulation: result,
+        acknowledge: ['SIMULATION_READS_INCOMPLETE'],
+      }),
+    ).toEqual([]);
+  });
+
+  it('a contract the transaction creates has no state before: not a failed read', async () => {
+    const { sim } = await full('setup');
+    expect(sim.findings).toEqual([]);
+    expect(sim.matchesPreview.status).toBe('match');
   });
 });
 

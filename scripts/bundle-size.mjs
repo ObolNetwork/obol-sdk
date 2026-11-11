@@ -18,7 +18,7 @@ const dist = join(root, 'dist/browser/src');
 const budgetFile = join(root, 'scripts/bundle-budget.json');
 
 const SCENARIOS = {
-  // A page that reads an OVM (ovm.getState / verify) and nothing else.
+  // A page that reads an OVM (ovm.getState / getProvenance) and nothing else.
   'ovm-reads': `
     import { createObolContext, createOvmModule } from '${dist}/ovm/index.js';
     export const read = (config, address) =>
@@ -33,7 +33,7 @@ const SCENARIOS = {
   'splits-distribution': `
     import { createObolContext, createSplitsModule } from '${dist}/splits/index.js';
     export const preview = (config, input) =>
-      createSplitsModule(createObolContext(config)).previewDistribution(input);`,
+      createSplitsModule(createObolContext(config)).previewDistributeAll(input);`,
   // Everything: the client with every module.
   client: `
     import { createObolClient } from '${dist}/index.js';

@@ -22,7 +22,7 @@ import {
   isValidLock,
   parseEnr,
   verifyLock,
-  verifyTypedDataSignature,
+  isValidTypedDataSignature,
 } from '../../src/cluster/index.js';
 import * as root from '../../src/index.js';
 import { clusterConfigOrDefinitionHash } from '../../src/internal/verification/common.js';
@@ -213,7 +213,7 @@ describe('contract-wallet signatures through the bound client', () => {
   });
 });
 
-describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASignature)', () => {
+describe('isValidTypedDataSignature (2.x validateAddressSignature / validateEOASignature)', () => {
   const account = accountOf(KEYS.creator);
   const other = accountOf(KEYS.other);
   // As obol-api builds the terms message: EIP712Domain in types, no chainId.
@@ -236,14 +236,14 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
   it('accepts an account signature and refuses another signer', async () => {
     const signature = await account.signTypedData(typedData as never);
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         address: account.address,
         signature,
         typedData,
       }),
     ).toBe(true);
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         address: other.address,
         signature,
         typedData,
@@ -252,13 +252,13 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
       }),
     ).toBe(false);
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         address: account.address,
         signature: 'not hex',
         typedData,
       }),
     ).toBe(false);
-    expect(root.verifyTypedDataSignature).toBe(verifyTypedDataSignature);
+    expect(root.isValidTypedDataSignature).toBe(isValidTypedDataSignature);
   });
 
   it("accepts eth-sig-util's TypedMessage (salt as bytes)", async () => {
@@ -297,7 +297,7 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
       domain: { name: 'Obol', salt: bytesToHex(salt) },
     } as never);
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         address: account.address,
         signature,
         typedData: message,
@@ -305,14 +305,14 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
     ).toBe(true);
     // A typed array works too; another salt does not verify.
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         address: account.address,
         signature,
         typedData: { ...message, domain: { ...message.domain, salt } },
       }),
     ).toBe(true);
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         address: account.address,
         signature,
         typedData: {
@@ -322,7 +322,7 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
       }),
     ).toBe(false);
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         address: account.address,
         signature,
         typedData: null as never,
@@ -350,9 +350,9 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
         },
       },
     });
-    expect(await verifyTypedDataSignature(args)).toBe(false);
+    expect(await isValidTypedDataSignature(args)).toBe(false);
     expect(
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         ...args,
         publicClients: { 560048: chain.publicClient },
       }),
@@ -393,7 +393,7 @@ describe('verifyTypedDataSignature (2.x validateAddressSignature / validateEOASi
         },
       });
     const verify = async (answers: Record<Hex, Hex>): Promise<boolean> =>
-      await verifyTypedDataSignature({
+      await isValidTypedDataSignature({
         ...args,
         publicClient: wallet(answers).publicClient,
       });

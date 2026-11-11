@@ -228,27 +228,61 @@ export interface ReadValues {
     after?: bigint;
   }>;
   roles: Array<{ ovm: Address; user: Address; before?: bigint }>;
+  /**
+   * Reads that gave no value: a failed or reverted call, or the whole
+   * before / after batch failing. Never dropped silently: an unread value is
+   * not "unchanged".
+   */
+  unread: UnreadValue[];
+}
+
+export interface UnreadValue {
+  /** What was read, e.g. `ETH balance of 0x…`. */
+  what: string;
+  when: 'before' | 'after';
+  /** The contract or account the value belongs to. */
+  address: Address;
 }
 
 export const readValues = (plan: ReadPlan, reads: Reads): ReadValues => {
   let i = 0;
-  const next = (): { before?: bigint; after?: bigint } => {
+  const unread: UnreadValue[] = [];
+  const next = (
+    what: string,
+    address: Address,
+    needsAfter = true,
+  ): { before?: bigint; after?: bigint } => {
     const before = uint(reads.before[i]);
     const after = uint(reads.after[i]);
     i++;
+    if (before === undefined) unread.push({ what, when: 'before', address });
+    if (after === undefined && needsAfter) {
+      unread.push({ what, when: 'after', address });
+    }
     return {
       ...(before !== undefined ? { before } : {}),
       ...(after !== undefined ? { after } : {}),
     };
   };
   return {
-    eth: plan.eth.map(address => ({ address, ...next() })),
-    warehouse: plan.warehouse.map(address => ({ address, ...next() })),
-    values: plan.values.map(v => ({ ...v, ...next() })),
+    eth: plan.eth.map(address => ({
+      address,
+      ...next(`ETH balance of ${address}`, address),
+    })),
+    warehouse: plan.warehouse.map(address => ({
+      address,
+      ...next(`Warehouse balance of ${address}`, address),
+    })),
+    values: plan.values.map(v => ({
+      ...v,
+      ...next(`${v.name} of ${v.ovm}`, v.ovm),
+    })),
     roles: plan.roles.map(r => {
-      const { before } = next();
+      // The role bits after come from the RolesUpdated event.
+      const { before } = next(`roles of ${r.user} on ${r.ovm}`, r.ovm, false);
       return { ...r, ...(before !== undefined ? { before } : {}) };
     }),
+    unread,
   };
 };
 

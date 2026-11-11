@@ -14,6 +14,8 @@ import {
   credentials,
   ETH,
   GWEI,
+  HOODI_GENESIS_VALIDATORS_ROOT,
+  MAINNET_GENESIS_VALIDATORS_ROOT,
   OVM,
   PUBKEY_A,
   PUBKEY_B,
@@ -42,21 +44,49 @@ const apiWith = (
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status });
 
+const SYNCED = {
+  head_slot: '1000',
+  sync_distance: '0',
+  is_syncing: false,
+  is_optimistic: false,
+  el_offline: false,
+};
+
 const mockBeacon = (
   pending: unknown[],
   validators: unknown[],
   partials: unknown[] = [],
+  node: {
+    genesisValidatorsRoot?: string;
+    syncing?: unknown;
+    executionOptimistic?: boolean;
+    genesis?: unknown;
+  } = {},
 ) => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const state = { execution_optimistic: node.executionOptimistic ?? false };
   const fetchMock = jest.fn(async (url: any, init?: RequestInit) => {
     calls.push({ url: String(url), init });
+    if (String(url).endsWith('/eth/v1/beacon/genesis')) {
+      return jsonResponse(
+        node.genesis ?? {
+          data: {
+            genesis_validators_root:
+              node.genesisValidatorsRoot ?? HOODI_GENESIS_VALIDATORS_ROOT,
+          },
+        },
+      );
+    }
+    if (String(url).endsWith('/eth/v1/node/syncing')) {
+      return jsonResponse({ data: node.syncing ?? SYNCED });
+    }
     if (String(url).endsWith('/pending_deposits')) {
-      return jsonResponse({ data: pending });
+      return jsonResponse({ ...state, data: pending });
     }
     if (String(url).endsWith('/pending_partial_withdrawals')) {
-      return jsonResponse({ data: partials });
+      return jsonResponse({ ...state, data: partials });
     }
-    return jsonResponse({ data: validators });
+    return jsonResponse({ ...state, data: validators });
   });
   global.fetch = fetchMock as unknown as typeof fetch;
   return calls;
@@ -1007,11 +1037,13 @@ describe('deposits.status', () => {
         { beaconUrl: BEACON },
       );
       expect(calls.map(c => c.url)).toEqual([
+        'http://beacon.local:5052/eth/v1/beacon/genesis',
+        'http://beacon.local:5052/eth/v1/node/syncing',
         'http://beacon.local:5052/eth/v1/beacon/states/head/pending_deposits',
         'http://beacon.local:5052/eth/v1/beacon/states/head/pending_partial_withdrawals',
         'http://beacon.local:5052/eth/v1/beacon/states/head/validators',
       ]);
-      expect(JSON.parse(String(calls[2].init?.body))).toEqual({
+      expect(JSON.parse(String(calls[4].init?.body))).toEqual({
         ids: [PUBKEY_A, PUBKEY_B, PUBKEY_C],
       });
       expect(result[0]).toEqual({
@@ -1171,6 +1203,184 @@ describe('deposits.status', () => {
           )
         ).code,
       ).toBe('STATUS_UNAVAILABLE');
+    });
+
+    describe('node checks (never "every pubkey is new" from a wrong or unsynced node)', () => {
+      const read = async (node: object, api?: ReturnType<typeof fakeApi>) => {
+        // An empty node: without the checks every pubkey would read `new`.
+        const calls = mockBeacon([], [], [], node);
+        const error = await caught(
+          getDepositStatus(fakeChain().context(api), [PUBKEY_A], {
+            beaconUrl: BEACON,
+          }),
+        );
+        return { error, calls };
+      };
+
+      it('accepts a synced node of the client chain', async () => {
+        mockBeacon([], []);
+        const [a] = await getDepositStatus(fakeChain().context(), [PUBKEY_A], {
+          beaconUrl: BEACON,
+        });
+        expect(a).toEqual({
+          pubkey: PUBKEY_A,
+          status: 'new',
+          source: 'chain',
+          pendingDeposits: [],
+        });
+      });
+
+      it('refuses a node of another network (mainnet root on a Hoodi client)', async () => {
+        const { error, calls } = await read({
+          genesisValidatorsRoot: MAINNET_GENESIS_VALIDATORS_ROOT,
+        });
+        expect(error).toMatchObject({
+          code: 'STATUS_UNAVAILABLE',
+          details: { reason: 'beacon_wrong_chain' },
+        });
+        // No state was read from it.
+        expect(calls.map(c => c.url)).toEqual([
+          'http://beacon.local:5052/eth/v1/beacon/genesis',
+        ]);
+      });
+
+      it.each([
+        ['syncing', { ...SYNCED, is_syncing: true, sync_distance: '5000' }],
+        ['el_offline', { ...SYNCED, el_offline: true }],
+      ])('refuses a node that is %s', async (_name, syncing) => {
+        const { error, calls } = await read({ syncing });
+        expect(error).toMatchObject({
+          code: 'STATUS_UNAVAILABLE',
+          details: { reason: 'beacon_syncing' },
+        });
+        expect(calls).toHaveLength(2);
+      });
+
+      it('refuses an optimistic node and an execution_optimistic answer', async () => {
+        expect(
+          (await read({ syncing: { ...SYNCED, is_optimistic: true } })).error,
+        ).toMatchObject({
+          code: 'STATUS_UNAVAILABLE',
+          details: { reason: 'beacon_optimistic' },
+        });
+        expect((await read({ executionOptimistic: true })).error).toMatchObject(
+          {
+            code: 'STATUS_UNAVAILABLE',
+            details: { reason: 'beacon_optimistic' },
+          },
+        );
+      });
+
+      it('accepts an older node without el_offline / is_optimistic', async () => {
+        mockBeacon([], [registryRow(PUBKEY_A, 'active_ongoing')], [], {
+          syncing: { head_slot: '1', sync_distance: '0', is_syncing: false },
+        });
+        const [a] = await getDepositStatus(fakeChain().context(), [PUBKEY_A], {
+          beaconUrl: BEACON,
+        });
+        expect(a.status).toBe('active');
+      });
+
+      it.each([
+        ['genesis', { genesis: { data: {} } }],
+        ['genesis root', { genesisValidatorsRoot: '0x1234' }],
+        ['syncing', { syncing: { is_syncing: 'no' } }],
+      ])('fails closed on a malformed %s answer', async (_name, node) => {
+        expect((await read(node)).error.code).toBe('STATUS_UNAVAILABLE');
+      });
+    });
+
+    describe('fallback from the Obol API only when it is unavailable', () => {
+      const ROUTE = 'POST /v1/validators/hoodi/deposit-status';
+      const failing = (code: any, status: number) =>
+        fakeApi({
+          [ROUTE]: () => {
+            throw new ObolApiError(code, 'refused', {
+              status,
+              endpoint: '/v1/validators/hoodi/deposit-status',
+              method: 'POST',
+            });
+          },
+        });
+      const read = async (api: ReturnType<typeof fakeApi>) => {
+        const calls = mockBeacon([], [registryRow(PUBKEY_A, 'active_ongoing')]);
+        try {
+          const [status] = await getDepositStatus(
+            fakeChain().context(api),
+            [PUBKEY_A],
+            { beaconUrl: BEACON },
+          );
+          return { source: status.source, calls };
+        } catch (error: any) {
+          return { code: error.code as string, calls };
+        }
+      };
+
+      it.each([
+        ['API_ERROR', 500],
+        ['API_ERROR', 502],
+        ['API_ERROR', 503],
+        ['API_ERROR', 0], // network failure
+        ['API_TIMEOUT', 0],
+      ])('falls back on %s (status %i)', async (code, status) => {
+        expect((await read(failing(code, status))).source).toBe('chain');
+      });
+
+      it.each([
+        ['API_VALIDATION', 400],
+        ['API_UNAUTHORIZED', 401],
+        ['API_UNAUTHORIZED', 403],
+        ['API_CONFLICT', 409],
+        ['API_VALIDATION', 422],
+        ['API_RATE_LIMIT', 429],
+        ['API_ERROR', 451],
+        ['API_RESPONSE_MISMATCH', 200],
+      ])(
+        'throws %s (status %i) and never asks the beacon node',
+        async (code, status) => {
+          const result = await read(failing(code, status));
+          expect(result.code).toBe(code);
+          expect(result.calls).toHaveLength(0);
+        },
+      );
+
+      it('a 404 from the by-lock route (unknown lock) is thrown, not a fallback', async () => {
+        const api = fakeApi({
+          [`/v1/lock/${LOCK}`]: () => {
+            throw new ObolApiError('API_NOT_FOUND', 'no such lock', {
+              status: 404,
+              endpoint: `/v1/lock/${LOCK}`,
+              method: 'GET',
+            });
+          },
+        });
+        const calls = mockBeacon([], []);
+        const error = await caught(
+          getDepositStatus(fakeChain().context(api), [PUBKEY_A], {
+            lockHash: LOCK,
+            beaconUrl: BEACON,
+          }),
+        );
+        expect(error.code).toBe('API_NOT_FOUND');
+        expect(calls).toHaveLength(0);
+      });
+
+      it('a wrong-chain node is an error after an API outage too', async () => {
+        mockBeacon([], [], [], {
+          genesisValidatorsRoot: MAINNET_GENESIS_VALIDATORS_ROOT,
+        });
+        const error = await caught(
+          getDepositStatus(
+            fakeChain().context(failing('API_ERROR', 503)),
+            [PUBKEY_A],
+            { beaconUrl: BEACON },
+          ),
+        );
+        expect(error).toMatchObject({
+          code: 'STATUS_UNAVAILABLE',
+          details: { reason: 'beacon_wrong_chain' },
+        });
+      });
     });
 
     it('rejects a beaconUrl that is not http(s)', async () => {

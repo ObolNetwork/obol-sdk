@@ -223,6 +223,76 @@ describe('setup.prepareOvmWithSplits', () => {
     expect(prepared.preview.principalRecipient.created).toBe(true);
   });
 
+  // rc.12
+  it.each([
+    ['the zero address', ZERO_ADDRESS, 'zero_address'],
+    [
+      'the SplitsWarehouse',
+      '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8',
+      'protocol_contract',
+    ],
+    [
+      'the PullSplit factory',
+      '0x5cbA88D55Cec83caD5A105Ad40C8c9aF20bE21d1',
+      'protocol_contract',
+    ],
+  ])(
+    'refuses %s as a split recipient on either side',
+    async (_n, bad, issue) => {
+      const withBad = [
+        { address: A, share: 600_000 },
+        { address: bad, share: 400_000 },
+      ];
+      for (const input of [
+        {
+          owner: OWNER,
+          reward: { split: { recipients: withBad } },
+          principal: { address: A },
+        },
+        {
+          owner: OWNER,
+          reward: { address: A },
+          principal: { split: { recipients: withBad } },
+        },
+      ]) {
+        const error = await caught(
+          prepareOvmWithSplits(chainWith().context(), input),
+        );
+        expect(error.code).toBe('PAYLOAD_INVALID');
+        expect(
+          (error.details.issues as Array<{ issue?: string }>)[0].issue,
+        ).toBe(issue);
+      }
+    },
+  );
+
+  it("refuses a split's own predicted address as its recipient (self_recipient)", async () => {
+    // A (0x…a1) sorts before `own`, so A's allocation is the first one and
+    // decides the address the fake factory predicts: `own`.
+    const own = predicted({ allocations: [400_000n] } as SplitParams);
+    const error = await caught(
+      prepareOvmWithSplits(chainWith().context(), {
+        owner: OWNER,
+        reward: {
+          split: {
+            recipients: [
+              { address: own, share: 600_000 },
+              { address: A, share: 400_000 },
+            ],
+          },
+        },
+        principal: { address: A },
+      }),
+    );
+    expect(error.code).toBe('PAYLOAD_INVALID');
+    expect(
+      (error.details.issues as Array<{ issue?: string }>)[0],
+    ).toMatchObject({
+      path: 'reward.split.recipients',
+      issue: 'self_recipient',
+    });
+  });
+
   it('needs exactly one of split and address per side', async () => {
     const error = await caught(
       prepareOvmWithSplits(chainWith().context(), {
@@ -313,6 +383,69 @@ describe('setup presets', () => {
       { address: A, share: 990_000n },
       { address: '0xDe5aE4De36c966747Ea7DF13BD9589642e2B1D0d', share: 10_000n },
     ]);
+  });
+
+  // rc.12: "Split Everything" with a zero reward recipient would put the
+  // whole principal on the zero address.
+  it.each([
+    [
+      'rewardsSplit',
+      () =>
+        rewardsSplit({
+          chainId: 560048,
+          owner: OWNER,
+          principalRecipient: A,
+          recipients: [{ address: ZERO_ADDRESS, share: 990_000 }],
+        }),
+    ],
+    [
+      'totalSplit (Split Everything)',
+      () =>
+        totalSplit({
+          chainId: 560048,
+          owner: OWNER,
+          recipients: [{ address: ZERO_ADDRESS, share: 990_000 }],
+        }),
+    ],
+    [
+      'totalSplit (principal recipients)',
+      () =>
+        totalSplit({
+          chainId: 560048,
+          owner: OWNER,
+          recipients: [{ address: A, share: 990_000 }],
+          principalRecipients: [{ address: ZERO_ADDRESS, share: 1_000_000 }],
+        }),
+    ],
+    [
+      'solo',
+      () => solo({ chainId: 560048, owner: OWNER, recipient: ZERO_ADDRESS }),
+    ],
+  ])('%s refuses the zero address', async (_n, run) => {
+    const error = await caught(run);
+    expect(error.code).toBe('PAYLOAD_INVALID');
+    expect((error.details.issues as Array<{ issue?: string }>)[0].issue).toBe(
+      'zero_address',
+    );
+  });
+
+  it('refuses the SplitsWarehouse as a preset recipient', async () => {
+    const error = await caught(() =>
+      totalSplit({
+        chainId: 1,
+        owner: OWNER,
+        recipients: [
+          { address: A, share: 490_000 },
+          {
+            address: '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8',
+            share: 500_000,
+          },
+        ],
+      }),
+    );
+    expect((error.details.issues as Array<{ issue?: string }>)[0].issue).toBe(
+      'protocol_contract',
+    );
   });
 
   it('refuses the RAF as a reward recipient', async () => {

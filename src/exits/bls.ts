@@ -13,9 +13,10 @@ import {
   decodeG1,
 } from '../internal/bls.js';
 import type { BlsBackend } from '../cluster/blsBackend.js';
-import { decode, invalid, T } from '../schema.js';
+import { decode, invalid, rejectUnknownKeys, T } from '../schema.js';
 
 const ShareIndex = Type.Integer({ minimum: 1 });
+const STRICT = { additionalProperties: false };
 
 const uniqueIndices = (items: Array<{ index: number }>, path: string): void => {
   const seen = new Set<number>();
@@ -53,7 +54,8 @@ export const blsVerify = (
   const pk = fromHexString(decode(T.Pubkey, pubkey, 'pubkey'));
   const msg = fromHexString(decode(T.Hex, message, 'message'));
   const sig = fromHexString(decode(T.BlsSignature, signature, 'signature'));
-  const bls = options?.bls;
+  rejectUnknownKeys(options, ['bls'], 'options');
+  const bls = options.bls;
   if (bls === undefined) return verifyBytes(pk, msg, sig);
   for (const method of ['decodePublicKey', 'verify'] as const) {
     if (typeof bls?.[method] !== 'function') {
@@ -101,9 +103,12 @@ export const blsThresholdAggregate = (
   partials: Array<{ index: number; signature: Hex }>,
 ): Hex => {
   const items = decode(
-    Type.Array(Type.Object({ index: ShareIndex, signature: T.BlsSignature }), {
-      minItems: 1,
-    }),
+    Type.Array(
+      Type.Object({ index: ShareIndex, signature: T.BlsSignature }, STRICT),
+      {
+        minItems: 1,
+      },
+    ),
     partials,
     'partials',
   );
@@ -140,7 +145,7 @@ export const blsRecoverPubkey = (
   shares: Array<{ index: number; pubshare: Hex }>,
 ): Hex => {
   const items = decode(
-    Type.Array(Type.Object({ index: ShareIndex, pubshare: T.Pubkey }), {
+    Type.Array(Type.Object({ index: ShareIndex, pubshare: T.Pubkey }, STRICT), {
       minItems: 1,
     }),
     shares,

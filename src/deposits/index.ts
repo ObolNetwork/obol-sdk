@@ -13,17 +13,17 @@ import {
   type DepositStatusOptions,
 } from './status.js';
 import {
-  verifyDepositData,
-  type VerifyDepositDataOptions,
-} from './verifyDepositData.js';
+  assertDepositData,
+  type AssertDepositDataOptions,
+} from './assertDepositData.js';
 
-export { fromLock, verifyDepositData };
-export { depositDataRoot } from './verifyDepositData.js';
+export { fromLock, assertDepositData };
+export { depositDataRoot } from './assertDepositData.js';
 export {
   MAX_COMPOUNDING_DEPOSIT,
   MAX_DEPOSIT,
   MIN_DEPOSIT,
-} from './verifyDepositData.js';
+} from './assertDepositData.js';
 export { BATCH_DEPOSIT_SIZE } from './prepareDeposit.js';
 export type { FromLockOptions, LockDeposits } from './fromLock.js';
 export type { DepositPreview, PrepareDepositInput } from './prepareDeposit.js';
@@ -33,7 +33,7 @@ export type {
   DepositStatusOptions,
   PendingDeposit,
 } from './status.js';
-export type { VerifyDepositDataOptions } from './verifyDepositData.js';
+export type { AssertDepositDataOptions } from './assertDepositData.js';
 
 /** The deposits module bound to a client context. */
 export interface DepositsModule {
@@ -41,9 +41,9 @@ export interface DepositsModule {
     lock: Parameters<typeof fromLock>[0],
     options?: FromLockOptions,
   ) => Promise<LockDeposits>;
-  verifyDepositData: (
+  assertDepositData: (
     deposits: readonly DepositInput[],
-    options?: Partial<VerifyDepositDataOptions>,
+    options?: Partial<AssertDepositDataOptions>,
   ) => Promise<void>;
   status: (
     pubkeys: readonly string[],
@@ -62,8 +62,8 @@ export const createDepositsModule = (ctx: Context): DepositsModule => ({
       publicClient: ctx.publicClient,
       ...options,
     }),
-  verifyDepositData: async (deposits, options = {}) => {
-    await verifyDepositData(deposits, { chainId: ctx.chain.id, ...options });
+  assertDepositData: async (deposits, options = {}) => {
+    await assertDepositData(deposits, { chainId: ctx.chain.id, ...options });
   },
   status: async (pubkeys, options) =>
     await getDepositStatus(ctx, pubkeys, options),

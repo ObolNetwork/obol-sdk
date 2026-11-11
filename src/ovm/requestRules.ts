@@ -4,14 +4,14 @@
  * fee is kept, so each is a blocking error. Electra
  * `process_withdrawal_request` (EIP-7002) and `process_consolidation_request`
  * (EIP-7251). Checks that need data the status source did not give are
- * reported as VALIDATOR_STATUS_UNCHECKED (info) instead of being skipped
- * silently.
+ * reported as VALIDATOR_STATUS_UNCHECKED (a warning, so `send` needs it
+ * acknowledged) instead of being skipped silently.
  */
 import type { Address, Hex } from 'viem';
 import { currentEpoch, type ObolChain } from '../chains.js';
 import { finding } from '../chainUtils.js';
 import { ObolError } from '../errors.js';
-import type { Finding } from '../types.js';
+import type { Finding, FindingsOf } from '../types.js';
 import { ETH, GWEI } from '../units.js';
 import {
   PENDING_PARTIAL_WITHDRAWALS_LIMIT,
@@ -48,11 +48,10 @@ class Unchecked {
     this.byPubkey.set(pubkey, set);
   }
 
-  findings(): Finding[] {
+  findings(): Array<Finding<'VALIDATOR_STATUS_UNCHECKED'>> {
     return [...this.byPubkey].map(([pubkey, checks]) =>
       finding(
         'VALIDATOR_STATUS_UNCHECKED',
-        'info',
         `The status source did not give what these checks need for ${pubkey}: ${[
           ...checks,
         ].join(', ')}`,
@@ -67,10 +66,11 @@ class Unchecked {
 }
 
 /** VALIDATOR_STATUS_UNCHECKED for requests prepared with no status source at all. */
-export const noStatusFinding = (operation: string): Finding =>
+export const noStatusFinding = (
+  operation: string,
+): Finding<'VALIDATOR_STATUS_UNCHECKED'> =>
   finding(
     'VALIDATOR_STATUS_UNCHECKED',
-    'info',
     `${operation}: no validator status source, so the beacon chain rules (active, not exiting, credentials, balances, pending withdrawals) were not checked; a request that breaks one is ignored and its fee kept`,
     {
       hint: 'Enable the Obol API or pass beaconUrl to have them checked',
@@ -212,10 +212,10 @@ export const checkWithdrawalRequests = (
   requests: ReadonlyArray<{ pubkey: Hex; amount: bigint }>,
   statuses: Map<string, DepositStatus>,
   source: { address: Address | null; what: string },
-): { requests: CheckedWithdrawal[]; checks: Finding[] } => {
+): { requests: CheckedWithdrawal[]; checks: FindingsOf<'eoaWithdraw'> } => {
   const epoch = currentEpoch(rules.chain, rules.nowMs);
   const unchecked = new Unchecked();
-  const checks: Finding[] = [];
+  const checks: FindingsOf<'eoaWithdraw'> = [];
   const pendingAdded = new Map<string, bigint>();
   const queues = queuesOf(statuses);
   let queueWarned = false;
@@ -343,7 +343,6 @@ export const checkWithdrawalRequests = (
       checks.push(
         finding(
           'PARTIAL_WITHDRAWAL_QUEUE_FULL',
-          'warning',
           'The beacon chain pending partial withdrawal queue is full: partial requests are ignored until it drains, and the fee is kept',
           {
             hint: 'Wait for the queue to drain',
@@ -356,7 +355,6 @@ export const checkWithdrawalRequests = (
     checks.push(
       finding(
         'WITHDRAW_AMOUNT_CAPPED',
-        'info',
         `${status.pubkey} can withdraw at most ${amount} wei now (balance above 32 ETH less pending withdrawals); the request asks for that instead of ${request.amount} wei`,
         {
           hint: 'The beacon chain would cap it the same way; the request is sent with the capped amount',
@@ -382,10 +380,12 @@ export const checkConsolidationRequests = (
   requests: ReadonlyArray<{ sources: Hex[]; target: Hex }>,
   statuses: Map<string, DepositStatus>,
   source: Address,
-): Finding[] => {
+): Array<
+  Finding<'CONSOLIDATION_CREDENTIALS_DIFFER' | 'VALIDATOR_STATUS_UNCHECKED'>
+> => {
   const epoch = currentEpoch(rules.chain, rules.nowMs);
   const unchecked = new Unchecked();
-  const checks: Finding[] = [];
+  const checks: Array<Finding<'CONSOLIDATION_CREDENTIALS_DIFFER'>> = [];
   for (const request of requests) {
     const target = statuses.get(request.target);
     for (const pubkey of request.sources) {
@@ -460,12 +460,16 @@ export const checkConsolidationRequests = (
         checks.push(
           finding(
             'CONSOLIDATION_CREDENTIALS_DIFFER',
-            'warning',
-            `Source ${pubkey} and target ${request.target} have different withdrawal addresses: the stake moves out of this OVM`,
+            `Source ${pubkey} and target ${request.target} have different withdrawal addresses: the stake moves out of this OVM, to ${credentialsAddress(targetCredentials)}`,
             {
-              hint: 'Check that the target is yours',
+              hint: 'Send only if the target validator and its withdrawal address are yours: the stake cannot be moved back',
               subject: { pubkey },
-              details: { source: pubkey, target: request.target },
+              details: {
+                source: pubkey,
+                target: request.target,
+                sourceWithdrawalAddress: credentialsAddress(credentials),
+                targetWithdrawalAddress: credentialsAddress(targetCredentials),
+              },
             },
           ),
         );

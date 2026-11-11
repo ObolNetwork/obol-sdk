@@ -1,6 +1,6 @@
 /**
  * OVM and split distributions on a Hoodi fork: ovm.previewDistribute,
- * splits.previewDistribution / prepareDistribution → send, then every leg of
+ * splits.previewDistributeAll / prepareDistributeAll → send, then every leg of
  * the preview (OVM payout, split distribution, Warehouse withdrawals, direct
  * payments) compared with the balances and logs after mining.
  */
@@ -12,7 +12,7 @@ import {
   type TransactionReceipt,
 } from 'viem';
 import { NATIVE_TOKEN } from '../src/abi.js';
-import type { DistributionPreview } from '../src/splits/index.js';
+import type { DistributeAllPreview } from '../src/splits/index.js';
 import type { Prepared, SplitParams } from '../src/types.js';
 import {
   balanceOf,
@@ -67,7 +67,7 @@ const transfer = async (
 const withoutDust = (amount: bigint): bigint =>
   amount > 0n ? amount - 1n : 0n;
 
-type Row = DistributionPreview['recipients'][number];
+type Row = DistributeAllPreview['recipients'][number];
 
 /**
  * ETH the transaction should send to a recipient's wallet, from the preview
@@ -98,7 +98,7 @@ const toWallet = (r: Row, minWithdraw: bigint): bigint => {
  */
 const executeAndCompare = async (
   s: Signer,
-  prepared: Prepared<'distribution'>,
+  prepared: Prepared<'distributeAll'>,
   ovm?: Address,
 ): Promise<TransactionReceipt> => {
   const { preview } = prepared;
@@ -195,7 +195,7 @@ describeFork('distributions', () => {
     });
     expect(ovmChecks).toEqual([]);
 
-    const prepared = await s.obol.splits.prepareDistribution({ ovm: d.ovm });
+    const prepared = await s.obol.splits.prepareDistributeAll({ ovm: d.ovm });
     const { preview } = prepared;
     expect(prepared.request.to).toBe(NET.multicall3);
     expect(prepared.checks).toEqual([]);
@@ -241,7 +241,7 @@ describeFork('distributions', () => {
       rewardPayout: parseEther('1'),
     });
     expect(ovmChecks).toEqual([]);
-    const prepared = await s.obol.splits.prepareDistribution({ ovm: d.ovm });
+    const prepared = await s.obol.splits.prepareDistributeAll({ ovm: d.ovm });
     const direct = prepared.preview.recipients.find(
       r => r.address === principal,
     );
@@ -258,7 +258,7 @@ describeFork('distributions', () => {
   test('minWithdraw leaves out legs below it with a skipReason, and the chain leaves them in place', async () => {
     await transfer(s, d.ovm, parseEther('1'));
     const minWithdraw = parseEther('0.5');
-    const { preview, checks } = await s.obol.splits.previewDistribution({
+    const { preview, checks } = await s.obol.splits.previewDistributeAll({
       ovm: d.ovm,
       minWithdraw,
     });
@@ -274,7 +274,7 @@ describeFork('distributions', () => {
       minWithdraw,
     );
 
-    const prepared = await s.obol.splits.prepareDistribution({
+    const prepared = await s.obol.splits.prepareDistributeAll({
       ovm: d.ovm,
       minWithdraw,
     });
@@ -285,7 +285,7 @@ describeFork('distributions', () => {
   test('with nothing above minWithdraw the preview names each skipped leg and prepare throws NOTHING_TO_DISTRIBUTE', async () => {
     await transfer(s, d.ovm, parseEther('0.001'));
     const minWithdraw = parseEther('0.5');
-    const { preview } = await s.obol.splits.previewDistribution({
+    const { preview } = await s.obol.splits.previewDistributeAll({
       ovm: d.ovm,
       minWithdraw,
     });
@@ -301,11 +301,11 @@ describeFork('distributions', () => {
     }
     await expectCode(
       async () =>
-        await s.obol.splits.prepareDistribution({ ovm: d.ovm, minWithdraw }),
+        await s.obol.splits.prepareDistributeAll({ ovm: d.ovm, minWithdraw }),
       'NOTHING_TO_DISTRIBUTE',
     );
     // The default minWithdraw (1 wei) still distributes the dust.
-    const prepared = await s.obol.splits.prepareDistribution({ ovm: d.ovm });
+    const prepared = await s.obol.splits.prepareDistributeAll({ ovm: d.ovm });
     expect(prepared.preview.ovm?.skipReason).toBeUndefined();
     await executeAndCompare(s, prepared, d.ovm);
   });
@@ -325,7 +325,7 @@ describeFork('distributions', () => {
     await publicClient.waitForTransactionReceipt({ hash });
 
     await transfer(s, d.ovm, parseEther('0.5'));
-    const prepared = await s.obol.splits.prepareDistribution({ ovm: d.ovm });
+    const prepared = await s.obol.splits.prepareDistributeAll({ ovm: d.ovm });
     expect(codes(prepared.checks)).toEqual(['RECIPIENT_WITHDRAW_PAUSED']);
     expect(prepared.checks[0].details).toEqual({ address: r2 });
     expect(
@@ -335,7 +335,7 @@ describeFork('distributions', () => {
 
     // Sent by the paused recipient itself (an EOA, so tx.origin): included.
     await transfer(s, d.ovm, parseEther('0.5'));
-    const own = await r2Wallet.obol.splits.prepareDistribution({ ovm: d.ovm });
+    const own = await r2Wallet.obol.splits.prepareDistributeAll({ ovm: d.ovm });
     expect(codes(own.checks)).toEqual([]);
     const r2Leg = own.preview.recipients.find(r => r.address === r2);
     expect(r2Leg?.skipReason).toBeUndefined();
@@ -393,7 +393,7 @@ describeFork('distributions', () => {
     );
 
     // The split now holds the ETH itself; a split-only distribution moves it.
-    const prepared = await s.obol.splits.prepareDistribution({
+    const prepared = await s.obol.splits.prepareDistributeAll({
       rewardSplit: { ...d.rewardSplit, address: d.rewardRecipient },
     });
     expect(prepared.preview.ovm).toBeUndefined();
@@ -412,7 +412,7 @@ describeFork('distributions', () => {
       distributionIncentive: 10_000, // 1%
     });
     await transfer(s, other.ovm, parseEther('1'));
-    const prepared = await s.obol.splits.prepareDistribution({
+    const prepared = await s.obol.splits.prepareDistributeAll({
       ovm: other.ovm,
     });
     const [split] = prepared.preview.splits;
@@ -458,7 +458,7 @@ describeFork('distributions', () => {
       const outsider = await signer(5);
       await expectCode(
         async () =>
-          await outsider.obol.splits.prepareDistribution({
+          await outsider.obol.splits.prepareDistributeAll({
             rewardSplit: { ...params, address: split },
           }),
         'SPLIT_PAUSED',
@@ -477,7 +477,7 @@ describeFork('distributions', () => {
     });
 
     test('the owner, an EOA, distributes it through Multicall3', async () => {
-      const prepared = await s.obol.splits.prepareDistribution({
+      const prepared = await s.obol.splits.prepareDistributeAll({
         rewardSplit: { ...params, address: split },
       });
       await executeAndCompare(s, prepared);

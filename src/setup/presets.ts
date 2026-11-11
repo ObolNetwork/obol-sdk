@@ -15,6 +15,7 @@ import {
   toSplitParams,
   type ShareRecipient,
 } from '../splits/shares.js';
+import { refuseUnusableRecipients } from '../splits/create.js';
 import type { OvmWithSplitsInput, SplitSpec } from './withSplits.js';
 
 /**
@@ -44,6 +45,12 @@ export const ovmSplitParams = (input: {
     'rewardRecipients',
     SPLITS_SCALE - RAF_SHARE,
   );
+  // Before the RAF share is added: a protocol contract as a recipient.
+  refuseUnusableRecipients(
+    input.chainId,
+    toSplitParams(rewards, incentive),
+    'rewardRecipients',
+  );
   const rafIndex = rewards.findIndex(r => sameAddress(r.address, rafRecipient));
   if (rafIndex !== -1) {
     throw invalid(
@@ -72,10 +79,13 @@ export const ovmSplitParams = (input: {
       'principalRecipients',
       SPLITS_SCALE,
     );
-    return {
-      rewardSplit,
-      principalSplit: toSplitParams(principals, incentive),
-    };
+    const principalSplit = toSplitParams(principals, incentive);
+    refuseUnusableRecipients(
+      input.chainId,
+      principalSplit,
+      'principalRecipients',
+    );
+    return { rewardSplit, principalSplit };
   }
   // Split Everything: spread the RAF share over the reward recipients.
   const sorted = toSplitParams(rewards, incentive);

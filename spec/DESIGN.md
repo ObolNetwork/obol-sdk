@@ -52,7 +52,7 @@ Every write is a `prepareX(input)` returning:
 
 ```ts
 type Prepared<K extends PreparedKind> = {
-  kind: K             // which operation: 'deposit' | 'withdraw' | 'distribution' | ...; narrows preview
+  kind: K             // which operation: 'deposit' | 'withdraw' | 'distributeAll' | ...; narrows preview
   request: { to: Address; data: Hex; value: bigint; chainId: number }  // viem-compatible
   checks: Finding[]   // everything the SDK verified; errors make prepare throw instead
   preview: PreviewByKind[K]  // what the transaction will do (amounts per recipient, predicted addresses, ...)
@@ -128,12 +128,12 @@ for await (const event of obol.cluster.watch(configHash, { signal })) {
 | Module | Purpose | Main operations |
 |---|---|---|
 | `cluster` | Definitions and locks | `prepareDefinition` (build + hash, sign via walletClient) / `create`, `accept`, `get`, `getLock`, `watch`; pure `verifyDefinition`, `verifyLock`, `computeConfigHash`, `computeLockHash` |
-| `deposits` | Deposit data and status | `fromLock(lock, { amount })`, `prepareDeposit` (OVM: one transaction per deposit, so it returns `Prepared[]`; batch deposit contract: one per 500; `kind: 'deposit' \| 'topUp'`), `status(pubkeys)`; pure `verifyDepositData`. Depositing to OVM credentials through the batch contract warns `OVM_STAKE_NOT_TRACKED` (the OVM's `amountOfPrincipalStake` is not raised, so principal would later be paid out as rewards) |
+| `deposits` | Deposit data and status | `fromLock(lock, { amount })`, `prepareDeposit` (OVM: one transaction per deposit, so it returns `Prepared[]`; batch deposit contract: one per 500; `kind: 'deposit' \| 'topUp'`), `status(pubkeys)`; pure `assertDepositData`. Depositing to OVM credentials through the batch contract warns `OVM_STAKE_NOT_TRACKED` (the OVM's `amountOfPrincipalStake` is not raised, so principal would later be paid out as rewards) |
 | `ovm` | ObolValidatorManager | reads `verify` (provenance: obol / notObol / unknown + source), `getState` (with distributable and routing), `getRoleHolders` (`api+chain`), `getValidators` (`api`); `prepareWithdraw` (full exits opt-in), `prepareConsolidate` (explicit opt-in), `prepareDistribute` / `previewDistribute`, role and ownership writes with previews and findings; pure `expectedWithdrawalCredentials`, `OVM_ROLES` |
-| `splits` | 0xSplits v2 PullSplits | `predictSplit`, `prepareCreateSplit`, `getSplit` (params from input, API or logs, checked against `splitHash`), `prepareDistribution` / `previewDistribution` (OVM + splits + warehouse withdrawals, per-recipient preview, `minWithdraw` and skip reasons) |
+| `splits` | 0xSplits v2 PullSplits | `predictSplit`, `prepareCreateSplit`, `getSplit` (params from input, API or logs, checked against `splitHash`), `prepareDistributeAll` / `previewDistributeAll` (OVM + splits + warehouse withdrawals, per-recipient preview, `minWithdraw` and skip reasons) |
 | `setup` | Compositions | `prepareOvmWithSplits` (one Multicall3 tx: reward split, optional principal split, OVM; idempotent); presets (solo, Lido CSM, rewards split, total split) built on the individual builders |
 | `incentives` | Obol incentives | `get(address)`, `prepareClaim` (proof vs on-chain root, deadline, contract code check) |
-| `exits` | Exit messages | `verifyPartialExit`, `aggregate`; pure BLS helpers |
+| `exits` | Exit messages | `assertPartialExit`, `aggregate`; pure BLS helpers |
 | `terms` | Terms and conditions | `hasAccepted`, `accept` |
 | `withdrawals` | Direct EIP-7002 requests | `prepareEoaWithdraw` (from the validator's withdrawal address) |
 | `legacy` | Existing OWR / SplitMain v1 | reads only (`getOwrTranches`) |

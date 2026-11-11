@@ -8,7 +8,7 @@ import { Type } from '@sinclair/typebox';
 import { parseEther, type Hex } from 'viem';
 import { requireContracts } from '../chains.js';
 import type { Context } from '../context.js';
-import { ObolApiError, ObolError, isObolError } from '../errors.js';
+import { ObolError, isObolError, type ObolApiError } from '../errors.js';
 import { decode, invalid, T, trimTrailingSlashes } from '../schema.js';
 import type { PendingRetry, Source, StatusSource } from '../types.js';
 import { gweiToWei } from '../units.js';
@@ -682,11 +682,25 @@ const normalizeBeaconUrl = (beaconUrl: string): string => {
   return trimTrailingSlashes(url.toString());
 };
 
-const beaconData = async (
+type BeaconReason =
+  | 'beacon_wrong_chain'
+  | 'beacon_syncing'
+  | 'beacon_optimistic';
+
+/** The node answered, but its answer must not be used for this chain now. */
+const beaconUnusable = (
+  reason: BeaconReason,
+  message: string,
+  hint: string,
+): ObolError =>
+  new ObolError('STATUS_UNAVAILABLE', message, { hint, details: { reason } });
+
+/** One beacon node request: the parsed JSON body (an object). */
+const beaconJson = async (
   url: string,
   what: string,
   body?: unknown,
-): Promise<unknown[]> => {
+): Promise<Record<string, unknown>> => {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -712,11 +726,87 @@ const beaconData = async (
   } catch (cause) {
     throw unavailable(`Malformed beacon node ${what} response`, cause);
   }
-  const data = (parsed as { data?: unknown } | null)?.data;
-  if (!Array.isArray(data)) {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw unavailable(`Malformed beacon node ${what} response`);
   }
-  return data;
+  return parsed as Record<string, unknown>;
+};
+
+/**
+ * A beacon state read: the `data` list. An answer the node marks
+ * `execution_optimistic` is refused: it is built on execution payloads the
+ * node has not verified, so its registry and queues may not stand.
+ */
+const beaconData = async (
+  url: string,
+  what: string,
+  body?: unknown,
+): Promise<unknown[]> => {
+  const parsed = await beaconJson(url, what, body);
+  if (parsed.execution_optimistic === true) {
+    throw beaconUnusable(
+      'beacon_optimistic',
+      `The beacon node answered ${what} optimistically (execution_optimistic): its execution client has not verified the head`,
+      'Retry when the node has verified the head, or use another beacon node; do not assume the validator is new',
+    );
+  }
+  if (!Array.isArray(parsed.data)) {
+    throw unavailable(`Malformed beacon node ${what} response`);
+  }
+  return parsed.data;
+};
+
+/**
+ * Before any state of the node is trusted: it is a node of the client's
+ * chain (`genesis_validators_root` from `/eth/v1/beacon/genesis` equals the
+ * chain table's) and it is in sync (`/eth/v1/node/syncing`: not syncing,
+ * execution client online, head not optimistic). A node of another network,
+ * or one still syncing, has no rows for the pubkeys, which would otherwise
+ * read as "every validator is new".
+ */
+const checkBeaconNode = async (ctx: Context, base: string): Promise<void> => {
+  const expected = ctx.chain.genesisValidatorsRoot?.toLowerCase();
+  if (expected === undefined) {
+    throw unavailable(
+      `No genesis validators root is known for chain ${ctx.chain.id}, so the beacon node cannot be checked`,
+    );
+  }
+  const genesis = (await beaconJson(`${base}/eth/v1/beacon/genesis`, 'genesis'))
+    .data as Record<string, unknown> | null | undefined;
+  const root = lowerString(genesis?.genesis_validators_root);
+  if (root === undefined || !CREDENTIALS.test(root)) {
+    throw unavailable('Malformed beacon node genesis response');
+  }
+  if (root !== expected) {
+    throw beaconUnusable(
+      'beacon_wrong_chain',
+      `The beacon node at beaconUrl is not on ${ctx.chain.name}: its genesis validators root is ${root}, expected ${expected}`,
+      `Pass the URL of a ${ctx.chain.name} beacon node`,
+    );
+  }
+  const syncing = (await beaconJson(`${base}/eth/v1/node/syncing`, 'syncing'))
+    .data as Record<string, unknown> | null | undefined;
+  if (typeof syncing?.is_syncing !== 'boolean') {
+    throw unavailable('Malformed beacon node syncing response');
+  }
+  // `el_offline` and `is_optimistic` are absent on older nodes; when present
+  // they must be false.
+  if (syncing.is_syncing || syncing.el_offline === true) {
+    throw beaconUnusable(
+      'beacon_syncing',
+      syncing.is_syncing
+        ? `The beacon node is still syncing (sync distance ${String(syncing.sync_distance ?? 'unknown')}): its validator registry and queues are not current`
+        : 'The beacon node reports its execution client offline (el_offline): its head may be stale',
+      'Wait for the node to sync, or use another beacon node; do not assume the validator is new',
+    );
+  }
+  if (syncing.is_optimistic === true) {
+    throw beaconUnusable(
+      'beacon_optimistic',
+      'The beacon node is following the chain optimistically (is_optimistic): its execution client has not verified the head',
+      'Retry when the node has verified the head, or use another beacon node; do not assume the validator is new',
+    );
+  }
 };
 
 const gweiString = (value: unknown, what: string): bigint => {
@@ -751,10 +841,12 @@ export const queuesOf = (
 ): BeaconQueues | undefined => beaconQueues.get(statuses);
 
 const fromBeacon = async (
+  ctx: Context,
   pubkeys: Hex[],
   beaconUrl: string,
 ): Promise<Map<string, DepositStatus>> => {
   const base = normalizeBeaconUrl(beaconUrl);
+  await checkBeaconNode(ctx, base);
   const requested = new Set<string>(pubkeys);
 
   // The pending queue is read before the registry, so a deposit that moves
@@ -879,7 +971,22 @@ const fromBeacon = async (
 /** Thrown when the API has neither endpoint for this call and no beaconUrl. */
 const ENDPOINT_UNAVAILABLE = 'endpoint_unavailable';
 
-/** An API failure falls back to the beacon node when there is one. */
+/**
+ * Whether an error means the Obol API could not be reached or could not
+ * answer: a timeout, a network failure (status 0) or a 5xx. Only these fall
+ * back to the beacon node. A 400, 401, 403, 409, 422, 429 or 451 is the API
+ * answering (a bad request, a refused or rate-limited caller), and is thrown:
+ * falling back on those would let a caller swap sources by making the API
+ * refuse the request.
+ */
+export const isApiUnavailable = (error: unknown): boolean => {
+  if (isObolError(error, 'API_TIMEOUT')) return true;
+  if (!isObolError(error, 'API_ERROR')) return false;
+  const status = (error as ObolApiError).status;
+  return status === 0 || status >= 500;
+};
+
+/** An unavailable API falls back to the beacon node when there is one. */
 const apiOrBeacon = async (
   read: () => Promise<Map<string, DepositStatus>>,
   beaconUrl: string | undefined,
@@ -887,9 +994,7 @@ const apiOrBeacon = async (
   try {
     return await read();
   } catch (error) {
-    if (!(error instanceof ObolApiError) || beaconUrl === undefined) {
-      throw error;
-    }
+    if (!isApiUnavailable(error) || beaconUrl === undefined) throw error;
     return undefined;
   }
 };
@@ -902,9 +1007,14 @@ const fromApiSources = async (
   try {
     return await fromDepositStatusApi(ctx, pubkeys, opts.pendingRetry ?? {});
   } catch (error) {
-    // 404: an API without the deposit-status route (not deployed yet).
+    // 404 from this route means the route itself is missing (an API
+    // deployment without deposit-status, or a local obol-api): the route
+    // answers `new` for a pubkey it does not know, never 404. That is one
+    // endpoint being unavailable, so the next source is tried: the interim
+    // by-lock route, then the beacon node. A 404 from the by-lock route
+    // below is different (the API does not know that lock) and is thrown.
     if (!isObolError(error, 'API_NOT_FOUND')) {
-      if (error instanceof ObolApiError && opts.beaconUrl !== undefined) {
+      if (isApiUnavailable(error) && opts.beaconUrl !== undefined) {
         return undefined;
       }
       throw error;
@@ -936,8 +1046,12 @@ const fromApiSources = async (
  * answers 404, the interim
  * `GET /v1/state/:lockHash` when `lockHash` is given (the pubkeys must
  * belong to that lock: `PAYLOAD_INVALID` / `not_in_lock`). Else, or if the
- * API request fails, the beacon node at `beaconUrl` (pending queue read
- * before the registry). Neither: `API_DISABLED` (API off) or
+ * API is unavailable (a timeout, a network failure or a 5xx; any other API
+ * error is thrown), the beacon node at `beaconUrl` (pending queue read
+ * before the registry), after checking that it is a node of the client's
+ * chain (genesis validators root) and in sync: `STATUS_UNAVAILABLE` with
+ * `reason` `beacon_wrong_chain`, `beacon_syncing` or `beacon_optimistic`
+ * otherwise. Neither source: `API_DISABLED` (API off) or
  * `STATUS_UNAVAILABLE` (API without the route). A malformed, duplicate,
  * incomplete or unknown answer is `STATUS_UNAVAILABLE`. With
  * `expectedWithdrawalAddress`, each status has `credentialsMatch`.
@@ -975,7 +1089,7 @@ const readStatuses = async (
         { hint: 'Enable the API, or pass beaconUrl' },
       );
     }
-    found = await fromBeacon(unique, opts.beaconUrl);
+    found = await fromBeacon(ctx, unique, opts.beaconUrl);
     queues = queuesOf(found);
     source = 'chain';
   }

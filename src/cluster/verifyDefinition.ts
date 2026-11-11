@@ -2,7 +2,7 @@ import { Type } from '@sinclair/typebox';
 import type { PublicClient } from 'viem';
 import { getObolChain } from '../chains.js';
 import { isObolError } from '../errors.js';
-import { decode, T } from '../schema.js';
+import { decode, rejectUnknownKeys, T } from '../schema.js';
 import {
   assertSignatureClients,
   checkTypedDataSignature,
@@ -43,11 +43,14 @@ export interface VerifyOptions extends SignatureClients {
   publicClient?: PublicClient;
 }
 
-export const VerifyDefinitionSchema = Type.Object({
-  definition: DefinitionSchema,
-  configHash: Type.Optional(T.Hash32),
-  chainId: T.Uint,
-});
+export const VerifyDefinitionSchema = Type.Object(
+  {
+    definition: DefinitionSchema,
+    configHash: Type.Optional(T.Hash32),
+    chainId: T.Uint,
+  },
+  { additionalProperties: false },
+);
 
 const present = (value: string | undefined): value is string =>
   typeof value === 'string' && value !== '' && value !== '0x';
@@ -155,6 +158,7 @@ export const verifyDefinition = async (
     VerifyDefinitionSchema,
     input,
   );
+  rejectUnknownKeys(options, ['publicClient', 'publicClients'], 'options');
   assertSignatureClients(options, 'options');
   const chain = getObolChain(chainId);
   const issues: DefinitionIssue[] = [];

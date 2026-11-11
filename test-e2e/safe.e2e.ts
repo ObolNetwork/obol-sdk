@@ -22,6 +22,7 @@ import {
   sendAndWait,
   signer,
   type Signer,
+  warningCodes,
 } from './helpers/fork.js';
 import { deployOvm } from './helpers/ovm.js';
 import { deploySafe, safeAbi, safeWallet } from './helpers/safe.js';
@@ -74,7 +75,9 @@ describeFork('send through a Safe', () => {
       user,
       roles: OVM_ROLES.DEPOSIT,
     });
-    const sent = await obol.send(prepared);
+    const sent = await obol.send(prepared, {
+      acknowledge: warningCodes(prepared as AnyPrepared),
+    });
     expect(sent.contractWallet).toBe(true);
     const execution = wallet.executions.get(sent.hash);
     expect(execution).toBeDefined();
@@ -111,7 +114,9 @@ describeFork('send through a Safe', () => {
       checks: [],
       preview: { function: 'grantRoles', args: [] },
     };
-    const sent = await obol.send(prepared);
+    const sent = await obol.send(prepared, {
+      acknowledge: warningCodes(prepared as AnyPrepared),
+    });
     expect(sent.contractWallet).toBe(true);
     const error = await expectCode(
       async () => await sent.wait({ timeoutMs: 30_000 }),
@@ -203,11 +208,11 @@ describeFork('send through a Safe', () => {
       );
     });
 
-    test('so prepareDistribution from the Safe is SPLIT_PAUSED', async () => {
+    test('so prepareDistributeAll from the Safe is SPLIT_PAUSED', async () => {
       const obol = obolFor(safeWallet(safe, owner).walletClient);
       await expectCode(
         async () =>
-          await obol.splits.prepareDistribution({
+          await obol.splits.prepareDistributeAll({
             rewardSplit: { ...params, address: split },
           }),
         'SPLIT_PAUSED',
@@ -252,14 +257,16 @@ describeFork('send through a Safe', () => {
       .then(
         async hash => await publicClient.waitForTransactionReceipt({ hash }),
       );
-    const prepared = await obol.splits.prepareDistribution({ ovm: d.ovm });
+    const prepared = await obol.splits.prepareDistributeAll({ ovm: d.ovm });
     expect(codes(prepared.checks)).toEqual(['RECIPIENT_WITHDRAW_PAUSED']);
     const safeLeg = prepared.preview.recipients.find(r => r.address === safe);
     expect(safeLeg).toMatchObject({ skipReason: 'paused', fromOvm: 0n });
     const otherLeg = prepared.preview.recipients.find(r => r.address === other);
 
     const safeBefore = await balanceOf(safe);
-    const sent = await obol.send(prepared);
+    const sent = await obol.send(prepared, {
+      acknowledge: warningCodes(prepared as AnyPrepared),
+    });
     expect(sent.contractWallet).toBe(true);
     await sent.wait({ timeoutMs: 30_000 });
     expect(await balanceOf(safe)).toBe(safeBefore);

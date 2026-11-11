@@ -62,7 +62,23 @@ export const T = {
   ]),
 };
 
-const messageFor = (error: { message: string; schema: TSchema }): string => {
+/** TypeBox `ValueErrorType.ObjectAdditionalProperties`. */
+const UNEXPECTED_PROPERTY = 42;
+
+const unknownKeyMessage = (key: string, allowed: readonly string[]): string =>
+  `unknown key "${key}"; allowed keys: ${[...allowed].sort().join(', ')}`;
+
+const messageFor = (error: {
+  type: number;
+  path: string;
+  message: string;
+  schema: TSchema;
+}): string => {
+  if (error.type === UNEXPECTED_PROPERTY) {
+    const key = error.path.split('/').pop() ?? '';
+    const properties = (error.schema as { properties?: object }).properties;
+    return unknownKeyMessage(key, Object.keys(properties ?? {}));
+  }
   if (error.schema.format === 'obol-address') {
     return 'must be a hex address (all-lowercase, all-uppercase or a valid EIP-55 checksum)';
   }
@@ -95,9 +111,38 @@ export const decode = <S extends TSchema>(
     const path = toPath(error.path, basePath);
     if (seen.has(path)) continue;
     seen.add(path);
-    issues.push({ path, message: messageFor(error) });
+    issues.push({
+      path,
+      message: messageFor(error),
+      ...(error.type === UNEXPECTED_PROPERTY ? { issue: 'unknown_key' } : {}),
+    });
   }
   throw payloadInvalid(issues);
+};
+
+/**
+ * PAYLOAD_INVALID (issue `unknown_key`) when `value` has a key that is not in
+ * `allowed`: for option objects that carry values a schema cannot describe
+ * (viem clients, a BLS backend, an AbortSignal) and so are not decoded whole.
+ * A misspelt option must never be dropped silently: `signature` for
+ * `signatures` would turn a check off.
+ */
+export const rejectUnknownKeys = (
+  value: unknown,
+  allowed: readonly string[],
+  path: string,
+): void => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw invalid(path, 'must be an object');
+  }
+  const issues: Issue[] = Object.keys(value)
+    .filter(key => !allowed.includes(key))
+    .map(key => ({
+      path: path === '' ? key : `${path}.${key}`,
+      message: unknownKeyMessage(key, allowed),
+      issue: 'unknown_key',
+    }));
+  if (issues.length > 0) throw payloadInvalid(issues);
 };
 
 /** Checksummed form of an address that passed `T.Address`. */

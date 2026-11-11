@@ -1,5 +1,5 @@
 /**
- * splits.prepareDistribution / previewDistribution / distributionFromReceipt:
+ * splits.prepareDistributeAll / previewDistributeAll / distributionFromReceipt:
  * distribute an OVM, the splits behind it, and withdraw recipients' Warehouse
  * and SplitMain balances in one Multicall3 transaction. Vectors
  * `distribution.json` (`routing`, `split_distribution`, `prepare`).
@@ -34,7 +34,7 @@ import {
   ZERO_ADDRESS,
 } from '../schema.js';
 import type {
-  Finding,
+  FindingsOf,
   Prepared,
   PreviewResult,
   SplitParams,
@@ -60,7 +60,7 @@ const DistributionSplit = Type.Object({
   address: Type.Optional(T.Address),
 });
 
-export const DistributionInputSchema = Type.Object(
+export const DistributeAllInputSchema = Type.Object(
   {
     ovm: Type.Optional(T.Address),
     rewardSplit: Type.Optional(DistributionSplit),
@@ -74,7 +74,7 @@ export const DistributionInputSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export interface DistributionInput {
+export interface DistributeAllInput {
   ovm?: string;
   /** The split params; `address` defaults to the OVM's matching recipient. */
   rewardSplit?: SplitParamsInput & { address?: string };
@@ -103,7 +103,7 @@ export interface DistributionInput {
  */
 export type SkipReason = 'nothing' | 'dust' | 'paused';
 
-export interface DistributionPreview {
+export interface DistributeAllPreview {
   /** The `minWithdraw` the legs were compared with (wei). */
   minWithdraw: bigint;
   ovm?: {
@@ -191,14 +191,14 @@ const readSplitHash = async (
 /** Reads everything at one block and builds the calls, preview and findings. */
 const buildDistribution = async (
   ctx: Context,
-  input: DistributionInput,
+  input: DistributeAllInput,
 ): Promise<{
   calls: Call3[];
-  preview: DistributionPreview;
-  checks: Finding[];
+  preview: DistributeAllPreview;
+  checks: FindingsOf<'distributeAll'>;
   blockNumber: bigint;
 }> => {
-  const d = decode(DistributionInputSchema, input);
+  const d = decode(DistributeAllInputSchema, input);
   if (
     d.ovm === undefined &&
     d.rewardSplit === undefined &&
@@ -224,7 +224,7 @@ const buildDistribution = async (
   const minWithdraw = d.minWithdraw ?? 1n;
   const contracts = requireContracts(
     ctx.chain.id,
-    'splits.prepareDistribution',
+    'splits.prepareDistributeAll',
   );
   const { warehouse, splitMain, rafRecipient } = contracts;
   const sender = senderOf(
@@ -233,7 +233,7 @@ const buildDistribution = async (
   );
   const isSender = (address: string): boolean =>
     sender !== null && sameAddress(address, sender);
-  const checks: Finding[] = [];
+  const checks: FindingsOf<'distributeAll'> = [];
 
   // OVM: provenance, then its state; everything else is read at that block.
   const ovmAddress = d.ovm !== undefined ? checksum(d.ovm) : undefined;
@@ -243,7 +243,7 @@ const buildDistribution = async (
   const ovm =
     ovmAddress !== undefined
       ? await readOvmCore(ctx, ovmAddress, {
-          what: 'splits.prepareDistribution',
+          what: 'splits.prepareDistributeAll',
         })
       : undefined;
   const blockNumber =
@@ -365,6 +365,13 @@ const buildDistribution = async (
       ? checksum(d.distributor)
       : (sender ?? undefined);
   const hasIncentive = splits.some(s => s.params.distributionIncentive > 0);
+  if (hasIncentive && distributor === ZERO_ADDRESS) {
+    throw invalid(
+      'distributor',
+      'must not be the zero address for splits with a distribution incentive: the incentive would be credited to it and lost',
+      'zero_address',
+    );
+  }
   if (hasIncentive && distributor === undefined) {
     throw invalid(
       'distributor',
@@ -474,7 +481,7 @@ const buildDistribution = async (
     credits.set(key, entry);
   };
 
-  const splitPreviews: DistributionPreview['splits'] = splits.map(
+  const splitPreviews: DistributeAllPreview['splits'] = splits.map(
     (split, i) => {
       const [hash, paused, owner, balances] = results.slice(i * 4, i * 4 + 4);
       if (
@@ -556,7 +563,7 @@ const buildDistribution = async (
     addresses.some((a, i) => isSender(a) && pausedAt(i)) &&
     (await senderIsOrigin());
 
-  const recipients: DistributionPreview['recipients'] = addresses.map(
+  const recipients: DistributeAllPreview['recipients'] = addresses.map(
     (address, i) => {
       const warehouseBalance =
         (balanceResults[i * 3] as bigint | undefined) ?? 0n;
@@ -613,7 +620,6 @@ const buildDistribution = async (
           checks.push(
             finding(
               'RECIPIENT_WITHDRAW_PAUSED',
-              'info',
               `${address} paused its Warehouse withdrawals; its withdrawal is left out`,
               {
                 hint: 'The recipient withdraws itself',
@@ -632,7 +638,6 @@ const buildDistribution = async (
         checks.push(
           finding(
             'RAF_LEFT_IN_WAREHOUSE',
-            'info',
             `The Obol RAF address ${address} is not withdrawn: ${warehouseAmount} wei stays in the Warehouse`,
             {
               hint: 'Include it (the default, includeRaf: true) to withdraw it too; anyone may',
@@ -659,7 +664,7 @@ const buildDistribution = async (
     },
   );
 
-  const preview: DistributionPreview = {
+  const preview: DistributeAllPreview = {
     minWithdraw,
     ...(ovm !== undefined && routing !== undefined && ovmAddress !== undefined
       ? {
@@ -699,10 +704,10 @@ const buildDistribution = async (
  * `skipReason`; recipients whose paused Warehouse withdrawals the sender cannot
  * bypass get a RECIPIENT_WITHDRAW_PAUSED finding.
  */
-export const prepareDistribution = async (
+export const prepareDistributeAll = async (
   ctx: Context,
-  input: DistributionInput,
-): Promise<Prepared<'distribution'>> => {
+  input: DistributeAllInput,
+): Promise<Prepared<'distributeAll'>> => {
   const { calls, preview, checks, blockNumber } = await buildDistribution(
     ctx,
     input,
@@ -714,9 +719,9 @@ export const prepareDistribution = async (
   }
   const { multicall3 } = requireContracts(
     ctx.chain.id,
-    'splits.prepareDistribution',
+    'splits.prepareDistributeAll',
   );
-  return prepared(ctx, 'distribution', {
+  return prepared(ctx, 'distributeAll', {
     to: multicall3,
     data: encodeFunctionData({
       abi: multicall3Abi,
@@ -730,14 +735,14 @@ export const prepareDistribution = async (
 };
 
 /**
- * The same reads and checks as `prepareDistribution`, without throwing
+ * The same reads and checks as `prepareDistributeAll`, without throwing
  * NOTHING_TO_DISTRIBUTE: for a page that shows the legs with the button
  * disabled.
  */
-export const previewDistribution = async (
+export const previewDistributeAll = async (
   ctx: Context,
-  input: DistributionInput,
-): Promise<PreviewResult<DistributionPreview>> => {
+  input: DistributeAllInput,
+): Promise<PreviewResult<DistributeAllPreview>> => {
   const { preview, checks, blockNumber } = await buildDistribution(ctx, input);
   return { preview, checks, blockNumber };
 };

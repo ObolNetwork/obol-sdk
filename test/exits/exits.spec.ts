@@ -21,7 +21,7 @@ import {
   type StoredExitBlob,
 } from '../../src/exits/index.js';
 import { aggregate } from '../../src/exits/aggregate.js';
-import { verifyPartialExit } from '../../src/exits/verifyPartialExit.js';
+import { assertPartialExit } from '../../src/exits/assertPartialExit.js';
 import {
   exitSigningRoot,
   partialExitsPayloadRoot,
@@ -222,18 +222,18 @@ describe('exits SSZ', () => {
   });
 });
 
-describe('exits.verifyPartialExit', () => {
+describe('exits.assertPartialExit', () => {
   it('returns new valid blobs', () => {
     const blobs = [blob(2)];
     expect(
-      verifyPartialExit({ cluster, payload: payloadFor(2, blobs) }),
+      assertPartialExit({ cluster, payload: payloadFor(2, blobs) }),
     ).toEqual(blobs);
   });
 
   it('accepts a payload signed the way Charon signs it (sorted, 65 bytes)', () => {
     const blobs = [blob(3), secondBlob(3)];
     expect(
-      verifyPartialExit({ cluster, payload: payloadFor(3, blobs) }),
+      assertPartialExit({ cluster, payload: payloadFor(3, blobs) }),
     ).toEqual(byIndex(blobs));
   });
 
@@ -244,7 +244,7 @@ describe('exits.verifyPartialExit', () => {
       partial_exits: blobs,
       signature: sign65(rootAsListed(blobs, 3), operatorKeys[2]),
     };
-    expect(caught(() => verifyPartialExit({ cluster, payload })).code).toBe(
+    expect(caught(() => assertPartialExit({ cluster, payload })).code).toBe(
       'EXIT_PAYLOAD_SIGNATURE_INVALID',
     );
   });
@@ -257,7 +257,7 @@ describe('exits.verifyPartialExit', () => {
     const high = (n - s).toString(16).padStart(64, '0');
     const flipped = `${bytesToHex(bytes.slice(0, 32))}${high}${bytes[64] === 0 ? '01' : '00'}`;
     expect(
-      verifyPartialExit({
+      assertPartialExit({
         cluster,
         payload: { ...payload, signature: flipped },
       }),
@@ -274,13 +274,13 @@ describe('exits.verifyPartialExit', () => {
       },
     };
     const payload = payloadFor(2, [padded]);
-    expect(verifyPartialExit({ cluster, payload })).toEqual([mine]);
+    expect(assertPartialExit({ cluster, payload })).toEqual([mine]);
   });
 
   it('rejects a 64-byte payload signature', () => {
     const payload = payloadFor(2, [blob(2)]);
     payload.signature = payload.signature.slice(0, 130) as Hex;
-    expect(caught(() => verifyPartialExit({ cluster, payload })).code).toBe(
+    expect(caught(() => assertPartialExit({ cluster, payload })).code).toBe(
       'EXIT_PAYLOAD_SIGNATURE_INVALID',
     );
   });
@@ -289,7 +289,7 @@ describe('exits.verifyPartialExit', () => {
     'rejects share_idx %d (EXIT_SHARE_INDEX_INVALID)',
     shareIdx => {
       const payload = { ...payloadFor(1, [blob(1)]), share_idx: shareIdx };
-      expect(caught(() => verifyPartialExit({ cluster, payload })).code).toBe(
+      expect(caught(() => assertPartialExit({ cluster, payload })).code).toBe(
         'EXIT_SHARE_INDEX_INVALID',
       );
     },
@@ -297,7 +297,7 @@ describe('exits.verifyPartialExit', () => {
 
   it('rejects a payload signed by another operator', () => {
     const payload = payloadFor(2, [blob(2)], operatorKeys[0]);
-    expect(caught(() => verifyPartialExit({ cluster, payload })).code).toBe(
+    expect(caught(() => assertPartialExit({ cluster, payload })).code).toBe(
       'EXIT_PAYLOAD_SIGNATURE_INVALID',
     );
   });
@@ -308,7 +308,7 @@ describe('exits.verifyPartialExit', () => {
       operators: [{ enr: 'enr:-nope' }, ...cluster.operators.slice(1)],
     };
     const error = caught(() =>
-      verifyPartialExit({ cluster: bad, payload: payloadFor(1, [blob(1)]) }),
+      assertPartialExit({ cluster: bad, payload: payloadFor(1, [blob(1)]) }),
     );
     expect(error.code).toBe('PAYLOAD_INVALID');
     expect((error.details.issues as any[])[0].path).toBe(
@@ -323,7 +323,7 @@ describe('exits.verifyPartialExit', () => {
     const payload = payloadFor(1, [blob(1)]);
     expect(
       caught(() =>
-        verifyPartialExit({ cluster: { ...cluster, forkVersion }, payload }),
+        assertPartialExit({ cluster: { ...cluster, forkVersion }, payload }),
       ).code,
     ).toBe('UNSUPPORTED_CHAIN');
   });
@@ -332,7 +332,7 @@ describe('exits.verifyPartialExit', () => {
     const other = { ...blob(1), public_key: pubshare(4) };
     expect(
       caught(() =>
-        verifyPartialExit({ cluster, payload: payloadFor(1, [other]) }),
+        assertPartialExit({ cluster, payload: payloadFor(1, [other]) }),
       ).code,
     ).toBe('EXIT_VALIDATOR_NOT_IN_CLUSTER');
   });
@@ -346,7 +346,7 @@ describe('exits.verifyPartialExit', () => {
     };
     expect(
       caught(() =>
-        verifyPartialExit({
+        assertPartialExit({
           cluster: short,
           payload: payloadFor(2, [blob(2)]),
         }),
@@ -358,7 +358,7 @@ describe('exits.verifyPartialExit', () => {
     const wrong = { ...blob(3) };
     expect(
       caught(() =>
-        verifyPartialExit({ cluster, payload: payloadFor(2, [wrong]) }),
+        assertPartialExit({ cluster, payload: payloadFor(2, [wrong]) }),
       ).code,
     ).toBe('EXIT_PARTIAL_SIGNATURE_INVALID');
   });
@@ -369,7 +369,7 @@ describe('exits.verifyPartialExit', () => {
       existing: StoredExitBlob[] | Record<string, StoredExitBlob>,
       blobs = [mine],
     ) =>
-      verifyPartialExit({ cluster, payload: payloadFor(2, blobs), existing });
+      assertPartialExit({ cluster, payload: payloadFor(2, blobs), existing });
 
     it('drops the blob already stored (case-insensitive)', () => {
       const doc = stored({
@@ -416,14 +416,53 @@ describe('exits.verifyPartialExit', () => {
       ).toBe('EXIT_VALIDATOR_INDEX_MISMATCH');
     });
 
-    it.each(['199', '201'])(
-      'rejects a different epoch (%s, EXIT_EPOCH_MISMATCH)',
-      epoch => {
-        expect(
-          caught(() => run([stored({}, { ...message, epoch })])).code,
-        ).toBe('EXIT_EPOCH_MISMATCH');
+    // The payload signs epoch 200. Any other stored epoch is rejected (2.x
+    // accepted a higher new epoch); rc.12 says which way it differs and how
+    // to re-sign at another epoch.
+    it.each([
+      ['199', 'higher'],
+      ['201', 'lower'],
+      ['1', 'higher'],
+      ['18446744073709551615', 'lower'],
+    ])(
+      'rejects a stored epoch of %s: the new epoch is %s (EXIT_EPOCH_MISMATCH)',
+      (epoch, direction) => {
+        const error = caught(() => run([stored({}, { ...message, epoch })]));
+        expect(error.code).toBe('EXIT_EPOCH_MISMATCH');
+        expect(error.details).toEqual({
+          pubkey: expect.any(String),
+          epoch: '200',
+          storedEpoch: epoch,
+          direction,
+        });
+        // The reset path that exists: each operator deletes its own partial;
+        // there is no whole-document delete in the Obol API.
+        expect(error.hint).toMatch(/deleted first/);
+        expect(error.hint).toMatch(/charon exit delete/);
+        expect(error.hint).toMatch(
+          /no single call that deletes the whole exit/,
+        );
       },
     );
+
+    it('rejects unknown top-level input keys, tolerates extra document fields', () => {
+      expect(
+        caught(() =>
+          assertPartialExit({
+            cluster,
+            payload: payloadFor(1, [blob(1)]),
+            exisiting: [],
+          } as any),
+        ).code,
+      ).toBe('PAYLOAD_INVALID');
+      // A cluster object with fields the SDK does not read (an API document).
+      expect(() =>
+        assertPartialExit({
+          cluster: { ...cluster, _id: 'abc', name: 'x' } as any,
+          payload: payloadFor(1, [blob(1)]),
+        }),
+      ).not.toThrow();
+    });
 
     it('rejects a different stored signature for the share', () => {
       expect(
@@ -437,12 +476,12 @@ describe('exits.verifyPartialExit', () => {
   it('rejects malformed input (PAYLOAD_INVALID)', () => {
     expect(
       caught(() =>
-        verifyPartialExit({ cluster, payload: { share_idx: 1 } } as any),
+        assertPartialExit({ cluster, payload: { share_idx: 1 } } as any),
       ).code,
     ).toBe('PAYLOAD_INVALID');
     expect(
       caught(() =>
-        verifyPartialExit({
+        assertPartialExit({
           cluster,
           payload: payloadFor(1, [blob(1)]),
           existing: [{ ...stored({}), epoch: '99999999999999999999' }],

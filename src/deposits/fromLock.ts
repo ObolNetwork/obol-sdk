@@ -10,13 +10,19 @@ import type { PublicClients } from '../cluster/eip712.js';
 import { verifyLock } from '../cluster/verifyLock.js';
 import { LockSchema, type ClusterLock } from '../cluster/schema.js';
 import { ObolError } from '../errors.js';
-import { decode, invalid, T } from '../schema.js';
+import { decode, invalid, rejectUnknownKeys, T } from '../schema.js';
 import type { Deposit } from '../types.js';
 import { GWEI, MAX_UINT64 } from '../units.js';
-import { depositDataRoot } from './verifyDepositData.js';
+import { depositDataRoot } from './assertDepositData.js';
 
 export interface FromLockOptions {
-  /** The deposit amount to return (wei). */
+  /**
+   * The deposit amount to return (wei). Required when the lock holds
+   * deposit data for more than one amount (Charon's default is 1 ETH and
+   * 32 ETH per validator): the SDK never picks one, since each choice sends
+   * a different amount of ETH. Without it such a lock throws
+   * DEPOSIT_AMOUNT_REQUIRED, whose `details.available` lists the amounts.
+   */
   amount?: bigint;
   /**
    * How to run `cluster.verifyLock` first: `true` / `'attested'` (default)
@@ -49,25 +55,47 @@ export interface LockDeposits {
   amounts: bigint[];
   /** One deposit per returned validator that has it, in lock order, by amount (wei). */
   depositsByAmount: Map<bigint, Deposit[]>;
-  /** One deposit per returned validator for `amount`, or for the only amount. */
-  deposits?: Deposit[];
+  /**
+   * One deposit per returned validator, all of the same amount: `amount`
+   * when given, else the lock's only amount. Always present.
+   */
+  deposits: Deposit[];
 }
 
-export const FromLockOptionsSchema = Type.Object({
-  amount: Type.Optional(T.Wei),
-  verify: Type.Optional(
-    Type.Union([
-      Type.Boolean(),
-      Type.Literal('attested'),
-      Type.Literal('full'),
-    ]),
-  ),
-  validators: Type.Optional(
-    Type.Array(Type.Union([T.Uint, T.Pubkey]), { minItems: 1 }),
-  ),
-  chainId: Type.Optional(T.Uint),
-  yieldMs: Type.Optional(T.Uint),
-});
+export const FromLockOptionsSchema = Type.Object(
+  {
+    amount: Type.Optional(T.Wei),
+    verify: Type.Optional(
+      Type.Union([
+        Type.Boolean(),
+        Type.Literal('attested'),
+        Type.Literal('full'),
+      ]),
+    ),
+    validators: Type.Optional(
+      Type.Array(Type.Union([T.Uint, T.Pubkey]), { minItems: 1 }),
+    ),
+    chainId: Type.Optional(T.Uint),
+    yieldMs: Type.Optional(T.Uint),
+  },
+  {
+    additionalProperties: false,
+    description:
+      'The options a schema can describe. The options object also takes publicClient, publicClients and bls; any other key is PAYLOAD_INVALID.',
+  },
+);
+
+/** Every key of `FromLockOptions`; any other key is PAYLOAD_INVALID. */
+const FROM_LOCK_OPTION_KEYS = [
+  'amount',
+  'verify',
+  'validators',
+  'chainId',
+  'publicClient',
+  'publicClients',
+  'yieldMs',
+  'bls',
+] as const;
 
 /** Indexes of the requested validators, ascending and distinct. */
 const selectValidators = (
@@ -175,8 +203,9 @@ type DecodedFromLockOptions = Omit<
 >;
 
 /** The options `FromLockOptionsSchema` checks, without the clients and backend. */
-const decodeOptions = (options: FromLockOptions): DecodedFromLockOptions =>
-  decode(
+const decodeOptions = (options: FromLockOptions): DecodedFromLockOptions => {
+  rejectUnknownKeys(options, FROM_LOCK_OPTION_KEYS, 'options');
+  return decode(
     FromLockOptionsSchema,
     {
       ...(options.amount !== undefined ? { amount: options.amount } : {}),
@@ -189,6 +218,7 @@ const decodeOptions = (options: FromLockOptions): DecodedFromLockOptions =>
     },
     'options',
   );
+};
 
 /** The lock's `fork_version` must be `chainId`'s (when given). */
 const checkForkVersion = (
@@ -240,21 +270,32 @@ const verifyForDeposits = async (
 
 type LockValidator = ClusterLock['distributed_validators'][number];
 
-/** `partial_deposit_data` when it has entries, else `deposit_data`, else none. */
+/**
+ * The deposit data the lock hash covers, and nothing else: `deposit_data`
+ * for a v1.6.0 / v1.7.0 lock, `partial_deposit_data` from v1.8.0. The other
+ * field is not signed by the DKG for that version and is never returned: a
+ * legacy lock that carries `partial_deposit_data` entries is refused
+ * (`partial_deposit_data_unexpected`, as `cluster.verifyLock` does), and a
+ * v1.8.0+ lock's `deposit_data` is ignored.
+ */
 const rawDepositData = (
   validator: LockValidator,
   legacyLayout: boolean,
+  index: number,
 ): RawDeposit[] => {
   const partial = validator.partial_deposit_data;
-  if (partial !== undefined && partial !== null && partial.length > 0) {
-    return partial;
+  const hasPartial =
+    partial !== undefined && partial !== null && partial.length > 0;
+  if (legacyLayout) {
+    if (hasPartial) {
+      throw lockInvalid(
+        `Validator ${index} of a pre-v1.8.0 lock has partial_deposit_data, which that lock's hash does not cover`,
+        { issue: 'partial_deposit_data_unexpected', index },
+      );
+    }
+    return validator.deposit_data !== undefined ? [validator.deposit_data] : [];
   }
-  // From v1.8.0 a lock's deposits are in partial_deposit_data only; its
-  // deposit_data is not covered by lock verification, so never read it.
-  if (legacyLayout && validator.deposit_data !== undefined) {
-    return [validator.deposit_data];
-  }
-  return [];
+  return hasPartial ? partial : [];
 };
 
 /** Locks before v1.8.0 keep one `deposit_data` per validator. */
@@ -270,7 +311,7 @@ const collectDeposits = (
   const depositsByAmount = new Map<bigint, Deposit[]>();
   for (const index of selected) {
     const validator = validators[index];
-    const raw = rawDepositData(validator, legacyLayout);
+    const raw = rawDepositData(validator, legacyLayout, index);
     if (raw.length === 0) {
       throw lockInvalid(`Validator ${index} has no deposit data`, {
         issue: 'deposit_data_missing',
@@ -298,17 +339,32 @@ const compareBigints = (a: bigint, b: bigint): number => {
 
 /**
  * One deposit per selected validator for `amount` (throws
- * DEPOSIT_AMOUNT_NOT_IN_LOCK if not every one has it), or for the only
- * amount, else none.
+ * DEPOSIT_AMOUNT_NOT_IN_LOCK if not every one has it). Without `amount`:
+ * the lock's only amount, or DEPOSIT_AMOUNT_REQUIRED when it has several.
+ * An amount is never chosen for the caller.
  */
 const pickDeposits = (
   amount: bigint | undefined,
   amounts: bigint[],
   depositsByAmount: Map<bigint, Deposit[]>,
   selected: number[],
-): Deposit[] | undefined => {
+): Deposit[] => {
+  // The amounts every selected validator has a deposit for.
+  const available = amounts.filter(
+    a => depositsByAmount.get(a)?.length === selected.length,
+  );
   if (amount === undefined) {
-    return amounts.length === 1 ? depositsByAmount.get(amounts[0]) : undefined;
+    if (amounts.length !== 1) {
+      throw new ObolError(
+        'DEPOSIT_AMOUNT_REQUIRED',
+        `The lock has deposit data for ${amounts.length} amounts (${amounts.join(', ')} wei): pass the one to deposit as options.amount`,
+        {
+          hint: 'Each amount is a separate deposit per validator. Pass amount (wei), e.g. 32 ETH to activate the validators at once, or read depositsByAmount to deposit in parts',
+          details: { available },
+        },
+      );
+    }
+    amount = amounts[0];
   }
   const deposits = depositsByAmount.get(amount);
   if (deposits?.length !== selected.length) {
@@ -317,12 +373,7 @@ const pickDeposits = (
       `Not every requested validator in the lock has a deposit of ${amount} wei`,
       {
         hint: 'Pick one of the available amounts',
-        details: {
-          amount,
-          available: amounts.filter(
-            a => depositsByAmount.get(a)?.length === selected.length,
-          ),
-        },
+        details: { amount, available },
       },
     );
   }
@@ -338,17 +389,24 @@ const pickDeposits = (
  * signatures (deposits and builder registration) of the returned
  * validators: for a 10k-validator lock about 2 s plus about 25 ms per
  * signature with the default backend; `verify: 'full'` for every check); every returned validator has `partial_deposit_data`
- * (v1.8.0+) or `deposit_data`; each deposit has well-formed pubkey,
+ * (v1.8.0+) or `deposit_data` (v1.6.0, v1.7.0), read only from the field
+ * that version's lock hash covers (a legacy lock with `partial_deposit_data`
+ * entries is LOCK_INVALID `partial_deposit_data_unexpected`, also with
+ * `verify: false`); each deposit has well-formed pubkey,
  * credentials and signature, a positive gwei amount, the validator's group
  * pubkey, and a `deposit_data_root` that matches (computed when absent). A
  * second deposit of one amount for a validator is ignored. With `amount`,
- * every returned validator must have a deposit of it.
+ * every returned validator must have a deposit of it. Without `amount`, the
+ * lock must hold deposit data for exactly one amount: a lock with several
+ * (Charon's default is 1 ETH and 32 ETH) throws DEPOSIT_AMOUNT_REQUIRED
+ * with the amounts in `details.available`; `deposits` is never left out and
+ * an amount is never chosen for the caller.
  *
  * @throws PAYLOAD_INVALID (also `options.validators` not in the lock, issue
  *   `not_in_lock`); LOCK_INVALID (`step` and `index` from verifyLock, or
  *   `issue` `fork_version_mismatch`, `deposit_data_missing`,
- *   `deposit_data_invalid`); DEPOSIT_AMOUNT_NOT_IN_LOCK (`amount`,
- *   `available`).
+ *   `deposit_data_invalid`); DEPOSIT_AMOUNT_REQUIRED (`available`);
+ *   DEPOSIT_AMOUNT_NOT_IN_LOCK (`amount`, `available`).
  */
 export const fromLock = async (
   input: unknown,
@@ -390,6 +448,6 @@ export const fromLock = async (
     validators: selected,
     amounts,
     depositsByAmount,
-    ...(deposits !== undefined ? { deposits } : {}),
+    deposits,
   };
 };

@@ -32,6 +32,12 @@ export interface CompareInput {
   events: SimulatedEvent[];
   changes: StateChange[];
   values: ReadValues;
+  /**
+   * Before / after reads that failed (without the expected ones, such as the
+   * state of a contract this transaction creates). Any of them makes the
+   * comparison `notCompared` at best.
+   */
+  unread?: string[];
 }
 
 type Obj = Record<string, any>;
@@ -44,10 +50,20 @@ const lower = (v: unknown): string => String(v).toLowerCase();
 class Comparer {
   readonly compared: string[] = [];
   readonly differences: string[] = [];
+  readonly notCompared: string[] = [];
 
   constructor(private readonly input: CompareInput) {}
 
+  /**
+   * Compares one thing. A simulated value of `undefined` means it could not
+   * be read (see `ethDelta`, `valueDelta`): that is recorded as not
+   * compared, never as equal and never dropped.
+   */
   check(what: string, preview: unknown, simulated: unknown): void {
+    if (simulated === undefined) {
+      this.notCompared.push(what);
+      return;
+    }
     this.compared.push(what);
     const same =
       typeof preview === 'string' && typeof simulated === 'string'
@@ -109,10 +125,17 @@ class Comparer {
   }
 
   result(): PreviewComparison {
+    let status: PreviewComparison['status'] = 'match';
+    if (this.differences.length > 0) status = 'mismatch';
+    else if (this.compared.length === 0 || this.notCompared.length > 0) {
+      status = 'notCompared';
+    }
     return {
-      ok: this.differences.length === 0,
+      status,
+      ok: status === 'match',
       differences: this.differences,
       compared: this.compared,
+      notCompared: this.notCompared,
     };
   }
 }
@@ -138,10 +161,11 @@ const payouts = (c: Comparer, ovm: string, p: Obj, label: string): void => {
 /** ovm.prepareDistribute */
 const distribute = (c: Comparer, tx: SimTx, p: Obj): void => {
   payouts(c, tx.to, p, 'OVM');
-  const stake = c.valueDelta(tx.to, 'amountOfPrincipalStake');
-  if (stake !== undefined) {
-    c.check('amountOfPrincipalStake change', -p.principalPayout, stake);
-  }
+  c.check(
+    'amountOfPrincipalStake change',
+    -p.principalPayout,
+    c.valueDelta(tx.to, 'amountOfPrincipalStake'),
+  );
   if (p.mode === 'pull') {
     const pending = c.valueDelta(tx.to, 'fundsPendingWithdrawal');
     c.check(
@@ -185,11 +209,11 @@ const walletAmount = (r: Obj, minWithdraw: bigint, paused: boolean): bigint => {
   return amount;
 };
 
-/** splits.prepareDistribution */
+/** splits.prepareDistributeAll */
 const distribution = (
   c: Comparer,
   p: Obj,
-  prepared: Prepared<'distribution'>,
+  prepared: Prepared<'distributeAll'>,
 ): void => {
   const paused = (address: string): boolean =>
     prepared.checks.some(
@@ -510,12 +534,15 @@ export const comparePreview = (
   const c = new Comparer(input);
   const p = prepared.preview as unknown;
   const { tx } = input;
+  // A value that was not read is not an unchanged value: whatever the
+  // per-kind comparison below finds, the result cannot be `match`.
+  for (const what of input.unread ?? []) c.notCompared.push(what);
   if (!isObj(p)) return c.result();
   switch (prepared.kind) {
     case 'distribute':
       distribute(c, tx, p);
       break;
-    case 'distribution':
+    case 'distributeAll':
       distribution(c, p, prepared);
       break;
     case 'withdraw':

@@ -44,7 +44,7 @@ import {
 } from '../internal/yielder.js';
 import { chainIdForForkVersion } from '../chains.js';
 import { isObolError } from '../errors.js';
-import { decode, invalid, T } from '../schema.js';
+import { decode, invalid, rejectUnknownKeys, T } from '../schema.js';
 import { nobleBls, type BlsBackend } from './blsBackend.js';
 import {
   assertSignatureClients,
@@ -133,15 +133,37 @@ export interface VerifyLockOptions {
 
 const DEFAULT_YIELD_MS = 50;
 
-export const VerifyLockOptionsSchema = Type.Object({
-  level: Type.Optional(
-    Type.Union([Type.Literal('attested'), Type.Literal('full')]),
-  ),
-  signatures: Type.Optional(
-    Type.Union([Type.Literal('all'), Type.Literal('none'), Type.Array(T.Uint)]),
-  ),
-  yieldMs: Type.Optional(T.Uint),
-});
+/** Every key of `VerifyLockOptions`; any other key is PAYLOAD_INVALID. */
+export const VERIFY_LOCK_OPTION_KEYS = [
+  'publicClient',
+  'publicClients',
+  'level',
+  'signatures',
+  'yieldMs',
+  'bls',
+  'signal',
+] as const;
+
+export const VerifyLockOptionsSchema = Type.Object(
+  {
+    level: Type.Optional(
+      Type.Union([Type.Literal('attested'), Type.Literal('full')]),
+    ),
+    signatures: Type.Optional(
+      Type.Union([
+        Type.Literal('all'),
+        Type.Literal('none'),
+        Type.Array(T.Uint),
+      ]),
+    ),
+    yieldMs: Type.Optional(T.Uint),
+  },
+  {
+    additionalProperties: false,
+    description:
+      'The options a schema can describe. The options object also takes publicClient, publicClients, bls and signal (VERIFY_LOCK_OPTION_KEYS); any other key is PAYLOAD_INVALID.',
+  },
+);
 
 const BACKEND_METHODS = [
   'decodePublicKey',
@@ -481,6 +503,17 @@ const checkDeposits = async (run: Run): Promise<void> => {
   await guarded(step, 'malformed', async () => {
     const { allowed, required } = allowedDepositAmounts(definition, layout);
     for (const [i, validator] of lock.distributed_validators.entries()) {
+      // Before v1.8.0 a lock has one `deposit_data` per validator and its
+      // lock hash does not cover `partial_deposit_data`: an entry there is
+      // unsigned by the DKG, so the lock is refused instead of ignoring it
+      // (Charon drops the field when it reads such a lock).
+      if (
+        layout !== 'v1.8+' &&
+        Array.isArray(validator.partial_deposit_data) &&
+        validator.partial_deposit_data.length > 0
+      ) {
+        fail(step, 'partial_deposit_data_unexpected', i);
+      }
       const deposits = depositsOf(run, i);
       if (deposits === undefined || deposits.length === 0) {
         fail(step, 'deposit_data_missing', i);
@@ -588,6 +621,12 @@ const checkLockSignatures = async (run: Run): Promise<void> => {
 const runSteps = async (run: Run): Promise<LockVerification> => {
   const { level } = run;
   try {
+    // First, so a lock of a version the SDK does not implement (v1.9.0, or
+    // one below v1.6.0) reads as unsupported and not as a signature or hash
+    // failure of rules that were never meant for it.
+    if (!isSupportedVersion(run.lock.cluster_definition.version)) {
+      fail('hash_mismatch', 'version_unsupported');
+    }
     const flow = checkFlow(run.lock);
     checkDefinition(run);
     await checkDefinitionSignatures(run, flow);
@@ -682,6 +721,9 @@ export const verifyLock = async (
   options: VerifyLockOptions = {},
 ): Promise<LockVerification> => {
   const lock = decode(LockSchema, input, 'lock');
+  // A misspelt option (`signature` for `signatures`) must not be dropped: it
+  // would turn a check off without a word.
+  rejectUnknownKeys(options, VERIFY_LOCK_OPTION_KEYS, 'options');
   const scalars = decode(
     VerifyLockOptionsSchema,
     {

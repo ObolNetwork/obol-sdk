@@ -3,7 +3,7 @@ import { fromHexString, toHexString } from '@chainsafe/ssz';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { numberToBytesBE } from '@noble/curves/utils.js';
 import type { Hex } from 'viem';
-import { depositDataRoot } from '../../src/deposits/verifyDepositData.js';
+import { depositDataRoot } from '../../src/deposits/assertDepositData.js';
 import type { Deposit } from '../../src/types.js';
 
 const ls = bls12_381.longSignatures;

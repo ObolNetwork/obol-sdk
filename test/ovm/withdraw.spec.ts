@@ -1,6 +1,7 @@
 import { decodeFunctionData, type Hex } from 'viem';
 import { ovmAbi } from '../../src/abi.js';
 import { CHAINS, currentEpoch } from '../../src/chains.js';
+import { findingsToAcknowledge } from '../../src/send.js';
 import { prepareConsolidate, prepareWithdraw } from '../../src/ovm/withdraw.js';
 import { checkWithdrawalRequests } from '../../src/ovm/requestRules.js';
 import type { DepositStatus } from '../../src/deposits/status.js';
@@ -516,7 +517,6 @@ describe('ovm.prepareConsolidate', () => {
   const base = {
     ovm: OVM,
     requests: [{ sources: [PUBKEY_A, PUBKEY_B], target: PUBKEY_C }],
-    acknowledgeStakeMovesToTarget: true as const,
     from: OWNER,
   };
 
@@ -542,17 +542,42 @@ describe('ovm.prepareConsolidate', () => {
     });
   });
 
-  it('requires the acknowledgement first, also for untyped callers', async () => {
-    for (const ack of [undefined, false, 'true']) {
-      const error = await caught(
-        prepareConsolidate(ovmChain().context(), {
-          ...base,
-          acknowledgeStakeMovesToTarget: ack,
-          ovm: 'not an address',
-        } as any),
-      );
-      expect(error.code).toBe('CONSOLIDATION_NOT_ACKNOWLEDGED');
-    }
+  // rc.12: no acknowledgement flag on the input. A consolidation that moves
+  // stake to another withdrawal address, or whose rules could not be
+  // checked, carries a warning that `send` refuses until acknowledged.
+  it('rejects the rc.11 acknowledgeStakeMovesToTarget flag as an unknown key', async () => {
+    const error = await caught(
+      prepareConsolidate(ovmChain().context(), {
+        ...base,
+        acknowledgeStakeMovesToTarget: true,
+      } as any),
+    );
+    expect(error.code).toBe('PAYLOAD_INVALID');
+    expect(error.details.issues).toEqual([
+      expect.objectContaining({
+        path: 'acknowledgeStakeMovesToTarget',
+        issue: 'unknown_key',
+      }),
+    ]);
+  });
+
+  it('without a status source: a VALIDATOR_STATUS_UNCHECKED warning that send refuses', async () => {
+    const chain = ovmChain({ consolidationFee: 5n });
+    const result = await prepareConsolidate(chain.context(), base);
+    expect(result.checks).toEqual([
+      expect.objectContaining({
+        code: 'VALIDATOR_STATUS_UNCHECKED',
+        severity: 'warning',
+      }),
+    ]);
+    expect(findingsToAcknowledge(result).map(f => f.code)).toEqual([
+      'VALIDATOR_STATUS_UNCHECKED',
+    ]);
+    expect(
+      findingsToAcknowledge(result, {
+        acknowledge: ['VALIDATOR_STATUS_UNCHECKED'],
+      }),
+    ).toEqual([]);
   });
 
   it('limits sources to 1–63', async () => {
@@ -632,7 +657,38 @@ describe('ovm.prepareConsolidate', () => {
           credentials('02', OVM),
         ),
       );
+      // Nothing to acknowledge: the stake stays with this OVM.
       expect(result.checks).toEqual([]);
+      expect(findingsToAcknowledge(result)).toEqual([]);
+    });
+
+    it('a target with another withdrawal address needs CONSOLIDATION_CREDENTIALS_DIFFER acknowledged', async () => {
+      const result = await run(
+        rows(
+          credentials('01', OVM),
+          credentials('01', OVM),
+          credentials('02', OTHER),
+        ),
+      );
+      expect(result.checks.every(f => f.severity === 'warning')).toBe(true);
+      expect(result.checks[0].details).toEqual({
+        source: PUBKEY_A,
+        target: PUBKEY_C,
+        sourceWithdrawalAddress: OVM.toLowerCase(),
+        targetWithdrawalAddress: OTHER.toLowerCase(),
+      });
+      expect(findingsToAcknowledge(result)).toHaveLength(2);
+      // Another code does not cover it.
+      expect(
+        findingsToAcknowledge(result, {
+          acknowledge: ['VALIDATOR_STATUS_UNCHECKED'],
+        }),
+      ).toHaveLength(2);
+      expect(
+        findingsToAcknowledge(result, {
+          acknowledge: ['CONSOLIDATION_CREDENTIALS_DIFFER'],
+        }),
+      ).toEqual([]);
     });
 
     it('warns when the target belongs to another address (CONSOLIDATION_CREDENTIALS_DIFFER)', async () => {

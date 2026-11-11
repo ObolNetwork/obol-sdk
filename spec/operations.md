@@ -8,6 +8,11 @@ Contents: [Shared types](#shared-types) · [Client](#client) · [cluster](#clust
 [ovm](#ovm) · [splits](#splits) · [setup](#setup) · [incentives](#incentives) · [exits](#exits) · [terms](#terms) ·
 [send](#send) · [simulate](#simulate) · [Not placed in the module table](#not-placed-in-the-module-table) · [Open questions](#open-questions)
 
+**Names.** The prefix of an operation says what it does with a problem (settled in 3.0.0-rc.12): `prepare*` builds a
+checked transaction and reports findings; `preview*` returns `{ preview, checks, blockNumber }` and no transaction;
+`verify*` returns a result object for untrusted input (throwing only for malformed input); `isValid*` returns a
+boolean; `assert*` throws when its check fails; `get*` reads; `compute*` hashes.
+
 ## Shared types
 
 ```
@@ -20,7 +25,8 @@ Prepared<K> = {
 }
 AnyPrepared   = Prepared<"deposit"> | Prepared<"withdraw"> | …   # discriminated by kind
 PreviewResult<P> = { preview: P, checks: Finding[], blockNumber: uint }   # every preview* operation
-Finding = { code: string, severity: "warning" | "info", message: string, hint: string?,
+Finding = { code: FindingCode, severity: "warning" | "info",   # one severity per code (FINDINGS); a Prepared<K>
+            message: string, hint: string?,                   # carries only the codes of FINDING_CODES_BY_KIND[K]
             subject: { pubkey: Pubkey } | { address: Address } | { index: uint }?,   # set when it is about one item
             details: object? }
 Source  = "api" | "chain"
@@ -36,10 +42,10 @@ Deposit = { pubkey: Pubkey, withdrawalCredentials: Hex32, signature: Hex96, depo
 | `withdraw`            | `ovm.prepareWithdraw`                                                                                                          | `WithdrawPreview`                          |
 | `consolidate`         | `ovm.prepareConsolidate`                                                                                                       | `ConsolidatePreview`                       |
 | `distribute`          | `ovm.prepareDistribute`                                                                                                        | `DistributePreview`                        |
-| `distribution`        | `splits.prepareDistribution`                                                                                                   | `DistributionPreview`                      |
+| `distributeAll`       | `splits.prepareDistributeAll`                                                                                                  | `DistributeAllPreview`                     |
 | `createOvm`           | `setup.prepareCreateOvm`                                                                                                       | `{ factory }`                              |
 | `ovmWithSplits`       | `setup.prepareOvmWithSplits`                                                                                                   | `OvmWithSplitsPreview`                     |
-| `createSplit`         | `splits.prepareCreateSplit`, `setup.prepareCreateSplit`                                                                        | `{ address, params }`                      |
+| `createSplit`         | `splits.prepareCreateSplit`                                                                                                    | `{ address, params }`                      |
 | `claim`               | `incentives.prepareClaim`                                                                                                      | `{ amount, contractAddress }`              |
 | `eoaWithdraw`         | `withdrawals.prepareEoaWithdraw`                                                                                               | `EoaWithdrawPreview`                       |
 | `role`                | `ovm.prepareGrantRoles`, `prepareRevokeRoles`, `prepareRenounceRoles`                                                          | `{ function, args }`                       |
@@ -53,7 +59,9 @@ Deposit = { pubkey: Pubkey, withdrawalCredentials: Hex32, signature: Hex96, depo
 - `request.chainId` is the client chain. `request.value` is `0` unless stated.
 - The head block an operation pins its reads to (and scans logs up to) is read with the viem client's block-number
   cache bypassed (`cacheTime: 0`): a cached number (viem keeps it for the polling interval, 4 s by default) would miss
-  a transaction the caller has just mined, e.g. `ovm.verify` would report a just-created OVM as `notObol`.
+  a transaction the caller has just mined, e.g. `ovm.getProvenance` would report a just-created OVM as `notObol`.
+- `checks` is not advisory: `send` refuses a `Prepared` while one of its `warning` findings is not acknowledged by
+  code (see "send"). `info` findings need no acknowledgement. A check that could not run is reported as a `warning`.
 - A `Prepared` is a snapshot checked at `blockNumber`. `send` does not refuse an old one: the writes are safe when
   stale (a distribution pays what is there at execution; fees have a maximum). `isStale(prepared, head, maxAgeBlocks)`
   (`pure`) is true when `head − blockNumber > maxAgeBlocks` (never for a `Prepared` without `blockNumber`); an app that
@@ -70,6 +78,14 @@ Not repeated below:
 - **G1** Inputs are decoded against the operation's schema: required fields, types, hex lengths, address format
   (checksum rule in README), integer ranges. Failure: `PAYLOAD_INVALID` with `issues[]` (path + message).
   (2.15 `PayloadValidationError`, `InvalidArgumentError`)
+  Caller-supplied inputs and options are strict (3.0.0-rc.12): a key the operation does not define is
+  `PAYLOAD_INVALID` with `issue: "unknown_key"` and a message naming the key and the allowed keys, never ignored (a
+  misspelt `signatures` would otherwise turn a check off). This covers every `prepare*` input, every options object
+  (`verifyLock`, `isValidLock`, `fromLock`, `assertDepositData`, `status`, `verifyDefinition`, `watch`, `simulate`,
+  `send`, `ovm.getProvenance`, `blsVerify`), the top-level keys of `exits.assertPartialExit` / `exits.aggregate` and the
+  `createObolClient` config. Documents stay tolerant of extra fields: cluster definitions and locks, `Deposit`
+  objects, split params, and the API wire objects of exits (`cluster`, `payload`, `existing`, `validator`, `exit`),
+  as do Obol API and beacon node responses.
 - **G2** A `chain` or `api+chain` operation that reads contracts requires the client chain to have them: OVM, splits,
   incentives and deposit operations are mainnet (1) and Hoodi (560048) only. Else `UNSUPPORTED_CHAIN`. (2.15)
 - **G3** An operation that signs, or `send`, checks the `walletClient` chain equals the client chain, else
@@ -224,6 +240,14 @@ Tag: `pure` (`chain` when a definition signer is a contract wallet: EIP-1271 cal
   publicClients: Record<chainId, PublicClient> | (chainId) => PublicClient? }  # by the lock's chain
 ```
 
+An options key outside this list is `PAYLOAD_INVALID` (`unknown_key`), also through `isValidLock` (3.0.0-rc.12;
+before, `{ level: "attested", signature: "all" }` silently checked no BLS signature).
+
+A lock whose definition `version` the SDK does not implement (v1.9.0, or below v1.6.0) fails first, before any other
+step, as `{ ok: false, step: "hash_mismatch", issue: "version_unsupported" }` (3.0.0-rc.12 reports it first; a
+v1.9.0 lock used to fail at whichever earlier step its contents tripped). v1.9.0 is not supported by design: the
+Obol API does not accept it.
+
 Output: `{ ok: bool, level, step: string?, issue: string?, validator: uint? }`; `validator` is the index of the
 failing validator when the failing check is per validator (steps 5–8). Steps: `definition_flow_unknown`,
 `definition_invalid`, `definition_signature_invalid`, `definition_signature_unverifiable`, `hash_mismatch`,
@@ -291,7 +315,7 @@ element (G1 `x`; G2 `x.c1` and `x.c0`) below the field modulus, since `x + p` wo
 non-canonical public share, group key or signature fails its step (`malformed_share`, `signature_invalid`). (new in
 3.0.0-rc.4)
 
-BLS signature checks (steps 7, 8 and `deposits.verifyDepositData`) run in batches of 32: each signature is weighted
+BLS signature checks (steps 7, 8 and `deposits.assertDepositData`) run in batches of 32: each signature is weighted
 by a fresh secret random 64-bit scalar and every point is checked to be in the prime-order subgroup and not the
 identity, so a batch passes only if every signature in it is valid on its own (a plain sum would accept invalid
 signatures that cancel out). A failing batch is checked one signature at a time, and the first invalid one is
@@ -333,7 +357,9 @@ Tag: `pure`. `parseEnr(enr)`: decodes a text ENR (`enr:` + base64url RLP, EIP-77
 }`; anything else: `PAYLOAD_INVALID` (path `enr`). `isValidEnr(value)`: `true` iff `parseEnr` would succeed; never
 throws; whitespace is not trimmed. (new in 3.0.0-rc.5; 2.x re-exported the `@chainsafe/enr` class)
 
-### verifyTypedDataSignature
+### isValidTypedDataSignature
+
+Named `verifyTypedDataSignature` until 3.0.0-rc.12: it returns a boolean, like `isValidLock`.
 
 Tag: `pure` (`chain` for a contract-wallet signer). Inputs: `{ address, signature, typedData: { domain?, types,
 primaryType, message }, chainId?: uint, publicClient?, publicClients? }`. Output: `bool`. The 2.x
@@ -400,8 +426,11 @@ Pubkey)[]?, yieldMs: uint?, bls: BlsBackend?, publicClient: PublicClient?, publi
 
 ```
 { lockHash: Hash32, validators: uint[] (lock indexes, ascending), amounts: bigint[] (ascending),
-  depositsByAmount: map bigint -> Deposit[], deposits: Deposit[]? }
+  depositsByAmount: map bigint -> Deposit[], deposits: Deposit[] }
 ```
+
+`deposits` is always present and holds one deposit per returned validator, all of one amount. An options key
+outside the list above is `PAYLOAD_INVALID` (`unknown_key`).
 
 `validators` picks the validators to return, by index in the lock or group pubkey (default all; one that is not in
 the lock: `PAYLOAD_INVALID`, issue `not_in_lock`). Results stay in lock order.
@@ -415,17 +444,27 @@ Checks:
    (2.15 `getDepositData` ran the full verification)
 2. The lock has at least one validator; each returned one has `partial_deposit_data` (v1.8.0+; `deposit_data` is
    not read) or `deposit_data` (v1.6.0, v1.7.0). Else `LOCK_INVALID` (issue `deposit_data_missing`). (2.15)
+   Only the field the lock hash of that version covers is read, also with `verify: false`. A v1.6.0 / v1.7.0 lock
+   whose validator has a non-empty `partial_deposit_data` is `LOCK_INVALID` (issue
+   `partial_deposit_data_unexpected`, `index`): that field is outside a legacy lock's hash, so an entry there was
+   not produced by the DKG (3.0.0-rc.12; before, the entry was returned in place of the signed `deposit_data`).
+   Charon drops the field when reading such a lock; the SDK refuses the lock.
 3. Each deposit: pubkey, credentials, signature are well-formed hex of the right length, `amount` is a positive
    integer (gwei); the pubkey equals the validator's `distributed_public_key`; a present `deposit_data_root` equals the
    recomputed root (an absent one is computed). Else `LOCK_INVALID` (issue `deposit_data_invalid`). (2.15)
 4. Duplicate amounts for one validator keep the first. (2.15)
 5. With `amount`, every returned validator has a deposit of that amount, else `DEPOSIT_AMOUNT_NOT_IN_LOCK` (lists the
-   available amounts). Without `amount`, `deposits` is set only when the returned validators have one amount. (2.15)
+   available amounts). Without `amount`, the lock must hold deposit data for exactly one amount, which is returned;
+   a lock with several (Charon's default is 1 ETH and 32 ETH per validator; 1, 8, 32 and 256 ETH with compounding)
+   is `DEPOSIT_AMOUNT_REQUIRED` with `available` (the amounts every returned validator has). The SDK never picks an
+   amount: each choice deposits a different amount of ETH. (3.0.0-rc.12; before, `deposits` was left out, 2.15)
 
 The lock's `fork_version` must match the client chain when called through the client (`LOCK_INVALID`, issue
 `fork_version_mismatch`). (2.15 `getDepositData`)
 
-### deposits.verifyDepositData
+### deposits.assertDepositData
+
+Named `deposits.verifyDepositData` until 3.0.0-rc.12: it throws when a check fails and returns nothing.
 
 Tag: `pure`. Inputs: `deposits: Deposit[]`, `{ chainId: uint, kind: "deposit" | "topUp" (default "deposit"),
 expectedWithdrawalAddress: Address?, yieldMs: uint?, signal: AbortSignal?, bls: BlsBackend? }`. Output: nothing
@@ -536,8 +575,24 @@ null`, and `credentialsConflict` matches its validly signed deposits. A signatur
    `not_in_lock`), a pubkey the lock has but `/state` leaves out is `new`, and a registry validator's queued top-ups
    come as one amount without credentials. Without `lockHash` and without `beaconUrl`: `STATUS_UNAVAILABLE` (details
    `reason: "endpoint_unavailable"`, hint: pass `lockHash` or `beaconUrl`).
-3. Chain fallback with `beaconUrl`, when the API is off, fails (any other API error) or lacks the route without
-   `lockHash`: `GET /eth/v1/beacon/states/head/pending_deposits`, then `GET
+3. Chain fallback with `beaconUrl`, when the API is off, is unavailable, or lacks the route without `lockHash`.
+   "Unavailable" is `API_TIMEOUT`, or `API_ERROR` with no HTTP status (a network failure) or a 5xx. Any other API
+   answer is thrown and the beacon node is not asked: 400 / 422 (`API_VALIDATION`), 401 / 403
+   (`API_UNAUTHORIZED`), 409, 429 (`API_RATE_LIMIT`), 451, `API_RESPONSE_MISMATCH`, and a 404 from the by-lock
+   routes of 2. (the API does not know that lock). A 404 from the deposit-status route itself is the route being
+   absent (it answers `new` for an unknown pubkey, never 404), which is 2. (3.0.0-rc.12; before, every API error
+   fell back.)
+
+   Before any state is read the node is checked (3.0.0-rc.12), and a failed check is `STATUS_UNAVAILABLE`, never
+   "every pubkey is `new`":
+   - `GET /eth/v1/beacon/genesis`: `genesis_validators_root` equals the client chain's (chain table), else
+     `reason: "beacon_wrong_chain"`;
+   - `GET /eth/v1/node/syncing`: `is_syncing` is `false` and `el_offline` is not `true`, else `reason:
+"beacon_syncing"`; `is_optimistic` is not `true`, else `reason: "beacon_optimistic"` (`el_offline` and
+     `is_optimistic` may be absent on older nodes);
+   - every state answer below with `execution_optimistic: true` is refused (`reason: "beacon_optimistic"`).
+
+   Then: `GET /eth/v1/beacon/states/head/pending_deposits`, then `GET
 /eth/v1/beacon/states/head/pending_partial_withdrawals` (summed per validator index) and `POST
 /eth/v1/beacon/states/head/validators` (with `validator.activation_epoch`, `exit_epoch`, `effective_balance`); the
    pending queue is read before the registry so a deposit moving from the queue to the registry is not missed (2.16
@@ -574,17 +629,18 @@ Tag: `chain` (uses `deposits.status` when available). Inputs:
 
 Checks:
 
-1. `deposits.verifyDepositData` with `expectedWithdrawalAddress` = the OVM address (via ovm) or the given address
+1. `deposits.assertDepositData` with `expectedWithdrawalAddress` = the OVM address (via ovm) or the given address
    (via batch; required, `PAYLOAD_INVALID`). (2.15; 2.15 let `eoa.deposit` omit the address, v3 does not)
-2. Via ovm: `ovm.verify(ovm)` is `obol`, else `OVM_NOT_OBOL` (notObol) or `PROVENANCE_UNKNOWN` (unknown). The
+2. Via ovm: `ovm.getProvenance(ovm)` is `obol`, else `OVM_NOT_OBOL` (notObol) or `PROVENANCE_UNKNOWN` (unknown). The
    principal is at stake, so unknown is an error here. (new; 2.16 rule)
 3. Via ovm: the sender is the owner or holds `DEPOSIT_ROLE` (`owner()`, `rolesOf(from)`), else `OVM_ROLE_MISSING`
    (the call would revert). (new)
-4. Via batch with credentials pointing at a contract that `ovm.verify` says is `obol`: Finding `OVM_STAKE_NOT_TRACKED`
+4. Via batch with credentials pointing at a contract that `ovm.getProvenance` says is `obol`: Finding `OVM_STAKE_NOT_TRACKED`
    (warning). The batch contract does not raise `amountOfPrincipalStake`, so the principal would later be routed as
    rewards unless the owner calls `setAmountOfPrincipalStake`. (new; from `ObolValidatorManager.deposit`)
 5. Existence, when `deposits.status` can answer (API or `beaconUrl`; else Finding `DEPOSIT_EXISTENCE_UNCHECKED`,
-   info):
+   a warning since 3.0.0-rc.12: `send` needs it acknowledged). "The expected address" is the OVM (via ovm) or
+   `expectedWithdrawalAddress` (via batch):
    - queue only, `signaturesPending` still true after the `pendingRetry` re-reads, and the credentials undecided (an
      unchecked deposit before the first valid one) → `STATUS_UNAVAILABLE` (details `reason: "signatures_pending"`,
      `pubkey`; hint: retry in a slot or two): which deposit creates the validator, and so its credentials, is not
@@ -602,8 +658,19 @@ Checks:
      `DEPOSIT_CONFLICT` nor, on `credentialsConflict`, more than the warning;
    - `kind: "topUp"` and the pubkey is `new`, or only in the queue with every queued deposit `signatureValid: false`
      → `DEPOSIT_TOP_UP_TARGET_MISSING` (new);
-   - `kind: "deposit"` and the validator exists → Finding `DEPOSIT_IS_TOP_UP` (warning: credentials are ignored, the
-     validator keeps its own) (2.16 message);
+   - `kind: "deposit"` and the pubkey is already in the validator registry, in any status (`pending_initialized`
+     through `withdrawal_done`): always an error (3.0.0-rc.12; before, the warning `DEPOSIT_IS_TOP_UP`). The beacon
+     chain applies such a deposit as a top-up and ignores its withdrawal credentials, so the ETH follows the ones
+     the validator has:
+     - they are not `0x01` / `0x02` credentials of the expected address, or are unknown → `DEPOSIT_CONFLICT`
+       (`existing: "validator"`, `existingCredentials`). The deposit front-running case: the validator was created
+       first with someone else's withdrawal address;
+     - they are → `DEPOSIT_VALIDATOR_EXISTS` (`status`, `withdrawalCredentials`). Adding stake to an existing
+       validator is `kind: "topUp"`;
+   - `kind: "topUp"` and the credentials the validator has (registry), or will get (the first possibly valid queued
+     deposit), do not point at the expected address → Finding `TOP_UP_CREDENTIALS_FOREIGN` (warning: the top-up can
+     only be withdrawn to those credentials; a top-up to a validator the caller does not control is a donation, so
+     `send` refuses it until acknowledged) (3.0.0-rc.12);
    - same-credential deposits already queued (possibly valid ones) → Finding `DEPOSIT_ALREADY_QUEUED` (info) (2.16);
    - `kind: "topUp"` to an `exited` validator → Finding `TOP_UP_EXITED_VALIDATOR` (warning) (new);
    - the validator has `0x01` (or `0x00`) credentials and `balance` + queued amounts + this deposit > 32 ETH →
@@ -654,20 +721,36 @@ Tag: `pure`. `OVM_ROLES = { WITHDRAWAL: 0x01, CONSOLIDATION: 0x02, SET_BENEFICIA
 SET_REWARD: 0x10, DEPOSIT: 0x20 }` (matches the contract constants). The owner may call every role-gated function.
 `expectedWithdrawalCredentials(ovm, prefix: "0x01" | "0x02")` = `prefix ‖ 11 zero bytes ‖ ovm`, lowercase. (2.16)
 
-### ovm.verify
+### ovm.getProvenance
 
-Tag: `api+chain`. Input: `ovm: Address`. Output: `{ status: "obol" | "notObol" | "unknown", source: Source,
-factoryAddress: Address, reason: string, creationTxHash: Hash32? }`. (2.16 `OVM.verify`, launchpad rules)
+Named `ovm.verify` until 3.0.0-rc.12 (result type `OvmVerification`): it reads where a contract came from and returns
+a status; it does not verify untrusted input.
+
+Tag: `api+chain`. Inputs: `ovm: Address`, `{ requireChain: bool (false) }`. Output: `{ status: "obol" | "notObol" |
+"unknown", source: Source, factoryAddress: Address, reason: string, creationTxHash: Hash32? }`. (2.16 `OVM.verify`,
+launchpad rules)
+
+`source` says who vouches for the verdict. `chain`: the caller's RPC; for `obol` that is always the factory's
+`CreateObolValidatorManager` log for this address, read from the creation receipt (2.) or by the log scan (4.).
+`api`: the Obol API alone. Since 3.0.0-rc.12 an `obol` / api result is only what could not be confirmed on chain,
+and `deposits.prepareDeposit` does not accept it: it calls with `requireChain: true`, which never returns
+`obol` / api.
 
 1. `getCode(ovm)`: a read error → `unknown` / chain. Empty code, or an EIP-7702 delegation (`0xef0100…`) → `notObol` /
    chain.
 2. API, the OVM record `GET /v1/ovm/:network/:address`: its `provenance` is used only when it is `obol`, the record's
-   `address` is this address and `provenance.factoryAddress` (when present) is the chain's OVM factory: `obol` / api
-   (with `creationTxHash`), with the API's `reason`. `notObol` (which can be an answer cached before the OVM was
+   `address` is this address and `provenance.factoryAddress` (when present) is the chain's OVM factory. That answer
+   is then confirmed on chain (3.0.0-rc.12): with a `creationTxHash`, `eth_getTransactionReceipt` must be a
+   successful transaction holding a log emitted by the chain table's factory with topic 0
+   `CreateObolValidatorManager` and topic 1 = this address → `obol` / chain (one request, no log scan). A receipt
+   without that log means the API is wrong → step 3. No `creationTxHash`, or the receipt could not be read: with
+   `requireChain` → step 3; without it → `obol` / api (with `creationTxHash` when given), the API's `reason` marked
+   "not confirmed on chain". `notObol` (which can be an answer cached before the OVM was
    deployed or indexed, while step 1 saw code), `unknown`, a record for another address or no `provenance` → step 3
    (3.0.0-rc.7). When that endpoint fails (404 while it is not deployed, or any other API error), the interim
    `GET /v1/eth/contract-creation/:network/:address`: used only when its `contractAddress` is present and equals this
-   address (case-insensitive) and it names a creating factory: `obol` / api when that is the chain's OVM factory, else
+   address (case-insensitive) and it names a creating factory: when that is the chain's OVM factory, `obol`, handled
+   as the record's `obol` above (it has no transaction hash, so `obol` / api, or step 3 with `requireChain`); else
    `notObol` / api. A record without `contractAddress`, no record or an API error → step 3.
 3. Chain, the OVM getters (`readOvmCore`, one Multicall3 read at head): read, and a required getter reverted →
    `notObol` / chain ("does not answer the OVM getters"), since every contract the factory creates answers them. A
@@ -746,15 +829,15 @@ Output also has `findings: Finding[]`. Roles shown come from `rolesOf`, never fr
 
 ### Log scans
 
-Every `eth_getLogs` scan (`ovm.verify` 4, `ovm.getRoleHolders` 1, `splits.getSplit` 3) reads windows of 10,000 blocks at
+Every `eth_getLogs` scan (`ovm.getProvenance` 4, `ovm.getRoleHolders` 1, `splits.getSplit` 3) reads windows of 10,000 blocks at
 first, a few at a time, doubling after each round that works, up to 50,000. Public RPCs cap the range (often 10,000
 blocks) or the size of the answer: when a request is refused for that reason (codes -32005 and HTTP 413; -32600 /
 -32602 / -32000 with a range or limit message; "block range", "max allowed range", "too many", "limit exceeded",
 "query returned more than" and the like, whatever the code) the window is halved and that range retried, down to 1,000
 blocks. The window is remembered for the `PublicClient`, and never grows back to a size that was refused, so a proxy
-that is slow to refuse costs about one round per client. A scan for one event (`ovm.verify`, the split's `SplitCreated`
+that is slow to refuse costs about one round per client. A scan for one event (`ovm.getProvenance`, the split's `SplitCreated`
 log) reads the newest range first and stops at the first range with a match. Any other failure, or a refusal at 1,000
-blocks, fails the scan: never read as "no event" (`ovm.verify` gives `unknown`, never `notObol`). (3.0.0-rc.4; start
+blocks, fails the scan: never read as "no event" (`ovm.getProvenance` gives `unknown`, never `notObol`). (3.0.0-rc.4; start
 and growth 3.0.0-rc.8)
 
 ### Pinned reads
@@ -786,7 +869,7 @@ Checks:
    Any `amount = 0` requires `acknowledgeFullExit: true`, else `FULL_EXIT_NOT_ACKNOWLEDGED`: an exit is
    irreversible and takes the validator offline, and 0 is too easy to pass by accident. (new)
 2. `excessFeeRecipient` (default: `from`, else the wallet account) is non-zero. (2.15)
-3. `ovm.verify`: `notObol` → `OVM_NOT_OBOL`; `unknown` → Finding `PROVENANCE_UNKNOWN` (warning). (new)
+3. `ovm.getProvenance`: `notObol` → `OVM_NOT_OBOL`; `unknown` → Finding `PROVENANCE_UNKNOWN` (warning). (new)
 4. Sender is owner or holds `WITHDRAWAL` (`OVM_ROLE_MISSING`). (new)
 5. Fee: read the EIP-7002 fee (`eth_call` to `0x00000961Ef480Eb55e80D19ad83579A64c007002` with empty data; empty or
    failed → `FEE_READ_FAILED`), then resolve the total. The accepted range is `[fee × n, max(10 × fee, 1 gwei) × n]`; a
@@ -812,7 +895,7 @@ Checks:
       EIP-7002), is `NO_EXCESS_BALANCE` too, so a partial request is never sent with amount 0; a full pending partial withdrawal queue (known only from a beacon node) →
       Finding `PARTIAL_WITHDRAWAL_QUEUE_FULL` (warning).
 
-   Without a status source: Finding `VALIDATOR_STATUS_UNCHECKED` (info, `checks: ["all"]`). A rule whose data the
+   Without a status source: Finding `VALIDATOR_STATUS_UNCHECKED` (warning since 3.0.0-rc.12, `checks: ["all"]`). A rule whose data the
    source did not give (an API answer without the epochs or pending partials) is skipped with
    `VALIDATOR_STATUS_UNCHECKED` naming it, for that validator.
    Output: `Prepared<"withdraw">`, preview `{ requests: { pubkey, amount, requestedAmount?, routedAs?, principalPart?,
@@ -827,14 +910,16 @@ withdrawal of 16 ETH or more is paid as principal while `amountOfPrincipalStake`
 
 ### ovm.prepareConsolidate
 
-Tag: `chain`. Inputs: `{ ovm, requests: { sources: Pubkey[], target: Pubkey }[], acknowledgeStakeMovesToTarget: true,
-fee: bigint?, excessFeeRecipient: Address?, from: Address?, beaconUrl: string?, lockHash: Hash32? }`. A source equal
-to its target switches that validator to `0x02` (compounding) credentials.
+Tag: `chain`. Inputs: `{ ovm, requests: { sources: Pubkey[], target: Pubkey }[], fee: bigint?, excessFeeRecipient:
+Address?, from: Address?, beaconUrl: string?, lockHash: Hash32? }`. A source equal to its target switches that
+validator to `0x02` (compounding) credentials.
 
 Checks:
 
-1. `acknowledgeStakeMovesToTarget` is exactly `true`, else `CONSOLIDATION_NOT_ACKNOWLEDGED` (checked first, also for
-   untyped callers). (2.16)
+1. There is no acknowledgement flag on the input (3.0.0-rc.12 removed `acknowledgeStakeMovesToTarget` and
+   `CONSOLIDATION_NOT_ACKNOWLEDGED`: the flag had to be `true` on every call, also for a switch to compounding that
+   moves nothing, so it protected nothing; passing it is now `PAYLOAD_INVALID`, `unknown_key`). What needs
+   acknowledging is reported as a warning in step 5 and enforced by `send`.
 2. Each request has 1–63 sources (contract limit; else it reverts) (`PAYLOAD_INVALID`). (new, from contract)
 3. Provenance and role (`CONSOLIDATION`) as `prepareWithdraw` 3–4.
 4. Fee as `prepareWithdraw` 5 with the EIP-7251 predeploy `0x0000BBdDc7CE488642fb579F8B00f3a590007251` and
@@ -846,8 +931,10 @@ Checks:
    (`CONSOLIDATION_TARGET_NOT_COMPOUNDING`), target active (`VALIDATOR_NOT_ACTIVE`), neither exiting
    (`VALIDATOR_EXITING`), source past the shard committee period (`VALIDATOR_TOO_NEW`), source without pending partial
    withdrawals (`CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL`). A target of another withdrawal address is allowed by the
-   chain (the stake leaves this OVM): Finding `CONSOLIDATION_CREDENTIALS_DIFFER` (warning). Unchecked rules as
-   `prepareWithdraw` 6.
+   chain (the stake leaves this OVM and cannot be moved back): Finding `CONSOLIDATION_CREDENTIALS_DIFFER` (warning,
+   per source, with both withdrawal addresses), which `send` refuses until acknowledged. Unchecked rules as
+   `prepareWithdraw` 6: `VALIDATOR_STATUS_UNCHECKED` (warning), also when there is no status source at all or the
+   target's credentials are unknown, since the withdrawal addresses were then not compared.
 
 Output: `Prepared<"consolidate">` with `OVM.consolidate((srcPubKeys, targetPubKey)[], maxFeePerConsolidation =
 floor(totalFee / n), excessFeeRecipient)`, `value = totalFee`.
@@ -861,7 +948,7 @@ Tag: `chain`. Inputs: `{ ovm, mode: "push" | "pull" (default "push") }`. Calls `
 2. Read state on-chain (`getState`); `distributable = 0` → `NOTHING_TO_DISTRIBUTE`.
 
 Preview: the routing of `distribution.json` `routing` (`distributable`, `principalPayout`, `rewardPayout`) with the
-recipients. Use `splits.prepareDistribution` to also distribute the splits behind the recipients.
+recipients. Use `splits.prepareDistributeAll` to also distribute the splits behind the recipients.
 
 `ovm.previewDistribute(input)` (`chain`) runs the same reads and returns `PreviewResult<DistributePreview>` (`{
 preview, checks, blockNumber }`, the shape of every `preview*`) without throwing for `NOTHING_TO_DISTRIBUTE` (zeros
@@ -924,9 +1011,12 @@ Tag: `pure`. Vectors `split_shares.json`.
   `PAYLOAD_INVALID`. No float arithmetic. (2.16 `percentToShares`)
 - `formatPercent(ppm)` → the shortest decimal string with at most 4 decimals (`333333` → `"33.3333"`).
 - `splitParams(recipients: { address, share: bigint }[], distributionIncentive: uint)` → `SplitParams`:
-  1. At least one recipient; valid, unique (case-insensitive) addresses; shares positive integers; sum exactly
-     `1_000_000`. Else `PAYLOAD_INVALID` with `issue` `empty_recipients`, `invalid_address`, `duplicate_address`,
-     `share_not_positive_integer` or `sum_mismatch`. (2.16 `readShares`, 2.15 float tolerance dropped)
+  1. At least one recipient; valid, unique (case-insensitive) addresses, none of them the zero address; shares
+     positive integers; sum exactly `1_000_000`. Else `PAYLOAD_INVALID` with `issue` `empty_recipients`,
+     `invalid_address`, `zero_address`, `duplicate_address`, `share_not_positive_integer` or `sum_mismatch`. (2.16
+     `readShares`, 2.15 float tolerance dropped; `zero_address` new in 3.0.0-rc.12: a share allocated to the zero
+     address can never be withdrawn from the Warehouse.) An address is all-lowercase, all-uppercase or a valid
+     EIP-55 checksum; a mixed-case one with a wrong checksum is `invalid_address`, never normalised.
   2. `distributionIncentive` ≤ 65535 (`PAYLOAD_INVALID`). (2.15 `distributorFeePercent ≤ 6.5535`)
   3. Recipients sorted by numeric address; `totalAllocation` = sum.
 
@@ -945,6 +1035,14 @@ salt: Hash32? }`. No RAF share is added here; presets add it.
 1. `splitParams` checks.
 2. Factory code equals the expected bytecode, else `CONTRACT_NOT_AVAILABLE`. (2.15 `isContractAvailable`)
 3. `predictSplit`; `exists` → `SPLIT_ALREADY_EXISTS` (carries `address`; nothing to send).
+4. Recipients whose share could never be withdrawn (3.0.0-rc.12), `PAYLOAD_INVALID` at `recipients`: one of the
+   chain's protocol contracts (`issue: "protocol_contract"`: the SplitsWarehouse, the PullSplit factory, the OVM
+   factory, SplitMain, the OWR factory, the batch deposit contract, the beacon deposit contract, the EIP-7002 and
+   EIP-7251 request contracts, the Obol token; checked before any chain read), or the split's own predicted address
+   (`issue: "self_recipient"`, checked before `SPLIT_ALREADY_EXISTS`). The RAF recipient is a normal recipient.
+   `prepareOvmWithSplits` applies the same to each split (path `reward.split.recipients` /
+   `principal.split.recipients`), and the presets apply the protocol-contract rule (they know the chain, not the
+   address). `predictSplit`, `getSplit` and `prepareDistributeAll` stay permissive: they read splits that exist.
 
 Output: `Prepared<"createSplit">` (preview `{ address, params }`) calling `createSplitDeterministic(params, owner, creator = 0x0, salt)` on the
 factory.
@@ -952,7 +1050,7 @@ factory.
 ### splits.getSplit
 
 Tag: `api+chain` (state always `chain`). Inputs: `{ address, params: SplitParams?, ovm: Address? }` (the API source
-is keyed by OVM, so it is asked only when `ovm` is given; `prepareDistribution` passes it). Output: `null` when the
+is keyed by OVM, so it is asked only when `ovm` is given; `prepareDistributeAll` passes it). Output: `null` when the
 address is not a SplitV2 split (1–2), else `{ address, splitHash: Hash32, owner, paused, balance: bigint,
 warehouseBalance: bigint, params: SplitParams | null, paramsSource: Source | "input" | null, blockNumber }`.
 
@@ -968,10 +1066,14 @@ warehouseBalance: bigint, params: SplitParams | null, paramsSource: Source | "in
 address` (scanned from the factory deployment block, newest first, as "Log scans"). Whatever the source,
    `keccak256(abi.encode((address[], uint256[], uint256, uint16)))` of the params must equal `splitHash`: for input
    params a mismatch is `SPLIT_PARAMS_MISMATCH`; an API or log answer that does not match is discarded and the next
-   source tried. No matching params → `params: null`, `paramsSource: null` (not an error; `prepareDistribution` then
+   source tried. No matching params → `params: null`, `paramsSource: null` (not an error; `prepareDistributeAll` then
    throws `SPLIT_PARAMS_REQUIRED` if it needs them).
 
-### splits.prepareDistribution
+### splits.prepareDistributeAll
+
+Named `splits.prepareDistribution` / `previewDistribution` until 3.0.0-rc.12 (`Prepared` kind `distribution`, preview
+`DistributionPreview`): it distributes the OVM, its splits and the recipients' Warehouse balances, where
+`ovm.prepareDistribute` is the OVM alone.
 
 Tag: `chain`. Inputs:
 
@@ -985,7 +1087,7 @@ Tag: `chain`. Inputs:
 
 Reads in two `aggregate3` calls pinned to one block: the OVM first (its recipients name the splits), then the splits
 and balances. Vectors `distribution.json` (`routing`, `split_distribution`, `prepare`).
-(2.16 `prepareDistribution`)
+(2.16 `prepareDistributeAll`)
 
 1. At least one of `ovm`, `rewardSplit`, `principalSplit` (`PAYLOAD_INVALID`). Split params: allocations match
    recipients in length, non-negative integers, positive sum equal to `totalAllocation`.
@@ -1002,6 +1104,8 @@ and balances. Vectors `distribution.json` (`routing`, `split_distribution`, `pre
    owner is the sender but a contract (a Safe): through Multicall3 the split sees Multicall3 as `msg.sender`, so only
    an EOA owner passes the pause, as `tx.origin` (as for Warehouse withdrawals below).
 8. Splits with a non-zero `distributionIncentive` need `distributor` (default the sender), else `PAYLOAD_INVALID`.
+   An explicit zero-address `distributor` with such a split is `PAYLOAD_INVALID` (`issue: "zero_address"`): the
+   incentive would be credited to the zero address (3.0.0-rc.12). Without an incentive the distributor is unused.
 9. No calls result → `NOTHING_TO_DISTRIBUTE`. (2.16 threw this at send)
 
 The RAF is withdrawn by default: withdrawing for it is permissionless and costs the other recipients nothing, and
@@ -1009,7 +1113,7 @@ The RAF is withdrawn by default: withdrawing for it is permissionless and costs 
 has something in the Warehouse after this distribution, Finding `RAF_LEFT_IN_WAREHOUSE` (info) with the `amount`.
 (rc.4; rc.3 left it out by default)
 
-`splits.previewDistribution(input)` runs the same reads and returns `PreviewResult<DistributionPreview>` (`{ preview,
+`splits.previewDistributeAll(input)` runs the same reads and returns `PreviewResult<DistributeAllPreview>` (`{ preview,
 checks, blockNumber }`) without throwing for `NOTHING_TO_DISTRIBUTE`, for a page that shows greyed-out legs with the button disabled. Other errors
 (e.g. `SPLIT_PAUSED`) still throw. A recipient in the withdrawal set whose withdrawal is left out keeps `withdraw:
 true` and gets a `skipReason`.
@@ -1069,9 +1173,8 @@ bigint (wei, default 16 ETH) }`. Any addresses: a split, an EOA, a Safe.
 Output: `Prepared<"createOvm">` (preview `{ factory: Address }`) calling `createObolValidatorManager(owner, principalRecipient,
 rewardRecipient, thresholdGwei)`. The OVM address is not known before mining; read it with `ovmFromReceipt`.
 
-### setup.prepareCreateSplit
-
-The same operation as [`splits.prepareCreateSplit`](#splitspreparecreatesplit), exported here for setup flows.
+To create a split on its own use [`splits.prepareCreateSplit`](#splitspreparecreatesplit) (3.0.0-rc.12 removed the
+alias `setup.prepareCreateSplit`).
 
 ### setup.prepareOvmWithSplits
 
@@ -1180,7 +1283,9 @@ FullExitBlob        = { public_key: Pubkey, signed_exit_message: { message: { ep
 `Uint64` is a decimal string; leading zeros are accepted (the API accepts them), outputs are canonical, and a value above
 2^64−1 is `PAYLOAD_INVALID`. A missing share is an absent key. Pubkeys compare case-insensitively.
 
-### exits.verifyPartialExit
+### exits.assertPartialExit
+
+Named `exits.verifyPartialExit` until 3.0.0-rc.12: it throws when a check fails and returns the blobs to store.
 
 Tag: `pure`. Inputs: `{ cluster: { operators: { enr }[], forkVersion: Hex4, validators: { distributedPublicKey,
 publicShares[] }[] }, payload: PartialExitsPayload, existing: StoredExitBlob[] | { [pubkey]: StoredExitBlob }? }`.
@@ -1199,6 +1304,13 @@ Output: the blobs that are new (already stored ones are dropped), normalised and
 5. Against the stored exit of the blob's pubkey (every blob is looked up): the same `validator_index`
    (`EXIT_VALIDATOR_INDEX_MISMATCH`) and the same epoch (`EXIT_EPOCH_MISMATCH`); a stored partial for this share must be
    the same signature (`EXIT_SIGNATURE_CONFLICT`), and the blob is then dropped as already stored.
+   Any other epoch is refused, higher or lower (2.x accepted a higher one): partial signatures over different
+   epochs cannot be aggregated. `EXIT_EPOCH_MISMATCH` carries `direction` (`higher` / `lower`, the blob's epoch
+   against the stored one; 3.0.0-rc.12) and a hint with the reset path: the stored exit must be deleted before
+   anyone re-signs at another epoch. The Obol API and Charon provide that as a per-operator delete (`charon exit
+delete`, `DELETE /v1/exp/partial_exits/:lockHash/:shareIdx/:validatorPubkey`: an operator removes its own partial
+   signature, and the document is removed when none is left). The API has no call that deletes a whole exit
+   document, so every operator that already submitted has to delete before the epoch can change.
 6. The partial signature verifies against the public share over the `VoluntaryExit{epoch, validator_index}` signing
    root in domain `DOMAIN_VOLUNTARY_EXIT 0x04000000` with the Capella fork and genesis validators root
    (`EXIT_PARTIAL_SIGNATURE_INVALID`).
@@ -1258,15 +1370,71 @@ version: 1 }` with the domain without `chainId` and posts `{ address, version, t
 
 ### send
 
-Tag: wallet. Input: `Prepared`. Output: `{ hash: Hash32, contractWallet: bool, wait(options?: { onReplaced?,
-timeoutMs?, confirmations? }) }`.
+Tag: wallet. Inputs: `Prepared`, `{ acknowledge: FindingCode[]?, simulation: Simulation? }`. Output: `{ hash:
+Hash32, contractWallet: bool, wait(options?: { onReplaced?, timeoutMs?, confirmations? }) }`.
 
 1. `prepared.request.chainId` equals the client chain and the wallet chain, else `CHAIN_MISMATCH`. The client's
    viem chain is passed to `sendTransaction`, so viem checks the wallet chain again when it sends; a wallet that
    switched in between is `CHAIN_MISMATCH` too (nothing was sent). A context built by hand without `viemChain` uses a
    minimal viem chain with the client chain id. (send-time check new in 3.0.0-rc.5)
-2. `kind` is one of the kinds of "Shared types" and the `request` fields are well-formed (`to` an address, `data` hex,
-   `value` ≥ 0), else `PREPARED_INVALID`.
+2. `kind` is one of the kinds of "Shared types", the `request` fields are well-formed (`to` an address, `data` hex,
+   `value` ≥ 0) and `checks` is an array, else `PREPARED_INVALID`.
+   (1. and 2. run first; then 2a, before the wallet is looked at, so a caller without a wallet can still learn what
+   must be acknowledged.)
+
+   2a. **Acknowledgement (3.0.0-rc.12).** Every finding with `severity: "warning"` in `prepared.checks`, and in
+   `simulation.findings` when a simulation is passed, must have its `code` listed in `acknowledge`, else
+   `FINDINGS_NOT_ACKNOWLEDGED` (`codes`: the distinct codes still open, in order; `findings`; a message naming each
+   warning; a hint with the exact call, `send(prepared, { acknowledge: [...] })`, listing the codes already given
+   plus the open ones). Nothing is sent and the wallet is not asked. Rules:
+   - `acknowledge` is a list of finding codes. There is no boolean, wildcard or "all": `true`, a string or an object
+     is `PAYLOAD_INVALID`. An entry that is not a finding code (a typo, an error code) is `PAYLOAD_INVALID`
+     (`issue: "unknown_finding_code"`).
+   - A listed code with no matching warning is ignored, so a script can state a policy ("I accept
+     `SPLIT_REUSED`-style conditions when they occur") without knowing whether it applies this time.
+   - Acknowledging one code does not acknowledge another; one code covers every finding of that code on this
+     transaction (several validators).
+   - `info` findings never need acknowledgement.
+   - `simulation` must be the `simulate` result of this `prepared` (its `request` equals `prepared.request`: `to`,
+     `data`, `value`, `chainId`), else `PAYLOAD_INVALID` (`issue: "simulation_mismatch"`). Passing it is how
+     "simulation was requested" reaches `send`: `SIMULATION_REVERTED`, `SIMULATION_PREVIEW_MISMATCH`,
+     `SIMULATION_READS_INCOMPLETE`, `SIMULATION_UNTRUSTED_EVENT` and `SIMULATION_UNAVAILABLE` (could not simulate)
+     then block until acknowledged.
+   - An unknown options key is `PAYLOAD_INVALID` (`unknown_key`).
+
+   Helpers (`pure`), so that the honest path is one line:
+   - `warningsOf(prepared, simulation?)`: every `warning` of `prepared.checks` and of the simulation, in order, as
+     findings (`code`, `message`, `hint`, `subject`, `details`): what a confirmation dialog, or an agent's report
+     to its operator, shows.
+   - `warningCodes(prepared, simulation?)`: their distinct codes, in the shape `acknowledge` takes.
+     `send(prepared, { simulation, acknowledge: warningCodes(prepared, simulation) })` acknowledges exactly the
+     warnings this transaction carries now, and nothing a later or different transaction might. It is computed from
+     the transaction at hand, so it is not a blanket value; a caller that uses it without showing `warningsOf` to
+     anyone has chosen to ignore the warnings.
+   - `findingsToAcknowledge(prepared, { acknowledge?, simulation? })`: the warnings `send` would still refuse, for
+     callers that send `prepared.request` through their own wallet layer (wagmi, a Safe app, a relayer): they send
+     only when it is empty. `send` cannot enforce the rule on a caller that bypasses it.
+   - `UNCHECKED_WARNING_CODES`: the codes of the warnings that only mean "a check could not run"
+     (`DEPOSIT_EXISTENCE_UNCHECKED`, `VALIDATOR_STATUS_UNCHECKED`, `PROVENANCE_UNKNOWN`, `SIMULATION_UNAVAILABLE`,
+     `SIMULATION_READS_INCOMPLETE`), as a ready-made policy list. It never contains a warning about what the
+     transaction does.
+
+   Every helper refuses a `simulation` of another request (`PAYLOAD_INVALID`, `simulation_mismatch`).
+
+   The codes are catalogued in `FINDINGS` (`src/findings.ts`): per code its `severity` (one per code, everywhere),
+   `group` (`unchecked`, `risk`, `note`, `claim`), `meaning` and `guidance`; `FindingCode` is the union of its keys.
+   `FINDING_CODES_BY_KIND` lists the codes each `Prepared` kind can carry, and `Prepared<K>.checks` is typed to
+   them (the compiler holds every `prepare*` to its list); `SIMULATION_FINDING_CODES` are the simulation's.
+
+   The error is written to be acted on without other context: `message` has one numbered line per open warning
+   (`code: message (hint)`), `details.findings` the same as objects, and `hint` says that nothing was sent, that
+   the warnings go to whoever owns the funds (an agent reports to its operator and waits), the exact
+   `send(prepared, { acknowledge: [...] })` call, and what to do if they are not accepted.
+
+   The rule is the same for every `prepare*` (deposits, withdrawals, consolidations, OVM writes, splits, setup,
+   incentive claims, direct EIP-7002 requests). The one prepare-time flag that remains is `acknowledgeFullExit`
+   (`prepareWithdraw`, `prepareEoaWithdraw`), required only when an amount is 0.
+
 3. The wallet rejects or fails before returning a hash: `TX_REJECTED` (nothing was sent).
 4. Returns as soon as the wallet returns a hash.
 
@@ -1304,7 +1472,7 @@ Tag: `chain`, **experimental** (its result shape may change in a minor release).
 `obol.experimental.simulate(prepared, options?)`; also the export `experimental.simulate(ctx, prepared, options?)`
 (`@obolnetwork/obol-sdk/experimental`).
 Runs `prepared.request` as sent by `from`, without sending anything, and says what it would do. `prepareX` stays pure:
-the pattern is prepare → simulate → show `summary` → send.
+the pattern is prepare → simulate → show `summary` and the findings → `send(prepared, { simulation, acknowledge })`.
 
 Input: `Prepared` and `{ from: Address?, blockNumber: bigint | 'latest'?, backend: 'auto' | 'eth_simulateV1' |
 'debug_traceCall' | 'eth_call'? }`.
@@ -1330,8 +1498,8 @@ Input: `Prepared` and `{ from: Address?, blockNumber: bigint | 'latest'?, backen
      failing inner call) and `prestateTracer` with `diffMode: true` (accounts whose ETH balance changes); before
      values with `eth_call`, after values with `eth_call` and the post-state diff as state overrides (a slot in `pre`
      and not in `post` was cleared).
-   - `eth_call`: success or revert only; the result is `limited: true` with Finding `SIMULATION_UNAVAILABLE` naming
-     each skipped backend and why (unless `eth_call` was forced). An `eth_call` error that is not an execution failure
+   - `eth_call`: success or revert only; the result is `limited: true` with Finding `SIMULATION_UNAVAILABLE`
+     (warning since 3.0.0-rc.12) naming each skipped backend and why (unless `eth_call` was forced). An `eth_call` error that is not an execution failure
      (a revert, out of gas, insufficient funds) is `SIMULATION_FAILED`, not a revert.
      A forced backend that the node lacks or that fails is `SIMULATION_FAILED`. No gas is charged in any backend, so
      balance changes exclude gas fees; `gas` reports it apart: `used` from the backend, `estimatedFee = used ×
@@ -1369,14 +1537,16 @@ Output (`limited: false`, backends `eth_simulateV1` / `debug_traceCall`):
   events: { address, name, args, known }[];
   stateChanges: StateChange[];
   summary: string[];
-  matchesPreview: { ok: boolean, differences: string[], compared: string[] };
+  matchesPreview: { status: 'match' | 'mismatch' | 'notCompared', ok: boolean,
+                    differences: string[], compared: string[], notCompared: string[] };
   findings: Finding[];
+  request: { to, data, value, chainId };   // what was simulated; send(prepared, { simulation }) checks it
 }
 type RevertReason = { message, name?, args?, data?, inner?: { index, target, reason: RevertReason } }
 ```
 
-With `limited: true` (`eth_call`): `{ limited, backend: 'eth_call', from, blockNumber, success, revertReason?,
-findings, summary }`.
+With `limited: true` (`eth_call`): `{ limited, backend: 'eth_call', request, from, blockNumber, success,
+revertReason?, findings, summary }`.
 
 - `balanceChanges`: only non-zero deltas; ETH first (the sender first, then by address), then Warehouse balances
   labelled `warehouse:<address>`. Other labels name known addresses: `sender`, `OVM`, `new OVM`, `new split`,
@@ -1402,19 +1572,27 @@ findings, summary }`.
   per ETH change and `… is credited … in the Warehouse` per Warehouse change. Amounts have 6 decimals (rounded half
   up), below 0.000001 ETH in wei. Deterministic for a given result; no LLM. A revert is one line: `Reverts: <reason>`.
 - `matchesPreview` compares where the preview says the same thing as the simulation; `compared` names each check,
-  `differences` the failures (`<what>: preview <x>, simulation <y>`); a preview with nothing comparable compares
-  nothing (`ok: true`, `compared: []`); a revert is `ok: false`.
+  `differences` the failures (`<what>: preview <x>, simulation <y>`), `notCompared` what should have been compared
+  and could not be. `status` (3.0.0-rc.12) is `mismatch` when anything differs (a revert included); else
+  `notCompared` when nothing was compared (`compared: []`: a preview with nothing comparable) or when a value
+  needed was not read (`notCompared` non-empty); else `match`. `ok` is `status === "match"`: it is never true when
+  nothing was compared (rc.11 returned `ok: true, compared: []`).
+- A before / after read that fails (the whole batch, or one call) is never dropped: Finding
+  `SIMULATION_READS_INCOMPLETE` (warning, `unread`), `matchesPreview.status` is then `notCompared` at best, and the
+  unread values are left out of `balanceChanges` and `stateChanges` (absent, not zero). The "before" state of a
+  contract the transaction itself creates is not expected and does not count. (3.0.0-rc.12; rc.11 dropped unread
+  values, so "not read" looked like "unchanged".)
 
-  | Operation (by the `Prepared` kind)                                       | Compared                                                                                                                                                                                                                                                                        |
-  | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `ovm.prepareDistribute`                                                  | `DistributeFunds` payouts; `amountOfPrincipalStake` change; push: ETH to each recipient; pull: `fundsPendingWithdrawal` change                                                                                                                                                  |
-  | `splits.prepareDistribution`                                             | the OVM payouts; each split's `SplitDistributed` amount (none when skipped); each recipient's Warehouse credit from each split (plus its incentive when it is the distributor), its `distributorReward`, and ETH received (from the withdrawal legs, see `prepareDistribution`) |
-  | `ovm.prepareWithdraw` / `prepareConsolidate`                             | requests (pubkeys, amounts, sources and targets) in order; `value = totalFee`; no request above `maxFeePerRequest`; fees received by the predeploy; the refund received by `excessFeeRecipient`                                                                                 |
-  | `deposits.prepareDeposit`                                                | deposits (pubkeys in order, total); the deposit contract's ETH change; via the OVM: `amountOfPrincipalStake` change                                                                                                                                                             |
-  | `withdrawals.prepareEoaWithdraw`                                         | the request from calldata; the fee received by the predeploy                                                                                                                                                                                                                    |
-  | OVM role and ownership writes                                            | grant / revoke / renounce: the roles after; `setAmountOfPrincipalStake`: before and after; `withdrawPullBalance`: ETH received; `setBeneficiary` / `setRewardRecipient` / `transfer` / `completeOwnershipHandover`: the new recipient and owner; `sweep`: the `Swept` amount    |
-  | `setup.prepareOvmWithSplits` / `prepareCreateOvm` / `prepareCreateSplit` | the OVM created and its recipients; the splits created are exactly those the preview marks `created`                                                                                                                                                                            |
-  | `incentives.prepareClaim`                                                | the `Claimed` amount                                                                                                                                                                                                                                                            |
+  | Operation (by the `Prepared` kind)                                       | Compared                                                                                                                                                                                                                                                                         |
+  | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `ovm.prepareDistribute`                                                  | `DistributeFunds` payouts; `amountOfPrincipalStake` change; push: ETH to each recipient; pull: `fundsPendingWithdrawal` change                                                                                                                                                   |
+  | `splits.prepareDistributeAll`                                            | the OVM payouts; each split's `SplitDistributed` amount (none when skipped); each recipient's Warehouse credit from each split (plus its incentive when it is the distributor), its `distributorReward`, and ETH received (from the withdrawal legs, see `prepareDistributeAll`) |
+  | `ovm.prepareWithdraw` / `prepareConsolidate`                             | requests (pubkeys, amounts, sources and targets) in order; `value = totalFee`; no request above `maxFeePerRequest`; fees received by the predeploy; the refund received by `excessFeeRecipient`                                                                                  |
+  | `deposits.prepareDeposit`                                                | deposits (pubkeys in order, total); the deposit contract's ETH change; via the OVM: `amountOfPrincipalStake` change                                                                                                                                                              |
+  | `withdrawals.prepareEoaWithdraw`                                         | the request from calldata; the fee received by the predeploy                                                                                                                                                                                                                     |
+  | OVM role and ownership writes                                            | grant / revoke / renounce: the roles after; `setAmountOfPrincipalStake`: before and after; `withdrawPullBalance`: ETH received; `setBeneficiary` / `setRewardRecipient` / `transfer` / `completeOwnershipHandover`: the new recipient and owner; `sweep`: the `Swept` amount     |
+  | `setup.prepareOvmWithSplits` / `prepareCreateOvm` / `prepareCreateSplit` | the OVM created and its recipients; the splits created are exactly those the preview marks `created`                                                                                                                                                                             |
+  | `incentives.prepareClaim`                                                | the `Claimed` amount                                                                                                                                                                                                                                                             |
 
 Limitations: an untrusted event is shown, not believed; a trusted contract can still behave unexpectedly, which the
 balance changes (from the trace) show. A simulation is of one block's state; anything that changes before the transaction is mined (another

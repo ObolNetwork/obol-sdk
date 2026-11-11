@@ -21,14 +21,14 @@ import type {
   Deposit,
   DepositInput,
   DepositKind,
-  Finding,
+  FindingsOf,
   Prepared,
   StatusSource,
 } from '../types.js';
 import { ETH } from '../units.js';
-import { credentialsPrefix } from '../ovm/credentials.js';
+import { credentialsPointAt, credentialsPrefix } from '../ovm/credentials.js';
 import { readOvmCore, requireRole, requireSender } from '../ovm/read.js';
-import { requireObolOvm, verifyOvm } from '../ovm/verify.js';
+import { requireObolOvm, getOvmProvenance } from '../ovm/provenance.js';
 import {
   effectiveCredentials,
   possiblyValidDeposits,
@@ -37,7 +37,7 @@ import {
   statusSourceOf,
   type DepositStatus,
 } from './status.js';
-import { DepositSchema, verifyDepositData } from './verifyDepositData.js';
+import { DepositSchema, assertDepositData } from './assertDepositData.js';
 
 /** Deposits per batch deposit transaction. */
 export const BATCH_DEPOSIT_SIZE = 500;
@@ -85,6 +85,8 @@ const sum = (amounts: bigint[]): bigint => amounts.reduce((a, b) => a + b, 0n);
 /** What the check 5 helpers share for one deposit. */
 interface ExistenceContext {
   deposit: Deposit;
+  /** The address the deposit's credentials were checked against (the OVM, or `expectedWithdrawalAddress`). */
+  expected: Address;
   kind: DepositKind;
   status: DepositStatus;
   pubkey: Hex;
@@ -92,7 +94,7 @@ interface ExistenceContext {
   queued: DepositStatus['pendingDeposits'];
   details: { index: number; pubkey: Hex };
   subject: { pubkey: Hex };
-  findings: Finding[];
+  findings: FindingsOf<'deposit'>;
 }
 
 const conflictError = (
@@ -109,6 +111,7 @@ const conflictError = (
       details: {
         ...c.details,
         ...(existing !== undefined ? { existingCredentials: existing } : {}),
+        existing: 'queued',
       },
     },
   );
@@ -128,7 +131,6 @@ const checkConflictingQueue = (
   c.findings.push(
     finding(
       'QUEUED_CREDENTIALS_CONFLICT',
-      'warning',
       `Validly signed deposits queued for ${c.pubkey} carry different withdrawal credentials; the first one (${applies ?? 'unknown'}) applies`,
       {
         hint: 'Find out who queued the other deposits before adding to this validator',
@@ -190,7 +192,6 @@ const pendingDepositChecks = (c: ExistenceContext): void => {
     c.findings.push(
       finding(
         'DEPOSIT_ALREADY_QUEUED',
-        'info',
         `${c.queued.length} deposit(s) for ${c.pubkey} are already queued`,
         {
           hint: 'Make sure this is not a repeat',
@@ -200,6 +201,79 @@ const pendingDepositChecks = (c: ExistenceContext): void => {
       ),
     );
   }
+};
+
+/**
+ * Check 5, `kind: 'deposit'` for a pubkey that is already in the validator
+ * registry (any status, exited included): always an error. The beacon chain
+ * treats such a deposit as a top-up and ignores its withdrawal credentials,
+ * so the ETH follows the credentials the validator already has.
+ * - Those are not `0x01` / `0x02` for the expected address (or are unknown):
+ *   DEPOSIT_CONFLICT. This is the deposit front-running case: someone
+ *   created the validator first, with their own withdrawal address.
+ * - They are: DEPOSIT_VALIDATOR_EXISTS; adding stake is `kind: 'topUp'`.
+ */
+const registeredDepositError = (c: ExistenceContext): ObolError => {
+  const existing = c.status.withdrawalCredentials;
+  const beaconStatus = c.status.beaconStatus ?? c.status.status;
+  if (existing === undefined || !credentialsPointAt(existing, c.expected)) {
+    return new ObolError(
+      'DEPOSIT_CONFLICT',
+      existing === undefined
+        ? `${c.pubkey} is already a validator (${beaconStatus}) and its withdrawal credentials could not be read: a deposit would top it up whatever they are`
+        : `${c.pubkey} is already a validator (${beaconStatus}) with withdrawal credentials ${existing}, which do not point at ${c.expected}: a deposit would top it up and the ETH could only be withdrawn to those credentials, not to ${c.expected}`,
+      {
+        hint: 'Do not send. Someone else created this validator first (deposit front-running needs a signature by the validator key, so by its operators); the deposit data in the lock must not be used',
+        details: {
+          ...c.details,
+          ...(existing !== undefined ? { existingCredentials: existing } : {}),
+          existing: 'validator',
+        },
+      },
+    );
+  }
+  return new ObolError(
+    'DEPOSIT_VALIDATOR_EXISTS',
+    `${c.pubkey} is already a validator (${beaconStatus}): kind "deposit" is for creating one`,
+    {
+      hint:
+        c.status.status === 'exited'
+          ? 'Do not deposit to an exited validator: the ETH is swept back to its withdrawal address, not staked'
+          : 'This validator has been deposited to already. To add stake to it, prepare a top-up (kind: "topUp")',
+      details: {
+        ...c.details,
+        status: beaconStatus,
+        withdrawalCredentials: existing,
+      },
+    },
+  );
+};
+
+/**
+ * Check 5, `kind: 'topUp'`: the credentials the validator has (or will get)
+ * do not point at the expected address, so the top-up funds someone else's
+ * withdrawal address. A warning: `send` refuses it until acknowledged.
+ */
+const foreignTopUpCheck = (c: ExistenceContext): void => {
+  const existing = effectiveCredentials(c.status);
+  if (existing === undefined || credentialsPointAt(existing, c.expected)) {
+    return;
+  }
+  c.findings.push(
+    finding(
+      'TOP_UP_CREDENTIALS_FOREIGN',
+      `${c.pubkey} has withdrawal credentials ${existing}, which do not point at ${c.expected}: this top-up can only be withdrawn to those credentials`,
+      {
+        hint: 'A top-up to a validator you do not control is a donation; send only if that is intended',
+        subject: c.subject,
+        details: {
+          ...c.details,
+          existingCredentials: existing,
+          expectedWithdrawalAddress: c.expected,
+        },
+      },
+    ),
+  );
 };
 
 /** Check 5: TOP_UP_ABOVE_EFFECTIVE_CAP for 0x00 / 0x01 credentials. */
@@ -225,7 +299,6 @@ const effectiveCapCheck = (
     c.findings.push(
       finding(
         'TOP_UP_ABOVE_EFFECTIVE_CAP',
-        'warning',
         `${c.pubkey} has ${prefix} credentials: with this deposit its balance reaches ${after} wei, above 32 ETH; the excess is swept back to the withdrawal address, not staked`,
         {
           hint: 'Deposit at most up to 32 ETH, or consolidate to 0x02 first',
@@ -244,13 +317,15 @@ const existenceChecks = (
   kind: DepositKind,
   status: DepositStatus,
   alreadyInInput: bigint,
-): Finding[] => {
-  const findings: Finding[] = [];
+  expected: Address,
+): FindingsOf<'deposit'> => {
+  const findings: FindingsOf<'deposit'> = [];
   const pubkey = status.pubkey;
   const registered =
     status.status !== 'new' && status.beaconStatus !== 'pending_deposit';
   const c: ExistenceContext = {
     deposit,
+    expected,
     kind,
     status,
     pubkey,
@@ -280,21 +355,12 @@ const existenceChecks = (
       },
     );
   }
-  if (kind === 'deposit' && registered) {
-    findings.push(
-      finding(
-        'DEPOSIT_IS_TOP_UP',
-        'warning',
-        `${pubkey} is already a validator: this deposit tops it up and its withdrawal credentials are ignored`,
-        { hint: 'Confirm this is intended', subject, details },
-      ),
-    );
-  }
+  if (kind === 'deposit' && registered) throw registeredDepositError(c);
+  if (kind === 'topUp') foreignTopUpCheck(c);
   if (kind === 'topUp' && status.status === 'exited') {
     findings.push(
       finding(
         'TOP_UP_EXITED_VALIDATOR',
-        'warning',
         `${pubkey} has exited: the top-up is swept back to its withdrawal address, not staked`,
         { hint: 'Do not top up', subject, details },
       ),
@@ -307,17 +373,21 @@ const existenceChecks = (
 /**
  * deposits.prepareDeposit (`chain`, uses deposits.status when a source is
  * available). Checks, in order:
- * 1. `verifyDepositData` against the OVM address (via ovm) or
+ * 1. `assertDepositData` against the OVM address (via ovm) or
  *    `expectedWithdrawalAddress` (via batch, required);
- * 2. via ovm: `ovm.verify` is `obol` (OVM_NOT_OBOL / PROVENANCE_UNKNOWN);
+ * 2. via ovm: `ovm.getProvenance` is `obol` (OVM_NOT_OBOL / PROVENANCE_UNKNOWN);
  * 3. via ovm: the sender is owner or holds DEPOSIT (OVM_ROLE_MISSING);
  * 4. via batch to credentials of an Obol OVM: OVM_STAKE_NOT_TRACKED warning;
- * 5. existence (DEPOSIT_CONFLICT, DEPOSIT_TOP_UP_TARGET_MISSING,
- *    STATUS_UNAVAILABLE `signatures_pending` while the credentials are
- *    undecided, and the findings
- *    DEPOSIT_IS_TOP_UP, DEPOSIT_ALREADY_QUEUED, QUEUED_CREDENTIALS_CONFLICT,
- *    TOP_UP_EXITED_VALIDATOR, TOP_UP_ABOVE_EFFECTIVE_CAP), or
- *    DEPOSIT_EXISTENCE_UNCHECKED without a status source;
+ * 5. existence: `kind: 'deposit'` for a pubkey already in the validator
+ *    registry always throws (DEPOSIT_CONFLICT when its credentials do not
+ *    point at the expected address, else DEPOSIT_VALIDATOR_EXISTS);
+ *    DEPOSIT_CONFLICT for a queued deposit with other credentials,
+ *    DEPOSIT_TOP_UP_TARGET_MISSING, STATUS_UNAVAILABLE `signatures_pending`
+ *    while the credentials are undecided, and the findings
+ *    DEPOSIT_ALREADY_QUEUED, QUEUED_CREDENTIALS_CONFLICT,
+ *    TOP_UP_CREDENTIALS_FOREIGN, TOP_UP_EXITED_VALIDATOR,
+ *    TOP_UP_ABOVE_EFFECTIVE_CAP; or the warning DEPOSIT_EXISTENCE_UNCHECKED
+ *    without a status source;
  * 6. the target contract has code (CONTRACT_NOT_AVAILABLE).
  *
  * Returns one Prepared per deposit via ovm (`OVM.deposit`, value = amount),
@@ -355,13 +425,13 @@ export const prepareDeposit = async (
     }
     expected = checksum(args.expectedWithdrawalAddress);
   }
-  await verifyDepositData(deposits, {
+  await assertDepositData(deposits, {
     chainId: ctx.chain.id,
     kind,
     expectedWithdrawalAddress: expected,
   });
 
-  const checks: Finding[] = [];
+  const checks: FindingsOf<'deposit'> = [];
   let blockNumber: bigint | undefined;
   if (ovm !== null) {
     // 2. Provenance: the principal is at stake, so unknown is an error.
@@ -374,12 +444,11 @@ export const prepareDeposit = async (
     });
     requireRole(core, from, 'DEPOSIT');
     blockNumber = core.blockNumber;
-  } else if ((await verifyOvm(ctx, expected)).status === 'obol') {
+  } else if ((await getOvmProvenance(ctx, expected)).status === 'obol') {
     // 4. Batch deposits do not raise the OVM's amountOfPrincipalStake.
     checks.push(
       finding(
         'OVM_STAKE_NOT_TRACKED',
-        'warning',
         `${expected} is an Obol OVM: the batch deposit contract does not raise its amountOfPrincipalStake, so this principal would later be paid out as rewards`,
         {
           hint: 'Deposit via the OVM, or have the owner call setAmountOfPrincipalStake',
@@ -391,17 +460,16 @@ export const prepareDeposit = async (
   }
 
   // 5. Existence. Findings about one deposit go only on its transaction.
-  const perDeposit: Finding[][] = deposits.map(() => []);
+  const perDeposit: Array<FindingsOf<'deposit'>> = deposits.map(() => []);
   const pubkeys = deposits.map(d => d.pubkey.toLowerCase() as Hex);
   const statuses = await statusIfAvailable(ctx, pubkeys, statusSourceOf(args));
   if (statuses === null) {
     checks.push(
       finding(
         'DEPOSIT_EXISTENCE_UNCHECKED',
-        'info',
-        `No deposit status source, so kind "${kind}" was trusted`,
+        `No deposit status source, so kind "${kind}" was trusted: whether these validators already exist, and with which withdrawal credentials, was not checked`,
         {
-          hint: 'Enable the API (with lockHash until it serves deposit status by pubkey), or pass beaconUrl',
+          hint: 'Enable the API (with lockHash until it serves deposit status by pubkey), or pass beaconUrl; otherwise check each pubkey on a beacon explorer before acknowledging',
         },
       ),
     );
@@ -417,6 +485,7 @@ export const prepareDeposit = async (
         kind,
         status,
         earlier,
+        expected,
       );
       inInput.set(pubkeys[index], earlier + deposit.amount);
     });

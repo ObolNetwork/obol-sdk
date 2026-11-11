@@ -10,11 +10,15 @@ This file has two audiences:
 
 - **Prepare a cluster invitation** from code (not the hosted Launchpad UI): `cluster.prepareDefinition` → `cluster.create`, operators join with `cluster.accept`, and `cluster.watch` follows signatures and the lock.
 - **Verify a cluster lock** without running Charon: `cluster.verifyLock` (also a plain export, no client needed), or `isValidLock` for a boolean. On a Node server: `level: 'full'`, the native backend from `@obolnetwork/obol-sdk/blst`, and `publicClients` for Safe-signed definitions (README "Servers").
-- **Deposit validators** from a lock: `deposits.fromLock` → `deposits.prepareDeposit` (via an OVM or the batch deposit contract), with `deposits.status` for what the beacon chain already has.
+- **Deposit validators** from a lock: `deposits.fromLock(lock, { amount })` → `deposits.prepareDeposit` (via an OVM or the batch deposit contract), with `deposits.status` for what the beacon chain already has. `amount` is required for a lock with several deposit amounts (Charon's default locks: 1 ETH and 32 ETH); a deposit to a validator that already exists throws (`kind: 'topUp'` adds stake).
 - **Deploy and run an Obol Validator Manager (OVM) with splits**: `setup.prepareOvmWithSplits` and the presets, then `ovm.prepareWithdraw`, `ovm.prepareConsolidate`, `ovm.prepareDistribute` and the role / ownership writes; `splits.*` for SplitV2 reads, distributions and share math.
 - **Claim Obol incentives**: `incentives.preflight` → `incentives.prepareClaim`.
-- **Build exit flows**: `exits.verifyPartialExit` (what the Obol API checks before storing a partial) and `exits.aggregate` (threshold aggregation into a signed voluntary exit).
+- **Build exit flows**: `exits.assertPartialExit` (what the Obol API checks before storing a partial) and `exits.aggregate` (threshold aggregation into a signed voluntary exit).
 - **Request EIP-7002 withdrawals from an EOA-credentialed validator**: `withdrawals.prepareEoaWithdraw`.
+
+**Warnings are not advisory.** `send(prepared)` refuses a transaction whose `checks` hold a `warning` until its code is passed in `acknowledge` (`FINDINGS_NOT_ACKNOWLEDGED` lists them). When helping a user: show `warningsOf(prepared, simulation)` (each `message` and `hint`, and `FINDINGS[code].guidance`), let the user decide, then send with `acknowledge: warningCodes(prepared, simulation)` or with the codes they accepted. Never acknowledge on the user's behalf, and never call `warningCodes` for warnings nobody was shown. A warning means funds may go somewhere unintended, or that a safety check did not run. README "Acknowledging warnings" has the three patterns (dialog, scripted policy, agent).
+
+**Names tell you the failure mode** (README "Naming"): `prepare*` builds a transaction, `preview*` reads what it would do, `verify*` returns a result object (check `.ok`), `isValid*` returns a boolean, `assert*` throws, `get*` reads.
 
 Route *elsewhere* when:
 - User just wants to **create a cluster through a UI flow with friends** → point to [launchpad.obol.org](https://launchpad.obol.org) (hosted DKG orchestration). The SDK is the "do it from code" alternative.
@@ -37,7 +41,7 @@ Route *elsewhere* when:
 - **Language**: TypeScript (~5.9)
 - **Node**: >= 20
 - **Package Manager**: yarn (`yarn@1.22.22`)
-- **Peer dependency**: `viem@^2`
+- **Peer dependency**: `viem@^2.27.0`
 
 ## Quick Commands
 
@@ -94,24 +98,25 @@ src/
 ├── chains.ts         # Chain table (fork versions, genesis validators roots, contract addresses), API hosts
 ├── api.ts            # Obol API HTTP client (typed errors, timeout)
 ├── errors.ts         # ObolError<C> / ObolApiError, isObolError (narrows details), common error builders
-├── codes.ts          # ObolErrorCode / FindingCode unions and ObolErrorDetails (checked against spec/errors.md)
+├── codes.ts          # ObolErrorCode union and ObolErrorDetails (checked against spec/errors.md)
+├── findings.ts       # FINDINGS catalogue (FindingCode, severity, meaning, guidance), FINDING_CODES_BY_KIND, UNCHECKED_WARNING_CODES
 ├── multicall.ts      # The one Multicall3 read helper (readMany / readValues)
 ├── schema.ts         # TypeBox helpers (T.*), decode → PAYLOAD_INVALID
 ├── types.ts          # Shared types: Prepared<K> / AnyPrepared / PreviewByKind, Finding, StatusSource, Deposit, SplitParams
 ├── units.ts          # ETH / GWEI constants and conversions
 ├── abi.ts            # Contract ABIs (viem `as const`)
 ├── chainUtils.ts     # Chain read helpers (CHAIN_READ_FAILED)
-├── send.ts           # send + waitForContractWalletExecution (Safe)
+├── send.ts           # send (acknowledgement of warnings), warningsOf / warningCodes / findingsToAcknowledge, waitForContractWalletExecution (Safe)
 ├── simulate/         # simulate: backends (eth_simulateV1, debug_traceCall, eth_call), decoding, analysis, preview comparison
-├── cluster/          # Definitions and locks: hashing, EIP-712 (+ verifyTypedDataSignature), ENR, prepare/create/accept, verifyLock / isValidLock (+ BlsBackend), watch
+├── cluster/          # Definitions and locks: hashing, EIP-712 (+ isValidTypedDataSignature), ENR, prepare/create/accept, verifyLock / isValidLock (+ BlsBackend), watch
 ├── blst/             # Node-only entry: the @chainsafe/blst BlsBackend (optional peer, dynamic import); nothing else imports it
-├── deposits/         # fromLock, verifyDepositData, status, prepareDeposit
-├── ovm/              # OVM reads (verify, state, roles, validators), routing, withdraw / consolidate / distribute, role writes;
+├── deposits/         # fromLock, assertDepositData, status, prepareDeposit
+├── ovm/              # OVM reads (provenance, state, roles, validators), routing, withdraw / consolidate / distribute, role writes;
 │                     #   requestRules.ts: the beacon chain's EIP-7002 / EIP-7251 request rules
 ├── splits/           # SplitV2: share math, predict / create, getSplit, distributions
 ├── setup/            # OVM + splits creation flows and presets
 ├── incentives/       # Merkle distributor reads, preflight, prepareClaim
-├── exits/            # verifyPartialExit, aggregate, BLS helpers, exit SSZ
+├── exits/            # assertPartialExit, aggregate, BLS helpers, exit SSZ
 ├── terms/            # Terms and conditions (EIP-712)
 ├── withdrawals/      # EIP-7002 withdrawals for EOA-credentialed validators
 ├── legacy/           # Reads of 2.x-era OWR contracts (experimental)
@@ -122,6 +127,8 @@ src/
     ├── bls.ts                    # BLS12-381 (@noble/curves): point decoding, finite differences, randomised batch, threshold aggregation
     ├── secp256k1.ts              # ENR-key signature verification
     ├── exitDomain.ts             # computeDomain / signingRoot for exits
+    ├── bytes.ts                  # hex helpers without Buffer
+    ├── sszLists.ts               # ByteListType / ListBasicType / ListCompositeType that hash without Buffer
     ├── yielder.ts                # createTick: yield to the event loop every yieldMs
     └── verification/
         ├── common.ts             # Config / definition / lock hashes (one-shot and sliced), deposit + builder fields and signing roots, node signatures
@@ -137,6 +144,8 @@ test/
 ├── helpers/          # fakeChain / fakeApi (EIP-1193 fake chain and API), syntheticLock (real-key locks), blstBackend (the shipped src/blst adapter over the devDependency)
 ├── vectors/          # spec/vectors and distributed-validator-specs suites (VECTORS_REBASELINE=1 rewrites distribution.json)
 ├── spec/             # spec conformance (errors.md vs codes) and spec/schemas up to date
+├── package/          # the built package (dist/) in a child Node process: browser bundle without Buffer, CJS + ESM copies together, run-time imports (skipped locally when dist/ is missing or stale; CI builds first)
+├── send/             # send acknowledgement of warnings
 ├── fuzz/             # differential lock fuzz (yarn test:fuzz; run.sh with Charon), regressions/, seeded decoder fuzz
 └── <module>/         # One directory per src module (cluster, deposits, ovm, splits, setup, ...)
 
@@ -158,7 +167,8 @@ Types are generated separately via `tsc -b tsconfig.types.json` → `dist/types/
 
 Key build notes:
 - `viem` is a peer dependency and always external.
-- `@noble/curves`, `@noble/hashes` and `@chainsafe/enr` (ESM-only) are bundled; `@chainsafe/ssz` and `@sinclair/typebox` are dependencies.
+- `@noble/curves`, `@noble/hashes` and `@chainsafe/enr` (ESM-only) are bundled and so are devDependencies; `@chainsafe/ssz` and `@sinclair/typebox` are the only dependencies. `test/package/packaging.spec.ts` fails if a build imports anything that is not a dependency or peer.
+- The browser build must run without `Buffer` (and without Node built-ins). `@chainsafe/ssz` 0.14.3 needs `Buffer` to hash lists (`mixInLength`), so list types come from `src/internal/sszLists.ts`, never from `@chainsafe/ssz` (ESLint enforces both). `test/package/browserNoBuffer.spec.ts` runs the built bundle with `Buffer` deleted.
 - Browser build defines `process.env` as empty and `global` as `globalThis`.
 - One entry per module plus the root (`src/index.ts`, `src/<module>/index.ts`), with shared chunks (`splitting`), so classes such as `ObolError` exist once across entries; no worker bundle and no `worker_threads` / native imports in `dist`, except the Node-only `blst` entry (cjs / esm, not browser), whose `import('@chainsafe/blst')` stays external and runs on `loadBlstBackend()`.
 - `"sideEffects": false` in the package and in `dist/esm` / `dist/browser` (the nearest package.json decides for bundlers). `yarn size:check` bundles typical imports and checks them against `scripts/bundle-budget.json`; a reads-only `ovm` import must carry no BLS or SSZ code.
@@ -190,13 +200,13 @@ Every module is a `create<Module>Module(ctx)` that binds the module's functions 
 
 **Method tags** (in TSDoc and `spec/operations.md`): `pure` (no client), `chain`, `api`, `api+chain` (API first, chain fallback). With `api: false`, `api+chain` methods use the chain and `api` methods throw `API_DISABLED`.
 
-**Checks every operation runs** (spec G1–G4): inputs decoded against a TypeBox schema (`PAYLOAD_INVALID` with `issues[]`); contract operations need a chain with Obol contracts (`UNSUPPORTED_CHAIN`); signing and `send` need a wallet on the client chain (`WALLET_REQUIRED`, `CHAIN_MISMATCH`); API failures map to `API_*` codes.
+**Checks every operation runs** (spec G1–G4): inputs decoded against a strict TypeBox schema (`PAYLOAD_INVALID` with `issues[]`; an unknown key is `issue: 'unknown_key'`); contract operations need a chain with Obol contracts (`UNSUPPORTED_CHAIN`); signing and `send` need a wallet on the client chain (`WALLET_REQUIRED`, `CHAIN_MISMATCH`); API failures map to `API_*` codes.
 
 ### Prepare, then send
 
 ```typescript
 type Prepared<K extends PreparedKind> = {
-  kind: K;                // 'deposit' | 'withdraw' | 'distribution' | ... (spec/operations.md "Shared types")
+  kind: K;                // 'deposit' | 'withdraw' | 'distributeAll' | ... (spec/operations.md "Shared types")
   request: { to: Address; data: Hex; value: bigint; chainId: number };
   checks: Finding[];      // warnings / info; errors throw instead
   preview: PreviewByKind[K]; // what the transaction will do; narrows on kind
@@ -208,21 +218,27 @@ type Finding = { code: FindingCode; severity: 'warning' | 'info'; message: strin
 // every preview* returns { preview, checks, blockNumber }
 ```
 
-`send(prepared)` checks the wallet chain, sends `request` and returns `{ hash, contractWallet, wait }`; for a Safe, `wait` follows the Safe's `ExecutionSuccess`. Callers with their own wallet layer send `request` directly.
+`send(prepared, { acknowledge?, simulation? })` checks the wallet chain, refuses unacknowledged warnings, sends `request` and returns `{ hash, contractWallet, wait }`; for a Safe, `wait` follows the Safe's `ExecutionSuccess`. `warningsOf(prepared, simulation?)` are the warnings to show, `warningCodes(prepared, simulation?)` their codes for `acknowledge`. Callers with their own wallet layer send `request` directly and gate on `findingsToAcknowledge(prepared, { acknowledge })`.
 
-`simulate(prepared, { from })` (`src/simulate/`) runs `request` on the node without sending it: `eth_simulateV1`, else `debug_traceCall` (callTracer + prestateTracer diff), else `eth_call` (`limited: true`), detected once per client. It returns the decoded revert or balance changes (ETH, Warehouse), events, state changes, `summary` lines and `matchesPreview` (the preview compared with the simulation; a difference is an SDK bug). `prepare*` never simulates on its own. Tests replay JSON-RPC exchanges recorded on an anvil Hoodi fork (`test/simulate/fixtures`); `test/simulate/e2e.spec.ts` (opt-in, `SIMULATE_E2E=1`) re-records them with `SIMULATE_RECORD=1`.
+**Findings and acknowledgement** (`src/send.ts`). A `prepare*` throws for an error and reports the rest in `checks`. Severity rule: `warning` when the transaction may not do what the caller intends or when a check could not run (`*_UNCHECKED`, `PROVENANCE_UNKNOWN`, `SIMULATION_UNAVAILABLE`, `SIMULATION_READS_INCOMPLETE`); `info` otherwise. `send` throws `FINDINGS_NOT_ACKNOWLEDGED` (before touching the wallet) while a warning's code is not in `acknowledge`; the same for the findings of a `simulation` passed to it, which must be of the same `request`. `acknowledge` is a list of `FindingCode`s: never add a boolean or wildcard form (`warningCodes(prepared)` is the one-line form, computed from the transaction at hand). Do not add new prepare-time `acknowledgeX: true` flags; emit a warning finding instead (`acknowledgeFullExit` is the one that remains).
+
+**Adding or changing a finding** (`src/findings.ts`). Add the code to `FINDINGS` with TSDoc, `severity`, `group`, `meaning` and `guidance` (the README and MIGRATION tables repeat `meaning` and `guidance` word for word; `test/spec/findings.spec.ts` checks them and the severity in `spec/errors.md`), and to `FINDING_CODES_BY_KIND` for each `Prepared` kind that can carry it: `Prepared<K>.checks` is typed from that map, so emitting an unlisted code does not compile. `finding(code, message, extra)` takes the severity from the catalogue.
+
+**Naming rule for operations.** `prepare*` builds a checked transaction; `preview*` returns `{ preview, checks, blockNumber }`; `verify*` returns a result object for untrusted input and throws only for malformed input; `isValid*` returns a boolean; `assert*` throws when its check fails (before a write); `get*` reads; `compute*` hashes. Do not add a `verify*` that throws or returns a boolean.
+
+`simulate(prepared, { from })` (`src/simulate/`) runs `request` on the node without sending it: `eth_simulateV1`, else `debug_traceCall` (callTracer + prestateTracer diff), else `eth_call` (`limited: true`), detected once per client. It returns the decoded revert or balance changes (ETH, Warehouse), events, state changes, `summary` lines and `matchesPreview` (the preview compared with the simulation; `status` `match` / `mismatch` / `notCompared`, and `ok` only for `match`; a difference is an SDK bug). It must not fail open: an unread before / after value is `SIMULATION_READS_INCOMPLETE` and makes the comparison `notCompared`, never "unchanged". `prepare*` never simulates on its own. Tests replay JSON-RPC exchanges recorded on an anvil Hoodi fork (`test/simulate/fixtures`); `test/simulate/e2e.spec.ts` (opt-in, `SIMULATE_E2E=1`) re-records them with `SIMULATE_RECORD=1`.
 
 ### Modules
 
 | Module | Main operations |
 |--------|-----------------|
-| `cluster` | `computeConfigHash` / `computeDefinitionHash` / `computeLockHash`, `prepareDefinition`, `create`, `accept`, `get`, `getLock`, `watch`, `verifyDefinition`, `verifyLock`, `isValidLock`, `parseEnr` / `isValidEnr`, `verifyTypedDataSignature` (also root) |
-| `deposits` | `fromLock`, `verifyDepositData`, `status`, `prepareDeposit` (via `{ ovm }` or `{ batch: true }`, `kind: 'deposit' \| 'topUp'`) |
-| `ovm` | `verify` (provenance), `getState`, `getRoleHolders`, `getValidators`, `prepareWithdraw`, `prepareConsolidate`, `prepareDistribute` / `previewDistribute`, role and ownership writes (`prepareGrantRoles`, `prepareTransfer`, `prepareSetPrincipalRecipient`, ...) |
-| `splits` | `percent` / `formatPercent` / `splitParams`, `predictSplit`, `prepareCreateSplit`, `getSplit`, `prepareDistribution` / `previewDistribution` |
-| `setup` | `prepareCreateOvm`, `prepareCreateSplit`, `prepareOvmWithSplits`, `ovmFromReceipt`, presets (`rewardsSplit`, `totalSplit`, `solo`) |
+| `cluster` | `computeConfigHash` / `computeDefinitionHash` / `computeLockHash`, `prepareDefinition`, `create`, `accept`, `get`, `getLock`, `watch`, `verifyDefinition`, `verifyLock`, `isValidLock`, `parseEnr` / `isValidEnr`, `isValidTypedDataSignature` (also root) |
+| `deposits` | `fromLock`, `assertDepositData`, `status`, `prepareDeposit` (via `{ ovm }` or `{ batch: true }`, `kind: 'deposit' \| 'topUp'`) |
+| `ovm` | `getProvenance`, `getState`, `getRoleHolders`, `getValidators`, `prepareWithdraw`, `prepareConsolidate`, `prepareDistribute` / `previewDistribute`, role and ownership writes (`prepareGrantRoles`, `prepareTransfer`, `prepareSetPrincipalRecipient`, ...) |
+| `splits` | `percent` / `formatPercent` / `splitParams`, `predictSplit`, `prepareCreateSplit`, `getSplit`, `prepareDistributeAll` / `previewDistributeAll` |
+| `setup` | `prepareCreateOvm`, `prepareOvmWithSplits`, `ovmFromReceipt`, presets (`rewardsSplit`, `totalSplit`, `solo`) |
 | `incentives` | `get`, `isClaimed`, `preflight`, `prepareClaim` |
-| `exits` | `verifyPartialExit`, `aggregate` (bound: `chainId` from the client) on the Obol API exit formats (snake_case, as stored), `blsVerify`, `blsAggregate`, `blsThresholdAggregate`, `blsRecoverPubkey` |
+| `exits` | `assertPartialExit`, `aggregate` (bound: `chainId` from the client) on the Obol API exit formats (snake_case, as stored), `blsVerify`, `blsAggregate`, `blsThresholdAggregate`, `blsRecoverPubkey` |
 | `terms` | `hasAccepted`, `accept` |
 | `withdrawals` | `prepareEoaWithdraw` |
 | `experimental` | `simulate`, `legacy.getOwrTranches` (shapes may change in a minor release) |
@@ -231,7 +247,7 @@ Exits use the EIP-7044 domain: the Capella fork version and genesis validators r
 
 ### Errors (`src/errors.ts`, `src/codes.ts`, codes in `spec/errors.md`)
 
-One class, **`ObolError`** (`code`, `message`, `hint`, `details`), and **`ObolApiError`** for API responses (`status`, `endpoint`, ...). Codes are the `ObolErrorCode` / `FindingCode` unions in `src/codes.ts`, with `ObolErrorDetails` typing each code's `details`; `isObolError(error, code)` narrows. Every code, what throws it and what the caller should do is in `spec/errors.md`; `test/spec/conformance.spec.ts` fails when errors.md, `src/codes.ts` and the codes used in `src/` differ. Add a new code to errors.md and `src/codes.ts` first.
+One class, **`ObolError`** (`code`, `message`, `hint`, `details`), and **`ObolApiError`** for API responses (`status`, `endpoint`, ...). `isObolError` checks a `Symbol.for` brand, not `instanceof`, so it works across the CJS / ESM / browser copies and across installed versions; use it (not `instanceof ObolError`) in new code that may see an error from another copy. Codes are the `ObolErrorCode` / `FindingCode` unions in `src/codes.ts`, with `ObolErrorDetails` typing each code's `details`; `isObolError(error, code)` narrows. Every code, what throws it and what the caller should do is in `spec/errors.md`; `test/spec/conformance.spec.ts` fails when errors.md, `src/codes.ts` and the codes used in `src/` differ. Add a new code to errors.md and `src/codes.ts` first.
 
 ### Lock verification
 
@@ -244,7 +260,7 @@ One class, **`ObolError`** (`code`, `message`, `hint`, `details`), and **`ObolAp
 - **One thread, no workers.** Everything runs on the calling thread and awaits `tick()` (`src/internal/yielder.ts`) between units of work: it yields (`setImmediate`, else `setTimeout(0)`) once half of `yieldMs` (default 50) has passed. Long loops (lock / definition hashing per validator, share binding, signature batches, node signatures) must keep calling `tick`. There are no time limits or concurrency limits; servers apply their own around the call.
 - **BLS backend.** `BlsBackend` (`src/cluster/blsBackend.ts`) is the injectable interface (`decodePublicKey`, `aggregatePublicKeys`, `onPolynomial`, `verify`, `createBatch`); `nobleBls` is the default. The adapter over `@chainsafe/blst` ships as the Node-only entry `@obolnetwork/obol-sdk/blst` (`loadBlstBackend`, `blstBackendFrom`; `@chainsafe/blst` is an optional peer and a devDependency); no other entry imports it. `test/cluster/blstCrossCheck.spec.ts` checks both backends agree; `test/blst/blst.spec.ts` checks nothing else imports the entry.
 - **Share binding (step 5).** Y0 = group key, Yj = share j: they lie on one polynomial of degree < t iff every t-th forward difference is the identity (point subtractions only). Only Y0 … Y(t-1) are subgroup-checked; later points are then integer combinations of them. Identity points are rejected. `test/internal/shareBinding.spec.ts` compares it with Lagrange recovery.
-- **Signatures (steps 6, 7, `verifyDepositData`).** `firstInvalidSignature` checks batches of 32 with random 64-bit weights per signature (subgroup-checked points), so a batch passes only if each signature is valid on its own; a failing batch is rechecked one by one to report the first invalid validator. Never replace this with a plain aggregate check: invalid signatures can cancel out in a sum (`test/cluster/verifyLockSynthetic.spec.ts` has the cases).
+- **Signatures (steps 6, 7, `assertDepositData`).** `firstInvalidSignature` checks batches of 32 with random 64-bit weights per signature (subgroup-checked points), so a batch passes only if each signature is valid on its own; a failing batch is rechecked one by one to report the first invalid validator. Never replace this with a plain aggregate check: invalid signatures can cancel out in a sum (`test/cluster/verifyLockSynthetic.spec.ts` has the cases).
 - **Cost** (one thread): pure JS about 25 ms per signature, so a 1k-validator lock with 3 signatures each is about 80 s `full`, 0.3 s `attested`; 10k `attested` about 2 s. With the blst adapter, 1k `full` about 1.3 s.
 
 ### Supported Chains (`src/chains.ts`)
@@ -260,7 +276,7 @@ Gnosis and Sepolia are accepted for cluster files and terms only (existing Launc
 
 ### Validation
 
-All inputs are decoded with **TypeBox** schemas (`src/schema.ts`, `T.*` for hex, addresses, uints) before any API or contract call. Units: ETH amounts are `bigint` wei everywhere; shares are parts per million (`1_000_000` = 100%). See `spec/README.md` "Conventions".
+All inputs are decoded with **TypeBox** schemas (`src/schema.ts`, `T.*` for hex, addresses, uints) before any API or contract call. Input and option schemas are strict: every `Type.Object` a caller fills has `additionalProperties: false`, and an options object with values a schema cannot describe (viem clients, a `BlsBackend`, an `AbortSignal`) goes through `rejectUnknownKeys(options, KEYS, 'options')` first. A misspelt option must never be dropped silently. Schemas of documents (cluster files, `Deposit`, split params, exit wire objects) and API responses stay open. Units: ETH amounts are `bigint` wei everywhere; shares are parts per million (`1_000_000` = 100%). See `spec/README.md` "Conventions".
 
 ### Authentication Pattern
 
@@ -323,7 +339,7 @@ The SDK reads no environment variables; RPCs come from the viem clients the call
 | `@sinclair/typebox` | Input schemas and decoding |
 | `@noble/curves` | BLS12-381 and secp256k1 (bundled) |
 | `@chainsafe/ssz` | SSZ hashing of cluster files, deposits and exits |
-| `@chainsafe/enr` | Ethereum Node Record parsing (bundled; ESM-only) |
+| `@chainsafe/enr` (dev) | Ethereum Node Record parsing (bundled into every build; ESM-only) |
 | `@chainsafe/blst` (optional peer, dev) | Native BLS for Node servers through `@obolnetwork/obol-sdk/blst` (dynamic import); cross-checks the pure-JS backend in tests |
 
 ## Dependencies policy
@@ -350,7 +366,7 @@ Version bumping follows semantic versioning:
 
 ## CI/CD
 
-- **PR checks**: lint, prettier, build, unit tests (GitHub Actions, `.github/workflows/ci.yml`)
+- **PR checks**: lint, prettier, build, API report, bundle size, unit tests (GitHub Actions, `.github/workflows/ci.yml`). The unit tests run after the build and include `test/package`, which fails in CI when `dist/` is missing or older than `src/`
 - **Node version in CI**: 24.x
 
 ## Common Patterns When Modifying Code
@@ -382,7 +398,9 @@ Before reporting or "fixing" a security finding in this SDK, read [`KNOWN_ISSUES
 
 - Do not read `test/bytecodes.ts` unless working on factory code checks — it's ~50KB of hex
 - Do not import from `src/internal/` in new public API; it is carried-over pure code behind the modules
-- Do not skip schema decoding — every input is decoded before API/contract calls
+- Do not skip schema decoding — every input is decoded before API/contract calls, and unknown keys are rejected
+- Do not use `Buffer` in `src/` (browsers have none): `Uint8Array`, `src/internal/bytes.ts`, and the list types of `src/internal/sszLists.ts`
+- Do not downgrade a finding to `info`, or add a way to acknowledge every warning at once, to make `send` pass
 - Do not add ethers (or any second Ethereum library); use viem
 - Do not use `jest.mock()` — use `jest.unstable_mockModule()` for ESM compatibility
 - Do not import native modules (`@chainsafe/blst`, …) or `worker_threads` from `src/`, except `src/blst/` (dynamic `import('@chainsafe/blst')` only); native speed comes in through a `BlsBackend`, and no other entry may import `src/blst/`

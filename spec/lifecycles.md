@@ -78,9 +78,10 @@ fallback with `beaconUrl`).
 | Status | Beacon state | Observed by | What `prepareDeposit` does |
 |---|---|---|---|
 | `new` | no registry entry, no pending deposit | `deposits.status` | `deposit`: full checks incl. BLS. `topUp`: `DEPOSIT_TOP_UP_TARGET_MISSING` |
-| `queued` | in `pending_deposits` (`beaconStatus: "pending_deposit"`), or registry `pending_initialized` / `pending_queued` | `deposits.status` (`pendingDeposits[]`, `beaconStatus`) | same credentials: `DEPOSIT_ALREADY_QUEUED` (info); different or unknown credentials: `DEPOSIT_CONFLICT` |
-| `active` | `active_ongoing`, `active_exiting`, `active_slashed` | `deposits.status` (`validatorIndex`, `balance`) | `deposit`: `DEPOSIT_IS_TOP_UP` (warning); `topUp`: allowed |
-| `exited` | `exited_*`, `withdrawal_*` | `deposits.status` | `topUp`: `TOP_UP_EXITED_VALIDATOR` (warning) |
+| `queued` | in `pending_deposits` only (`beaconStatus: "pending_deposit"`) | `deposits.status` (`pendingDeposits[]`, `beaconStatus`) | same credentials: `DEPOSIT_ALREADY_QUEUED` (info); different or unknown credentials: `DEPOSIT_CONFLICT` (`existing: "queued"`) |
+| `queued` | registry `pending_initialized` / `pending_queued` (the validator exists) | `deposits.status` (`validatorIndex`, `beaconStatus`) | as `active`: `deposit` throws; the rest of a chunked activation deposit is a `topUp` |
+| `active` | `active_ongoing`, `active_exiting`, `active_slashed` | `deposits.status` (`validatorIndex`, `balance`) | `deposit`: error, `DEPOSIT_VALIDATOR_EXISTS` (its credentials point at the expected address) or `DEPOSIT_CONFLICT` (`existing: "validator"`: they do not); `topUp`: allowed, with `TOP_UP_CREDENTIALS_FOREIGN` (warning) when the credentials are not the expected address's |
+| `exited` | `exited_*`, `withdrawal_*` | `deposits.status` | `deposit`: error, as `active`; `topUp`: `TOP_UP_EXITED_VALIDATOR` (warning) |
 
 Notes:
 

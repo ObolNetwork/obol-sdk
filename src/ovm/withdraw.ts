@@ -10,7 +10,7 @@ import { prepared, readRequestFee, resolveRequestFee } from '../chainUtils.js';
 import { senderOf, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, invalid, T, ZERO_ADDRESS } from '../schema.js';
-import type { Prepared, StatusSource } from '../types.js';
+import type { FindingsOf, Prepared, StatusSource } from '../types.js';
 import { GWEI, MAX_UINT64, weiToGwei } from '../units.js';
 import {
   StatusSourceFields,
@@ -81,9 +81,13 @@ const resolveExcessFeeRecipient = (
 export const PrepareWithdrawInputSchema = Type.Object(
   {
     ovm: T.Address,
-    requests: Type.Array(Type.Object({ pubkey: T.Pubkey, amount: T.Wei }), {
-      minItems: 1,
-    }),
+    requests: Type.Array(
+      Type.Object(
+        { pubkey: T.Pubkey, amount: T.Wei },
+        { additionalProperties: false },
+      ),
+      { minItems: 1 },
+    ),
     fee: Type.Optional(T.Wei),
     excessFeeRecipient: Type.Optional(T.Address),
     from: Type.Optional(T.Address),
@@ -176,7 +180,7 @@ export const prepareWithdraw = async (
     args.from,
   );
 
-  const checks = await provenanceFindings(ctx, ovm);
+  const checks: FindingsOf<'withdraw'> = await provenanceFindings(ctx, ovm);
   const from = requireSender(ctx, args.from, 'ovm.prepareWithdraw');
   const core = await readOvmCore(ctx, ovm, {
     from,
@@ -263,16 +267,18 @@ export const PrepareConsolidateInputSchema = Type.Object(
   {
     ovm: T.Address,
     requests: Type.Array(
-      Type.Object({
-        sources: Type.Array(T.Pubkey, {
-          minItems: 1,
-          maxItems: MAX_CONSOLIDATION_SOURCES,
-        }),
-        target: T.Pubkey,
-      }),
+      Type.Object(
+        {
+          sources: Type.Array(T.Pubkey, {
+            minItems: 1,
+            maxItems: MAX_CONSOLIDATION_SOURCES,
+          }),
+          target: T.Pubkey,
+        },
+        { additionalProperties: false },
+      ),
       { minItems: 1 },
     ),
-    acknowledgeStakeMovesToTarget: Type.Literal(true),
     fee: Type.Optional(T.Wei),
     excessFeeRecipient: Type.Optional(T.Address),
     from: Type.Optional(T.Address),
@@ -284,7 +290,6 @@ export interface PrepareConsolidateInput extends StatusSource {
   ovm: string;
   /** A source equal to its target switches it to 0x02 (compounding) credentials. */
   requests: Array<{ sources: string[]; target: string }>;
-  acknowledgeStakeMovesToTarget: true;
   /** Total fee in wei; default max(10 × current fee, 1 gwei) × total sources (the OVM refunds the excess). */
   fee?: bigint;
   excessFeeRecipient?: string;
@@ -299,31 +304,22 @@ export interface ConsolidatePreview {
 
 /**
  * ovm.prepareConsolidate (`chain`): EIP-7251 requests through
- * `OVM.consolidate`. Checks, in order: `acknowledgeStakeMovesToTarget` is
- * exactly true (CONSOLIDATION_NOT_ACKNOWLEDGED, before anything else);
- * 1–63 sources per request; provenance; the sender is owner or holds
- * CONSOLIDATION; the fee over all sources (EIP-7251 predeploy; default as
- * prepareWithdraw, the top of the accepted range); with a
- * status source, warnings CONSOLIDATION_TARGET_NOT_COMPOUNDING and
- * CONSOLIDATION_CREDENTIALS_DIFFER (withdrawal addresses compared).
+ * `OVM.consolidate`. Checks, in order: 1–63 sources per request;
+ * provenance; the sender is owner or holds CONSOLIDATION; the fee over all
+ * sources (EIP-7251 predeploy; default as prepareWithdraw, the top of the
+ * accepted range); with a status source, the beacon chain's request rules
+ * (errors) and the warning CONSOLIDATION_CREDENTIALS_DIFFER when a source
+ * and its target have different withdrawal addresses (the stake leaves this
+ * OVM); without one, or when the source lacks a field, the warning
+ * VALIDATOR_STATUS_UNCHECKED. `send` refuses either warning until it is
+ * acknowledged (`send(prepared, { acknowledge: [...] })`). There is no
+ * acknowledgement flag on the input (rc.11's `acknowledgeStakeMovesToTarget`
+ * was required on every call, also when no stake moved).
  */
 export const prepareConsolidate = async (
   ctx: Context,
   input: PrepareConsolidateInput,
 ): Promise<Prepared<'consolidate'>> => {
-  // Checked first and at runtime, also for untyped callers.
-  if (
-    (input as { acknowledgeStakeMovesToTarget?: unknown } | null)
-      ?.acknowledgeStakeMovesToTarget !== true
-  ) {
-    throw new ObolError(
-      'CONSOLIDATION_NOT_ACKNOWLEDGED',
-      'prepareConsolidate requires acknowledgeStakeMovesToTarget: true',
-      {
-        hint: "Consolidation moves the source validators' stake to the target; confirm the targets are yours, then pass it",
-      },
-    );
-  }
   const args = decode(PrepareConsolidateInputSchema, input);
   const contracts = requireContracts(ctx.chain.id, 'ovm.prepareConsolidate');
   const ovm = checksum(args.ovm);
@@ -333,7 +329,7 @@ export const prepareConsolidate = async (
     args.from,
   );
 
-  const checks = await provenanceFindings(ctx, ovm);
+  const checks: FindingsOf<'consolidate'> = await provenanceFindings(ctx, ovm);
   const from = requireSender(ctx, args.from, 'ovm.prepareConsolidate');
   const core = await readOvmCore(ctx, ovm, {
     from,

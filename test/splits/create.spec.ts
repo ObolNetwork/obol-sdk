@@ -149,6 +149,78 @@ describe('splits.prepareCreateSplit', () => {
     expect(chain.requests).toHaveLength(0);
   });
 
+  // rc.12: recipients whose share could never be withdrawn. Addresses are
+  // written out (0xSplits v2 deployments, the Hoodi OVM factory, the beacon
+  // deposit contract), not read from the SDK's chain table.
+  describe('unusable recipients', () => {
+    const ZERO = '0x0000000000000000000000000000000000000000';
+    const withRecipient = (address: string) => [
+      { address: A, share: 700_000 },
+      { address, share: 300_000 },
+    ];
+    const issueOf = async (
+      input: Parameters<typeof prepareCreateSplit>[1],
+      chain = chainWith().chain,
+    ) => {
+      const error = await caught(prepareCreateSplit(chain.context(), input));
+      expect(error.code).toBe('PAYLOAD_INVALID');
+      return (error.details.issues as Array<{ issue?: string }>)[0].issue;
+    };
+
+    it('refuses the zero address', async () => {
+      expect(await issueOf({ recipients: withRecipient(ZERO) })).toBe(
+        'zero_address',
+      );
+    });
+
+    it.each([
+      ['SplitsWarehouse', '0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8'],
+      ['PullSplitFactory', '0x5cbA88D55Cec83caD5A105Ad40C8c9aF20bE21d1'],
+      ['OVM factory (Hoodi)', '0x5754C8665B7e7BF15E83fCdF6d9636684B782b12'],
+      ['deposit contract', '0x00000000219ab540356cBB839Cbe05303d7705Fa'],
+      ['EIP-7002 predeploy', '0x00000961Ef480Eb55e80D19ad83579A64c007002'],
+      ['EIP-7251 predeploy', '0x0000BBdDc7CE488642fb579F8B00f3a590007251'],
+      // Lower-case spelling of the Warehouse: compared case-insensitively.
+      [
+        'SplitsWarehouse (lower case)',
+        '0x8fb66f38cf86a3d5e8768f8f1754a24a6c661fb8',
+      ],
+    ])('refuses %s as a recipient (protocol_contract)', async (_n, address) => {
+      const { chain } = chainWith();
+      expect(await issueOf({ recipients: withRecipient(address) }, chain)).toBe(
+        'protocol_contract',
+      );
+      // Refused before any chain read.
+      expect(chain.requests).toHaveLength(0);
+    });
+
+    it("refuses the split's own predicted address (self_recipient)", async () => {
+      expect(await issueOf({ recipients: withRecipient(PREDICTED) })).toBe(
+        'self_recipient',
+      );
+    });
+
+    it('Multicall3 stays a PUBLIC_FORWARDER_AS_RECIPIENT error', async () => {
+      const error = await caught(
+        prepareCreateSplit(chainWith().chain.context(), {
+          recipients: withRecipient(
+            '0xcA11bde05977b3631167028862bE2a173976CA11',
+          ),
+        }),
+      );
+      expect(error.code).toBe('PUBLIC_FORWARDER_AS_RECIPIENT');
+    });
+
+    it('the bound module refuses them too', async () => {
+      const error = await caught(
+        createSplitsModule(chainWith().chain.context()).prepareCreateSplit({
+          recipients: withRecipient(ZERO),
+        }),
+      );
+      expect(error.code).toBe('PAYLOAD_INVALID');
+    });
+  });
+
   it('rejects a malformed salt', async () => {
     const { chain } = chainWith();
     const error = await caught(

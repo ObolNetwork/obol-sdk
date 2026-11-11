@@ -29,12 +29,13 @@ import {
 } from 'viem/accounts';
 import { hoodi, mainnet } from 'viem/chains';
 import { CHAINS, createObolClient, type ObolClient } from '../../src/index.js';
+import { warningCodes } from '../../src/send.js';
 import type { AnyPrepared, Deposit, Finding } from '../../src/types.js';
 import {
   depositDomainForFork,
   depositSigningRoot,
 } from '../../src/internal/verification/common.js';
-import { depositDataRoot } from '../../src/deposits/verifyDepositData.js';
+import { depositDataRoot } from '../../src/deposits/assertDepositData.js';
 import { GWEI } from '../../src/units.js';
 
 /** The forked chain: Hoodi (default) or mainnet (E2E_CHAIN=mainnet). */
@@ -223,12 +224,22 @@ export const balanceOf = async (
 export const gasCost = (receipt: TransactionReceipt): bigint =>
   receipt.gasUsed * receipt.effectiveGasPrice;
 
-/** `obol.send` then `wait`; returns the receipt (wait throws on revert). */
+/**
+ * `send` refuses warnings that are not acknowledged by code (rc.12). These
+ * suites assert the findings themselves and then send to compare with what
+ * is mined, so they acknowledge exactly the warnings present, with the SDK's
+ * `warningCodes`. An application shows them to whoever owns the funds first.
+ */
+export { warningCodes };
+
+/** `obol.send` (acknowledging `prepared`'s own warnings) then `wait`; returns the receipt (wait throws on revert). */
 export const sendAndWait = async (
   obol: ObolClient,
   prepared: AnyPrepared,
 ): Promise<TransactionReceipt> => {
-  const sent = await obol.send(prepared);
+  const sent = await obol.send(prepared, {
+    acknowledge: warningCodes(prepared),
+  });
   return await sent.wait({ timeoutMs: 120_000 });
 };
 

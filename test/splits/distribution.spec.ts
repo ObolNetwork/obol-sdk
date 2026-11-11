@@ -14,8 +14,8 @@ import {
 } from '../../src/abi.js';
 import {
   distributionFromReceipt,
-  prepareDistribution,
-  previewDistribution,
+  prepareDistributeAll,
+  previewDistributeAll,
 } from '../../src/splits/distribution.js';
 import { createSplitsModule } from '../../src/splits/index.js';
 import { ZERO_ADDRESS } from '../../src/schema.js';
@@ -109,7 +109,7 @@ const scenario = (s: Scenario = {}) =>
 
 const both = { rewardSplit: rewardParams, principalSplit: principalParams };
 
-describe('splits.prepareDistribution', () => {
+describe('splits.prepareDistributeAll', () => {
   it('leaves legs below minWithdraw out with a skipReason', async () => {
     const chain = scenario({
       ovmBalance: parseEther('1'),
@@ -121,10 +121,10 @@ describe('splits.prepareDistribution', () => {
       from: SENDER,
       minWithdraw: parseEther('2'),
     };
-    const error = await caught(prepareDistribution(chain.context(), input));
+    const error = await caught(prepareDistributeAll(chain.context(), input));
     expect(error.code).toBe('NOTHING_TO_DISTRIBUTE');
 
-    const { preview, checks, blockNumber } = await previewDistribution(
+    const { preview, checks, blockNumber } = await previewDistributeAll(
       chain.context(),
       input,
     );
@@ -153,7 +153,7 @@ describe('splits.prepareDistribution', () => {
       ovmBalance: parseEther('1'),
       warehouse: { [HOODI.rafRecipient]: 500n },
     });
-    const withRaf = await prepareDistribution(chain.context(), {
+    const withRaf = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       ...both,
       from: SENDER,
@@ -170,7 +170,7 @@ describe('splits.prepareDistribution', () => {
     ).toBe(true);
     expect(withRaf.checks).toEqual([]);
 
-    const without = await prepareDistribution(chain.context(), {
+    const without = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       ...both,
       from: SENDER,
@@ -199,7 +199,7 @@ describe('splits.prepareDistribution', () => {
       ovmBalance: parseEther('1'),
       warehouse: { [A]: 100n },
     });
-    const { preview } = await prepareDistribution(chain.context(), {
+    const { preview } = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       ...both,
       from: SENDER,
@@ -221,7 +221,7 @@ describe('splits.prepareDistribution', () => {
 
   it('includes a leg at exactly minWithdraw', async () => {
     const chain = scenario({ warehouse: { [A]: 101n } });
-    const prepared = await prepareDistribution(chain.context(), {
+    const prepared = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       ...both,
       from: SENDER,
@@ -240,7 +240,7 @@ describe('splits.prepareDistribution', () => {
 
   it('adds PROVENANCE_UNKNOWN when the factory logs cannot be read', async () => {
     const chain = scenario({ ovmBalance: parseEther('1'), getLogsFails: true });
-    const prepared = await prepareDistribution(chain.context(), {
+    const prepared = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       ...both,
       from: SENDER,
@@ -258,7 +258,7 @@ describe('splits.prepareDistribution', () => {
     expect(
       (
         await caught(
-          prepareDistribution(chain.context(), { ovm: OVM, ...both }),
+          prepareDistributeAll(chain.context(), { ovm: OVM, ...both }),
         )
       ).code,
     ).toBe('OVM_NOT_OBOL');
@@ -271,7 +271,7 @@ describe('splits.prepareDistribution', () => {
       paused: { [A]: true, [safe]: true },
       code: { [safe]: '0x6080604052' },
     });
-    const prepared = await previewDistribution(chain.context(), {
+    const prepared = await previewDistributeAll(chain.context(), {
       ovm: OVM,
       ...both,
       recipients: [A, safe],
@@ -296,7 +296,7 @@ describe('splits.prepareDistribution', () => {
       code: { [safe]: '0x6080604052' },
     });
     const error = await caught(
-      prepareDistribution(chain.context(), {
+      prepareDistributeAll(chain.context(), {
         rewardSplit: { ...rewardParams, address: REWARD },
         from: safe,
       }),
@@ -309,7 +309,7 @@ describe('splits.prepareDistribution', () => {
     const chain = scenario({
       rewardSplit: { paused: true, owner: SENDER, balance: parseEther('1') },
     });
-    const prepared = await prepareDistribution(chain.context(), {
+    const prepared = await prepareDistributeAll(chain.context(), {
       rewardSplit: { ...rewardParams, address: REWARD },
       from: SENDER,
     });
@@ -324,7 +324,7 @@ describe('splits.prepareDistribution', () => {
       paused: { [SENDER]: true },
       walletAccount: SENDER,
     });
-    const prepared = await prepareDistribution(chain.context(), {
+    const prepared = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       ...both,
       recipients: [SENDER],
@@ -355,7 +355,7 @@ describe('splits.prepareDistribution', () => {
       principalRecipient: A,
       logs: [created],
     });
-    const prepared = await prepareDistribution(chain.context(), {
+    const prepared = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       from: SENDER,
     });
@@ -381,7 +381,7 @@ describe('splits.prepareDistribution', () => {
       principalRecipient: A,
     });
     const error = await caught(
-      prepareDistribution(chain.context(), { ovm: OVM, from: SENDER }),
+      prepareDistributeAll(chain.context(), { ovm: OVM, from: SENDER }),
     );
     expect(error.code).toBe('SPLIT_PARAMS_REQUIRED');
     expect(error.details).toEqual({ address: REWARD, kind: 'reward' });
@@ -393,7 +393,7 @@ describe('splits.prepareDistribution', () => {
       principalRecipient: REWARD,
       rewardRecipient: REWARD,
     });
-    const prepared = await prepareDistribution(chain.context(), {
+    const prepared = await prepareDistributeAll(chain.context(), {
       ovm: OVM,
       rewardSplit: rewardParams,
       principalSplit: rewardParams,
@@ -408,7 +408,7 @@ describe('splits.prepareDistribution', () => {
       },
     ]);
     const mismatch = await caught(
-      prepareDistribution(chain.context(), {
+      prepareDistributeAll(chain.context(), {
         ovm: OVM,
         rewardSplit: rewardParams,
         principalSplit: principalParams,
@@ -424,7 +424,7 @@ describe('splits.prepareDistribution', () => {
       rewardSplit: { params: withIncentive, balance: 1_000_001n },
       walletAccount: SENDER,
     });
-    const prepared = await prepareDistribution(chain.context(), {
+    const prepared = await prepareDistributeAll(chain.context(), {
       rewardSplit: { ...withIncentive, address: REWARD },
       recipients: [SENDER],
     });
@@ -441,6 +441,38 @@ describe('splits.prepareDistribution', () => {
       alreadyWaiting: 0n,
       withdraw: true,
     });
+  });
+
+  // rc.12: the incentive would be credited to the zero address and lost.
+  it('refuses an explicit zero-address distributor when a split has an incentive', async () => {
+    const withIncentive = { ...rewardParams, distributionIncentive: 10_000 };
+    const chain = scenario({
+      rewardSplit: { params: withIncentive, balance: 1_000_001n },
+      walletAccount: SENDER,
+    });
+    const error = await caught(
+      prepareDistributeAll(chain.context(), {
+        rewardSplit: { ...withIncentive, address: REWARD },
+        distributor: '0x0000000000000000000000000000000000000000',
+      }),
+    );
+    expect(error.code).toBe('PAYLOAD_INVALID');
+    expect((error.details.issues as unknown[])[0]).toMatchObject({
+      path: 'distributor',
+      issue: 'zero_address',
+    });
+  });
+
+  it('accepts a zero-address distributor when no split pays an incentive', async () => {
+    const chain = scenario({
+      rewardSplit: { params: rewardParams, balance: 1_000_001n },
+      walletAccount: SENDER,
+    });
+    const prepared = await prepareDistributeAll(chain.context(), {
+      rewardSplit: { ...rewardParams, address: REWARD },
+      distributor: '0x0000000000000000000000000000000000000000',
+    });
+    expect(prepared.preview.splits[0].distributorReward).toBe(0n);
   });
 
   it.each<[string, object]>([
@@ -468,21 +500,21 @@ describe('splits.prepareDistribution', () => {
       rewardSplit: { params: { ...rewardParams, distributionIncentive: 1 } },
     });
     expect(
-      (await caught(prepareDistribution(chain.context(), input))).code,
+      (await caught(prepareDistributeAll(chain.context(), input))).code,
     ).toBe('PAYLOAD_INVALID');
   });
 
   it('is bound by createSplitsModule', async () => {
     const chain = scenario({ ovmBalance: parseEther('1') });
     const splits = createSplitsModule(chain.context());
-    const prepared = await splits.prepareDistribution({
+    const prepared = await splits.prepareDistributeAll({
       ovm: OVM,
       ...both,
       from: SENDER,
     });
     expect(prepared.request.to).toBe(HOODI.multicall3);
     await expect(
-      splits.previewDistribution({ ovm: OVM, ...both }),
+      splits.previewDistributeAll({ ovm: OVM, ...both }),
     ).resolves.toHaveProperty('preview');
   });
 });

@@ -4,6 +4,8 @@
  * errors.md and against the codes used in `src/`, so they cannot drift.
  */
 import type { Address, Hash, Hex, TransactionReceipt } from 'viem';
+import type { FindingCode, WarningCode } from './findings.js';
+import type { Finding } from './types.js';
 
 /** One failing input path of PAYLOAD_INVALID. */
 export interface Issue {
@@ -55,11 +57,26 @@ export interface ObolErrorDetails {
     index: number;
     pubkey: Hex;
     existingCredentials?: Hex;
+    /** Where the other credentials are: a registered validator or a queued deposit. */
+    existing?: 'validator' | 'queued';
+  };
+  DEPOSIT_VALIDATOR_EXISTS: {
+    index: number;
+    pubkey: Hex;
+    /** The validator's beacon status (`active_ongoing`, `withdrawal_done`, ...). */
+    status: string;
+    withdrawalCredentials: Hex;
   };
   DEPOSIT_TOP_UP_TARGET_MISSING: { index: number; pubkey: Hex };
   DEPOSIT_AMOUNT_NOT_IN_LOCK: { amount: bigint; available: bigint[] };
+  DEPOSIT_AMOUNT_REQUIRED: { available: bigint[] };
   STATUS_UNAVAILABLE: {
-    reason?: 'endpoint_unavailable' | 'signatures_pending';
+    reason?:
+      | 'endpoint_unavailable'
+      | 'signatures_pending'
+      | 'beacon_wrong_chain'
+      | 'beacon_syncing'
+      | 'beacon_optimistic';
     /** With `signatures_pending`: the pubkey whose credentials are undecided. */
     pubkey?: Hex;
   };
@@ -90,7 +107,6 @@ export interface ObolErrorDetails {
     expiresAt: bigint;
   };
   FULL_EXIT_NOT_ACKNOWLEDGED: Record<string, never>;
-  CONSOLIDATION_NOT_ACKNOWLEDGED: Record<string, never>;
   FEE_OUT_OF_RANGE: { fee: bigint; minimum: bigint; maximum: bigint };
   FEE_READ_FAILED: { predeploy: Address };
   // Withdrawal and consolidation requests (EIP-7002 / EIP-7251)
@@ -155,7 +171,13 @@ export interface ObolErrorDetails {
     validatorIndex: string;
     storedValidatorIndex: string;
   };
-  EXIT_EPOCH_MISMATCH: { pubkey: Hex; epoch: string; storedEpoch: string };
+  EXIT_EPOCH_MISMATCH: {
+    pubkey: Hex;
+    epoch: string;
+    storedEpoch: string;
+    /** Whether the new epoch is above or below the stored one. */
+    direction: 'higher' | 'lower';
+  };
   EXIT_SIGNATURE_CONFLICT: { pubkey: Hex; shareIdx: number };
   EXIT_PARTIAL_SIGNATURE_INVALID: { pubkey: Hex; shareIdx?: number };
   EXIT_NOT_ENOUGH_SHARES: {
@@ -166,6 +188,15 @@ export interface ObolErrorDetails {
   };
   // Sending and simulation
   PREPARED_INVALID: Record<string, never>;
+  FINDINGS_NOT_ACKNOWLEDGED: {
+    /** The warning codes `send` was not told to accept: distinct, in order. */
+    codes: WarningCode[];
+    /**
+     * The warnings themselves, from `prepared.checks` and the simulation,
+     * with `message`, `hint`, `subject` and `details`: what to show.
+     */
+    findings: Array<Finding<WarningCode>>;
+  };
   TX_REJECTED: Record<string, never>;
   TX_REVERTED: {
     hash: Hash;
@@ -229,8 +260,10 @@ export const OBOL_ERROR_CODES = [
   'DEPOSIT_INVALID',
   'DEPOSIT_LOOKS_LIKE_TOP_UP',
   'DEPOSIT_CONFLICT',
+  'DEPOSIT_VALIDATOR_EXISTS',
   'DEPOSIT_TOP_UP_TARGET_MISSING',
   'DEPOSIT_AMOUNT_NOT_IN_LOCK',
+  'DEPOSIT_AMOUNT_REQUIRED',
   'STATUS_UNAVAILABLE',
   'OVM_NOT_OBOL',
   'PROVENANCE_UNKNOWN',
@@ -243,7 +276,6 @@ export const OBOL_ERROR_CODES = [
   'PUBLIC_FORWARDER_AS_RECIPIENT',
   'OWNERSHIP_HANDOVER_NOT_PENDING',
   'FULL_EXIT_NOT_ACKNOWLEDGED',
-  'CONSOLIDATION_NOT_ACKNOWLEDGED',
   'FEE_OUT_OF_RANGE',
   'FEE_READ_FAILED',
   'VALIDATOR_NOT_ACTIVE',
@@ -276,6 +308,7 @@ export const OBOL_ERROR_CODES = [
   'EXIT_PARTIAL_SIGNATURE_INVALID',
   'EXIT_NOT_ENOUGH_SHARES',
   'PREPARED_INVALID',
+  'FINDINGS_NOT_ACKNOWLEDGED',
   'TX_REJECTED',
   'TX_REVERTED',
   'TX_REPLACED',
@@ -283,49 +316,4 @@ export const OBOL_ERROR_CODES = [
   'SIMULATION_FAILED',
 ] as const satisfies readonly ObolErrorCode[];
 
-/** Every finding code (`Finding.code`), including the incentive claim issues. */
-export const FINDING_CODES = [
-  'DEPOSIT_EXISTENCE_UNCHECKED',
-  'DEPOSIT_IS_TOP_UP',
-  'DEPOSIT_ALREADY_QUEUED',
-  'QUEUED_CREDENTIALS_CONFLICT',
-  'TOP_UP_ABOVE_EFFECTIVE_CAP',
-  'TOP_UP_EXITED_VALIDATOR',
-  'OVM_STAKE_NOT_TRACKED',
-  'PROVENANCE_UNKNOWN',
-  'VALIDATOR_STATUS_UNCHECKED',
-  'WITHDRAW_AMOUNT_CAPPED',
-  'PARTIAL_WITHDRAWAL_QUEUE_FULL',
-  'CONSOLIDATION_CREDENTIALS_DIFFER',
-  'PRINCIPAL_STAKE_MISMATCH',
-  'PUBLIC_FORWARDER_HOLDS_ROLE',
-  'ROLES_SURVIVE_TRANSFER',
-  'ROLE_HOLDERS_UNCHECKED',
-  'ROLE_GRANT_CONSOLIDATION',
-  'ROLE_GRANT_DEPOSIT_TO_PRINCIPAL',
-  'RECIPIENT_WITHDRAW_PAUSED',
-  'RAF_LEFT_IN_WAREHOUSE',
-  'SPLIT_REUSED',
-  'RECIPIENT_NOT_CONTRACT',
-  'SIMULATION_UNAVAILABLE',
-  'SIMULATION_REVERTED',
-  'SIMULATION_PREVIEW_MISMATCH',
-  'SIMULATION_UNTRUSTED_EVENT',
-  'SIMULATION_CONTRACT_WALLET',
-  // Incentive claim issues (incentives.preflight, INCENTIVES_PREFLIGHT_FAILED)
-  'NO_INCENTIVES',
-  'INCENTIVES_NOT_FOUND',
-  'INCENTIVES_FETCH_FAILED',
-  'OPERATOR_ADDRESS_MISMATCH',
-  'INCENTIVES_DATA_INVALID',
-  'CONTRACT_NOT_DEPLOYED',
-  'DISTRIBUTOR_UNKNOWN',
-  'UNSUPPORTED_CHAIN',
-  'TOKEN_MISMATCH',
-  'PROOF_INVALID',
-  'ALREADY_CLAIMED',
-  'CLAIM_WINDOW_CLOSED',
-  'CHAIN_READ_FAILED',
-] as const;
-
-export type FindingCode = (typeof FINDING_CODES)[number];
+export { FINDING_CODES, FINDINGS, type FindingCode } from './findings.js';

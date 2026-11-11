@@ -16,17 +16,21 @@ import {
   canonicalUint64,
   exitNetwork,
   storedShares,
-} from './verifyPartialExit.js';
+} from './assertPartialExit.js';
 
-export const AggregateSchema = Type.Object({
-  validator: Type.Object({
-    distributedPublicKey: T.Pubkey,
-    publicShares: Type.Array(T.Pubkey, { minItems: 1 }),
-  }),
-  exit: Type.Union([StoredExitBlobSchema, FullExitResponseSchema]),
-  threshold: Type.Integer({ minimum: 1 }),
-  chainId: Type.Integer({ minimum: 1 }),
-});
+// The input's own keys are strict; `validator` and `exit` are documents.
+export const AggregateSchema = Type.Object(
+  {
+    validator: Type.Object({
+      distributedPublicKey: T.Pubkey,
+      publicShares: Type.Array(T.Pubkey, { minItems: 1 }),
+    }),
+    exit: Type.Union([StoredExitBlobSchema, FullExitResponseSchema]),
+    threshold: Type.Integer({ minimum: 1 }),
+    chainId: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
 
 export interface AggregateInput {
   /** The validator from the cluster lock: group key and public shares in operator order. */

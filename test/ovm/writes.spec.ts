@@ -650,7 +650,7 @@ describe('ovm sweep and pull balances', () => {
 describe('createOvmModule', () => {
   it('binds the reads and exposes the pure helpers', async () => {
     const ovm = ovmFor({ ovmBalance: ETH });
-    expect((await ovm.verify(OVM)).status).toBe('obol');
+    expect((await ovm.getProvenance(OVM)).status).toBe('obol');
     expect((await ovm.getState(OVM))?.balance).toBe(ETH);
     expect((await ovm.getRoleHolders(OVM)).owner).toBe(OWNER);
     expect(ovm.OVM_ROLES.DEPOSIT).toBe(0x20n);

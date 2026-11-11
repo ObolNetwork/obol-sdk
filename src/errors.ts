@@ -30,6 +30,13 @@ export type ObolErrorOptions<C extends ObolErrorCode> = {
 export type DetailsOf<C extends ObolErrorCode> = ObolErrorDetails[C] &
   Record<string, unknown>;
 
+/**
+ * Marks every ObolError, from any copy of the SDK: the ESM and CJS builds, or
+ * two installed versions, each have their own `ObolError` class, so
+ * `instanceof` fails across them. A registry symbol is the same in all.
+ */
+const OBOL_ERROR_BRAND = Symbol.for('@obolnetwork/obol-sdk.ObolError');
+
 export class ObolError<C extends ObolErrorCode = ObolErrorCode> extends Error {
   readonly code: C;
   readonly hint?: string;
@@ -57,6 +64,10 @@ export class ObolError<C extends ObolErrorCode = ObolErrorCode> extends Error {
         configurable: true,
       });
     }
+    Object.defineProperty(this, OBOL_ERROR_BRAND, {
+      value: true,
+      enumerable: false,
+    });
     this.name = 'ObolError';
     this.code = code;
     this.hint = opts.hint;
@@ -115,6 +126,10 @@ export class ObolApiError<
  * `details` narrows to that code's fields:
  *
  *   if (isObolError(e, 'TX_UNCONFIRMED')) watch(e.details.hash)
+ *
+ * Works across copies of the SDK (an error thrown by the CommonJS build is
+ * recognised by the ESM build, and by another installed version): it checks
+ * a `Symbol.for` brand and a string `code`, not `instanceof`.
  */
 export function isObolError<C extends ObolErrorCode>(
   error: unknown,
@@ -122,8 +137,12 @@ export function isObolError<C extends ObolErrorCode>(
 ): error is ObolError<C>;
 export function isObolError(error: unknown): error is ObolError;
 export function isObolError(error: unknown, code?: ObolErrorCode): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { [OBOL_ERROR_BRAND]?: unknown; code?: unknown };
   return (
-    error instanceof ObolError && (code === undefined || error.code === code)
+    candidate[OBOL_ERROR_BRAND] === true &&
+    typeof candidate.code === 'string' &&
+    (code === undefined || candidate.code === code)
   );
 }
 

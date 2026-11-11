@@ -4,10 +4,6 @@
   "title": "ovm.prepareConsolidate",
   "additionalProperties": false,
   "properties": {
-    "acknowledgeStakeMovesToTarget": {
-      "const": true,
-      "type": "boolean"
-    },
     "beaconUrl": {
       "minLength": 1,
       "type": "string"
@@ -57,6 +53,7 @@
     },
     "requests": {
       "items": {
+        "additionalProperties": false,
         "properties": {
           "sources": {
             "items": {
@@ -86,8 +83,7 @@
   },
   "required": [
     "ovm",
-    "requests",
-    "acknowledgeStakeMovesToTarget"
+    "requests"
   ],
   "type": "object"
 }

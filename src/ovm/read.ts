@@ -16,7 +16,7 @@ import {
   type ReadCall,
 } from '../multicall.js';
 import { OVM_ROLES, roleNames, type OvmRoleName } from './routing.js';
-import { requireObolOvm } from './verify.js';
+import { requireObolOvm } from './provenance.js';
 import { finding } from '../chainUtils.js';
 import type { Finding } from '../types.js';
 
@@ -38,7 +38,7 @@ export interface OvmCore {
 
 export const ovmReadFailed = (ovm: Address, what: string): ObolError =>
   new ObolError('OVM_READ_FAILED', `${ovm} did not answer ${what}`, {
-    hint: 'Check the address and chain; run ovm.verify',
+    hint: 'Check the address and chain; run ovm.getProvenance',
     details: { address: ovm },
   });
 
@@ -201,20 +201,15 @@ export const requireHeldRoles = (
 export const provenanceFindings = async (
   ctx: Context,
   ovm: Address,
-): Promise<Finding[]> => {
-  const { verification, unknownFinding } = await requireObolOvm(
-    ctx,
-    ovm,
-    false,
-  );
+): Promise<Array<Finding<'PROVENANCE_UNKNOWN'>>> => {
+  const { provenance, unknownFinding } = await requireObolOvm(ctx, ovm, false);
   if (!unknownFinding) return [];
   return [
     finding(
       'PROVENANCE_UNKNOWN',
-      'warning',
-      `Could not check that ${ovm} was created by the Obol OVM factory: ${verification.reason}`,
+      `Could not check that ${ovm} was created by the Obol OVM factory: ${provenance.reason}`,
       {
-        hint: 'Retry ovm.verify before relying on the contract',
+        hint: 'Retry ovm.getProvenance before relying on the contract',
         subject: { address: ovm },
         details: { address: ovm },
       },

@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/cluster.verifyDefinition.json",
   "title": "cluster.verifyDefinition",
+  "additionalProperties": false,
   "properties": {
     "chainId": {
       "minimum": 0,

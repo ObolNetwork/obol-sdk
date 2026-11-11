@@ -2,6 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/deposits.fromLock.options.json",
   "title": "deposits.fromLock.options",
+  "additionalProperties": false,
+  "description": "The options a schema can describe. The options object also takes publicClient, publicClients and bls; any other key is PAYLOAD_INVALID.",
   "properties": {
     "amount": {
       "description": "wei",

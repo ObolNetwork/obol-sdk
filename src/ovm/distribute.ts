@@ -7,7 +7,7 @@ import { prepared } from '../chainUtils.js';
 import type { Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, T } from '../schema.js';
-import type { Finding, Prepared, PreviewResult } from '../types.js';
+import type { Prepared, PreviewResult } from '../types.js';
 import { provenanceFindings, readOvmCore } from './read.js';
 import { ovmRouting } from './routing.js';
 
@@ -44,7 +44,7 @@ const build = async (
   requireContracts(ctx.chain.id, operation);
   const ovm = checksum(args.ovm);
   const mode = args.mode ?? 'push';
-  const checks: Finding[] = await provenanceFindings(ctx, ovm);
+  const checks = await provenanceFindings(ctx, ovm);
   const core = await readOvmCore(ctx, ovm, { what: operation });
   return prepared(ctx, 'distribute', {
     to: ovm,

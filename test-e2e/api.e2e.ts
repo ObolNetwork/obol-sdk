@@ -1,6 +1,6 @@
 /**
  * Read-only checks against the public Obol API with the Hoodi fork as the
- * chain: incentives, and ovm.verify from the API's creation record compared
+ * chain: incentives, and ovm.getProvenance from the API's creation record compared
  * with the chain's factory logs. Skipped when the API is unreachable.
  *
  * A full incentives claim needs an address with an unclaimed Hoodi record:
@@ -48,22 +48,30 @@ describeFork('the public Obol API with a Hoodi fork (read-only)', () => {
   const withApi = () => obolFor(undefined, { baseUrl: API });
 
   apiTest(
-    'ovm.verify: the API creation record and the factory logs agree',
+    'ovm.getProvenance: the API creation record and the factory logs agree',
     async () => {
-      const fromApi = await withApi().ovm.verify(HOODI_OVM);
-      const fromChain = await obolFor().ovm.verify(HOODI_OVM);
-      expect(fromApi).toMatchObject({ status: 'obol', source: 'api' });
+      const fromApi = await withApi().ovm.getProvenance(HOODI_OVM);
+      const fromChain = await obolFor().ovm.getProvenance(HOODI_OVM);
+      // rc.12: the API's `obol` answer is confirmed against the creation
+      // receipt it names, so the verdict is the chain's (one receipt read).
+      expect(fromApi).toMatchObject({
+        status: 'obol',
+        source: 'chain',
+        reason:
+          'CreateObolValidatorManager event found in the creation transaction',
+      });
       expect(fromChain).toMatchObject({ status: 'obol', source: 'chain' });
       expect(fromApi.factoryAddress).toBe(fromChain.factoryAddress);
+      expect(fromApi.creationTxHash).toBe(fromChain.creationTxHash);
     },
   );
 
   apiTest(
-    'ovm.verify falls back to the chain for an OVM the API has not seen',
+    'ovm.getProvenance falls back to the chain for an OVM the API has not seen',
     async () => {
       const s = await signer(13);
       const d = await deployOvm(s);
-      const verification = await withApi().ovm.verify(d.ovm);
+      const verification = await withApi().ovm.getProvenance(d.ovm);
       expect(verification).toMatchObject({
         status: 'obol',
         source: 'chain',

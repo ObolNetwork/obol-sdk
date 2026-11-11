@@ -1,5 +1,9 @@
 import type { Address, Hex } from 'viem';
-import type { FindingCode } from './codes.js';
+import type {
+  FindingCode,
+  FindingCodeFor,
+  FindingSeverity,
+} from './findings.js';
 import type { DepositPreview } from './deposits/prepareDeposit.js';
 import type { ClaimPreview } from './incentives/incentives.js';
 import type { DistributePreview } from './ovm/distribute.js';
@@ -12,7 +16,7 @@ import type { ConsolidatePreview, WithdrawPreview } from './ovm/withdraw.js';
 import type { CreateOvmPreview } from './setup/ovm.js';
 import type { OvmWithSplitsPreview } from './setup/withSplits.js';
 import type { CreateSplitPreview } from './splits/create.js';
-import type { DistributionPreview } from './splits/distribution.js';
+import type { DistributeAllPreview } from './splits/distribution.js';
 import type { EoaWithdrawPreview } from './withdrawals/withdrawals.js';
 
 export type { Address, Hex };
@@ -27,10 +31,14 @@ export type FindingSubject =
   | { address: Address }
   | { index: number };
 
-/** A check result that does not stop the operation (spec/errors.md "Findings"). */
-export interface Finding {
-  code: FindingCode;
-  severity: 'warning' | 'info';
+/**
+ * A check result that does not stop the operation (spec/errors.md
+ * "Findings"). `severity: 'warning'` stops `send` until `code` is
+ * acknowledged; the meaning of each code is on the keys of `FINDINGS`.
+ */
+export interface Finding<C extends FindingCode = FindingCode> {
+  code: C;
+  severity: FindingSeverity;
   message: string;
   hint?: string;
   /** Set when the finding is about one validator, address or input entry. */
@@ -52,13 +60,13 @@ export interface PreviewByKind {
   consolidate: ConsolidatePreview;
   /** ovm.prepareDistribute */
   distribute: DistributePreview;
-  /** splits.prepareDistribution */
-  distribution: DistributionPreview;
+  /** splits.prepareDistributeAll */
+  distributeAll: DistributeAllPreview;
   /** setup.prepareCreateOvm */
   createOvm: CreateOvmPreview;
   /** setup.prepareOvmWithSplits */
   ovmWithSplits: OvmWithSplitsPreview;
-  /** splits.prepareCreateSplit (also setup.prepareCreateSplit) */
+  /** splits.prepareCreateSplit */
   createSplit: CreateSplitPreview;
   /** incentives.prepareClaim */
   claim: ClaimPreview;
@@ -88,7 +96,7 @@ export const PREPARED_KINDS: readonly PreparedKind[] = [
   'withdraw',
   'consolidate',
   'distribute',
-  'distribution',
+  'distributeAll',
   'createOvm',
   'ovmWithSplits',
   'createSplit',
@@ -116,11 +124,21 @@ export interface Prepared<K extends PreparedKind = PreparedKind> {
   /** Which operation prepared it; narrows `preview`. */
   kind: K;
   request: PreparedRequest;
-  checks: Finding[];
+  /**
+   * The findings of the checks, typed to the codes this kind can carry. A
+   * `warning` here stops `send` until its code is acknowledged
+   * (`warningCodes(prepared)`).
+   */
+  checks: Array<Finding<FindingCodeFor<K>>>;
   preview: PreviewByKind[K];
   /** The block the checks and preview read; absent when no chain state was read. */
   blockNumber?: bigint;
 }
+
+/** The findings a `Prepared<K>` carries: `Prepared<K>['checks']`. */
+export type FindingsOf<K extends PreparedKind = PreparedKind> = Array<
+  Finding<FindingCodeFor<K>>
+>;
 
 /** Any prepared transaction, as a union discriminated by `kind`. */
 export type AnyPrepared = { [K in PreparedKind]: Prepared<K> }[PreparedKind];

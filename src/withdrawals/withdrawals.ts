@@ -9,7 +9,7 @@ import { requireContracts } from '../chains.js';
 import { prepared, readRequestFee, resolveRequestFee } from '../chainUtils.js';
 import { senderOf, type Context } from '../context.js';
 import { decode, T } from '../schema.js';
-import type { Prepared, StatusSource } from '../types.js';
+import type { FindingsOf, Prepared, StatusSource } from '../types.js';
 import { GWEI } from '../units.js';
 import {
   StatusSourceFields,
@@ -91,7 +91,7 @@ export const prepareEoaWithdraw = async (
     pubkey,
     amount: args.amount,
   };
-  const checks =
+  const checks: FindingsOf<'eoaWithdraw'> =
     statuses === null
       ? [noStatusFinding('withdrawals.prepareEoaWithdraw')]
       : [];

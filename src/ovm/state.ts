@@ -63,7 +63,6 @@ export const publicForwarderFindings = (
   return [
     finding(
       'PUBLIC_FORWARDER_HOLDS_ROLE',
-      'warning',
       `${exposed.map(describe).join('; ')}: anyone can call the role-gated functions through it`,
       {
         hint: 'Revoke the roles (or transfer ownership) from the forwarder now',
@@ -121,7 +120,7 @@ const MISMATCH_TOLERANCE = ETH;
 /**
  * ovm.getState (`api+chain`): null when the address is not an OVM (no code,
  * or the OVM getters revert); it checks the shape of the contract, never
- * its origin: a look-alike passes, so provenance is only `ovm.verify`. A
+ * its origin: a look-alike passes, so provenance is only `ovm.getProvenance`. A
  * failed read throws (CHAIN_READ_FAILED). Otherwise the OVM getters, balance
  * and block number in
  * one Multicall3 read, the recipients' pull balances (and the chain's public
@@ -195,7 +194,6 @@ export const getOvmState = async (
       findings.push(
         finding(
           'PRINCIPAL_STAKE_MISMATCH',
-          'warning',
           `amountOfPrincipalStake (${core.amountOfPrincipalStake} wei) differs by more than 1 ETH from the principal the beacon chain credited to this OVM's validators (${principalOnBeaconChain} wei)`,
           {
             hint: 'Review deposits made via OVM.deposit; the owner can correct it with prepareSetAmountOfPrincipalStake',

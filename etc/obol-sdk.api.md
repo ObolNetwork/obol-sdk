@@ -59,6 +59,33 @@ export interface ApiErrorDetails {
     status: number;
 }
 
+// @public
+const assertDepositData: (deposits: readonly DepositInput[], options: AssertDepositDataOptions) => Promise<void>;
+
+// @public (undocumented)
+interface AssertDepositDataOptions {
+    bls?: BlsBackend;
+    // (undocumented)
+    chainId: number;
+    // (undocumented)
+    expectedWithdrawalAddress?: string;
+    // (undocumented)
+    kind?: DepositKind;
+    signal?: AbortSignal;
+    yieldMs?: number;
+}
+
+// @public
+const assertPartialExit: (input: AssertPartialExitInput) => PartialExitBlob[];
+
+// @public (undocumented)
+interface AssertPartialExitInput {
+    // (undocumented)
+    cluster: ExitCluster;
+    existing?: StoredExitBlob[] | Record<string, StoredExitBlob>;
+    payload: PartialExitsPayload;
+}
+
 // @public (undocumented)
 interface BalanceChange {
     // (undocumented)
@@ -113,6 +140,11 @@ const blsVerify: (pubkey: Hex, message: Hex, signature: Hex, options?: BlsVerify
 interface BlsVerifyOptions {
     bls?: BlsBackend;
 }
+
+// @public
+type BoundDefinitionInput = Omit<PrepareDefinitionInput, 'chainId'> & {
+    chainId?: number;
+};
 
 // @public
 export interface ChainContracts {
@@ -172,7 +204,7 @@ declare namespace cluster {
         creatorConfigHashTypedData,
         enrTypedData,
         operatorConfigHashTypedData,
-        verifyTypedDataSignature,
+        isValidTypedDataSignature,
         EIP712TypedData,
         PublicClients,
         SignatureClients,
@@ -194,6 +226,7 @@ declare namespace cluster {
         ClusterEvent,
         WatchOptions,
         ClusterModule,
+        BoundDefinitionInput,
         createClusterModule,
         createObolContext,
         ObolClientConfig
@@ -237,8 +270,9 @@ interface ClusterModule {
     computeDefinitionHash: typeof computeDefinitionHash;
     // (undocumented)
     computeLockHash: typeof computeLockHash;
-    // (undocumented)
-    create: (input: unknown) => Promise<Hex>;
+    create: (input: PreparedDefinition | (Omit<BoundDefinitionInput, 'creator'> & {
+        creator?: string;
+    })) => Promise<Hex>;
     // (undocumented)
     get: (configHash: string) => Promise<ClusterDefinition>;
     // (undocumented)
@@ -249,10 +283,7 @@ interface ClusterModule {
     }) => Promise<ClusterLock>;
     // (undocumented)
     isValidLock: (lock: unknown, options?: VerifyLockOptions) => Promise<boolean>;
-    // (undocumented)
-    prepareDefinition: (input: {
-        chainId?: number;
-    } & object) => PreparedDefinition;
+    prepareDefinition: (input: BoundDefinitionInput) => PreparedDefinition;
     // (undocumented)
     verifyDefinition: (input: {
         definition: unknown;
@@ -474,7 +505,7 @@ interface DepositPreview {
 declare namespace deposits {
     export {
         fromLock,
-        verifyDepositData,
+        assertDepositData,
         depositDataRoot,
         MAX_COMPOUNDING_DEPOSIT,
         MAX_DEPOSIT,
@@ -488,7 +519,7 @@ declare namespace deposits {
         DepositStatusName,
         DepositStatusOptions,
         PendingDeposit,
-        VerifyDepositDataOptions,
+        AssertDepositDataOptions,
         DepositsModule,
         createDepositsModule,
         createObolContext,
@@ -499,13 +530,13 @@ declare namespace deposits {
 // @public
 interface DepositsModule {
     // (undocumented)
+    assertDepositData: (deposits: readonly DepositInput[], options?: Partial<AssertDepositDataOptions>) => Promise<void>;
+    // (undocumented)
     fromLock: (lock: Parameters<typeof fromLock>[0], options?: FromLockOptions) => Promise<LockDeposits>;
     // (undocumented)
     prepareDeposit: (input: PrepareDepositInput) => Promise<Array<Prepared<'deposit'>>>;
     // (undocumented)
     status: (pubkeys: readonly string[], options?: DepositStatusOptions) => Promise<DepositStatus[]>;
-    // (undocumented)
-    verifyDepositData: (deposits: readonly DepositInput[], options?: Partial<VerifyDepositDataOptions>) => Promise<void>;
 }
 
 // @public (undocumented)
@@ -546,29 +577,7 @@ interface DepositStatusOptions extends StatusSource {
 export type DetailsOf<C extends ObolErrorCode> = ObolErrorDetails[C] & Record<string, unknown>;
 
 // @public (undocumented)
-interface DistributePreview {
-    // (undocumented)
-    distributable: bigint;
-    // (undocumented)
-    mode: 'push' | 'pull';
-    // (undocumented)
-    principalPayout: bigint;
-    // (undocumented)
-    principalRecipient: Address;
-    // (undocumented)
-    rewardPayout: bigint;
-    // (undocumented)
-    rewardRecipient: Address;
-}
-
-// @public
-const distributionFromReceipt: (receipt: DistributionReceipt, options: {
-    chainId: number;
-    ovm?: string;
-}) => DistributionResult;
-
-// @public (undocumented)
-interface DistributionInput {
+interface DistributeAllInput {
     distributor?: string;
     from?: string;
     includeRaf?: boolean;
@@ -586,7 +595,7 @@ interface DistributionInput {
 }
 
 // @public (undocumented)
-interface DistributionPreview {
+interface DistributeAllPreview {
     minWithdraw: bigint;
     // (undocumented)
     ovm?: {
@@ -621,6 +630,28 @@ interface DistributionPreview {
         skipReason?: SkipReason;
     }>;
 }
+
+// @public (undocumented)
+interface DistributePreview {
+    // (undocumented)
+    distributable: bigint;
+    // (undocumented)
+    mode: 'push' | 'pull';
+    // (undocumented)
+    principalPayout: bigint;
+    // (undocumented)
+    principalRecipient: Address;
+    // (undocumented)
+    rewardPayout: bigint;
+    // (undocumented)
+    rewardRecipient: Address;
+}
+
+// @public
+const distributionFromReceipt: (receipt: DistributionReceipt, options: {
+    chainId: number;
+    ovm?: string;
+}) => DistributionResult;
 
 // @public (undocumented)
 interface DistributionReceipt {
@@ -699,9 +730,9 @@ declare namespace exits {
         blsRecoverPubkey,
         blsThresholdAggregate,
         blsVerify,
-        verifyPartialExit,
+        assertPartialExit,
         AggregateInput,
-        VerifyPartialExitInput,
+        AssertPartialExitInput,
         BlsVerifyOptions,
         ExitCluster,
         ExitMessage,
@@ -723,6 +754,8 @@ interface ExitsModule {
     // (undocumented)
     aggregate: (input: Omit<AggregateInput, 'chainId'>) => FullExitBlob;
     // (undocumented)
+    assertPartialExit: typeof assertPartialExit;
+    // (undocumented)
     blsAggregate: typeof blsAggregate;
     // (undocumented)
     blsRecoverPubkey: typeof blsRecoverPubkey;
@@ -730,8 +763,6 @@ interface ExitsModule {
     blsThresholdAggregate: typeof blsThresholdAggregate;
     // (undocumented)
     blsVerify: typeof blsVerify;
-    // (undocumented)
-    verifyPartialExit: typeof verifyPartialExit;
 }
 
 // @public
@@ -765,9 +796,9 @@ export interface ExperimentalModule {
 }
 
 // @public
-export interface Finding {
+export interface Finding<C extends FindingCode = FindingCode> {
     // (undocumented)
-    code: FindingCode;
+    code: C;
     // (undocumented)
     details?: Record<string, unknown>;
     // (undocumented)
@@ -775,15 +806,313 @@ export interface Finding {
     // (undocumented)
     message: string;
     // (undocumented)
-    severity: 'warning' | 'info';
+    severity: FindingSeverity;
     subject?: FindingSubject;
 }
 
 // @public
-export const FINDING_CODES: readonly ["DEPOSIT_EXISTENCE_UNCHECKED", "DEPOSIT_IS_TOP_UP", "DEPOSIT_ALREADY_QUEUED", "QUEUED_CREDENTIALS_CONFLICT", "TOP_UP_ABOVE_EFFECTIVE_CAP", "TOP_UP_EXITED_VALIDATOR", "OVM_STAKE_NOT_TRACKED", "PROVENANCE_UNKNOWN", "VALIDATOR_STATUS_UNCHECKED", "WITHDRAW_AMOUNT_CAPPED", "PARTIAL_WITHDRAWAL_QUEUE_FULL", "CONSOLIDATION_CREDENTIALS_DIFFER", "PRINCIPAL_STAKE_MISMATCH", "PUBLIC_FORWARDER_HOLDS_ROLE", "ROLES_SURVIVE_TRANSFER", "ROLE_HOLDERS_UNCHECKED", "ROLE_GRANT_CONSOLIDATION", "ROLE_GRANT_DEPOSIT_TO_PRINCIPAL", "RECIPIENT_WITHDRAW_PAUSED", "RAF_LEFT_IN_WAREHOUSE", "SPLIT_REUSED", "RECIPIENT_NOT_CONTRACT", "SIMULATION_UNAVAILABLE", "SIMULATION_REVERTED", "SIMULATION_PREVIEW_MISMATCH", "SIMULATION_UNTRUSTED_EVENT", "SIMULATION_CONTRACT_WALLET", "NO_INCENTIVES", "INCENTIVES_NOT_FOUND", "INCENTIVES_FETCH_FAILED", "OPERATOR_ADDRESS_MISMATCH", "INCENTIVES_DATA_INVALID", "CONTRACT_NOT_DEPLOYED", "DISTRIBUTOR_UNKNOWN", "UNSUPPORTED_CHAIN", "TOKEN_MISMATCH", "PROOF_INVALID", "ALREADY_CLAIMED", "CLAIM_WINDOW_CLOSED", "CHAIN_READ_FAILED"];
+export const FINDING_CODES: FindingCode[];
+
+// @public
+export const FINDING_CODES_BY_KIND: {
+    readonly deposit: readonly ["DEPOSIT_EXISTENCE_UNCHECKED", "DEPOSIT_ALREADY_QUEUED", "QUEUED_CREDENTIALS_CONFLICT", "TOP_UP_ABOVE_EFFECTIVE_CAP", "TOP_UP_EXITED_VALIDATOR", "TOP_UP_CREDENTIALS_FOREIGN", "OVM_STAKE_NOT_TRACKED"];
+    readonly withdraw: readonly ["PROVENANCE_UNKNOWN", "VALIDATOR_STATUS_UNCHECKED", "WITHDRAW_AMOUNT_CAPPED", "PARTIAL_WITHDRAWAL_QUEUE_FULL"];
+    readonly consolidate: readonly ["PROVENANCE_UNKNOWN", "VALIDATOR_STATUS_UNCHECKED", "CONSOLIDATION_CREDENTIALS_DIFFER"];
+    readonly distribute: readonly ["PROVENANCE_UNKNOWN"];
+    readonly distributeAll: readonly ["PROVENANCE_UNKNOWN", "RECIPIENT_WITHDRAW_PAUSED", "RAF_LEFT_IN_WAREHOUSE"];
+    readonly createOvm: readonly ["RECIPIENT_NOT_CONTRACT"];
+    readonly ovmWithSplits: readonly ["SPLIT_REUSED", "RECIPIENT_NOT_CONTRACT"];
+    readonly createSplit: readonly [];
+    readonly claim: readonly [];
+    readonly eoaWithdraw: readonly ["VALIDATOR_STATUS_UNCHECKED", "WITHDRAW_AMOUNT_CAPPED", "PARTIAL_WITHDRAWAL_QUEUE_FULL"];
+    readonly role: readonly ["PROVENANCE_UNKNOWN", "ROLE_GRANT_CONSOLIDATION", "ROLE_GRANT_DEPOSIT_TO_PRINCIPAL"];
+    readonly ownership: readonly ["PROVENANCE_UNKNOWN", "ROLES_SURVIVE_TRANSFER", "ROLE_HOLDERS_UNCHECKED"];
+    readonly recipient: readonly ["PROVENANCE_UNKNOWN"];
+    readonly principalStake: readonly ["PROVENANCE_UNKNOWN"];
+    readonly sweep: readonly ["PROVENANCE_UNKNOWN"];
+    readonly withdrawPullBalance: readonly ["PROVENANCE_UNKNOWN"];
+    readonly recoverFunds: readonly ["PROVENANCE_UNKNOWN"];
+};
+
+// @public
+export type FindingCode = keyof typeof FINDINGS;
+
+// @public
+export type FindingCodeFor<K extends PreparedKind = PreparedKind> = (typeof FINDING_CODES_BY_KIND)[K][number];
+
+// @public
+export type FindingGroup = 'unchecked' | 'risk' | 'note' | 'claim';
 
 // @public (undocumented)
-export type FindingCode = (typeof FINDING_CODES)[number];
+export interface FindingInfo {
+    // (undocumented)
+    group: FindingGroup;
+    guidance: string;
+    meaning: string;
+    // (undocumented)
+    severity: FindingSeverity;
+}
+
+// @public
+export const FINDINGS: {
+    readonly DEPOSIT_EXISTENCE_UNCHECKED: {
+        readonly severity: "warning";
+        readonly group: "unchecked";
+        readonly meaning: "No deposit status source: whether the validators already exist, and with which withdrawal credentials, was not checked.";
+        readonly guidance: "Pass `beaconUrl` or enable the Obol API so it is checked. Acknowledge only after checking each pubkey yourself (a beacon explorer): a deposit to a validator someone else created first goes to their withdrawal address.";
+    };
+    readonly DEPOSIT_ALREADY_QUEUED: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "Deposits with the same credentials are already queued for the pubkey.";
+        readonly guidance: "Make sure this is not a repeat of a deposit already sent.";
+    };
+    readonly QUEUED_CREDENTIALS_CONFLICT: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "Validly signed deposits queued for the pubkey carry different withdrawal credentials; the first one (yours) applies.";
+        readonly guidance: "Find out who queued the other deposits. Acknowledge only if you accept adding ETH to a validator others have also deposited to.";
+    };
+    readonly TOP_UP_ABOVE_EFFECTIVE_CAP: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "The deposit takes a 0x00 / 0x01 validator above 32 ETH; the excess is swept back to the withdrawal address, not staked.";
+        readonly guidance: "Deposit at most up to 32 ETH, or switch the validator to 0x02 first. Acknowledge if the round trip of the excess is acceptable.";
+    };
+    readonly TOP_UP_EXITED_VALIDATOR: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "Top-up to an exited validator: the ETH is swept back to its withdrawal address, not staked.";
+        readonly guidance: "Do not top up an exited validator. Acknowledging sends ETH on a round trip to the withdrawal address.";
+    };
+    readonly TOP_UP_CREDENTIALS_FOREIGN: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "Top-up to a validator whose withdrawal credentials are not the expected address's: the ETH can only be withdrawn to those credentials.";
+        readonly guidance: "Acknowledge only for a deliberate top-up of a validator you do not control. The ETH cannot be recovered.";
+    };
+    readonly OVM_STAKE_NOT_TRACKED: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "Deposit to an OVM's credentials through the batch contract: the OVM does not count it as principal, so it would later be paid out as rewards.";
+        readonly guidance: "Deposit via the OVM instead. Acknowledge only if the owner will call `setAmountOfPrincipalStake` afterwards.";
+    };
+    readonly PROVENANCE_UNKNOWN: {
+        readonly severity: "warning";
+        readonly group: "unchecked";
+        readonly meaning: "Could not check that the contract was created by the Obol OVM factory.";
+        readonly guidance: "Retry `ovm.getProvenance`, or use an RPC that serves `eth_getLogs`. Acknowledge only if you know the contract by other means (you deployed it).";
+    };
+    readonly VALIDATOR_STATUS_UNCHECKED: {
+        readonly severity: "warning";
+        readonly group: "unchecked";
+        readonly meaning: "The beacon chain request rules could not all be checked (`details.checks`); for a consolidation the withdrawal addresses were not compared.";
+        readonly guidance: "Pass `beaconUrl` or enable the Obol API. Acknowledging accepts that the request may be ignored (fee lost) and, for a consolidation, that you checked the target's withdrawal address yourself.";
+    };
+    readonly WITHDRAW_AMOUNT_CAPPED: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "The partial withdrawal amount was capped to what the validator can withdraw now.";
+        readonly guidance: "None; the preview carries the capped amount.";
+    };
+    readonly PARTIAL_WITHDRAWAL_QUEUE_FULL: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "The beacon chain's pending partial withdrawal queue is full: the request would be ignored and the fee kept.";
+        readonly guidance: "Wait for the queue to drain. Acknowledging spends the fee for a request that is likely to be dropped.";
+    };
+    readonly CONSOLIDATION_CREDENTIALS_DIFFER: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "Source and target validators have different withdrawal addresses: the stake moves out of this OVM and cannot be moved back.";
+        readonly guidance: "Acknowledge only if the target validator and its withdrawal address (`details.targetWithdrawalAddress`) are yours.";
+    };
+    readonly PRINCIPAL_STAKE_MISMATCH: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "The OVM's `amountOfPrincipalStake` differs from the principal on the beacon chain by more than 1 ETH.";
+        readonly guidance: "Have the owner correct it with `prepareSetAmountOfPrincipalStake` before distributing.";
+    };
+    readonly PUBLIC_FORWARDER_HOLDS_ROLE: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "The owner or a role holder is a public forwarder: anyone can call the role-gated functions through it.";
+        readonly guidance: "Revoke its roles, or transfer ownership away from it, now.";
+    };
+    readonly ROLES_SURVIVE_TRANSFER: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "A change of owner does not revoke roles: the listed holders keep theirs.";
+        readonly guidance: "Revoke the roles that should not survive, before or after. Acknowledge if the new owner knows the holders.";
+    };
+    readonly ROLE_HOLDERS_UNCHECKED: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "Role holders could not be read, so surviving roles were not checked.";
+        readonly guidance: "Check `ovm.getRoleHolders` afterwards.";
+    };
+    readonly ROLE_GRANT_CONSOLIDATION: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "Granting CONSOLIDATION: the holder can move the whole stake into a validator it controls.";
+        readonly guidance: "Acknowledge only for an address you would trust with the stake.";
+    };
+    readonly ROLE_GRANT_DEPOSIT_TO_PRINCIPAL: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "Granting DEPOSIT to the principal recipient: it can raise the principal stake and take rewards as principal.";
+        readonly guidance: "Grant DEPOSIT to another address. Acknowledge only if the reward recipients accept that.";
+    };
+    readonly RECIPIENT_WITHDRAW_PAUSED: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "A recipient paused its Warehouse withdrawals; its withdrawal is left out of this transaction.";
+        readonly guidance: "None; the recipient withdraws itself.";
+    };
+    readonly RAF_LEFT_IN_WAREHOUSE: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "The Obol RAF balance stays in the Warehouse (it is not in the withdrawal set).";
+        readonly guidance: "None; anyone can withdraw it later.";
+    };
+    readonly SPLIT_REUSED: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "The split already exists at the predicted address and is reused.";
+        readonly guidance: "None.";
+    };
+    readonly RECIPIENT_NOT_CONTRACT: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "An OVM recipient has no contract code (an EOA, or a split not created yet).";
+        readonly guidance: "If it should be a split, create it first or use `setup.prepareOvmWithSplits`.";
+    };
+    readonly SIMULATION_UNAVAILABLE: {
+        readonly severity: "warning";
+        readonly group: "unchecked";
+        readonly meaning: "The node could not simulate the request in full: only success or revert was checked, not what it moves.";
+        readonly guidance: "Use an RPC with `eth_simulateV1`. Acknowledging sends on the strength of the preview alone.";
+    };
+    readonly SIMULATION_REVERTED: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "The transaction reverts when simulated.";
+        readonly guidance: "Do not send; prepare again, or fix the sender or state. Acknowledging sends a transaction expected to fail (gas lost).";
+    };
+    readonly SIMULATION_PREVIEW_MISMATCH: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "The simulation differs from the operation's preview.";
+        readonly guidance: "Prepare again and simulate the new transaction. Acknowledging sends a transaction whose effect is not the one previewed.";
+    };
+    readonly SIMULATION_READS_INCOMPLETE: {
+        readonly severity: "warning";
+        readonly group: "unchecked";
+        readonly meaning: "Some balances or state could not be read while simulating: the changes shown are incomplete and not fully compared with the preview.";
+        readonly guidance: "Simulate again, or on another RPC. Acknowledging sends without the full comparison; a missing change is not \"no change\".";
+    };
+    readonly SIMULATION_UNTRUSTED_EVENT: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "A contract with no known role in this transaction emitted events; they were not interpreted.";
+        readonly guidance: "Look at the listed contracts. Acknowledge if they are expected (a recipient contract reacting to ETH).";
+    };
+    readonly SIMULATION_CONTRACT_WALLET: {
+        readonly severity: "info";
+        readonly group: "note";
+        readonly meaning: "The sender is a contract wallet: its own signature and threshold checks were not simulated.";
+        readonly guidance: "Check the transaction in the Safe app as well.";
+    };
+    readonly NO_INCENTIVES: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The address has no incentives to claim.";
+        readonly guidance: "Nothing to do.";
+    };
+    readonly INCENTIVES_NOT_FOUND: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The Obol API has no incentives record for the address.";
+        readonly guidance: "Check the address and the chain.";
+    };
+    readonly INCENTIVES_FETCH_FAILED: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The incentives record could not be fetched from the Obol API.";
+        readonly guidance: "Retry later.";
+    };
+    readonly OPERATOR_ADDRESS_MISMATCH: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The incentives record is for another operator address.";
+        readonly guidance: "Report it; do not claim.";
+    };
+    readonly INCENTIVES_DATA_INVALID: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The incentives record is malformed.";
+        readonly guidance: "Report it; do not claim.";
+    };
+    readonly CONTRACT_NOT_DEPLOYED: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "There is no contract at the distributor address.";
+        readonly guidance: "Check the chain; do not claim.";
+    };
+    readonly DISTRIBUTOR_UNKNOWN: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The distributor contract does not have the expected code.";
+        readonly guidance: "Do not claim; report it.";
+    };
+    readonly UNSUPPORTED_CHAIN: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "Incentives are not available on this chain.";
+        readonly guidance: "Use mainnet or Hoodi.";
+    };
+    readonly TOKEN_MISMATCH: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The distributor pays a token other than OBOL.";
+        readonly guidance: "Do not claim; report it.";
+    };
+    readonly PROOF_INVALID: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The Merkle proof does not verify against the on-chain root.";
+        readonly guidance: "Do not claim; report it.";
+    };
+    readonly ALREADY_CLAIMED: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The incentives were already claimed.";
+        readonly guidance: "Nothing to do.";
+    };
+    readonly CLAIM_WINDOW_CLOSED: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "The claim window of the distributor has closed.";
+        readonly guidance: "Nothing can be claimed from it any more.";
+    };
+    readonly CHAIN_READ_FAILED: {
+        readonly severity: "warning";
+        readonly group: "claim";
+        readonly meaning: "A chain read needed for a claim check failed.";
+        readonly guidance: "Retry, or use another RPC.";
+    };
+};
+
+// @public
+export type FindingSeverity = 'warning' | 'info';
+
+// @public
+export type FindingsOf<K extends PreparedKind = PreparedKind> = Array<Finding<FindingCodeFor<K>>>;
+
+// Warning: (ae-forgotten-export) The symbol "Checked" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const findingsToAcknowledge: (prepared: Checked, options?: SendOptions) => Array<Finding<WarningCode>>;
 
 // @public
 export type FindingSubject = {
@@ -946,6 +1275,14 @@ const isValidEnr: (enr: unknown) => boolean;
 // @public
 export const isValidLock: (lock: unknown, options?: VerifyLockOptions) => Promise<boolean>;
 
+// @public
+export const isValidTypedDataSignature: (input: {
+    address: string;
+    signature: string;
+    typedData: EIP712TypedData;
+    chainId?: number;
+} & SignatureClients) => Promise<boolean>;
+
 declare namespace legacy {
     export {
         createLegacyModule,
@@ -971,7 +1308,7 @@ interface LimitedSimulation extends SimulationBase {
 // @public (undocumented)
 interface LockDeposits {
     amounts: bigint[];
-    deposits?: Deposit[];
+    deposits: Deposit[];
     depositsByAmount: Map<bigint, Deposit[]>;
     // (undocumented)
     lockHash: Hex;
@@ -1022,7 +1359,7 @@ const MIN_PRINCIPAL_THRESHOLD: bigint;
 const nobleBls: BlsBackend;
 
 // @public
-export const OBOL_ERROR_CODES: readonly ["PAYLOAD_INVALID", "UNSUPPORTED_CHAIN", "CHAIN_MISMATCH", "WALLET_REQUIRED", "BASE_URL_INVALID", "API_DISABLED", "CONTRACT_NOT_AVAILABLE", "CHAIN_READ_FAILED", "ABORTED", "API_VALIDATION", "API_UNAUTHORIZED", "API_NOT_FOUND", "API_CONFLICT", "API_RATE_LIMIT", "API_TIMEOUT", "API_ERROR", "API_RESPONSE_MISMATCH", "DEFINITION_INVALID", "ACCOUNT_NOT_OPERATOR", "LOCK_INVALID", "BLS_BACKEND_UNAVAILABLE", "DEPOSIT_INVALID", "DEPOSIT_LOOKS_LIKE_TOP_UP", "DEPOSIT_CONFLICT", "DEPOSIT_TOP_UP_TARGET_MISSING", "DEPOSIT_AMOUNT_NOT_IN_LOCK", "STATUS_UNAVAILABLE", "OVM_NOT_OBOL", "PROVENANCE_UNKNOWN", "OVM_READ_FAILED", "OVM_ROLE_EVENTS_UNAVAILABLE", "OVM_ROLE_MISSING", "OVM_OWNER_REQUIRED", "PUBLIC_FORWARDER_AS_ROLE_HOLDER", "PUBLIC_FORWARDER_AS_OWNER", "PUBLIC_FORWARDER_AS_RECIPIENT", "OWNERSHIP_HANDOVER_NOT_PENDING", "FULL_EXIT_NOT_ACKNOWLEDGED", "CONSOLIDATION_NOT_ACKNOWLEDGED", "FEE_OUT_OF_RANGE", "FEE_READ_FAILED", "VALIDATOR_NOT_ACTIVE", "VALIDATOR_EXITING", "VALIDATOR_TOO_NEW", "CREDENTIALS_NOT_SOURCE", "EXIT_BLOCKED_BY_PENDING_WITHDRAWAL", "PARTIAL_REQUIRES_COMPOUNDING", "EFFECTIVE_BALANCE_TOO_LOW", "NO_EXCESS_BALANCE", "CONSOLIDATION_TARGET_NOT_COMPOUNDING", "CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL", "CONSOLIDATION_ALREADY_COMPOUNDING", "SPLIT_ALREADY_EXISTS", "SPLIT_PARAMS_MISMATCH", "SPLIT_PARAMS_REQUIRED", "SPLIT_NOT_OVM_RECIPIENT", "SPLIT_PAUSED", "NOTHING_TO_DISTRIBUTE", "OVM_CREATE_EVENT_MISSING", "OVM_CREATE_EVENT_AMBIGUOUS", "INCENTIVES_PREFLIGHT_FAILED", "ALREADY_CLAIMED", "EXIT_SHARE_INDEX_INVALID", "EXIT_PAYLOAD_SIGNATURE_INVALID", "EXIT_VALIDATOR_NOT_IN_CLUSTER", "EXIT_VALIDATOR_INDEX_MISMATCH", "EXIT_EPOCH_MISMATCH", "EXIT_SIGNATURE_CONFLICT", "EXIT_PARTIAL_SIGNATURE_INVALID", "EXIT_NOT_ENOUGH_SHARES", "PREPARED_INVALID", "TX_REJECTED", "TX_REVERTED", "TX_REPLACED", "TX_UNCONFIRMED", "SIMULATION_FAILED"];
+export const OBOL_ERROR_CODES: readonly ["PAYLOAD_INVALID", "UNSUPPORTED_CHAIN", "CHAIN_MISMATCH", "WALLET_REQUIRED", "BASE_URL_INVALID", "API_DISABLED", "CONTRACT_NOT_AVAILABLE", "CHAIN_READ_FAILED", "ABORTED", "API_VALIDATION", "API_UNAUTHORIZED", "API_NOT_FOUND", "API_CONFLICT", "API_RATE_LIMIT", "API_TIMEOUT", "API_ERROR", "API_RESPONSE_MISMATCH", "DEFINITION_INVALID", "ACCOUNT_NOT_OPERATOR", "LOCK_INVALID", "BLS_BACKEND_UNAVAILABLE", "DEPOSIT_INVALID", "DEPOSIT_LOOKS_LIKE_TOP_UP", "DEPOSIT_CONFLICT", "DEPOSIT_VALIDATOR_EXISTS", "DEPOSIT_TOP_UP_TARGET_MISSING", "DEPOSIT_AMOUNT_NOT_IN_LOCK", "DEPOSIT_AMOUNT_REQUIRED", "STATUS_UNAVAILABLE", "OVM_NOT_OBOL", "PROVENANCE_UNKNOWN", "OVM_READ_FAILED", "OVM_ROLE_EVENTS_UNAVAILABLE", "OVM_ROLE_MISSING", "OVM_OWNER_REQUIRED", "PUBLIC_FORWARDER_AS_ROLE_HOLDER", "PUBLIC_FORWARDER_AS_OWNER", "PUBLIC_FORWARDER_AS_RECIPIENT", "OWNERSHIP_HANDOVER_NOT_PENDING", "FULL_EXIT_NOT_ACKNOWLEDGED", "FEE_OUT_OF_RANGE", "FEE_READ_FAILED", "VALIDATOR_NOT_ACTIVE", "VALIDATOR_EXITING", "VALIDATOR_TOO_NEW", "CREDENTIALS_NOT_SOURCE", "EXIT_BLOCKED_BY_PENDING_WITHDRAWAL", "PARTIAL_REQUIRES_COMPOUNDING", "EFFECTIVE_BALANCE_TOO_LOW", "NO_EXCESS_BALANCE", "CONSOLIDATION_TARGET_NOT_COMPOUNDING", "CONSOLIDATION_BLOCKED_BY_PENDING_WITHDRAWAL", "CONSOLIDATION_ALREADY_COMPOUNDING", "SPLIT_ALREADY_EXISTS", "SPLIT_PARAMS_MISMATCH", "SPLIT_PARAMS_REQUIRED", "SPLIT_NOT_OVM_RECIPIENT", "SPLIT_PAUSED", "NOTHING_TO_DISTRIBUTE", "OVM_CREATE_EVENT_MISSING", "OVM_CREATE_EVENT_AMBIGUOUS", "INCENTIVES_PREFLIGHT_FAILED", "ALREADY_CLAIMED", "EXIT_SHARE_INDEX_INVALID", "EXIT_PAYLOAD_SIGNATURE_INVALID", "EXIT_VALIDATOR_NOT_IN_CLUSTER", "EXIT_VALIDATOR_INDEX_MISMATCH", "EXIT_EPOCH_MISMATCH", "EXIT_SIGNATURE_CONFLICT", "EXIT_PARTIAL_SIGNATURE_INVALID", "EXIT_NOT_ENOUGH_SHARES", "PREPARED_INVALID", "FINDINGS_NOT_ACKNOWLEDGED", "TX_REJECTED", "TX_REVERTED", "TX_REPLACED", "TX_UNCONFIRMED", "SIMULATION_FAILED"];
 
 // @public (undocumented)
 export class ObolApiError<C extends ApiErrorCode = ApiErrorCode> extends ObolError<C> {
@@ -1082,7 +1419,7 @@ export interface ObolClient {
     incentives: IncentivesModule;
     // (undocumented)
     ovm: OvmModule;
-    send: (prepared: AnyPrepared) => Promise<Sent>;
+    send: (prepared: AnyPrepared, options?: SendOptions) => Promise<Sent>;
     // (undocumented)
     setup: SetupModule;
     // (undocumented)
@@ -1176,8 +1513,6 @@ export interface ObolErrorDetails {
         pendingPartialWithdrawals: bigint;
     };
     // (undocumented)
-    CONSOLIDATION_NOT_ACKNOWLEDGED: Record<string, never>;
-    // (undocumented)
     CONSOLIDATION_TARGET_NOT_COMPOUNDING: PubkeyDetails & {
         withdrawalCredentials: Hex;
     };
@@ -1203,10 +1538,15 @@ export interface ObolErrorDetails {
         available: bigint[];
     };
     // (undocumented)
+    DEPOSIT_AMOUNT_REQUIRED: {
+        available: bigint[];
+    };
+    // (undocumented)
     DEPOSIT_CONFLICT: {
         index: number;
         pubkey: Hex;
         existingCredentials?: Hex;
+        existing?: 'validator' | 'queued';
     };
     // (undocumented)
     DEPOSIT_INVALID: {
@@ -1224,6 +1564,13 @@ export interface ObolErrorDetails {
         pubkey: Hex;
     };
     // (undocumented)
+    DEPOSIT_VALIDATOR_EXISTS: {
+        index: number;
+        pubkey: Hex;
+        status: string;
+        withdrawalCredentials: Hex;
+    };
+    // (undocumented)
     EFFECTIVE_BALANCE_TOO_LOW: PubkeyDetails & {
         effectiveBalance: bigint;
     };
@@ -1236,6 +1583,7 @@ export interface ObolErrorDetails {
         pubkey: Hex;
         epoch: string;
         storedEpoch: string;
+        direction: 'higher' | 'lower';
     };
     // (undocumented)
     EXIT_NOT_ENOUGH_SHARES: {
@@ -1282,6 +1630,11 @@ export interface ObolErrorDetails {
     // (undocumented)
     FEE_READ_FAILED: {
         predeploy: Address;
+    };
+    // (undocumented)
+    FINDINGS_NOT_ACKNOWLEDGED: {
+        codes: WarningCode[];
+        findings: Array<Finding<WarningCode>>;
     };
     // (undocumented)
     FULL_EXIT_NOT_ACKNOWLEDGED: Record<string, never>;
@@ -1403,7 +1756,7 @@ export interface ObolErrorDetails {
     };
     // (undocumented)
     STATUS_UNAVAILABLE: {
-        reason?: 'endpoint_unavailable' | 'signatures_pending';
+        reason?: 'endpoint_unavailable' | 'signatures_pending' | 'beacon_wrong_chain' | 'beacon_syncing' | 'beacon_optimistic';
         pubkey?: Hex;
     };
     // (undocumented)
@@ -1496,7 +1849,8 @@ declare namespace ovm {
         OvmState,
         OvmValidator,
         OvmValidators,
-        OvmVerification,
+        OvmProvenance,
+        OvmProvenanceOptions,
         ConsolidatePreview,
         PrepareConsolidateInput,
         PrepareWithdrawInput,
@@ -1551,6 +1905,8 @@ interface OvmModule {
     // (undocumented)
     expectedWithdrawalCredentials: typeof expectedWithdrawalCredentials;
     // (undocumented)
+    getProvenance: (ovm: string, options?: OvmProvenanceOptions) => Promise<OvmProvenance>;
+    // (undocumented)
     getRoleHolders: (ovm: string) => Promise<OvmRoleHolders>;
     getState: (ovm: string) => Promise<OvmState | null>;
     // (undocumented)
@@ -1596,8 +1952,6 @@ interface OvmModule {
     roleNames: (roles: bigint) => OvmRoleName[];
     // (undocumented)
     routing: (input: OvmRoutingInput) => OvmRouting;
-    // (undocumented)
-    verify: (ovm: string) => Promise<OvmVerification>;
 }
 
 // @public (undocumented)
@@ -1606,6 +1960,24 @@ interface OvmOnlyInput {
     from?: string;
     // (undocumented)
     ovm: string;
+}
+
+// @public (undocumented)
+interface OvmProvenance {
+    // (undocumented)
+    creationTxHash?: Hash;
+    // (undocumented)
+    factoryAddress: Address;
+    // (undocumented)
+    reason: string;
+    source: Source;
+    // (undocumented)
+    status: 'obol' | 'notObol' | 'unknown';
+}
+
+// @public (undocumented)
+interface OvmProvenanceOptions {
+    requireChain?: boolean;
 }
 
 // @public
@@ -1740,20 +2112,6 @@ interface OvmValidators {
 type OvmValueName = 'amountOfPrincipalStake' | 'fundsPendingWithdrawal';
 
 // @public (undocumented)
-interface OvmVerification {
-    // (undocumented)
-    creationTxHash?: Hash;
-    // (undocumented)
-    factoryAddress: Address;
-    // (undocumented)
-    reason: string;
-    // (undocumented)
-    source: Source;
-    // (undocumented)
-    status: 'obol' | 'notObol' | 'unknown';
-}
-
-// @public (undocumented)
 interface OvmWithSplitsInput {
     // (undocumented)
     owner: string;
@@ -1857,8 +2215,6 @@ interface PreflightResult {
 // @public (undocumented)
 interface PrepareConsolidateInput extends StatusSource {
     // (undocumented)
-    acknowledgeStakeMovesToTarget: true;
-    // (undocumented)
     excessFeeRecipient?: string;
     fee?: bigint;
     // (undocumented)
@@ -1874,8 +2230,7 @@ interface PrepareConsolidateInput extends StatusSource {
 // @public
 export interface Prepared<K extends PreparedKind = PreparedKind> {
     blockNumber?: bigint;
-    // (undocumented)
-    checks: Finding[];
+    checks: Array<Finding<FindingCodeFor<K>>>;
     kind: K;
     // (undocumented)
     preview: PreviewByKind[K];
@@ -1988,7 +2343,7 @@ export interface PreviewByKind {
     createSplit: CreateSplitPreview;
     deposit: DepositPreview;
     distribute: DistributePreview;
-    distribution: DistributionPreview;
+    distributeAll: DistributeAllPreview;
     eoaWithdraw: EoaWithdrawPreview;
     ovmWithSplits: OvmWithSplitsPreview;
     ownership: OvmWritePreview;
@@ -2006,7 +2361,9 @@ interface PreviewComparison {
     compared: string[];
     // (undocumented)
     differences: string[];
+    notCompared: string[];
     ok: boolean;
+    status: 'match' | 'mismatch' | 'notCompared';
 }
 
 // @public
@@ -2083,7 +2440,13 @@ const rewardsSplit: (input: PresetOptions & {
 const roleNames: (roles: bigint) => OvmRoleName[];
 
 // @public
-export const send: (ctx: Context, prepared: AnyPrepared) => Promise<Sent>;
+export const send: (ctx: Context, prepared: AnyPrepared, options?: SendOptions) => Promise<Sent>;
+
+// @public
+export interface SendOptions {
+    acknowledge?: readonly FindingCode[];
+    simulation?: SimulationForSend;
+}
 
 // @public (undocumented)
 export interface Sent {
@@ -2135,8 +2498,6 @@ interface SetRewardRecipientInput {
 
 declare namespace setup {
     export {
-        CreateSplitInput,
-        CreateSplitPreview,
         DEFAULT_PRINCIPAL_THRESHOLD,
         MAX_PRINCIPAL_THRESHOLD,
         MIN_PRINCIPAL_THRESHOLD,
@@ -2170,7 +2531,6 @@ interface SetupModule {
     ovmSplitParams: (input: Preset<typeof ovmSplitParams>) => ReturnType<typeof ovmSplitParams>;
     // (undocumented)
     prepareCreateOvm: (input: CreateOvmInput) => Promise<Prepared<'createOvm'>>;
-    prepareCreateSplit: (input: CreateSplitInput) => Promise<Prepared<'createSplit'>>;
     // (undocumented)
     prepareOvmWithSplits: (input: OvmWithSplitsInput) => Promise<Prepared<'ovmWithSplits'>>;
     // (undocumented)
@@ -2237,7 +2597,24 @@ interface SimulateOptions {
 type Simulation = FullSimulation | LimitedSimulation;
 
 // @public
+export const SIMULATION_FINDING_CODES: readonly ["SIMULATION_UNAVAILABLE", "SIMULATION_REVERTED", "SIMULATION_PREVIEW_MISMATCH", "SIMULATION_READS_INCOMPLETE", "SIMULATION_UNTRUSTED_EVENT", "SIMULATION_CONTRACT_WALLET"];
+
+// @public
 type SimulationBackend = 'eth_simulateV1' | 'debug_traceCall' | 'eth_call';
+
+// @public (undocumented)
+export type SimulationFindingCode = (typeof SIMULATION_FINDING_CODES)[number];
+
+// @public
+export interface SimulationForSend {
+    // (undocumented)
+    findings: Finding[];
+    // (undocumented)
+    request: PreparedRequest;
+}
+
+// @public
+export type SimulationWarningCode = Extract<SimulationFindingCode, WarningCode>;
 
 // @public
 type SkipReason = 'nothing' | 'dust' | 'paused';
@@ -2309,8 +2686,8 @@ declare namespace splits {
         CreateSplitPreview,
         PredictSplitInput,
         distributionFromReceipt,
-        DistributionInput,
-        DistributionPreview,
+        DistributeAllInput,
+        DistributeAllPreview,
         DistributionReceipt,
         DistributionResult,
         SkipReason,
@@ -2354,9 +2731,9 @@ interface SplitsModule {
     // (undocumented)
     prepareCreateSplit: (input: CreateSplitInput) => Promise<Prepared<'createSplit'>>;
     // (undocumented)
-    prepareDistribution: (input: DistributionInput) => Promise<Prepared<'distribution'>>;
+    prepareDistributeAll: (input: DistributeAllInput) => Promise<Prepared<'distributeAll'>>;
     // (undocumented)
-    previewDistribution: (input: DistributionInput) => Promise<PreviewResult<DistributionPreview>>;
+    previewDistributeAll: (input: DistributeAllInput) => Promise<PreviewResult<DistributeAllPreview>>;
     // (undocumented)
     splitParams: typeof splitParams;
 }
@@ -2537,23 +2914,10 @@ interface TransferInput {
 }
 
 // @public
-const verifyDefinition: (input: unknown, options?: VerifyOptions) => Promise<DefinitionVerification>;
+export const UNCHECKED_WARNING_CODES: readonly ["DEPOSIT_EXISTENCE_UNCHECKED", "VALIDATOR_STATUS_UNCHECKED", "PROVENANCE_UNKNOWN", "SIMULATION_UNAVAILABLE", "SIMULATION_READS_INCOMPLETE"];
 
 // @public
-const verifyDepositData: (deposits: readonly DepositInput[], options: VerifyDepositDataOptions) => Promise<void>;
-
-// @public (undocumented)
-interface VerifyDepositDataOptions {
-    bls?: BlsBackend;
-    // (undocumented)
-    chainId: number;
-    // (undocumented)
-    expectedWithdrawalAddress?: string;
-    // (undocumented)
-    kind?: DepositKind;
-    signal?: AbortSignal;
-    yieldMs?: number;
-}
+const verifyDefinition: (input: unknown, options?: VerifyOptions) => Promise<DefinitionVerification>;
 
 // @public
 const verifyLock: (input: unknown, options?: VerifyLockOptions) => Promise<LockVerification>;
@@ -2576,25 +2940,6 @@ interface VerifyOptions extends SignatureClients {
 }
 
 // @public
-const verifyPartialExit: (input: VerifyPartialExitInput) => PartialExitBlob[];
-
-// @public (undocumented)
-interface VerifyPartialExitInput {
-    // (undocumented)
-    cluster: ExitCluster;
-    existing?: StoredExitBlob[] | Record<string, StoredExitBlob>;
-    payload: PartialExitsPayload;
-}
-
-// @public
-export const verifyTypedDataSignature: (input: {
-    address: string;
-    signature: string;
-    typedData: EIP712TypedData;
-    chainId?: number;
-} & SignatureClients) => Promise<boolean>;
-
-// @public
 export const waitForContractWalletExecution: (input: {
     publicClient: PublicClient;
     account: Address;
@@ -2611,6 +2956,26 @@ export interface WaitOptions {
     onReplaced?: (replacement: ReplacementReturnType) => void;
     timeoutMs?: number;
 }
+
+// @public
+export type WarningCode = {
+    [C in FindingCode]: (typeof FINDINGS)[C]['severity'] extends 'warning' ? C : never;
+}[FindingCode];
+
+// @public
+export type WarningCodeFor<K extends PreparedKind = PreparedKind> = Extract<FindingCodeFor<K>, WarningCode>;
+
+// @public
+export function warningCodes<K extends PreparedKind>(prepared: Checked<K>): Array<WarningCodeFor<K>>;
+
+// @public (undocumented)
+export function warningCodes<K extends PreparedKind>(prepared: Checked<K>, simulation: SimulationForSend | undefined): Array<WarningCodeFor<K> | SimulationWarningCode>;
+
+// @public
+export function warningsOf<K extends PreparedKind>(prepared: Checked<K>): Array<Finding<WarningCodeFor<K>>>;
+
+// @public (undocumented)
+export function warningsOf<K extends PreparedKind>(prepared: Checked<K>, simulation: SimulationForSend | undefined): Array<Finding<WarningCodeFor<K> | SimulationWarningCode>>;
 
 // @public (undocumented)
 interface WatchOptions {

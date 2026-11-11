@@ -286,7 +286,7 @@ const toViemTypedData = (typedData: EIP712TypedData): ClusterTypedData => {
 };
 
 /**
- * verifyTypedDataSignature (pure; `chain` for a contract-wallet signer):
+ * isValidTypedDataSignature (pure; `chain` for a contract-wallet signer):
  * whether `signature` is `address`'s EIP-712 signature of `typedData`, by
  * ECDSA recovery or, for a contract wallet such as a Safe, EIP-1271
  * `isValidSignature` (also the legacy `isValidSignature(bytes, bytes)` →
@@ -305,7 +305,7 @@ const toViemTypedData = (typedData: EIP712TypedData): ClusterTypedData => {
  * throws: a malformed signature or typed data is `false` (2.x threw on a
  * malformed signature).
  */
-export const verifyTypedDataSignature = async ({
+export const isValidTypedDataSignature = async ({
   address,
   signature,
   typedData,

@@ -1,6 +1,6 @@
 import type { ObolChain } from './chains.js';
 import { createObolContext, type ObolClientConfig } from './clientContext.js';
-import { send, type Sent } from './send.js';
+import { send, type SendOptions, type Sent } from './send.js';
 import {
   simulate,
   type SimulateOptions,
@@ -52,8 +52,12 @@ export interface ObolClient {
   exits: ExitsModule;
   terms: TermsModule;
   withdrawals: WithdrawalsModule;
-  /** Sends `prepared.request` with the wallet; see `send`. */
-  send: (prepared: AnyPrepared) => Promise<Sent>;
+  /**
+   * Sends `prepared.request` with the wallet. Refuses while a `warning` in
+   * `prepared.checks` (or in `options.simulation`) is not listed in
+   * `options.acknowledge`; see `send`.
+   */
+  send: (prepared: AnyPrepared, options?: SendOptions) => Promise<Sent>;
   experimental: ExperimentalModule;
 }
 
@@ -76,7 +80,7 @@ export const createObolClient = (config: ObolClientConfig): ObolClient => {
     exits: createExitsModule(ctx),
     terms: createTermsModule(ctx),
     withdrawals: createWithdrawalsModule(ctx),
-    send: async prepared => await send(ctx, prepared),
+    send: async (prepared, options) => await send(ctx, prepared, options),
     experimental: {
       simulate: async (prepared, options) =>
         await simulate(ctx, prepared, options),

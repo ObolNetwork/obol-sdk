@@ -725,6 +725,167 @@
       "issue": "empty_recipients",
       "rewardSplit": null,
       "principalSplit": null
+    },
+    {
+      "name": "reject_zero_address_reward",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 500000
+          },
+          {
+            "address": "0x0000000000000000000000000000000000000000",
+            "share": 490000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "zero_address",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_zero_address_split_everything",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x0000000000000000000000000000000000000000",
+            "share": 990000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "zero_address",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_zero_address_principal",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          }
+        ],
+        "principalRecipients": [
+          {
+            "address": "0x0000000000000000000000000000000000000000",
+            "share": 1000000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "zero_address",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_warehouse_recipient",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 500000
+          },
+          {
+            "address": "0x8fb66F38cF86A3d5e8768f8F1754A24A6c661Fb8",
+            "share": 490000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "protocol_contract",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_pull_split_factory_recipient",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 500000
+          },
+          {
+            "address": "0x5cbA88D55Cec83caD5A105Ad40C8c9aF20bE21d1",
+            "share": 490000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "protocol_contract",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_ovm_factory_principal_recipient",
+      "input": {
+        "chainId": 560048,
+        "kind": "total",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 990000
+          }
+        ],
+        "principalRecipients": [
+          {
+            "address": "0x5754C8665B7e7BF15E83fCdF6d9636684B782b12",
+            "share": 1000000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "protocol_contract",
+      "rewardSplit": null,
+      "principalSplit": null
+    },
+    {
+      "name": "reject_deposit_contract_recipient",
+      "input": {
+        "chainId": 560048,
+        "kind": "rewards",
+        "rewardRecipients": [
+          {
+            "address": "0x1234567890123456789012345678901234567890",
+            "share": 500000
+          },
+          {
+            "address": "0x00000000219ab540356cBB839Cbe05303d7705Fa",
+            "share": 490000
+          }
+        ],
+        "distributionIncentive": 0
+      },
+      "accepted": false,
+      "reason": "PAYLOAD_INVALID",
+      "issue": "protocol_contract",
+      "rewardSplit": null,
+      "principalSplit": null
     }
   ]
 }

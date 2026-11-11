@@ -83,6 +83,43 @@ describe('splits shares', () => {
       'share_not_positive_integer',
     ],
     ['sum_mismatch', [{ address: A, share: 999_999 }], 'sum_mismatch'],
+    // rc.12: a share for the zero address is burned.
+    [
+      'zero_address',
+      [
+        { address: A, share: 500_000 },
+        {
+          address: '0x0000000000000000000000000000000000000000',
+          share: 500_000,
+        },
+      ],
+      'zero_address',
+    ],
+    [
+      'zero_address (the only recipient)',
+      [{ address: `0x${'00'.repeat(20)}`, share: 1_000_000 }],
+      'zero_address',
+    ],
+    // Case handling: the same address in three spellings is one address.
+    [
+      'duplicate_address (upper-case hex)',
+      [
+        { address: A, share: 500_000 },
+        { address: `0x${A.slice(2).toUpperCase()}`, share: 500_000 },
+      ],
+      'duplicate_address',
+    ],
+    // A mixed-case address with a wrong checksum is refused, not normalised.
+    [
+      'invalid_address (bad checksum)',
+      [
+        {
+          address: '0x52908400098527886e0F7030069857D2E4169EE7',
+          share: 1_000_000,
+        },
+      ],
+      'invalid_address',
+    ],
   ])('splitParams rejects %s', async (_name, recipients, issue) => {
     const error = await caught(() => splitParams(recipients as never));
     expect(error.code).toBe('PAYLOAD_INVALID');

@@ -10,10 +10,10 @@ import {
 } from './create.js';
 import {
   distributionFromReceipt,
-  prepareDistribution,
-  previewDistribution,
-  type DistributionInput,
-  type DistributionPreview,
+  prepareDistributeAll,
+  previewDistributeAll,
+  type DistributeAllInput,
+  type DistributeAllPreview,
   type DistributionReceipt,
   type DistributionResult,
 } from './distribution.js';
@@ -28,8 +28,8 @@ export {
 } from './create.js';
 export {
   distributionFromReceipt,
-  type DistributionInput,
-  type DistributionPreview,
+  type DistributeAllInput,
+  type DistributeAllPreview,
   type DistributionReceipt,
   type DistributionResult,
   type SkipReason,
@@ -60,12 +60,12 @@ export interface SplitsModule {
   ) => Promise<Prepared<'createSplit'>>;
   /** null when the address is not a SplitV2 split; throws for read failures. */
   getSplit: (input: GetSplitInput) => Promise<SplitInfo | null>;
-  prepareDistribution: (
-    input: DistributionInput,
-  ) => Promise<Prepared<'distribution'>>;
-  previewDistribution: (
-    input: DistributionInput,
-  ) => Promise<PreviewResult<DistributionPreview>>;
+  prepareDistributeAll: (
+    input: DistributeAllInput,
+  ) => Promise<Prepared<'distributeAll'>>;
+  previewDistributeAll: (
+    input: DistributeAllInput,
+  ) => Promise<PreviewResult<DistributeAllPreview>>;
   distributionFromReceipt: (
     receipt: DistributionReceipt,
     options?: { ovm?: string },
@@ -79,8 +79,8 @@ export const createSplitsModule = (ctx: Context): SplitsModule => ({
   predictSplit: async input => await predictSplit(ctx, input),
   prepareCreateSplit: async input => await prepareCreateSplit(ctx, input),
   getSplit: async input => await getSplit(ctx, input),
-  prepareDistribution: async input => await prepareDistribution(ctx, input),
-  previewDistribution: async input => await previewDistribution(ctx, input),
+  prepareDistributeAll: async input => await prepareDistributeAll(ctx, input),
+  previewDistributeAll: async input => await previewDistributeAll(ctx, input),
   distributionFromReceipt: (receipt, options = {}) =>
     distributionFromReceipt(receipt, { ...options, chainId: ctx.chain.id }),
 });

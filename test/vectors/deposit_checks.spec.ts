@@ -1,7 +1,7 @@
-// spec/vectors/deposit_checks.json through deposits.verifyDepositData.
+// spec/vectors/deposit_checks.json through deposits.assertDepositData.
 import { readFileSync } from 'node:fs';
 import { ObolError } from '../../src/errors.js';
-import { verifyDepositData } from '../../src/deposits/verifyDepositData.js';
+import { assertDepositData } from '../../src/deposits/assertDepositData.js';
 
 const suite = JSON.parse(
   readFileSync('spec/vectors/deposit_checks.json', 'utf8'),
@@ -24,7 +24,7 @@ describe('vectors deposit_checks', () => {
     '%s',
     async (_name, c) => {
       const run = async () =>
-        await verifyDepositData(c.input.deposits.map(toDeposit), {
+        await assertDepositData(c.input.deposits.map(toDeposit), {
           chainId: c.input.chainId,
           kind: c.input.kind,
           ...(c.input.expectedWithdrawalAddress !== null &&

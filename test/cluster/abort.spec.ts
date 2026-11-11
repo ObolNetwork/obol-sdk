@@ -1,9 +1,9 @@
-// options.signal on verifyLock, isValidLock and verifyDepositData: checked at
+// options.signal on verifyLock, isValidLock and assertDepositData: checked at
 // the yield points, an abort is ABORTED with the signal's reason as cause.
 import { jest } from '@jest/globals';
 import { isValidLock, verifyLock } from '../../src/cluster/index.js';
 import { nobleBls, type BlsBackend } from '../../src/cluster/blsBackend.js';
-import { verifyDepositData } from '../../src/deposits/verifyDepositData.js';
+import { assertDepositData } from '../../src/deposits/assertDepositData.js';
 import { isObolError } from '../../src/errors.js';
 import { hoodiCompoundingDepositPayload } from '../fixtures.js';
 import { syntheticLock } from '../helpers/syntheticLock.js';
@@ -107,7 +107,7 @@ describe('options.signal', () => {
     }
   });
 
-  describe('verifyDepositData', () => {
+  describe('assertDepositData', () => {
     const d = hoodiCompoundingDepositPayload.deposit;
     const deposit = {
       pubkey: d.pubkey,
@@ -121,14 +121,14 @@ describe('options.signal', () => {
       const controller = new AbortController();
       controller.abort('gone');
       const error = await caught(
-        verifyDepositData([deposit], {
+        assertDepositData([deposit], {
           chainId: 560048,
           signal: controller.signal,
         }),
       );
       expect(error).toMatchObject({
         code: 'ABORTED',
-        details: { operation: 'deposits.verifyDepositData' },
+        details: { operation: 'deposits.assertDepositData' },
         cause: 'gone',
       });
     });
@@ -137,7 +137,7 @@ describe('options.signal', () => {
       const controller = new AbortController();
       const bls = abortingBackend(controller, 'deadline', 1);
       const error = await caught(
-        verifyDepositData(Array(40).fill(deposit), {
+        assertDepositData(Array(40).fill(deposit), {
           chainId: 560048,
           signal: controller.signal,
           bls,
@@ -150,7 +150,7 @@ describe('options.signal', () => {
     it('rejects a signal that is not an AbortSignal', async () => {
       expect(
         await caught(
-          verifyDepositData([deposit], {
+          assertDepositData([deposit], {
             chainId: 560048,
             signal: 'soon' as never,
           }),

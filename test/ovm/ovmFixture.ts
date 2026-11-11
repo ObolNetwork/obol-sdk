@@ -227,6 +227,26 @@ export const caught = async (promise: Promise<unknown>): Promise<any> => {
 
 export const BEACON_URL = 'http://beacon.local:5052';
 
+/**
+ * Hoodi's genesis validators root, as its beacon nodes report it at
+ * `/eth/v1/beacon/genesis` (written out here, not read from the SDK's chain
+ * table, so a wrong table entry fails the tests).
+ */
+export const HOODI_GENESIS_VALIDATORS_ROOT =
+  '0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f';
+/** Mainnet's, likewise. */
+export const MAINNET_GENESIS_VALIDATORS_ROOT =
+  '0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95';
+
+/** What the mocked node says about itself; default a synced Hoodi node. */
+export interface MockBeaconNode {
+  genesisValidatorsRoot?: string;
+  /** The `data` of `/eth/v1/node/syncing`. */
+  syncing?: Record<string, unknown>;
+  /** Top-level `execution_optimistic` on state reads. */
+  executionOptimistic?: boolean;
+}
+
 /** Replaces global fetch with a beacon node serving these rows; returns the restore function. */
 export const mockBeacon = (
   pending: Array<{ pubkey: Hex; withdrawal_credentials: Hex; amount: string }>,
@@ -236,16 +256,44 @@ export const mockBeacon = (
     amount: string;
     withdrawable_epoch?: string;
   }> = [],
+  node: MockBeaconNode = {},
 ): (() => void) => {
   const real = global.fetch;
-  const rowsFor = (url: string): unknown[] => {
-    if (url.endsWith('/pending_deposits')) return pending;
-    if (url.endsWith('/pending_partial_withdrawals')) return partials;
-    return validators;
+  const bodyFor = (url: string): unknown => {
+    if (url.endsWith('/eth/v1/beacon/genesis')) {
+      return {
+        data: {
+          genesis_time: '1742213400',
+          genesis_validators_root:
+            node.genesisValidatorsRoot ?? HOODI_GENESIS_VALIDATORS_ROOT,
+          genesis_fork_version: '0x10000910',
+        },
+      };
+    }
+    if (url.endsWith('/eth/v1/node/syncing')) {
+      return {
+        data: node.syncing ?? {
+          head_slot: '1000',
+          sync_distance: '0',
+          is_syncing: false,
+          is_optimistic: false,
+          el_offline: false,
+        },
+      };
+    }
+    const state = {
+      execution_optimistic: node.executionOptimistic ?? false,
+      finalized: false,
+    };
+    if (url.endsWith('/pending_deposits')) return { ...state, data: pending };
+    if (url.endsWith('/pending_partial_withdrawals')) {
+      return { ...state, data: partials };
+    }
+    return { ...state, data: validators };
   };
   global.fetch = (async (url: unknown) =>
     await Promise.resolve(
-      new Response(JSON.stringify({ data: rowsFor(String(url)) }), {
+      new Response(JSON.stringify(bodyFor(String(url))), {
         status: 200,
       }),
     )) as unknown as typeof fetch;

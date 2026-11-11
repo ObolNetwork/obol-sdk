@@ -4,7 +4,14 @@
  */
 import { Type, type Static } from '@sinclair/typebox';
 import { encodeAbiParameters, keccak256, type Address, type Hex } from 'viem';
-import { checksum, invalid, isAddressInput, T } from '../schema.js';
+import {
+  checksum,
+  invalid,
+  isAddressInput,
+  sameAddress,
+  T,
+  ZERO_ADDRESS,
+} from '../schema.js';
 import type { SplitParams } from '../types.js';
 
 /** 100% in SplitV2 allocations: 1% is 10000. */
@@ -87,9 +94,12 @@ const toShare = (value: unknown): bigint | null =>
 
 /**
  * Checks recipients and shares (shared by `splitParams` and the presets):
- * non-empty, valid unique addresses, positive integer shares summing to
+ * non-empty, valid unique addresses (compared case-insensitively), none of
+ * them the zero address (a share allocated to it is burned: nobody can
+ * withdraw it from the Warehouse), positive integer shares summing to
  * `expectedTotal`. Issues: `empty_recipients`, `invalid_address`,
- * `duplicate_address`, `share_not_positive_integer`, `sum_mismatch`.
+ * `zero_address`, `duplicate_address`, `share_not_positive_integer`,
+ * `sum_mismatch`.
  */
 export const readShares = (
   recipients: unknown,
@@ -108,6 +118,13 @@ export const readShares = (
         `${path}[${i}].address`,
         'must be a hex address (all-lowercase, all-uppercase or a valid EIP-55 checksum)',
         'invalid_address',
+      );
+    }
+    if (sameAddress(address, ZERO_ADDRESS)) {
+      throw invalid(
+        `${path}[${i}].address`,
+        'must not be the zero address: its share could never be withdrawn',
+        'zero_address',
       );
     }
     if (seen.has(address.toLowerCase())) {
@@ -174,7 +191,7 @@ export const toSplitParams = (
 
 /**
  * SplitV2 parameters from recipients with ppm shares. Checks: at least one
- * recipient; valid, unique (case-insensitive) addresses; positive integer
+ * recipient; valid, unique (case-insensitive), non-zero addresses; positive integer
  * shares summing to exactly 1_000_000; `distributionIncentive` ≤ 65535.
  * Failures are PAYLOAD_INVALID with an `issue`. Recipients come out sorted by
  * numeric address, checksummed. No RAF share is added.

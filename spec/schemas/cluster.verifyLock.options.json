@@ -2,6 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/cluster.verifyLock.options.json",
   "title": "cluster.verifyLock.options",
+  "additionalProperties": false,
+  "description": "The options a schema can describe. The options object also takes publicClient, publicClients, bls and signal (VERIFY_LOCK_OPTION_KEYS); any other key is PAYLOAD_INVALID.",
   "properties": {
     "level": {
       "anyOf": [

@@ -63,7 +63,7 @@ export const eventLog = (
   return { address, topics, data, blockNumber, logIndex };
 };
 
-/** The factory log that makes `ovm` pass ovm.verify on Hoodi. */
+/** The factory log that makes `ovm` pass ovm.getProvenance on Hoodi. */
 export const ovmCreatedLog = (ovm: Address): FakeLog =>
   eventLog(
     HOODI.ovmFactory.address,

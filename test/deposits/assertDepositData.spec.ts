@@ -1,5 +1,5 @@
 import { parseEther } from 'viem';
-import { verifyDepositData } from '../../src/deposits/verifyDepositData.js';
+import { assertDepositData } from '../../src/deposits/assertDepositData.js';
 import type { ObolError } from '../../src/errors.js';
 import {
   hoodiCompoundingDepositPayload,
@@ -30,28 +30,28 @@ const toDeposit = (d: any) => ({
 const mainnet = toDeposit(mainnetDepositPayload.deposit);
 const hoodi = toDeposit(hoodiCompoundingDepositPayload.deposit);
 
-describe('deposits.verifyDepositData', () => {
+describe('deposits.assertDepositData', () => {
   it('accepts valid deposits (kind defaults to deposit)', async () => {
     await expect(
-      verifyDepositData([mainnet], {
+      assertDepositData([mainnet], {
         chainId: 1,
         expectedWithdrawalAddress: mainnetDepositPayload.withdrawalAddress,
       }),
     ).resolves.toBeUndefined();
     await expect(
-      verifyDepositData([hoodi], { chainId: 560048 }),
+      assertDepositData([hoodi], { chainId: 560048 }),
     ).resolves.toBeUndefined();
   });
 
   it('accepts an empty list', async () => {
     await expect(
-      verifyDepositData([], { chainId: 999 }),
+      assertDepositData([], { chainId: 999 }),
     ).resolves.toBeUndefined();
   });
 
   it('runs the per-deposit checks before the chain check', async () => {
     const error = await rejection(
-      verifyDepositData([{ ...mainnet, amount: parseEther('0.5') }], {
+      assertDepositData([{ ...mainnet, amount: parseEther('0.5') }], {
         chainId: 999,
       }),
     );
@@ -61,7 +61,7 @@ describe('deposits.verifyDepositData', () => {
 
   it('reports the first failing deposit', async () => {
     const error = await rejection(
-      verifyDepositData(
+      assertDepositData(
         [
           mainnet,
           { ...mainnet, withdrawalCredentials: `0x03${'00'.repeat(31)}` },
@@ -79,13 +79,13 @@ describe('deposits.verifyDepositData', () => {
     // Each signature is invalid; their sum is the sum of two valid ones.
     const [first, second] = offsetDepositPair(mainnet);
     expect(
-      (await rejection(verifyDepositData([first, second], { chainId: 1 })))
+      (await rejection(assertDepositData([first, second], { chainId: 1 })))
         .details,
     ).toEqual({ index: 0, issue: 'signature_invalid' });
     expect(
       (
         await rejection(
-          verifyDepositData([mainnet, second, first], { chainId: 1 }),
+          assertDepositData([mainnet, second, first], { chainId: 1 }),
         )
       ).details,
     ).toEqual({ index: 1, issue: 'signature_invalid' });
@@ -97,7 +97,7 @@ describe('deposits.verifyDepositData', () => {
       signatureOutsideSubgroup(mainnet.signature),
     );
     expect(
-      (await rejection(verifyDepositData([mainnet, deposit], { chainId: 1 })))
+      (await rejection(assertDepositData([mainnet, deposit], { chainId: 1 })))
         .details,
     ).toEqual({ index: 1, issue: 'signature_invalid' });
   });
@@ -117,7 +117,7 @@ describe('deposits.verifyDepositData', () => {
     ],
   ])('rejects %s (PAYLOAD_INVALID)', async (_name, deposits, options) => {
     expect(
-      (await rejection(verifyDepositData(deposits as any, options as any)))
+      (await rejection(assertDepositData(deposits as any, options as any)))
         .code,
     ).toBe('PAYLOAD_INVALID');
   });

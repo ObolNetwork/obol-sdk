@@ -89,7 +89,7 @@ describe('deposits.prepareDeposit', () => {
       expect(result[0].preview.kind).toBe('deposit');
     });
 
-    it('runs verifyDepositData first (check 1)', async () => {
+    it('runs assertDepositData first (check 1)', async () => {
       expect(
         await caught(
           prepareDeposit(chainWith().context(), {
@@ -352,12 +352,161 @@ describe('deposits.prepareDeposit', () => {
       expect(codes(result.checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
     });
 
-    it('warns DEPOSIT_IS_TOP_UP for a deposit to an existing validator', async () => {
+    // rc.12: kind "deposit" for a pubkey that is already in the registry
+    // always throws (rc.11 returned a Prepared with a DEPOSIT_IS_TOP_UP
+    // warning, also when the credentials were someone else's).
+    it.each([
+      ['active_ongoing', credentials('02', OVM)],
+      ['active_ongoing', credentials('01', OVM)],
+      ['pending_initialized', credentials('02', OVM)],
+      ['active_exiting', credentials('02', OVM)],
+      ['exited_unslashed', credentials('02', OVM)],
+      ['withdrawal_possible', credentials('02', OVM)],
+      ['withdrawal_done', credentials('01', OVM)],
+    ] as const)(
+      'throws DEPOSIT_VALIDATOR_EXISTS for a deposit to an existing validator (%s, own credentials %s)',
+      async (status, existing) => {
+        restore = mockBeacon([], [registryRow(PUBKEY, status, existing)]);
+        const error = await caught(run({}));
+        expect(error).toMatchObject({
+          code: 'DEPOSIT_VALIDATOR_EXISTS',
+          details: {
+            index: 0,
+            pubkey: PUBKEY,
+            status,
+            withdrawalCredentials: existing,
+          },
+        });
+      },
+    );
+
+    it.each([
+      ['active_ongoing', credentials('01', OTHER)],
+      ['active_ongoing', credentials('02', OTHER)],
+      ['withdrawal_done', credentials('01', OTHER)],
+      // BLS (0x00) credentials: nobody's execution address.
+      ['active_ongoing', `0x00${'ab'.repeat(31)}` as Hex],
+      // Right address, but not a well-formed 0x01 / 0x02 credential.
+      [
+        'active_ongoing',
+        `0x03${'00'.repeat(11)}${OVM.slice(2).toLowerCase()}` as Hex,
+      ],
+    ] as const)(
+      'throws DEPOSIT_CONFLICT for a deposit to a validator that exists with foreign credentials (%s, %s): the front-running case',
+      async (status, existing) => {
+        restore = mockBeacon([], [registryRow(PUBKEY, status, existing)]);
+        const error = await caught(run({}));
+        expect(error).toMatchObject({
+          code: 'DEPOSIT_CONFLICT',
+          details: {
+            index: 0,
+            pubkey: PUBKEY,
+            existingCredentials: existing,
+            existing: 'validator',
+          },
+        });
+        expect(error.message).toContain(existing);
+      },
+    );
+
+    it('via batch: the same two errors, against expectedWithdrawalAddress', async () => {
+      const batch = { via: { batch: true }, expectedWithdrawalAddress: OVM };
+      restore = mockBeacon(
+        [],
+        [registryRow(PUBKEY, 'active_ongoing', credentials('01', OTHER))],
+      );
+      expect((await caught(run(batch))).code).toBe('DEPOSIT_CONFLICT');
+      restore();
       restore = mockBeacon(
         [],
         [registryRow(PUBKEY, 'active_ongoing', credentials('02', OVM))],
       );
-      expect(codes((await run({}))[0].checks)).toEqual(['DEPOSIT_IS_TOP_UP']);
+      expect((await caught(run(batch))).code).toBe('DEPOSIT_VALIDATOR_EXISTS');
+    });
+
+    it('marks a queued-deposit conflict as existing: queued', async () => {
+      restore = mockBeacon(
+        [
+          {
+            pubkey: PUBKEY,
+            withdrawal_credentials: credentials('01', OTHER),
+            amount: '32000000000',
+          },
+        ],
+        [],
+      );
+      expect((await caught(run({}))).details.existing).toBe('queued');
+    });
+
+    it('a top-up to an existing validator with own credentials has no finding', async () => {
+      restore = mockBeacon(
+        [],
+        [
+          registryRow(
+            PUBKEY,
+            'active_ongoing',
+            credentials('02', OVM),
+            32n * ETH,
+          ),
+        ],
+      );
+      const [result] = await run({ deposits: [TOP_UP], kind: 'topUp' });
+      expect(result.checks).toEqual([]);
+    });
+
+    it('warns TOP_UP_CREDENTIALS_FOREIGN for a top-up to a validator with foreign credentials', async () => {
+      const theirs = credentials('02', OTHER);
+      restore = mockBeacon(
+        [],
+        [registryRow(PUBKEY, 'active_ongoing', theirs, 32n * ETH)],
+      );
+      const [result] = await run({ deposits: [TOP_UP], kind: 'topUp' });
+      expect(result.checks).toEqual([
+        expect.objectContaining({
+          code: 'TOP_UP_CREDENTIALS_FOREIGN',
+          severity: 'warning',
+          subject: { pubkey: PUBKEY },
+          details: {
+            index: 0,
+            pubkey: PUBKEY,
+            existingCredentials: theirs,
+            expectedWithdrawalAddress: OVM,
+          },
+        }),
+      ]);
+    });
+
+    it('warns TOP_UP_CREDENTIALS_FOREIGN for a zero-credential top-up behind a queued foreign deposit', async () => {
+      const theirs = credentials('02', OTHER);
+      restore = mockBeacon(
+        [
+          {
+            pubkey: PUBKEY,
+            withdrawal_credentials: theirs,
+            amount: '32000000000',
+          },
+        ],
+        [],
+      );
+      const [result] = await run({ deposits: [TOP_UP], kind: 'topUp' });
+      expect(codes(result.checks)).toEqual([
+        'DEPOSIT_ALREADY_QUEUED',
+        'TOP_UP_CREDENTIALS_FOREIGN',
+      ]);
+    });
+
+    it('DEPOSIT_EXISTENCE_UNCHECKED is a warning (send needs it acknowledged)', async () => {
+      const [result] = await prepareDeposit(chainWith().context(), {
+        deposits: [DEPOSIT],
+        via: { ovm: OVM },
+        from: OWNER,
+      });
+      expect(result.checks).toEqual([
+        expect.objectContaining({
+          code: 'DEPOSIT_EXISTENCE_UNCHECKED',
+          severity: 'warning',
+        }),
+      ]);
     });
 
     it('warns TOP_UP_EXITED_VALIDATOR', async () => {

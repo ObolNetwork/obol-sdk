@@ -18,7 +18,7 @@ import {
 } from '../src/chainUtils.js';
 import { isStale, send, waitForContractWalletExecution } from '../src/send.js';
 import type { AnyPrepared } from '../src/types.js';
-import { verifyOvm } from '../src/ovm/verify.js';
+import { getOvmProvenance } from '../src/ovm/provenance.js';
 import { ovmCreatedLog } from './splits/helpers.js';
 import { OVM, ovmChain } from './ovm/ovmFixture.js';
 import { fakeChain, MULTICALL3 } from './helpers/fakeChain.js';
@@ -230,7 +230,7 @@ describe('v3 core', () => {
       expect(await latestBlockNumber(client)).toBe(2_000_005n);
     });
 
-    it('ovm.verify finds a creation log in a block mined after the last read', async () => {
+    it('ovm.getProvenance finds a creation log in a block mined after the last read', async () => {
       // An OVM that answers its getters, created in a block after the last read.
       const chain = ovmChain({
         provenance: 'notObol',
@@ -239,7 +239,7 @@ describe('v3 core', () => {
       const ctx = chain.context();
       await ctx.publicClient.getBlockNumber();
       chain.setBlockNumber(2_000_005n);
-      expect((await verifyOvm(ctx, OVM)).status).toBe('obol');
+      expect((await getOvmProvenance(ctx, OVM)).status).toBe('obol');
     });
   });
 

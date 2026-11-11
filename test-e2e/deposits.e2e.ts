@@ -12,7 +12,7 @@ import {
   type Hex,
   type TransactionReceipt,
 } from 'viem';
-import { depositDataRoot } from '../src/deposits/verifyDepositData.js';
+import { depositDataRoot } from '../src/deposits/assertDepositData.js';
 import type { Deposit } from '../src/types.js';
 import {
   codes,

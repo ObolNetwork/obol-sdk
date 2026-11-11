@@ -1,5 +1,5 @@
 /**
- * deposits.verifyDepositData: the pure deposit checks run before ETH is sent
+ * deposits.assertDepositData: the pure deposit checks run before ETH is sent
  * to a deposit contract (spec/operations.md, vectors deposit_checks.json).
  */
 import { fromHexString } from '@chainsafe/ssz';
@@ -23,7 +23,7 @@ import {
 import { nobleBls, type BlsBackend } from '../cluster/blsBackend.js';
 import { CHAINS } from '../chains.js';
 import { ObolError } from '../errors.js';
-import { decode, T } from '../schema.js';
+import { decode, rejectUnknownKeys, T } from '../schema.js';
 import type { Deposit, DepositInput, DepositKind } from '../types.js';
 import { ETH, GWEI } from '../units.js';
 
@@ -44,19 +44,36 @@ export const DepositSchema = Type.Object({
   amount: T.Wei,
 });
 
-export const VerifyDepositDataSchema = Type.Object({
+export const AssertDepositDataSchema = Type.Object({
   deposits: Type.Array(DepositSchema),
-  options: Type.Object({
-    chainId: T.Uint,
-    kind: Type.Optional(
-      Type.Union([Type.Literal('deposit'), Type.Literal('topUp')]),
-    ),
-    expectedWithdrawalAddress: Type.Optional(T.Address),
-    yieldMs: Type.Optional(T.Uint),
-  }),
+  options: Type.Object(
+    {
+      chainId: T.Uint,
+      kind: Type.Optional(
+        Type.Union([Type.Literal('deposit'), Type.Literal('topUp')]),
+      ),
+      expectedWithdrawalAddress: Type.Optional(T.Address),
+      yieldMs: Type.Optional(T.Uint),
+    },
+    {
+      additionalProperties: false,
+      description:
+        'The options a schema can describe. The options object also takes bls and signal; any other key is PAYLOAD_INVALID.',
+    },
+  ),
 });
 
-export interface VerifyDepositDataOptions {
+/** Every key of `AssertDepositDataOptions`; any other key is PAYLOAD_INVALID. */
+const VERIFY_DEPOSIT_OPTION_KEYS = [
+  'chainId',
+  'kind',
+  'expectedWithdrawalAddress',
+  'yieldMs',
+  'bls',
+  'signal',
+] as const;
+
+export interface AssertDepositDataOptions {
   chainId: number;
   kind?: DepositKind;
   expectedWithdrawalAddress?: string;
@@ -271,12 +288,13 @@ const signatureItem = (
  *   DEPOSIT_INVALID (`index`, `issue`); UNSUPPORTED_CHAIN when signatures
  *   must be checked on a chain without a known fork version.
  */
-export const verifyDepositData = async (
+export const assertDepositData = async (
   deposits: readonly DepositInput[],
-  options: VerifyDepositDataOptions,
+  options: AssertDepositDataOptions,
 ): Promise<void> => {
-  const args = decode(VerifyDepositDataSchema, { deposits, options });
-  const signal = options.signal;
+  rejectUnknownKeys(options, VERIFY_DEPOSIT_OPTION_KEYS, 'options');
+  const { bls: blsOption, signal, ...scalars } = options;
+  const args = decode(AssertDepositDataSchema, { deposits, options: scalars });
   assertSignal(signal, 'options.signal');
   const kind = args.options.kind ?? 'deposit';
   const { chainId, expectedWithdrawalAddress } = args.options;
@@ -292,13 +310,13 @@ export const verifyDepositData = async (
       `Cannot verify deposit signatures on chain ${chainId}: unknown genesis fork version`,
       {
         hint: 'Use mainnet (1) or Hoodi (560048)',
-        details: { chainId, operation: 'deposits.verifyDepositData' },
+        details: { chainId, operation: 'deposits.assertDepositData' },
       },
     );
   }
-  throwIfAborted(signal, 'deposits.verifyDepositData');
+  throwIfAborted(signal, 'deposits.assertDepositData');
   const domain = depositDomainForFork(forkVersion);
-  const bls = options.bls ?? nobleBls;
+  const bls = blsOption ?? nobleBls;
   const items = args.deposits.map(d =>
     signatureItem(bls, d as Deposit, domain),
   );
@@ -308,7 +326,7 @@ export const verifyDepositData = async (
     createTick(
       args.options.yieldMs ?? 50,
       signal,
-      'deposits.verifyDepositData',
+      'deposits.assertDepositData',
     ),
   );
   if (bad === -1) return;

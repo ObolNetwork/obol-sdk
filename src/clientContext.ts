@@ -18,7 +18,7 @@ import {
 } from './chains.js';
 import type { Context } from './context.js';
 import { ObolError } from './errors.js';
-import { decode, trimTrailingSlashes } from './schema.js';
+import { decode, rejectUnknownKeys, trimTrailingSlashes } from './schema.js';
 
 export interface ObolClientConfig {
   /** viem Chain: mainnet or Hoodi (Gnosis / Sepolia for cluster files only). */
@@ -88,6 +88,11 @@ const buildApi = (config: ObolClientConfig['api']): ObolApi | null => {
 
 /** Checks the configuration and builds the context every module is bound to. */
 export const createObolContext = (config: ObolClientConfig): Context => {
+  rejectUnknownKeys(
+    config,
+    ['chain', 'publicClient', 'walletClient', 'api'],
+    'config',
+  );
   const chain = getObolChain(config.chain.id);
   const publicChainId = config.publicClient.chain?.id;
   if (publicChainId !== undefined && publicChainId !== chain.id) {

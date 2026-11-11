@@ -23,9 +23,9 @@ import { VerifyLockOptionsSchema } from '../src/cluster/verifyLock.js';
 import { FromLockOptionsSchema } from '../src/deposits/fromLock.js';
 import { PrepareDepositInputSchema } from '../src/deposits/prepareDeposit.js';
 import { DepositStatusOptionsSchema } from '../src/deposits/status.js';
-import { VerifyDepositDataSchema } from '../src/deposits/verifyDepositData.js';
+import { AssertDepositDataSchema } from '../src/deposits/assertDepositData.js';
 import { AggregateSchema } from '../src/exits/aggregate.js';
-import { VerifyPartialExitSchema } from '../src/exits/verifyPartialExit.js';
+import { AssertPartialExitSchema } from '../src/exits/assertPartialExit.js';
 import { IsClaimedInput } from '../src/incentives/incentives.js';
 import { PrepareDistributeInputSchema } from '../src/ovm/distribute.js';
 import {
@@ -52,7 +52,7 @@ import {
   CreateSplitInputSchema,
   PredictSplitInputSchema,
 } from '../src/splits/create.js';
-import { DistributionInputSchema } from '../src/splits/distribution.js';
+import { DistributeAllInputSchema } from '../src/splits/distribution.js';
 import { GetSplitInputSchema } from '../src/splits/getSplit.js';
 import { AcceptSchema as TermsAcceptSchema } from '../src/terms/terms.js';
 import { PrepareEoaWithdrawInputSchema } from '../src/withdrawals/withdrawals.js';
@@ -68,7 +68,7 @@ export const OPERATION_INPUTS: Record<string, TSchema> = {
   'cluster.verifyDefinition': VerifyDefinitionSchema,
   'cluster.verifyLock.options': VerifyLockOptionsSchema,
   'deposits.fromLock.options': FromLockOptionsSchema,
-  'deposits.verifyDepositData': VerifyDepositDataSchema,
+  'deposits.assertDepositData': AssertDepositDataSchema,
   'deposits.status.options': DepositStatusOptionsSchema,
   'deposits.prepareDeposit': PrepareDepositInputSchema,
   'ovm.prepareWithdraw': PrepareWithdrawInputSchema,
@@ -90,11 +90,11 @@ export const OPERATION_INPUTS: Record<string, TSchema> = {
   'splits.predictSplit': PredictSplitInputSchema,
   'splits.prepareCreateSplit': CreateSplitInputSchema,
   'splits.getSplit': GetSplitInputSchema,
-  'splits.prepareDistribution': DistributionInputSchema,
+  'splits.prepareDistributeAll': DistributeAllInputSchema,
   'setup.prepareCreateOvm': CreateOvmInputSchema,
   'setup.prepareOvmWithSplits': OvmWithSplitsInputSchema,
   'incentives.isClaimed': IsClaimedInput,
-  'exits.verifyPartialExit': VerifyPartialExitSchema,
+  'exits.assertPartialExit': AssertPartialExitSchema,
   'exits.aggregate': AggregateSchema,
   'terms.accept': TermsAcceptSchema,
   'withdrawals.prepareEoaWithdraw': PrepareEoaWithdrawInputSchema,

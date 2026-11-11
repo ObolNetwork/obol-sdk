@@ -14,7 +14,7 @@ const NETWORKS = {
     env: 'RPC_HOODI',
     ovmFactory: '0x5754C8665B7e7BF15E83fCdF6d9636684B782b12',
     ovmFactoryBlock: 1735335,
-    // Serve eth_getLogs over 50,000 blocks, which ovm.verify and getSplit need.
+    // Serve eth_getLogs over 50,000 blocks, which ovm.getProvenance and getSplit need.
     rpcs: ['https://ethereum-hoodi-rpc.publicnode.com', 'https://0xrpc.io/hoodi'],
   },
   mainnet: {

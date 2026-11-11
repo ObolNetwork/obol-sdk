@@ -1,7 +1,7 @@
 /** splits.predictSplit and splits.prepareCreateSplit. */
 import { Type } from '@sinclair/typebox';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
-import { pullSplitFactoryAbi } from '../abi.js';
+import { DEPOSIT_CONTRACT, pullSplitFactoryAbi } from '../abi.js';
 import {
   chainReadFailed,
   latestBlockNumber,
@@ -10,7 +10,14 @@ import {
 } from '../chainUtils.js';
 import { requireContracts, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
-import { checksum, decode, T, ZERO_ADDRESS } from '../schema.js';
+import {
+  checksum,
+  decode,
+  invalid,
+  sameAddress,
+  T,
+  ZERO_ADDRESS,
+} from '../schema.js';
 import type { Prepared, SplitParams, SplitParamsInput } from '../types.js';
 import { EXPECTED_CODE_HASHES, requireExpectedCode } from './chain.js';
 import {
@@ -110,6 +117,65 @@ export interface CreateSplitInput {
   salt?: string;
 }
 
+/**
+ * Contracts of this chain that must not be a split recipient: ETH credited
+ * to them in the Warehouse has no owner who could withdraw it (the
+ * Warehouse, the factories, SplitMain, the deposit and request contracts,
+ * the Obol token). The RAF recipient is a real recipient and is not listed.
+ */
+export const protocolContracts = (
+  chainId: number,
+): Array<{ address: Address; name: string }> => {
+  const c = requireContracts(chainId, 'splits');
+  return [
+    { address: c.warehouse, name: 'the SplitsWarehouse' },
+    { address: c.pullSplitFactory, name: 'the PullSplit factory' },
+    { address: c.ovmFactory.address, name: 'the OVM factory' },
+    { address: c.splitMain, name: 'SplitMain' },
+    { address: c.owrFactory, name: 'the OWR factory' },
+    { address: c.batchDeposit, name: 'the batch deposit contract' },
+    { address: DEPOSIT_CONTRACT, name: 'the deposit contract' },
+    { address: c.withdrawalRequest, name: 'the EIP-7002 request contract' },
+    { address: c.consolidationRequest, name: 'the EIP-7251 request contract' },
+    { address: c.obolToken, name: 'the Obol token contract' },
+  ];
+};
+
+/**
+ * PAYLOAD_INVALID when a recipient is one of the chain's protocol contracts
+ * (`protocol_contract`) or, when known, the split's own address
+ * (`self_recipient`: the split would credit itself and that share could
+ * never leave the Warehouse). The zero address and duplicates are refused by
+ * `splitParams` (`readShares`) already.
+ */
+export const refuseUnusableRecipients = (
+  chainId: number,
+  params: SplitParams,
+  path: string,
+  splitAddress?: Address,
+): void => {
+  const contracts = protocolContracts(chainId);
+  // `params.recipients` is sorted by address, so the issue path is the
+  // list, and the message names the address.
+  params.recipients.forEach(recipient => {
+    const contract = contracts.find(c => sameAddress(c.address, recipient));
+    if (contract !== undefined) {
+      throw invalid(
+        path,
+        `${recipient} is ${contract.name}: a share sent to it could never be withdrawn`,
+        'protocol_contract',
+      );
+    }
+    if (splitAddress !== undefined && sameAddress(splitAddress, recipient)) {
+      throw invalid(
+        path,
+        `${recipient} is the address of this split itself: its share could never be withdrawn`,
+        'self_recipient',
+      );
+    }
+  });
+};
+
 /** Split owner and recipients must not be public forwarders. */
 export const refuseSplitForwarders = (
   chainId: number,
@@ -128,7 +194,10 @@ export const refuseSplitForwarders = (
 
 /**
  * Builds `createSplitDeterministic(params, owner, 0x0, salt)` on the PullSplit
- * factory. Checks: `splitParams` (shares sum to 1_000_000, no RAF added); the
+ * factory. Checks: `splitParams` (shares sum to 1_000_000, no RAF added, no
+ * zero or repeated address); no recipient is a public forwarder, one of the
+ * chain's protocol contracts (`protocol_contract`) or the split's own
+ * predicted address (`self_recipient`); the
  * factory has the expected code (CONTRACT_NOT_AVAILABLE); the split does not
  * exist yet (SPLIT_ALREADY_EXISTS, with its `address`).
  */
@@ -144,11 +213,12 @@ export const prepareCreateSplit = async (
   const owner =
     decoded.owner !== undefined ? checksum(decoded.owner) : ZERO_ADDRESS;
   const salt = (decoded.salt as Hex | undefined) ?? DEFAULT_SPLIT_SALT;
-  refuseSplitForwarders(ctx.chain.id, params, owner);
   const { pullSplitFactory } = requireContracts(
     ctx.chain.id,
     'splits.prepareCreateSplit',
   );
+  refuseSplitForwarders(ctx.chain.id, params, owner);
+  refuseUnusableRecipients(ctx.chain.id, params, 'recipients');
   const blockNumber = await latestBlockNumber(ctx.publicClient);
   await requireExpectedCode(
     ctx,
@@ -162,6 +232,7 @@ export const prepareCreateSplit = async (
     { params, owner, salt },
     blockNumber,
   );
+  refuseUnusableRecipients(ctx.chain.id, params, 'recipients', address);
   if (exists) throw splitAlreadyExists(address);
   return prepared(ctx, 'createSplit', {
     to: pullSplitFactory,

@@ -39,7 +39,7 @@ export interface BlsBatch<PublicKey = unknown> {
 /**
  * BLS12-381 (Ethereum consensus: G1 public keys, G2 signatures, POP
  * ciphersuite) operations used by `cluster.verifyLock` and
- * `deposits.verifyDepositData`. `PublicKey` is the backend's decoded G1
+ * `deposits.assertDepositData`. `PublicKey` is the backend's decoded G1
  * point; the SDK only passes values it got from `decodePublicKey` or
  * `aggregatePublicKeys` back in.
  *

@@ -38,16 +38,22 @@ const ClusterSchema = Type.Object({
   ),
 });
 
-export const VerifyPartialExitSchema = Type.Object({
-  cluster: ClusterSchema,
-  payload: PartialExitsPayloadSchema,
-  existing: Type.Optional(
-    Type.Union([
-      Type.Array(StoredExitBlobSchema),
-      Type.Record(Type.String(), StoredExitBlobSchema),
-    ]),
-  ),
-});
+// The input's own keys are strict; `cluster`, `payload` and `existing` are
+// documents (a lock excerpt, the API wire format, stored blobs) and may carry
+// fields the SDK does not read.
+export const AssertPartialExitSchema = Type.Object(
+  {
+    cluster: ClusterSchema,
+    payload: PartialExitsPayloadSchema,
+    existing: Type.Optional(
+      Type.Union([
+        Type.Array(StoredExitBlobSchema),
+        Type.Record(Type.String(), StoredExitBlobSchema),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
 
 /** The parts of a cluster lock exit verification needs. */
 export interface ExitCluster {
@@ -58,7 +64,7 @@ export interface ExitCluster {
   validators: Array<{ distributedPublicKey: string; publicShares: string[] }>;
 }
 
-export interface VerifyPartialExitInput {
+export interface AssertPartialExitInput {
   cluster: ExitCluster;
   /** The operator's submission, as the Obol API receives it. */
   payload: PartialExitsPayload;
@@ -69,6 +75,16 @@ export interface VerifyPartialExitInput {
    */
   existing?: StoredExitBlob[] | Record<string, StoredExitBlob>;
 }
+
+/**
+ * How to re-sign at another epoch. The stored exit keeps its epoch for as
+ * long as any operator's partial signature is stored: the Obol API has a
+ * per-operator delete only (`DELETE /v1/exp/partial_exits/:lockHash/:shareIdx/:pubkey`,
+ * what `charon exit delete` calls; it removes the document once no
+ * signature is left) and no route that deletes the whole exit document.
+ */
+const EPOCH_MISMATCH_HINT =
+  'Reject the payload. To exit at a different epoch, the stored exit for this validator must be deleted first, then every operator re-signs at the new epoch. The Obol API and Charon provide the delete: each operator that already submitted removes its own partial signature (`charon exit delete`), and the stored exit goes once none is left; the API has no single call that deletes the whole exit document';
 
 const exitError = <
   C extends
@@ -150,7 +166,7 @@ export const storedShares = (
 };
 
 const storedByPubkey = (
-  existing: VerifyPartialExitInput['existing'],
+  existing: AssertPartialExitInput['existing'],
 ): Map<string, StoredExitBlob> => {
   let list: StoredExitBlob[] = [];
   if (Array.isArray(existing)) list = existing;
@@ -206,10 +222,10 @@ const normalizeBlob = (
  *   EXIT_VALIDATOR_INDEX_MISMATCH, EXIT_EPOCH_MISMATCH,
  *   EXIT_SIGNATURE_CONFLICT, EXIT_PARTIAL_SIGNATURE_INVALID.
  */
-export const verifyPartialExit = (
-  input: VerifyPartialExitInput,
+export const assertPartialExit = (
+  input: AssertPartialExitInput,
 ): PartialExitBlob[] => {
-  const { cluster, payload, existing } = decode(VerifyPartialExitSchema, input);
+  const { cluster, payload, existing } = decode(AssertPartialExitSchema, input);
   const blobs = payload.partial_exits.map((blob, i) =>
     normalizeBlob(blob, `payload.partial_exits[${i}].signed_exit_message`),
   );
@@ -258,7 +274,7 @@ export const verifyPartialExit = (
 
   const network = exitNetwork(
     chainIdForForkVersion(cluster.forkVersion),
-    'exits.verifyPartialExit',
+    'exits.assertPartialExit',
   );
 
   const fresh: PartialExitBlob[] = [];
@@ -300,10 +316,15 @@ export const verifyPartialExit = (
       }
       const storedEpoch = BigInt(previous.epoch).toString();
       if (storedEpoch !== message.epoch) {
-        throw exitError(
+        const direction =
+          BigInt(message.epoch) > BigInt(storedEpoch) ? 'higher' : 'lower';
+        throw new ObolError(
           'EXIT_EPOCH_MISMATCH',
-          `Exit epoch ${message.epoch} differs from the stored ${storedEpoch} for ${pubkey}`,
-          { pubkey, epoch: message.epoch, storedEpoch },
+          `Exit epoch ${message.epoch} is ${direction} than the stored ${storedEpoch} for ${pubkey}: partial signatures over different epochs cannot be aggregated`,
+          {
+            hint: EPOCH_MISMATCH_HINT,
+            details: { pubkey, epoch: message.epoch, storedEpoch, direction },
+          },
         );
       }
       const share = storedShares(previous).get(shareIdx - 1);

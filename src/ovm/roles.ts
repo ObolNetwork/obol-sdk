@@ -20,6 +20,7 @@ import {
 } from '../schema.js';
 import type {
   Finding,
+  FindingsOf,
   Prepared,
   PreparedKind,
   PreviewByKind,
@@ -115,7 +116,7 @@ const refusePublicForwarder = (
 
 interface Setup {
   ovm: Address;
-  checks: Finding[];
+  checks: Array<Finding<'PROVENANCE_UNKNOWN'>>;
 }
 
 const setup = async (
@@ -134,7 +135,7 @@ const build = <K extends PreparedKind>(
   ovm: Address,
   functionName: string,
   args: readonly unknown[],
-  checks: Finding[],
+  checks: FindingsOf<K>,
   blockNumber?: bigint,
   extra?: Omit<PreviewByKind[K], keyof OvmWritePreview>,
 ): Prepared<K> => {
@@ -156,7 +157,9 @@ const build = <K extends PreparedKind>(
 const rolesSurviveFindings = async (
   ctx: Context,
   ovm: Address,
-): Promise<Finding[]> => {
+): Promise<
+  Array<Finding<'ROLES_SURVIVE_TRANSFER' | 'ROLE_HOLDERS_UNCHECKED'>>
+> => {
   try {
     const { holders } = await getOvmRoleHolders(ctx, ovm);
     const others = holders.filter(h => !h.isOwner && h.roles !== 0n);
@@ -164,7 +167,6 @@ const rolesSurviveFindings = async (
     return [
       finding(
         'ROLES_SURVIVE_TRANSFER',
-        'warning',
         `A change of owner does not revoke roles: ${others
           .map(h => `${h.address} (${h.roleNames.join(', ')})`)
           .join('; ')} keep theirs`,
@@ -184,7 +186,6 @@ const rolesSurviveFindings = async (
     return [
       finding(
         'ROLE_HOLDERS_UNCHECKED',
-        'info',
         `Could not read the role holders, so surviving roles were not checked: ${
           error instanceof Error ? error.message : String(error)
         }`,
@@ -242,7 +243,12 @@ export const prepareGrantRoles = async (
   const user = nonZero(args.user, 'user');
   const roles = toRoles(args.roles);
   refusePublicForwarder(ctx, user, { roles });
-  const { ovm, checks } = await setup(ctx, args.ovm, 'ovm.prepareGrantRoles');
+  const { ovm, checks: provenance } = await setup(
+    ctx,
+    args.ovm,
+    'ovm.prepareGrantRoles',
+  );
+  const checks: FindingsOf<'role'> = [...provenance];
   const { core, from } = await withSender(
     ctx,
     ovm,
@@ -254,7 +260,6 @@ export const prepareGrantRoles = async (
     checks.push(
       finding(
         'ROLE_GRANT_CONSOLIDATION',
-        'warning',
         `${user} could consolidate every validator of this OVM into one it controls, moving the whole stake`,
         {
           hint: 'Grant CONSOLIDATION only to an address you would trust with the stake',
@@ -270,7 +275,6 @@ export const prepareGrantRoles = async (
     checks.push(
       finding(
         'ROLE_GRANT_DEPOSIT_TO_PRINCIPAL',
-        'warning',
         `${user} is the principal recipient: with DEPOSIT it can raise amountOfPrincipalStake and receive rewards as principal`,
         { hint: 'Grant DEPOSIT to someone else', subject: { address: user } },
       ),
@@ -424,7 +428,8 @@ export const prepareCompleteOwnershipHandover = async (
   const pendingOwner = nonZero(args.pendingOwner, 'pendingOwner');
   refusePublicForwarder(ctx, pendingOwner, { owner: true });
   const operation = 'ovm.prepareCompleteOwnershipHandover';
-  const { ovm, checks } = await setup(ctx, args.ovm, operation);
+  const { ovm, checks: provenance } = await setup(ctx, args.ovm, operation);
+  const checks: FindingsOf<'ownership'> = [...provenance];
   const { core, from } = await withSender(ctx, ovm, args.from, operation);
   requireOwner(core, from);
   const [expiry] = await readMany(
@@ -445,7 +450,7 @@ export const prepareCompleteOwnershipHandover = async (
       'OVM_READ_FAILED',
       `${ovm} did not answer ownershipHandoverExpiresAt`,
       {
-        hint: 'Check the address and chain; run ovm.verify',
+        hint: 'Check the address and chain; run ovm.getProvenance',
         details: { address: ovm },
       },
     );
@@ -519,7 +524,12 @@ export const prepareTransfer = async (
   );
   const newOwner = nonZero(args.newOwner, 'newOwner');
   refusePublicForwarder(ctx, newOwner, { owner: true });
-  const { ovm, checks } = await setup(ctx, args.ovm, 'ovm.prepareTransfer');
+  const { ovm, checks: provenance } = await setup(
+    ctx,
+    args.ovm,
+    'ovm.prepareTransfer',
+  );
+  const checks: FindingsOf<'ownership'> = [...provenance];
   const { core, from } = await withSender(
     ctx,
     ovm,

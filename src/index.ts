@@ -14,11 +14,26 @@ export type {
 } from './client.js';
 export { ObolError, ObolApiError, isObolError } from './errors.js';
 export type { DetailsOf, ObolErrorOptions } from './errors.js';
-export { FINDING_CODES, OBOL_ERROR_CODES } from './codes.js';
+export { OBOL_ERROR_CODES } from './codes.js';
+export {
+  FINDING_CODES,
+  FINDING_CODES_BY_KIND,
+  FINDINGS,
+  SIMULATION_FINDING_CODES,
+  UNCHECKED_WARNING_CODES,
+} from './findings.js';
+export type {
+  FindingCode,
+  FindingCodeFor,
+  FindingGroup,
+  FindingInfo,
+  FindingSeverity,
+  SimulationFindingCode,
+  WarningCode,
+} from './findings.js';
 export type {
   ApiErrorCode,
   ApiErrorDetails,
-  FindingCode,
   Issue,
   ObolErrorCode,
   ObolErrorDetails,
@@ -30,6 +45,7 @@ export type {
   DepositInput,
   DepositKind,
   Finding,
+  FindingsOf,
   FindingSubject,
   PendingRetry,
   Prepared,
@@ -45,12 +61,26 @@ export type {
 export { CHAINS, currentEpoch, getObolChain } from './chains.js';
 export type { ChainContracts, ObolChain, PublicForwarder } from './chains.js';
 export { isAddressInput } from './schema.js';
-export { isStale, send, waitForContractWalletExecution } from './send.js';
-export type { Sent, WaitOptions } from './send.js';
+export {
+  findingsToAcknowledge,
+  isStale,
+  send,
+  waitForContractWalletExecution,
+  warningCodes,
+  warningsOf,
+} from './send.js';
+export type {
+  SendOptions,
+  Sent,
+  SimulationForSend,
+  SimulationWarningCode,
+  WaitOptions,
+  WarningCodeFor,
+} from './send.js';
 export type { Context } from './context.js';
 export type { BlsBackend, BlsBatch } from './cluster/blsBackend.js';
 export { isValidLock } from './cluster/verifyLock.js';
-export { verifyTypedDataSignature } from './cluster/eip712.js';
+export { isValidTypedDataSignature } from './cluster/eip712.js';
 export type {
   EIP712TypedData,
   PublicClients,

@@ -1,7 +1,7 @@
 /**
  * Exit shapes. These are the Obol API's wire and storage formats, kept as
  * they are (spec/README.md "Wire formats owned by others"), so the API can
- * pass what it receives and stores straight to `verifyPartialExit` and
+ * pass what it receives and stores straight to `assertPartialExit` and
  * `aggregate`.
  */
 import { Type, type Static } from '@sinclair/typebox';

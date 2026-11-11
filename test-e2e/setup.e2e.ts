@@ -1,6 +1,6 @@
 /**
  * setup.prepareOvmWithSplits → send → ovmFromReceipt on a Hoodi fork, then
- * the reads (ovm.verify, ovm.getState, splits.getSplit) against what the
+ * the reads (ovm.getProvenance, ovm.getState, splits.getSplit) against what the
  * real factories created.
  */
 import { parseAbi, parseEther, type Address } from 'viem';
@@ -83,8 +83,8 @@ describeFork('setup.prepareOvmWithSplits', () => {
     ).toMatch(/^0x[0-9a-f]{2,}/);
   });
 
-  test('ovm.verify finds the creation event by scanning from the factory deploy block', async () => {
-    const verification = await s.obol.ovm.verify(deployed.ovm);
+  test('ovm.getProvenance finds the creation event by scanning from the factory deploy block', async () => {
+    const verification = await s.obol.ovm.getProvenance(deployed.ovm);
     expect(verification).toEqual({
       status: 'obol',
       source: 'chain',
@@ -94,10 +94,10 @@ describeFork('setup.prepareOvmWithSplits', () => {
     });
   });
 
-  test('ovm.verify reports notObol for a contract and an EOA the factory did not create', async () => {
-    const warehouse = await s.obol.ovm.verify(NET.warehouse);
+  test('ovm.getProvenance reports notObol for a contract and an EOA the factory did not create', async () => {
+    const warehouse = await s.obol.ovm.getProvenance(NET.warehouse);
     expect(warehouse).toMatchObject({ status: 'notObol', source: 'chain' });
-    const eoa = await s.obol.ovm.verify(randomAddress());
+    const eoa = await s.obol.ovm.getProvenance(randomAddress());
     expect(eoa).toMatchObject({ status: 'notObol', source: 'chain' });
   });
 
@@ -181,6 +181,6 @@ describeFork('setup.prepareOvmWithSplits', () => {
     const second = s.obol.setup.ovmFromReceipt(receipt);
     expect(second.ovm).not.toBe(deployed.ovm);
     expect(second.rewardRecipient).toBe(deployed.rewardRecipient);
-    expect((await s.obol.ovm.verify(second.ovm)).status).toBe('obol');
+    expect((await s.obol.ovm.getProvenance(second.ovm)).status).toBe('obol');
   });
 });

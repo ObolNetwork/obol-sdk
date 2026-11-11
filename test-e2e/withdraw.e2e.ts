@@ -275,13 +275,15 @@ describeFork('EIP-7002 / EIP-7251 requests', () => {
   });
 
   test('consolidation: the EIP-7251 predeploy queues source → target and the OVM refunds the rest', async () => {
+    // rc.12: the acknowledgement flag is gone (an unknown key now).
     await expectCode(
       async () =>
         await s.obol.ovm.prepareConsolidate({
           ovm: d.ovm,
           requests: [{ sources: [pubkey], target: pubkey }],
+          acknowledgeStakeMovesToTarget: true,
         } as never),
-      'CONSOLIDATION_NOT_ACKNOWLEDGED',
+      'PAYLOAD_INVALID',
     );
     const fee = await currentFee(NET.consolidationRequest);
     const cap = capPerRequest(fee);
@@ -290,7 +292,6 @@ describeFork('EIP-7002 / EIP-7251 requests', () => {
     const prepared = await s.obol.ovm.prepareConsolidate({
       ovm: d.ovm,
       requests: [{ sources: [pubkey], target }],
-      acknowledgeStakeMovesToTarget: true,
       excessFeeRecipient,
     });
     expect(prepared.request.value).toBe(cap);

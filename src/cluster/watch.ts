@@ -9,7 +9,7 @@ import { definitionFlow } from '../internal/definitionFlow.js';
 import type { ObolApi } from '../api.js';
 import { requireApi, type Context } from '../context.js';
 import { isObolError, ObolApiError } from '../errors.js';
-import { checksum, decode, invalid, T } from '../schema.js';
+import { checksum, decode, invalid, rejectUnknownKeys, T } from '../schema.js';
 import { fetchDefinition, fetchLockByConfigHash } from './api.js';
 import type { ClusterDefinition } from './schema.js';
 
@@ -155,6 +155,7 @@ export const watch = (
   if (!(options?.signal instanceof AbortSignal)) {
     throw invalid('signal', 'must be an AbortSignal');
   }
+  rejectUnknownKeys(options, ['signal', 'intervalMs', 'sleep'], 'options');
   const intervalMs = decode(
     T.Uint,
     options.intervalMs ?? DEFAULT_WATCH_INTERVAL_MS,

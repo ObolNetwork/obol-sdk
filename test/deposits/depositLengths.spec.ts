@@ -2,7 +2,7 @@
 // drops bytes past its end, so a wrong-length field could hash like a
 // different, valid one. v3 rejects them on every path that hashes a deposit.
 import { computeDepositMsgRoot } from '../../src/internal/verification/common.js';
-import { verifyDepositData } from '../../src/deposits/verifyDepositData.js';
+import { assertDepositData } from '../../src/deposits/assertDepositData.js';
 import { verifyLock } from '../../src/cluster/verifyLock.js';
 import { mainnetDepositPayload } from '../fixtures.js';
 import { syntheticLock } from '../helpers/syntheticLock.js';
@@ -26,7 +26,7 @@ describe('deposit field lengths', () => {
     ).toThrow(/48 bytes/);
   });
 
-  it('verifyDepositData rejects them as PAYLOAD_INVALID before any hashing', async () => {
+  it('assertDepositData rejects them as PAYLOAD_INVALID before any hashing', async () => {
     const deposit = {
       pubkey: d.pubkey,
       withdrawalCredentials: d.withdrawal_credentials,
@@ -42,7 +42,7 @@ describe('deposit field lengths', () => {
       { depositDataRoot: d.deposit_data_root.slice(0, -2) },
     ]) {
       await expect(
-        verifyDepositData([{ ...deposit, ...bad }], { chainId: 1 }),
+        assertDepositData([{ ...deposit, ...bad }], { chainId: 1 }),
       ).rejects.toMatchObject({ code: 'PAYLOAD_INVALID' });
     }
   });

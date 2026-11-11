@@ -53,7 +53,7 @@ export interface ClaimPreview {
 }
 
 const issue = (code: FindingCode, message: string, hint: string): Finding =>
-  finding(code, 'warning', message, { hint });
+  finding(code, message, { hint });
 
 const endpoint = (ctx: Context, address: Address): string =>
   `/v1/address/incentives/${ctx.chain.network}/${address}`;
@@ -163,10 +163,10 @@ export const getIncentives = async (
   return data;
 };
 
-export const IsClaimedInput = Type.Object({
-  contractAddress: T.Address,
-  index: T.Uint,
-});
+export const IsClaimedInput = Type.Object(
+  { contractAddress: T.Address, index: T.Uint },
+  { additionalProperties: false },
+);
 
 /** `isClaimed(index)` on a Merkle distributor; CHAIN_READ_FAILED if the call fails. */
 export const isClaimed = async (

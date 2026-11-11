@@ -14,6 +14,7 @@ import { prepareDefinition } from './prepareDefinition.js';
 import type {
   ClusterDefinition,
   ClusterLock,
+  PrepareDefinitionInput,
   PreparedDefinition,
 } from './schema.js';
 import {
@@ -44,7 +45,7 @@ export {
   creatorConfigHashTypedData,
   enrTypedData,
   operatorConfigHashTypedData,
-  verifyTypedDataSignature,
+  isValidTypedDataSignature,
   type EIP712TypedData,
   type PublicClients,
   type SignatureClients,
@@ -82,10 +83,17 @@ export interface ClusterModule {
   computeConfigHash: typeof computeConfigHash;
   computeDefinitionHash: typeof computeDefinitionHash;
   computeLockHash: typeof computeLockHash;
-  prepareDefinition: (
-    input: { chainId?: number } & object,
-  ) => PreparedDefinition;
-  create: (input: unknown) => Promise<Hex>;
+  /** As the pure `prepareDefinition`; `chainId` defaults to the client chain. */
+  prepareDefinition: (input: BoundDefinitionInput) => PreparedDefinition;
+  /**
+   * Takes what `prepareDefinition` returned, or its input (then `creator`
+   * defaults to the wallet account and `chainId` to the client chain).
+   */
+  create: (
+    input:
+      | PreparedDefinition
+      | (Omit<BoundDefinitionInput, 'creator'> & { creator?: string }),
+  ) => Promise<Hex>;
   accept: (input: {
     configHash: string;
     enr: string;
@@ -110,14 +118,19 @@ export interface ClusterModule {
   isValidLock: (lock: unknown, options?: VerifyLockOptions) => Promise<boolean>;
 }
 
+/** `prepareDefinition`'s input through the client: `chainId` is optional. */
+export type BoundDefinitionInput = Omit<PrepareDefinitionInput, 'chainId'> & {
+  chainId?: number;
+};
+
 export const createClusterModule = (ctx: Context): ClusterModule => ({
   computeConfigHash,
   computeDefinitionHash,
   computeLockHash,
   /** As the pure `prepareDefinition`, with `chainId` defaulting to the client chain. */
-  prepareDefinition: (input: { chainId?: number } & object) =>
+  prepareDefinition: input =>
     prepareDefinition({ ...input, chainId: input.chainId ?? ctx.chain.id }),
-  create: async (input: unknown) => await create(ctx, input),
+  create: async input => await create(ctx, input),
   accept: async input => await accept(ctx, input),
   get: async configHash => await get(ctx, configHash),
   getLock: async input => await getLock(ctx, input),

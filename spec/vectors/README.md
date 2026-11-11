@@ -9,9 +9,9 @@ verification and BLS threshold aggregation are not here: they use the distribute
 | File | Covers | Operations | Cases |
 |---|---|---|---|
 | `split_shares.json` | `percent()` parsing; reward / total split parameters with the RAF share and Split Everything spreading; address order | `splits.percent`, `splits.splitParams`, setup presets | `percent` 14, `ovm_split_params` 18 |
-| `distribution.json` | OVM `distributeFunds` routing; PullSplit distribution amounts; the calls and per-recipient preview of a distribution | `ovm.prepareDistribute`, `splits.prepareDistribution` | `routing` 8, `split_distribution` 4, `prepare` 12 |
+| `distribution.json` | OVM `distributeFunds` routing; PullSplit distribution amounts; the calls and per-recipient preview of a distribution | `ovm.prepareDistribute`, `splits.prepareDistributeAll` | `routing` 8, `split_distribution` 4, `prepare` 12 |
 | `request_fees.json` | EIP-7002 / EIP-7251 fee default and bounds | `ovm.prepareWithdraw`, `ovm.prepareConsolidate`, `withdrawals.prepareEoaWithdraw` | `cases` 19 |
-| `deposit_checks.json` | Outcome and reason of the pure deposit checks: valid, wrong credentials, bad root, zero signature as deposit vs top-up, amount bounds, signature for another chain, signatures valid only in sum | `deposits.verifyDepositData`, `deposits.prepareDeposit` 1 | `cases` 31 |
+| `deposit_checks.json` | Outcome and reason of the pure deposit checks: valid, wrong credentials, bad root, zero signature as deposit vs top-up, amount bounds, signature for another chain, signatures valid only in sum | `deposits.assertDepositData`, `deposits.prepareDeposit` 1 | `cases` 31 |
 
 Not yet written (design: "setup calldata"): `setup_calldata.json` for `prepareCreateSplit` / `prepareOvmWithSplits`
 request encoding. It needs a fork or recorded factory answers for the predicted addresses.
@@ -49,10 +49,10 @@ Encoding inside the files:
   `test/fixtures.ts`. Error messages were mapped to the v3 `reason` / `issue`. The `request_fees.json` default cases
   were recomputed with the v3 `resolveRequestFee` when 3.0.0-rc.3 moved the OVM default to the top of the range.
 - `split_shares.json` and `distribution.json`: the shelved 2.16 work (`src/splits/splitShares.ts`,
-  `src/splits/distribution.ts`), unreleased. The `prepare` cases ran `prepareDistribution` against a fake provider that
+  `src/splits/distribution.ts`), unreleased. The `prepare` cases ran `prepareDistributeAll` against a fake provider that
   answers like `test/splits/distribution.spec.ts` `makeChain`, so the chain state in each `input` is exactly what the
   code saw.
-- 3.0.0-rc.4 re-ran the accepted `distribution.json` `prepare` cases on the v3 `prepareDistribution`
+- 3.0.0-rc.4 re-ran the accepted `distribution.json` `prepare` cases on the v3 `prepareDistributeAll`
   (`VECTORS_REBASELINE=1` with `test/vectors/distribution.spec.ts`): the expected `calls`, `preview` (every field) and
   `checks` (finding codes) are now v3's, and each case where v3 differs from 2.16 on purpose says why in `notes` (the
   RAF withdrawn by default, `RAF_LEFT_IN_WAREHOUSE`). The runners compare every output field, not a subset.

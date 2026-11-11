@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { Address } from 'viem';
 import { ovmRouting, thresholdGweiToWei } from '../../src/ovm/routing.js';
-import { prepareDistribution } from '../../src/splits/distribution.js';
+import { prepareDistributeAll } from '../../src/splits/distribution.js';
 import { splitAmounts } from '../../src/splits/shares.js';
 import type { SplitParams } from '../../src/types.js';
 import { fakeChain, type FakeContract } from '../helpers/fakeChain.js';
@@ -150,7 +150,7 @@ describe('vectors: distribution', () => {
             : {}),
           from: c.input.sender,
         };
-        const run = prepareDistribution(chain.context(), input);
+        const run = prepareDistributeAll(chain.context(), input);
         if (!c.accepted) {
           expect((await caught(run)).code).toBe(c.reason);
           return;

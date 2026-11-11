@@ -6,8 +6,10 @@
  * comparison with the operation's own preview.
  *
  *   const prepared = await obol.ovm.prepareDistribute({ ovm });
- *   const sim = await obol.simulate(prepared, { from });
- *   if (sim.success && (sim.limited || sim.matchesPreview.ok)) await obol.send(prepared);
+ *   const sim = await obol.experimental.simulate(prepared, { from });
+ *   // Refuses while a warning of `prepared` or of `sim` is not acknowledged
+ *   // (a revert, a preview mismatch, incomplete reads, no full simulation).
+ *   await obol.send(prepared, { simulation: sim });
  */
 import { Type } from '@sinclair/typebox';
 import type { Address } from 'viem';
@@ -16,6 +18,7 @@ import { requireContracts, senderOf, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
 import { checksum, decode, invalid, sameAddress, T } from '../schema.js';
 import { assertPrepared } from '../send.js';
+import type { SimulationFindingCode } from '../findings.js';
 import type { AnyPrepared, Finding } from '../types.js';
 import type { ChainContracts } from '../chains.js';
 import { DEPOSIT_CONTRACT, ovmAbi } from '../abi.js';
@@ -276,10 +279,9 @@ const formatValue = (v: unknown): string => {
 
 const unavailable = (
   skipped: Array<{ backend: string; reason: string }>,
-): Finding =>
+): Finding<'SIMULATION_UNAVAILABLE'> =>
   finding(
     'SIMULATION_UNAVAILABLE',
-    'info',
     `Neither eth_simulateV1 nor debug_traceCall could simulate the request on this node (${skipped
       .map(s => `${s.backend}: ${s.reason}`)
       .join('; ')}), so only success or revert was checked (eth_call)`,
@@ -359,7 +361,10 @@ const runFull = async (
  * CHAIN_MISMATCH); a sender (`from` or the wallet account, PAYLOAD_INVALID);
  * a chain with Obol contracts (UNSUPPORTED_CHAIN). A node without
  * eth_simulateV1 and debug_traceCall gives a `limited` result with a
- * SIMULATION_UNAVAILABLE finding; an RPC failure is SIMULATION_FAILED.
+ * SIMULATION_UNAVAILABLE warning; an RPC failure is SIMULATION_FAILED. A
+ * before / after read that fails is a SIMULATION_READS_INCOMPLETE warning
+ * and `matchesPreview.status` is then `notCompared`, never `match`
+ * (`matchesPreview.ok` is true only for `match`).
  * A contract-wallet sender (a Safe) is simulated as msg.sender: its own
  * signature, owner and nonce checks are not (SIMULATION_CONTRACT_WALLET).
  * Never sends anything and never throws for a revert: `success: false`.
@@ -399,7 +404,7 @@ export const simulate = async (
     value: prepared.request.value,
   };
 
-  const findings: Finding[] = [];
+  const findings: Array<Finding<SimulationFindingCode>> = [];
   let kind;
   try {
     kind = await getCodeKind(ctx.publicClient, from, blockNumber);
@@ -410,7 +415,6 @@ export const simulate = async (
     findings.push(
       finding(
         'SIMULATION_CONTRACT_WALLET',
-        'info',
         `${from} is a contract wallet: the call was simulated with it as msg.sender; its own signature, owner, threshold and nonce checks were not`,
         {
           hint: 'Check the Safe transaction in the Safe app as well',
@@ -430,7 +434,7 @@ export const simulate = async (
     opts.backend,
     skipped,
   );
-  const base = { from, blockNumber };
+  const base = { request: { ...prepared.request }, from, blockNumber };
 
   if (full === null) {
     const result = await callOnly(ctx.publicClient, tx, blockNumber);
@@ -473,7 +477,6 @@ export const simulate = async (
     findings.push(
       finding(
         'SIMULATION_REVERTED',
-        'warning',
         `The transaction reverts when simulated: ${revertReason.message}`,
         {
           hint: 'Do not send it; prepare again, or check the sender and state',
@@ -494,9 +497,11 @@ export const simulate = async (
       findings,
       summary: [revertLine(revertReason)],
       matchesPreview: {
+        status: 'mismatch',
         ok: false,
         differences: ['The transaction reverts'],
         compared: ['success'],
+        notCompared: [],
       },
     };
     return reverted;
@@ -525,6 +530,35 @@ export const simulate = async (
     throw simulationFailed(name, cause);
   }
   const values = readValues(plan, reads);
+  // A contract this transaction creates has no state before it: only its
+  // other failed reads count.
+  const created = createdContracts(facts.events, contracts);
+  const unread = values.unread
+    .filter(
+      u =>
+        !(
+          u.when === 'before' &&
+          created.some(c => sameAddress(c.address, u.address))
+        ),
+    )
+    .map(u => `${u.what} (${u.when})`);
+  if (unread.length > 0) {
+    findings.push(
+      finding(
+        'SIMULATION_READS_INCOMPLETE',
+        `${unread.length} value(s) could not be read ${
+          reads.before.every(r => r === undefined) ||
+          reads.after.every(r => r === undefined)
+            ? '(a whole before or after read failed) '
+            : ''
+        }while simulating, so the balance and state changes shown are incomplete and were not fully compared with the preview: ${unread.join('; ')}`,
+        {
+          hint: 'Simulate again, or on another RPC; do not read a missing change as "no change"',
+          details: { unread },
+        },
+      ),
+    );
+  }
   const labels = labelsFor(prepared, facts);
   const balances = balanceChanges(values, labels, from);
   const changes = stateChanges(facts, values);
@@ -534,15 +568,15 @@ export const simulate = async (
     events: facts.events,
     changes,
     values,
+    unread,
   });
-  if (!matchesPreview.ok) {
+  if (matchesPreview.status === 'mismatch') {
     const moved =
       prepared.blockNumber !== undefined &&
       prepared.blockNumber !== blockNumber;
     findings.push(
       finding(
         'SIMULATION_PREVIEW_MISMATCH',
-        'warning',
         `The simulation differs from the preview: ${matchesPreview.differences.join('; ')}${
           moved
             ? ` (the state moved since prepare: prepared at block ${prepared.blockNumber}, simulated on ${blockNumber}; prepare again)`
@@ -576,7 +610,6 @@ export const simulate = async (
     findings.push(
       finding(
         'SIMULATION_UNTRUSTED_EVENT',
-        'warning',
         `${untrusted.length} event(s) came from contracts with no known role in this transaction and were not interpreted: ${untrusted
           .map(e => `${e.name} from ${e.address}`)
           .join('; ')}`,

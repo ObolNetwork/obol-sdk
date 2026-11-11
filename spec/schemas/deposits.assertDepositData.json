@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/deposits.verifyDepositData.json",
-  "title": "deposits.verifyDepositData",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/deposits.assertDepositData.json",
+  "title": "deposits.assertDepositData",
   "properties": {
     "deposits": {
       "items": {
@@ -46,6 +46,8 @@
       "type": "array"
     },
     "options": {
+      "additionalProperties": false,
+      "description": "The options a schema can describe. The options object also takes bls and signal; any other key is PAYLOAD_INVALID.",
       "properties": {
         "chainId": {
           "minimum": 0,
