@@ -2,7 +2,109 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased
+#### [v3.0.0-rc.12](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.11...v3.0.0-rc.12)
+
+> 11 November 2026
+
+Fixes from the pre-release review of rc.11, and the names settled before 3.0.0. **Breaking**: six renames, `send`,
+`deposits.fromLock`, `ovm.prepareConsolidate` and unknown option keys. [MIGRATION.md](MIGRATION.md) "From
+3.0.0-rc.11 to rc.12" has before / after code for each.
+
+**Renamed** (no aliases; README "Naming": `verify*` returns a result, `isValid*` a boolean, `assert*` throws,
+`get*` reads)
+
+- `ovm.verify` → `ovm.getProvenance` (types `OvmVerification` → `OvmProvenance`, new `OvmProvenanceOptions`)
+- `splits.prepareDistribution` / `previewDistribution` → `splits.prepareDistributeAll` / `previewDistributeAll`
+  (`Prepared` kind `distribution` → `distributeAll`; `DistributionPreview` → `DistributeAllPreview`,
+  `DistributionInput` → `DistributeAllInput`)
+- `setup.prepareCreateSplit` removed: use `splits.prepareCreateSplit`
+- `deposits.verifyDepositData` → `deposits.assertDepositData` (`VerifyDepositDataOptions` →
+  `AssertDepositDataOptions`)
+- `exits.verifyPartialExit` → `exits.assertPartialExit` (`VerifyPartialExitInput` → `AssertPartialExitInput`)
+- `verifyTypedDataSignature` → `isValidTypedDataSignature` (root and `cluster`)
+
+**Breaking**
+
+- `send` refuses a prepared transaction while a `warning` finding in `prepared.checks` is not acknowledged by code:
+  `send(prepared, { acknowledge: ['CODE', ...] })`, else the new error `FINDINGS_NOT_ACKNOWLEDGED` (`codes`,
+  `findings`; the hint gives the exact call), thrown before the wallet is asked. No blanket acknowledgement; an
+  entry that is not a finding code is `PAYLOAD_INVALID`. `send(prepared, { simulation })` applies the same to the
+  simulation's warnings and refuses a simulation of another request. `send` requires `prepared.checks` to be an array
+  (`PREPARED_INVALID`).
+- Helpers and types for acknowledging: `warningsOf(prepared, simulation?)` (the warnings to show),
+  `warningCodes(prepared, simulation?)` (their codes: `send(tx, { simulation, acknowledge: warningCodes(tx,
+  simulation) })` acknowledges exactly what this transaction carries), `findingsToAcknowledge(prepared, options)`
+  (what is still open, for callers with their own wallet layer) and `UNCHECKED_WARNING_CODES` (the "a check could
+  not run" warnings, as a policy list). `FINDINGS` catalogues every finding code with TSDoc, `severity`, `group`,
+  `meaning` and `guidance`; `FindingCode` is its key union, `WarningCode` the warnings. `Prepared<K>['checks']` is
+  typed to the codes kind `K` can carry (`FindingCodeFor<K>`, `FINDING_CODES_BY_KIND`), and
+  `FINDINGS_NOT_ACKNOWLEDGED` details are `{ codes: WarningCode[], findings: Finding<WarningCode>[] }`.
+  `FINDING_CODES` is typed `FindingCode[]` (was a tuple).
+- `DEPOSIT_EXISTENCE_UNCHECKED`, `VALIDATOR_STATUS_UNCHECKED` and `SIMULATION_UNAVAILABLE` are warnings (were info):
+  a check that could not run now needs acknowledging.
+- `ovm.prepareConsolidate` no longer takes `acknowledgeStakeMovesToTarget` (it was required on every call, also when
+  no stake moved); `CONSOLIDATION_NOT_ACKNOWLEDGED` is removed. A target with another withdrawal address is the
+  warning `CONSOLIDATION_CREDENTIALS_DIFFER` (now with both addresses in `details`), enforced by `send`.
+- `deposits.prepareDeposit` with `kind: 'deposit'` for a pubkey already in the validator registry (any status)
+  throws: `DEPOSIT_CONFLICT` (`existing: 'validator'`) when its credentials do not point at the expected withdrawal
+  address (the deposit front-running case), else the new `DEPOSIT_VALIDATOR_EXISTS`. The warning
+  `DEPOSIT_IS_TOP_UP` is removed. `kind: 'topUp'` to a validator with other credentials gets the new warning
+  `TOP_UP_CREDENTIALS_FOREIGN`.
+- `deposits.fromLock`: `deposits` is always present (`Deposit[]`). A lock with several deposit amounts (Charon's
+  default: 1 ETH and 32 ETH) and no `amount` throws the new `DEPOSIT_AMOUNT_REQUIRED` (`available`) instead of
+  leaving `deposits` out.
+- Unknown keys in inputs and options are `PAYLOAD_INVALID` (`issue: 'unknown_key'`, naming the key and the allowed
+  keys) everywhere: newly in the options of `verifyLock`, `isValidLock`, `fromLock`, `assertDepositData`,
+  `verifyDefinition`, `cluster.watch`, `exits.blsVerify`, in `verifyDefinition`, `incentives.isClaimed`,
+  `exits.assertPartialExit` / `exits.aggregate` inputs (top level), request entries of `prepareWithdraw` /
+  `prepareConsolidate`, and the client config. `verifyLock(lock, { level: 'attested', signature: 'all' })` used to
+  ignore the misspelt key and check no BLS signature. Documents (cluster files, deposits, exit objects, API
+  responses) still accept extra fields.
+- `experimental.simulate`: `matchesPreview` has `status` (`match` | `mismatch` | `notCompared`) and `notCompared`;
+  `ok` is `status === 'match'` and no longer true when nothing was compared. A failed before / after read is the new
+  warning `SIMULATION_READS_INCOMPLETE` (was dropped, so an unread balance looked unchanged). Results carry
+  `request`.
+- `viem` peer range `^2.27.0` (was `^2.21.0`, older than `hoodi` in `viem/chains`).
+
+**Fixed**
+
+- fix(deposits): the beacon node fallback of `deposits.status` checks the node first: its genesis validators root
+  is the client chain's and `/eth/v1/node/syncing` reports it in sync (not syncing, execution client online, not
+  optimistic); `execution_optimistic` answers are refused. A failed check is `STATUS_UNAVAILABLE` (`reason`
+  `beacon_wrong_chain`, `beacon_syncing`, `beacon_optimistic`), not "every pubkey is new". The Obol API falls back
+  to it only when unavailable (a timeout, a network failure, a 5xx), not on 400 / 401 / 403 / 409 / 422 / 429 / 451,
+  nor on a 404 for an unknown `lockHash`.
+- fix(splits): the zero address is refused as a split recipient (`splitParams`, `prepareCreateSplit`,
+  `prepareOvmWithSplits`, presets: `zero_address`), as are the chain's protocol contracts (`protocol_contract`) and
+  the split's own predicted address (`self_recipient`); `prepareDistributeAll` refuses `distributor: 0x0` with a
+  distribution incentive.
+- fix(ovm): `ovm.getProvenance` confirms an Obol API `obol` answer against the creation receipt (the factory's
+  `CreateObolValidatorManager` log) and returns `source: 'chain'`; an unconfirmed one is `source: 'api'`.
+  `deposits.prepareDeposit` requires the chain (`ovm.getProvenance(ovm, { requireChain: true })`).
+- fix(browser): no `Buffer` in the browser build. `src/` uses `Uint8Array`, and the SSZ list types the SDK hashes
+  with no longer go through `@chainsafe/ssz`'s `Buffer`-based `mixInLength`. Without a polyfill, rc.11 reported a
+  valid lock as `hash_mismatch`.
+- fix(errors): `isObolError` recognises errors from another copy of the SDK (CommonJS and ESM builds together, or
+  two versions) by a `Symbol.for` brand instead of `instanceof`.
+- fix(cluster): a v1.6.0 / v1.7.0 lock with `partial_deposit_data` entries (which its lock hash does not cover) is
+  refused by `verifyLock` (`deposit_data_invalid`, `partial_deposit_data_unexpected`) and by `deposits.fromLock`
+  (`LOCK_INVALID`, also with `verify: false`); `fromLock` returned the unsigned entry in place of `deposit_data`.
+- fix(cluster): `verifyLock` reports an unsupported definition version (v1.9.0) first, as `hash_mismatch` /
+  `version_unsupported`, not as whichever earlier step the file failed.
+- fix(exits): `EXIT_EPOCH_MISMATCH` carries `direction` (`higher` | `lower`) and a hint with the reset path (the
+  stored exit must be deleted, per operator, before re-signing at another epoch). The rule is unchanged.
+- fix(types): `obol.cluster.prepareDefinition` and `obol.cluster.create` are typed with the definition input (were
+  `object` / `unknown`).
+- chore(deps): `@chainsafe/enr` moves to devDependencies: every build bundles it, so consumers installed it and
+  about 40 transitive packages for nothing.
+- test: the built package is tested (`test/package`): the browser bundle without `Buffer` on Charon-made locks, the
+  CommonJS / ESM / browser copies together, and that no build imports a package that is not a dependency or peer.
+  ESLint bans `Buffer` and the library's SSZ list types in `src/`.
+- docs: README, MIGRATION (also the missing rows: `clusterLockHash`, `assertDepositData`, the Launchpad
+  split-creation field mapping and the RAF share the presets add), `spec/` and `KNOWN_ISSUES.md` for all of the
+  above; every TypeScript block of README and MIGRATION type-checks.
+
+Carried over from the unreleased notes:
 
 - fix(cluster): `cluster.accept` refuses definitions below v1.10.0 (`DEFINITION_INVALID`, issue `version_unsupported`), as 2.x `acceptClusterDefinition` does since #224
 - fix(deposits): `deposits.fromLock` reads `deposit_data` only from v1.6.0 and v1.7.0 locks, also with `verify: false` (a v1.8.0+ validator without `partial_deposit_data` is `deposit_data_missing`)
