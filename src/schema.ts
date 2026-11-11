@@ -65,8 +65,18 @@ export const T = {
 /** TypeBox `ValueErrorType.ObjectAdditionalProperties`. */
 const UNEXPECTED_PROPERTY = 42;
 
+/**
+ * Orders strings by UTF-16 code unit, as `sort()` without a comparator does
+ * for strings: the same order in every runtime and locale (`localeCompare`
+ * depends on the locale). Also used for lowercased hex addresses.
+ */
+export const byCodeUnit = (a: string, b: string): number => {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+};
+
 const unknownKeyMessage = (key: string, allowed: readonly string[]): string =>
-  `unknown key "${key}"; allowed keys: ${[...allowed].sort().join(', ')}`;
+  `unknown key "${key}"; allowed keys: ${[...allowed].sort(byCodeUnit).join(', ')}`;
 
 const messageFor = (error: {
   type: number;

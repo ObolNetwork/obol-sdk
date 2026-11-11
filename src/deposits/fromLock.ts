@@ -103,7 +103,7 @@ const selectValidators = (
   requested: Array<number | string> | undefined,
 ): number[] => {
   const count = lock.distributed_validators.length;
-  if (requested === undefined) return [...Array(count).keys()];
+  if (requested === undefined) return [...new Array(count).keys()];
   const byKey = new Map(
     lock.distributed_validators.map((v, i) => [
       v.distributed_public_key.toLowerCase(),

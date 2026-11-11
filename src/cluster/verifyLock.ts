@@ -657,7 +657,7 @@ const selectedValidators = (
   signatures: 'all' | 'none' | number[],
   count: number,
 ): number[] => {
-  if (signatures === 'all') return [...Array(count).keys()];
+  if (signatures === 'all') return [...new Array(count).keys()];
   if (signatures === 'none') return [];
   signatures.forEach((index, i) => {
     if (index >= count) {
