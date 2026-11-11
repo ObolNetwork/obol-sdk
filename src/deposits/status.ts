@@ -285,25 +285,32 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
   }
   // Signature fields were added to the route later: absent on a deployment
   // without them, and then left absent here.
-  const pending = entry.signaturesPending;
-  if (pending !== undefined && typeof pending !== 'boolean') {
-    return bad('a malformed signaturesPending');
-  }
-  const conflict = entry.credentialsConflict;
-  if (
-    conflict !== undefined &&
-    conflict !== null &&
-    typeof conflict !== 'boolean'
-  ) {
-    return bad('a malformed credentialsConflict');
-  }
-  if (
-    pending === true
-      ? conflict === true || conflict === false
-      : conflict === null
-  ) {
-    return bad('a credentialsConflict inconsistent with signaturesPending');
-  }
+  const signatureFieldsOf = (): {
+    pending: boolean | undefined;
+    conflict: boolean | null | undefined;
+  } => {
+    const pending = entry.signaturesPending;
+    if (pending !== undefined && typeof pending !== 'boolean') {
+      return bad('a malformed signaturesPending');
+    }
+    const conflict = entry.credentialsConflict;
+    if (
+      conflict !== undefined &&
+      conflict !== null &&
+      typeof conflict !== 'boolean'
+    ) {
+      return bad('a malformed credentialsConflict');
+    }
+    if (
+      pending === true
+        ? conflict === true || conflict === false
+        : conflict === null
+    ) {
+      return bad('a credentialsConflict inconsistent with signaturesPending');
+    }
+    return { pending, conflict };
+  };
+  const { pending, conflict } = signatureFieldsOf();
   const pendingDeposits = (entry.pendingDeposits as unknown[]).map(item => {
     const deposit = (item ?? {}) as Record<string, unknown>;
     const credentials = lowerString(deposit.withdrawalCredentials);
@@ -326,7 +333,8 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
     ...(pending !== undefined ? { signaturesPending: pending } : {}),
     ...(conflict !== undefined ? { credentialsConflict: conflict } : {}),
   };
-  if (status === 'new') {
+  /** `new`: no registry entry, no queued deposit, nothing pending. */
+  const newEntry = (): DepositStatus => {
     if (
       entry.beaconStatus !== null ||
       entry.index !== null ||
@@ -337,12 +345,13 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
     }
     return {
       pubkey: pubkey as Hex,
-      status,
+      status: 'new',
       source: 'api',
       ...signatureFields,
       pendingDeposits,
     };
-  }
+  };
+  if (status === 'new') return newEntry();
   const beaconStatus = entry.beaconStatus;
   if (
     typeof beaconStatus !== 'string' ||
@@ -358,7 +367,8 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
   ) {
     return bad('malformed withdrawal credentials');
   }
-  if (beaconStatus === PENDING_DEPOSIT) {
+  /** `pending_deposit`: queued, not in the registry yet. */
+  const queuedEntry = (): DepositStatus => {
     if (entry.index !== null || pendingDeposits.length === 0) {
       return bad('a queued status without a queued deposit');
     }
@@ -405,58 +415,67 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
       ...signatureFields,
       pendingDeposits,
     };
-  }
-  if (pending === true) {
-    return bad('signaturesPending for a registered validator');
-  }
-  if (credentials === undefined) {
-    return bad('malformed withdrawal credentials');
-  }
-  const index = entry.index;
-  if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0) {
-    return bad('a malformed validator index');
-  }
-  // Added to the route later: absent on a deployment without them.
-  const epoch = (value: unknown, what: string): bigint | null | undefined => {
-    if (value === undefined) return undefined;
-    if (value === null) return null;
-    if (typeof value !== 'string' || !DECIMAL.test(value)) {
-      return bad(`a malformed ${what}`);
+  };
+  if (beaconStatus === PENDING_DEPOSIT) return queuedEntry();
+  /** A validator in the registry. */
+  const registeredEntry = (): DepositStatus => {
+    if (pending === true) {
+      return bad('signaturesPending for a registered validator');
     }
-    const n = BigInt(value);
-    return n === FAR_FUTURE_EPOCH ? null : n;
+    if (credentials === undefined) {
+      return bad('malformed withdrawal credentials');
+    }
+    const index = entry.index;
+    if (
+      typeof index !== 'number' ||
+      !Number.isSafeInteger(index) ||
+      index < 0
+    ) {
+      return bad('a malformed validator index');
+    }
+    // Added to the route later: absent on a deployment without them.
+    const epoch = (value: unknown, what: string): bigint | null | undefined => {
+      if (value === undefined) return undefined;
+      if (value === null) return null;
+      if (typeof value !== 'string' || !DECIMAL.test(value)) {
+        return bad(`a malformed ${what}`);
+      }
+      const n = BigInt(value);
+      return n === FAR_FUTURE_EPOCH ? null : n;
+    };
+    const activationEpoch = epoch(entry.activationEpoch, 'activation epoch');
+    const exitEpoch = epoch(entry.exitEpoch, 'exit epoch');
+    const pendingPartialWithdrawals =
+      entry.pendingPartialWithdrawals === undefined
+        ? undefined
+        : weiString(
+            entry.pendingPartialWithdrawals,
+            'pending partial withdrawals',
+            pubkey,
+          );
+    return {
+      pubkey: pubkey as Hex,
+      status: status as DepositStatusName,
+      source: 'api',
+      beaconStatus,
+      validatorIndex: index,
+      withdrawalCredentials: credentials as Hex,
+      balance: weiString(entry.balance, 'balance', pubkey),
+      effectiveBalance: weiString(
+        entry.effectiveBalance,
+        'effective balance',
+        pubkey,
+      ),
+      ...(activationEpoch !== undefined ? { activationEpoch } : {}),
+      ...(exitEpoch !== undefined ? { exitEpoch } : {}),
+      ...(pendingPartialWithdrawals !== undefined
+        ? { pendingPartialWithdrawals }
+        : {}),
+      ...signatureFields,
+      pendingDeposits,
+    };
   };
-  const activationEpoch = epoch(entry.activationEpoch, 'activation epoch');
-  const exitEpoch = epoch(entry.exitEpoch, 'exit epoch');
-  const pendingPartialWithdrawals =
-    entry.pendingPartialWithdrawals === undefined
-      ? undefined
-      : weiString(
-          entry.pendingPartialWithdrawals,
-          'pending partial withdrawals',
-          pubkey,
-        );
-  return {
-    pubkey: pubkey as Hex,
-    status: status as DepositStatusName,
-    source: 'api',
-    beaconStatus,
-    validatorIndex: index,
-    withdrawalCredentials: credentials as Hex,
-    balance: weiString(entry.balance, 'balance', pubkey),
-    effectiveBalance: weiString(
-      entry.effectiveBalance,
-      'effective balance',
-      pubkey,
-    ),
-    ...(activationEpoch !== undefined ? { activationEpoch } : {}),
-    ...(exitEpoch !== undefined ? { exitEpoch } : {}),
-    ...(pendingPartialWithdrawals !== undefined
-      ? { pendingPartialWithdrawals }
-      : {}),
-    ...signatureFields,
-    pendingDeposits,
-  };
+  return registeredEntry();
 };
 
 const sleep = async (ms: number): Promise<void> => {

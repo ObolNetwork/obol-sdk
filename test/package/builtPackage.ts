@@ -51,6 +51,7 @@ export const describeDist = (name: string, fn: () => void): void => {
     return;
   }
   console.warn(`Skipping "${name}": ${problem} (run \`yarn build\`)`);
+  // Locally, without a current build: skipped with the warning above (CI fails instead).
   describe.skip(name, fn);
 };
 

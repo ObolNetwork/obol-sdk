@@ -410,26 +410,24 @@ const requireAcknowledged = (
   if (open.length === 0) return;
   const codes = [...new Set(open.map(f => f.code))];
   const all = [...new Set([...(options.acknowledge ?? []), ...codes])];
-  const list = (items: readonly string[]): string =>
-    `[${items.map(c => `'${c}'`).join(', ')}]`;
+  const quoted = all.map(c => `'${c}'`).join(', ');
+  const lines = open
+    .map((f, i) => {
+      const hint = f.hint !== undefined ? ` (${f.hint})` : '';
+      return `${i + 1}. ${f.code}: ${f.message}${hint}`;
+    })
+    .join('\n');
+  const simulationArgument =
+    options.simulation !== undefined ? ', simulation' : '';
   throw new ObolError(
     'FINDINGS_NOT_ACKNOWLEDGED',
-    `Not sent: ${open.length} warning(s) on this ${prepared.kind} transaction were not acknowledged.\n${open
-      .map(
-        (f, i) =>
-          `${i + 1}. ${f.code}: ${f.message}${
-            f.hint !== undefined ? ` (${f.hint})` : ''
-          }`,
-      )
-      .join('\n')}`,
+    `Not sent: ${open.length} warning(s) on this ${prepared.kind} transaction were not acknowledged.\n${lines}`,
     {
       hint: [
         'Nothing was sent and the wallet was not asked.',
         'Each warning means the transaction may not do what is intended, or that a safety check could not run; error.details.findings has them with message, hint and subject, and FINDINGS[code] says what accepting each one means.',
         'Show them to whoever owns the funds (an agent: report them to your operator and wait; do not acknowledge on their behalf).',
-        `Once they accept, send again with the codes: send(prepared, { acknowledge: ${list(all)} }), or acknowledge: warningCodes(prepared${
-          options.simulation !== undefined ? ', simulation' : ''
-        }) for exactly the warnings this transaction carries.`,
+        `Once they accept, send again with the codes: send(prepared, { acknowledge: [${quoted}] }), or acknowledge: warningCodes(prepared${simulationArgument}) for exactly the warnings this transaction carries.`,
         'If they do not accept, do not send: fix the cause (the hints say how) and prepare again.',
       ].join(' '),
       details: { codes, findings: open },

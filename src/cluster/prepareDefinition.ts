@@ -78,10 +78,8 @@ export const prepareDefinition = (input: unknown): PreparedDefinition => {
       throw invalid(`depositAmounts[${i}]`, 'must be a whole number of gwei');
     }
     if (!allowed.includes(amount)) {
-      throw invalid(
-        `depositAmounts[${i}]`,
-        `must be one of ${allowed.map(a => `${a / ETH} ETH`).join(', ')}`,
-      );
+      const amounts = allowed.map(a => `${a / ETH} ETH`).join(', ');
+      throw invalid(`depositAmounts[${i}]`, `must be one of ${amounts}`);
     }
   });
 

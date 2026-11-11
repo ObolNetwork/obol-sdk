@@ -102,14 +102,13 @@ const provenanceFromApi = async (
     ) {
       return undefined;
     }
+    const defaultReason =
+      provenance.status === 'obol'
+        ? 'Created by the OVM factory'
+        : 'Not created by the OVM factory';
     return {
       status: provenance.status,
-      reason:
-        provenance.reason !== ''
-          ? provenance.reason
-          : provenance.status === 'obol'
-            ? 'Created by the OVM factory'
-            : 'Not created by the OVM factory',
+      reason: provenance.reason !== '' ? provenance.reason : defaultReason,
       ...(provenance.status === 'obol' &&
       provenance.creationTxHash !== undefined
         ? { creationTxHash: provenance.creationTxHash }
@@ -229,8 +228,10 @@ export const getOvmProvenance = async (
   // `source: 'api'`, unless `requireChain`, which goes on to the log scan.
   // A `notObol` from the interim record is the API's word too, and only
   // ever refuses; it is returned as it was.
-  const fromApi = await provenanceFromApi(ctx, ovm, factoryAddress);
-  if (fromApi !== undefined) {
+  /** Step 2's answer; undefined when the chain decides (steps 3 and 4). */
+  const byApi = async (): Promise<OvmProvenance | undefined> => {
+    const fromApi = await provenanceFromApi(ctx, ovm, factoryAddress);
+    if (fromApi === undefined) return undefined;
     if (fromApi.status !== 'obol') {
       return result(fromApi.status, 'api', fromApi.reason);
     }
@@ -262,7 +263,10 @@ export const getOvmProvenance = async (
         fromApi.creationTxHash,
       );
     }
-  }
+    return undefined;
+  };
+  const answered = await byApi();
+  if (answered !== undefined) return answered;
 
   // 3. The OVM getters: a contract that does not answer them is not one the
   // factory created (it never proves `obol`). A failed read goes on to 4.

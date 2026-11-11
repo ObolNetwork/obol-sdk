@@ -44,7 +44,7 @@ export const requireFullExitAcknowledged = (
   amounts: bigint[],
   acknowledged: unknown,
 ): void => {
-  if (amounts.some(a => a === 0n) && acknowledged !== true) {
+  if (amounts.includes(0n) && acknowledged !== true) {
     throw new ObolError(
       'FULL_EXIT_NOT_ACKNOWLEDGED',
       'A withdrawal amount of 0 is a full exit, and acknowledgeFullExit: true was not passed',

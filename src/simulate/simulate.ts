@@ -45,6 +45,7 @@ import {
   traceBackend,
   type Execution,
   type FullBackend,
+  type Reads,
   type SimTx,
 } from './backends.js';
 import { comparePreview } from './compare.js';
@@ -83,10 +84,9 @@ export const SimulateOptionsSchema = Type.Object(
   { additionalProperties: false },
 );
 
-const revertOf = (execution: {
-  failure?: Execution['failure'];
-  inner?: Execution['inner'];
-}): RevertReason => {
+const revertOf = (
+  execution: Pick<Execution, 'failure' | 'inner'>,
+): RevertReason => {
   const reason = decodeRevert(
     execution.failure?.data,
     execution.failure?.message,
@@ -308,12 +308,43 @@ const runFull = async (
 ): Promise<{ backend: FullBackend; execution: Execution } | null> => {
   const support = knownSupport(ctx.publicClient);
   const auto = forced === undefined || forced === 'auto';
-  const order: Array<'eth_simulateV1' | 'debug_traceCall'> =
+  const automatic: Array<'eth_simulateV1' | 'debug_traceCall'> =
+    forced === 'eth_call' ? [] : ['eth_simulateV1', 'debug_traceCall'];
+  const order =
     forced === 'eth_simulateV1' || forced === 'debug_traceCall'
       ? [forced]
-      : forced === 'eth_call'
-        ? []
-        : ['eth_simulateV1', 'debug_traceCall'];
+      : automatic;
+  /**
+   * A failed backend: thrown when forced (its own ObolError as it is, else
+   * SIMULATION_FAILED) or on a transport failure; in `auto`, an RPC answer
+   * gives the reason it is skipped. A node without the method is remembered.
+   */
+  const skipReason = (
+    name: 'eth_simulateV1' | 'debug_traceCall',
+    cause: unknown,
+  ): string => {
+    if (cause instanceof ObolError && !auto) throw cause;
+    const unsupported = isUnsupported(cause);
+    if (unsupported) support[name] = false;
+    if (!auto) {
+      throw unsupported
+        ? new ObolError(
+            'SIMULATION_FAILED',
+            `The node does not support ${name}`,
+            {
+              hint: "Use backend: 'auto'",
+              details: { backend: name },
+              cause,
+            },
+          )
+        : simulationFailed(name, cause);
+    }
+    // auto: a transport failure is not the node refusing the method.
+    if (!(cause instanceof ObolError) && !isRpcAnswer(cause)) {
+      throw simulationFailed(name, cause);
+    }
+    return rpcErrorInfo(cause).message;
+  };
   for (const name of order) {
     if (auto && support[name] === false) {
       skipped.push({ backend: name, reason: 'not supported by the node' });
@@ -328,27 +359,7 @@ const runFull = async (
       support[name] = true;
       return { backend, execution };
     } catch (cause) {
-      if (cause instanceof ObolError && !auto) throw cause;
-      const unsupported = isUnsupported(cause);
-      if (unsupported) support[name] = false;
-      if (!auto) {
-        throw unsupported
-          ? new ObolError(
-              'SIMULATION_FAILED',
-              `The node does not support ${name}`,
-              {
-                hint: "Use backend: 'auto'",
-                details: { backend: name },
-                cause,
-              },
-            )
-          : simulationFailed(name, cause);
-      }
-      // auto: a transport failure is not the node refusing the method.
-      if (!(cause instanceof ObolError) && !isRpcAnswer(cause)) {
-        throw simulationFailed(name, cause);
-      }
-      skipped.push({ backend: name, reason: rpcErrorInfo(cause).message });
+      skipped.push({ backend: name, reason: skipReason(name, cause) });
     }
   }
   return null;
@@ -388,15 +399,17 @@ export const simulate = async (
     );
   }
   const from = checksum(sender);
-  let blockNumber: bigint;
-  try {
-    blockNumber =
-      opts.blockNumber === undefined || opts.blockNumber === 'latest'
+  /** The block asked for, else the latest. */
+  const readBlockNumber = async (): Promise<bigint> => {
+    try {
+      return opts.blockNumber === undefined || opts.blockNumber === 'latest'
         ? await ctx.publicClient.getBlockNumber()
         : opts.blockNumber;
-  } catch (cause) {
-    throw simulationFailed('eth_call', cause);
-  }
+    } catch (cause) {
+      throw simulationFailed('eth_call', cause);
+    }
+  };
+  const blockNumber = await readBlockNumber();
   const tx: SimTx = {
     from,
     to: checksum(prepared.request.to),
@@ -436,13 +449,14 @@ export const simulate = async (
   );
   const base = { request: { ...prepared.request }, from, blockNumber };
 
-  if (full === null) {
+  /** No full backend: success or revert only (eth_call). */
+  const limitedResult = async (): Promise<LimitedSimulation> => {
     const result = await callOnly(ctx.publicClient, tx, blockNumber);
     if (opts.backend !== 'eth_call') {
       findings.push(unavailable(skipped));
     }
     const revertReason = result.success ? undefined : revertOf(result);
-    const limited: LimitedSimulation = {
+    return {
       ...base,
       limited: true,
       backend: 'eth_call',
@@ -455,24 +469,29 @@ export const simulate = async (
           : 'Succeeds (eth_call only: balance changes and events were not simulated)',
       ],
     };
-    return limited;
-  }
+  };
+  if (full === null) return await limitedResult();
 
   const { backend, execution } = full;
   const name = backend.name as Exclude<SimulationBackend, 'eth_call'>;
 
-  if (!execution.success) {
-    if (execution.inner === undefined && backend.innerFailure !== undefined) {
-      const calls = decodeAggregate3(tx.data);
-      if (calls !== null && sameAddress(tx.to, contracts.multicall3)) {
-        try {
-          const inner = await backend.innerFailure(calls, contracts.multicall3);
-          if (inner !== undefined) execution.inner = inner;
-        } catch {
-          // The outer revert is still reported.
-        }
-      }
+  /** For a failed Multicall3 batch: the inner call that failed, when the backend can tell. */
+  const addInnerFailure = async (): Promise<void> => {
+    if (execution.inner !== undefined || backend.innerFailure === undefined) {
+      return;
     }
+    const calls = decodeAggregate3(tx.data);
+    if (calls === null || !sameAddress(tx.to, contracts.multicall3)) return;
+    try {
+      const inner = await backend.innerFailure(calls, contracts.multicall3);
+      if (inner !== undefined) execution.inner = inner;
+    } catch {
+      // The outer revert is still reported.
+    }
+  };
+  /** The transaction reverts: the decoded reason, and nothing else to compare. */
+  const revertedResult = async (): Promise<FullSimulation> => {
+    await addInnerFailure();
     const revertReason = revertOf(execution);
     findings.push(
       finding(
@@ -484,7 +503,7 @@ export const simulate = async (
         },
       ),
     );
-    const reverted: FullSimulation = {
+    return {
       ...base,
       limited: false,
       backend: name,
@@ -504,8 +523,8 @@ export const simulate = async (
         notCompared: [],
       },
     };
-    return reverted;
-  }
+  };
+  if (!execution.success) return await revertedResult();
 
   const decoded = execution.logs.map(decodeLog);
   const trusted = trustedAddresses(prepared, tx, contracts, decoded);
@@ -522,13 +541,15 @@ export const simulate = async (
     ethAddresses: execution.ethAddresses,
   };
   const plan = planReads(facts);
-  let reads;
-  try {
-    reads = await backend.read(plan.calls);
-  } catch (cause) {
-    if (cause instanceof ObolError) throw cause;
-    throw simulationFailed(name, cause);
-  }
+  const readPlanned = async (): Promise<Reads> => {
+    try {
+      return await backend.read(plan.calls);
+    } catch (cause) {
+      if (cause instanceof ObolError) throw cause;
+      throw simulationFailed(name, cause);
+    }
+  };
+  const reads = await readPlanned();
   const values = readValues(plan, reads);
   // A contract this transaction creates has no state before it: only its
   // other failed reads count.
@@ -542,16 +563,15 @@ export const simulate = async (
         ),
     )
     .map(u => `${u.what} (${u.when})`);
+  const wholeReadFailed =
+    reads.before.every(r => r === undefined) ||
+    reads.after.every(r => r === undefined);
+  const whole = wholeReadFailed ? '(a whole before or after read failed) ' : '';
   if (unread.length > 0) {
     findings.push(
       finding(
         'SIMULATION_READS_INCOMPLETE',
-        `${unread.length} value(s) could not be read ${
-          reads.before.every(r => r === undefined) ||
-          reads.after.every(r => r === undefined)
-            ? '(a whole before or after read failed) '
-            : ''
-        }while simulating, so the balance and state changes shown are incomplete and were not fully compared with the preview: ${unread.join('; ')}`,
+        `${unread.length} value(s) could not be read ${whole}while simulating, so the balance and state changes shown are incomplete and were not fully compared with the preview: ${unread.join('; ')}`,
         {
           hint: 'Simulate again, or on another RPC; do not read a missing change as "no change"',
           details: { unread },
@@ -570,49 +590,49 @@ export const simulate = async (
     values,
     unread,
   });
-  if (matchesPreview.status === 'mismatch') {
+  /** SIMULATION_PREVIEW_MISMATCH, saying whether the state moved since prepare. */
+  const previewMismatch = (
+    differences: string[],
+  ): Finding<'SIMULATION_PREVIEW_MISMATCH'> => {
     const moved =
       prepared.blockNumber !== undefined &&
       prepared.blockNumber !== blockNumber;
-    findings.push(
-      finding(
-        'SIMULATION_PREVIEW_MISMATCH',
-        `The simulation differs from the preview: ${matchesPreview.differences.join('; ')}${
-          moved
-            ? ` (the state moved since prepare: prepared at block ${prepared.blockNumber}, simulated on ${blockNumber}; prepare again)`
-            : ''
-        }`,
-        {
-          hint: moved
-            ? 'Prepare again and simulate the new transaction'
-            : 'Prepare again at the latest block; if it persists, report it',
-          details: {
-            differences: matchesPreview.differences,
-            stateMoved: moved,
-            ...(prepared.blockNumber !== undefined
-              ? { preparedBlockNumber: prepared.blockNumber }
-              : {}),
-            blockNumber,
-          },
+    const movedText = moved
+      ? ` (the state moved since prepare: prepared at block ${prepared.blockNumber}, simulated on ${blockNumber}; prepare again)`
+      : '';
+    return finding(
+      'SIMULATION_PREVIEW_MISMATCH',
+      `The simulation differs from the preview: ${differences.join('; ')}${movedText}`,
+      {
+        hint: moved
+          ? 'Prepare again and simulate the new transaction'
+          : 'Prepare again at the latest block; if it persists, report it',
+        details: {
+          differences,
+          stateMoved: moved,
+          ...(prepared.blockNumber !== undefined
+            ? { preparedBlockNumber: prepared.blockNumber }
+            : {}),
+          blockNumber,
         },
-      ),
+      },
     );
+  };
+  if (matchesPreview.status === 'mismatch') {
+    findings.push(previewMismatch(matchesPreview.differences));
   }
-  const untrustedLines = untrusted.map(
-    e =>
-      `Unrecognised contract ${shortAddress(e.address)} emitted ${e.name}(${Object.values(
-        e.args,
-      )
-        .map(formatValue)
-        .join(', ')})`,
-  );
+  const untrustedLines = untrusted.map(e => {
+    const args = Object.values(e.args).map(formatValue).join(', ');
+    return `Unrecognised contract ${shortAddress(e.address)} emitted ${e.name}(${args})`;
+  });
+  const untrustedSources = untrusted
+    .map(e => `${e.name} from ${e.address}`)
+    .join('; ');
   if (untrusted.length > 0) {
     findings.push(
       finding(
         'SIMULATION_UNTRUSTED_EVENT',
-        `${untrusted.length} event(s) came from contracts with no known role in this transaction and were not interpreted: ${untrusted
-          .map(e => `${e.name} from ${e.address}`)
-          .join('; ')}`,
+        `${untrusted.length} event(s) came from contracts with no known role in this transaction and were not interpreted: ${untrustedSources}`,
         {
           hint: 'Do not rely on these events; balance changes come from the trace',
           details: {

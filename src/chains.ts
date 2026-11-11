@@ -225,7 +225,7 @@ export const currentEpoch = (
   return (now - chain.genesisTime) / SECONDS_PER_SLOT / SLOTS_PER_EPOCH;
 };
 
-const LOCAL_API = /^http(s)?:\/\/(localhost|127\.0\.0\.1)(:[0-9]{1,5})?$/;
+const LOCAL_API = /^http(s)?:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
 
 /**
  * Whether `baseUrl` (trailing slashes removed) may receive bearer

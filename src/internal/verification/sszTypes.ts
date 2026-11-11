@@ -18,7 +18,7 @@ const MAX_UINT64 = BigInt('0xffffffffffffffff');
 export const toUint64 = (value: string | number | bigint): bigint => {
   // BigInt('') is 0 and BigInt(1.5) throws; accept only plain decimal integers.
   if (
-    (typeof value === 'string' && !/^[0-9]+$/.test(value)) ||
+    (typeof value === 'string' && !/^\d+$/.test(value)) ||
     (typeof value === 'number' && !Number.isSafeInteger(value))
   ) {
     throw new Error(`value ${String(value)} is not a uint64`);

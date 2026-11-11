@@ -82,6 +82,12 @@ export interface RpcErrorInfo {
   data?: Hex;
 }
 
+/** The revert data of one error in the chain: `data`, or viem's nested `data.data`. */
+const errorData = (current: any): unknown => {
+  if (typeof current.data === 'string') return current.data;
+  return typeof current.data?.data === 'string' ? current.data.data : undefined;
+};
+
 /** Code, message and revert data from a viem / JSON-RPC error chain. */
 export const rpcErrorInfo = (error: unknown): RpcErrorInfo => {
   const info: RpcErrorInfo = {
@@ -99,12 +105,7 @@ export const rpcErrorInfo = (error: unknown): RpcErrorInfo => {
       info.code = current.code;
     }
     if (info.data === undefined) {
-      const data =
-        typeof current.data === 'string'
-          ? current.data
-          : typeof current.data?.data === 'string'
-            ? current.data.data
-            : undefined;
+      const data = errorData(current);
       if (data !== undefined && isHex(data)) info.data = data;
     }
     if (!detailsSet && typeof current.details === 'string') {
@@ -247,12 +248,11 @@ const isTransferLog = (log: { address: string }): boolean =>
   log.address.toLowerCase() === ETH_TRANSFER_LOG_ADDRESS;
 
 const callFailure = (call: SimulateCallResult): Failure => {
+  const returned = call.returnData !== '0x' ? call.returnData : undefined;
   const data =
     call.error?.data !== undefined && isHex(call.error.data)
       ? call.error.data
-      : call.returnData !== '0x'
-        ? call.returnData
-        : undefined;
+      : returned;
   return {
     message: call.error?.message ?? 'execution reverted',
     ...(data !== undefined ? { data } : {}),

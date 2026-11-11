@@ -204,9 +204,8 @@ export const scanLogs = async (
     }
   };
 
-  const logs: Log[] = [];
-  if (stopOnFirst) {
-    // Newest first, one range at a time.
+  /** Newest first, one range at a time, until a range has a log. */
+  const newestFirst = async (): Promise<Log[]> => {
     let end = toBlock;
     for (;;) {
       const size = windowOf(client);
@@ -217,7 +216,10 @@ export const scanLogs = async (
       if (start === fromBlock) return [];
       end = start - 1n;
     }
-  }
+  };
+  if (stopOnFirst) return await newestFirst();
+
+  const logs: Log[] = [];
   let next = fromBlock;
   while (next <= toBlock) {
     const size = windowOf(client);

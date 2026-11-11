@@ -182,7 +182,7 @@ const parseList = <V>(
 ): V[] | undefined => {
   if (!Array.isArray(raw)) return undefined;
   const items = raw.map(parse);
-  return items.some(i => i === undefined) ? undefined : (items as V[]);
+  return items.includes(undefined) ? undefined : (items as V[]);
 };
 
 /** Checks and types an API OVM record; malformed fields are left out. */

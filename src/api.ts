@@ -114,6 +114,29 @@ export class ObolApi {
           }, this.config.timeoutMs)
         : undefined;
     const http = { endpoint, method };
+    /** What a failed request throws: a timeout first, then an API error or the caller's abort as it is. */
+    const failure = (error: unknown): unknown => {
+      if (timedOut) {
+        return new ObolApiError(
+          'API_TIMEOUT',
+          `Obol API ${method} ${endpoint} did not answer within ${this.config.timeoutMs} ms`,
+          { ...http, status: 0 },
+          {
+            hint: 'A write may still have been processed; read the resource before retrying',
+            cause: error,
+          },
+        );
+      }
+      if (error instanceof ObolApiError || caller?.aborted === true) {
+        return error;
+      }
+      return new ObolApiError(
+        'API_ERROR',
+        `Obol API ${method} ${endpoint} failed: ${(error as Error).message}`,
+        { ...http, status: 0 },
+        { cause: error },
+      );
+    };
     try {
       const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
         method,
@@ -140,11 +163,12 @@ export class ObolApi {
       const code = CODE_FOR_STATUS[response.status] ?? 'API_ERROR';
       const detail = apiMessage(body);
       const requestId = response.headers.get('x-request-id') ?? undefined;
+      const detailText = detail !== undefined ? `: ${detail}` : '';
+      const requestText =
+        requestId !== undefined ? ` (request ${requestId})` : '';
       throw new ObolApiError(
         code,
-        `Obol API ${method} ${endpoint} failed with ${response.status}${
-          detail !== undefined ? `: ${detail}` : ''
-        }${requestId !== undefined ? ` (request ${requestId})` : ''}`,
+        `Obol API ${method} ${endpoint} failed with ${response.status}${detailText}${requestText}`,
         {
           ...http,
           status: response.status,
@@ -158,25 +182,7 @@ export class ObolApi {
         { hint: HINT_FOR_STATUS[response.status] ?? HINT_FOR_CODE[code] },
       );
     } catch (error) {
-      if (timedOut) {
-        throw new ObolApiError(
-          'API_TIMEOUT',
-          `Obol API ${method} ${endpoint} did not answer within ${this.config.timeoutMs} ms`,
-          { ...http, status: 0 },
-          {
-            hint: 'A write may still have been processed; read the resource before retrying',
-            cause: error,
-          },
-        );
-      }
-      if (error instanceof ObolApiError) throw error;
-      if (caller?.aborted === true) throw error;
-      throw new ObolApiError(
-        'API_ERROR',
-        `Obol API ${method} ${endpoint} failed: ${(error as Error).message}`,
-        { ...http, status: 0 },
-        { cause: error },
-      );
+      throw failure(error);
     } finally {
       clearTimeout(timer);
       caller?.removeEventListener('abort', onAbort);

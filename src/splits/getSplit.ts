@@ -119,7 +119,7 @@ const parseApiParams = (entry: unknown): SplitParams | null => {
   }
   const allocations = e.allocations.map(toBigInt);
   const totalAllocation = toBigInt(e.totalAllocation);
-  if (allocations.some(a => a === null) || totalAllocation === null) {
+  if (allocations.includes(null) || totalAllocation === null) {
     return null;
   }
   try {

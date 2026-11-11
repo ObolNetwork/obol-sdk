@@ -199,9 +199,9 @@ function randomWeight(): bigint {
 function mulSmall(point: G1Point, k: bigint): G1Point {
   let acc = G1.ZERO;
   const bits = k.toString(2);
-  for (let i = 0; i < bits.length; i++) {
+  for (const bit of bits) {
     acc = acc.double();
-    if (bits[i] === '1') acc = acc.add(point);
+    if (bit === '1') acc = acc.add(point);
   }
   return acc;
 }
@@ -210,9 +210,14 @@ function mulSmall(point: G1Point, k: bigint): G1Point {
  * Σ weights[i]·points[i] for weights below 2^64, by the bucket method. Noble's
  * generic multi-scalar multiplication walks all 255 scalar bits.
  */
+/** Window size dividing WEIGHT_BITS; larger windows pay off for more points. */
+function windowBitsFor(count: number): number {
+  if (count < 16) return 2;
+  return count < 512 ? 4 : 8;
+}
+
 function sumWeightedSignatures(points: G2Point[], weights: bigint[]): G2Point {
-  // Window size dividing WEIGHT_BITS; larger windows pay off for more points.
-  const windowBits = points.length < 16 ? 2 : points.length < 512 ? 4 : 8;
+  const windowBits = windowBitsFor(points.length);
   const mask = BigInt((1 << windowBits) - 1);
   let sum = G2.ZERO;
   for (let shift = WEIGHT_BITS - windowBits; shift >= 0; shift -= windowBits) {

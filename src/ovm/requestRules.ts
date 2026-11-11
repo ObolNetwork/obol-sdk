@@ -191,6 +191,71 @@ const requirePastCommitteePeriod = (
   }
 };
 
+/** A full exit is ignored while partial withdrawals are pending. */
+const requireNoPendingWithdrawals = (
+  status: DepositStatus,
+  pending: bigint | undefined,
+  unchecked: Unchecked,
+): void => {
+  if (pending === undefined) {
+    unchecked.add(status.pubkey, 'pending partial withdrawals');
+  } else if (pending > 0n) {
+    throw new ObolError(
+      'EXIT_BLOCKED_BY_PENDING_WITHDRAWAL',
+      `${status.pubkey} has ${pending} wei of partial withdrawals pending: the beacon chain ignores a full exit until they are processed, and keeps the fee`,
+      {
+        hint: 'Wait for the pending partial withdrawals to be processed, then request the exit',
+        details: {
+          pubkey: status.pubkey,
+          pendingPartialWithdrawals: pending,
+        },
+      },
+    );
+  }
+};
+
+/** A partial withdrawal needs 0x02 credentials. */
+const requireCompounding = (
+  status: DepositStatus,
+  credentials: Hex | undefined,
+): void => {
+  if (credentials !== undefined && credentialsPrefix(credentials) !== '0x02') {
+    throw new ObolError(
+      'PARTIAL_REQUIRES_COMPOUNDING',
+      `${status.pubkey} does not have 0x02 credentials: the beacon chain ignores a partial withdrawal and keeps the fee`,
+      {
+        hint: 'Consolidate to 0x02 first (prepareConsolidate with the validator as source and target), or exit',
+        details: {
+          pubkey: status.pubkey,
+          withdrawalCredentials: credentials,
+        },
+      },
+    );
+  }
+};
+
+/** A partial withdrawal needs an effective balance of at least 32 ETH. */
+const requireFullEffectiveBalance = (
+  status: DepositStatus,
+  unchecked: Unchecked,
+): void => {
+  if (status.effectiveBalance === undefined) {
+    unchecked.add(status.pubkey, 'effective balance');
+  } else if (status.effectiveBalance < MIN_ACTIVATION_BALANCE) {
+    throw new ObolError(
+      'EFFECTIVE_BALANCE_TOO_LOW',
+      `${status.pubkey} has an effective balance of ${status.effectiveBalance} wei, below 32 ETH: the beacon chain ignores a partial withdrawal and keeps the fee`,
+      {
+        hint: 'Effective balance steps up only at 32 + 1.25 ETH; top up or wait',
+        details: {
+          pubkey: status.pubkey,
+          effectiveBalance: status.effectiveBalance,
+        },
+      },
+    );
+  }
+};
+
 /** One withdrawal request as it will be sent. */
 export interface CheckedWithdrawal {
   pubkey: Hex;
@@ -238,56 +303,13 @@ export const checkWithdrawalRequests = (
           (pendingAdded.get(request.pubkey) ?? 0n);
 
     if (request.amount === 0n) {
-      if (pending === undefined) {
-        unchecked.add(status.pubkey, 'pending partial withdrawals');
-      } else if (pending > 0n) {
-        throw new ObolError(
-          'EXIT_BLOCKED_BY_PENDING_WITHDRAWAL',
-          `${status.pubkey} has ${pending} wei of partial withdrawals pending: the beacon chain ignores a full exit until they are processed, and keeps the fee`,
-          {
-            hint: 'Wait for the pending partial withdrawals to be processed, then request the exit',
-            details: {
-              pubkey: status.pubkey,
-              pendingPartialWithdrawals: pending,
-            },
-          },
-        );
-      }
+      requireNoPendingWithdrawals(status, pending, unchecked);
       return { ...request };
     }
 
     // Partial withdrawal.
-    if (
-      credentials !== undefined &&
-      credentialsPrefix(credentials) !== '0x02'
-    ) {
-      throw new ObolError(
-        'PARTIAL_REQUIRES_COMPOUNDING',
-        `${status.pubkey} does not have 0x02 credentials: the beacon chain ignores a partial withdrawal and keeps the fee`,
-        {
-          hint: 'Consolidate to 0x02 first (prepareConsolidate with the validator as source and target), or exit',
-          details: {
-            pubkey: status.pubkey,
-            withdrawalCredentials: credentials,
-          },
-        },
-      );
-    }
-    if (status.effectiveBalance === undefined) {
-      unchecked.add(status.pubkey, 'effective balance');
-    } else if (status.effectiveBalance < MIN_ACTIVATION_BALANCE) {
-      throw new ObolError(
-        'EFFECTIVE_BALANCE_TOO_LOW',
-        `${status.pubkey} has an effective balance of ${status.effectiveBalance} wei, below 32 ETH: the beacon chain ignores a partial withdrawal and keeps the fee`,
-        {
-          hint: 'Effective balance steps up only at 32 + 1.25 ETH; top up or wait',
-          details: {
-            pubkey: status.pubkey,
-            effectiveBalance: status.effectiveBalance,
-          },
-        },
-      );
-    }
+    requireCompounding(status, credentials);
+    requireFullEffectiveBalance(status, unchecked);
     if (status.balance === undefined || pending === undefined) {
       unchecked.add(
         status.pubkey,

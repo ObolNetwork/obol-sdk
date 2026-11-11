@@ -8,7 +8,7 @@
 import type { Address, Hex } from 'viem';
 import type { ChainContracts } from '../chains.js';
 import { DEPOSIT_CONTRACT, ovmAbi } from '../abi.js';
-import { sameAddress } from '../schema.js';
+import { byCodeUnit, sameAddress } from '../schema.js';
 import type { AnyPrepared, Prepared } from '../types.js';
 import { decodeCall } from './decode.js';
 import { requestFees, type ReadValues } from './analyze.js';
@@ -19,12 +19,6 @@ import type {
   SimulatedEvent,
   StateChange,
 } from './types.js';
-
-/** UTF-16 code-unit order, as the default `sort()`; lowercased hex addresses. */
-const byCodeUnit = (a: string, b: string): number => {
-  if (a < b) return -1;
-  return a > b ? 1 : 0;
-};
 
 export interface CompareInput {
   tx: SimTx;
@@ -314,13 +308,14 @@ const requests = (
             lower(r.target),
           ]),
         );
-  const actual: Array<[string, string]> = made.map(x =>
-    x.kind === 'withdrawalRequest'
-      ? [lower(x.pubkey), String(x.amount)]
-      : x.kind === 'consolidationRequest'
-        ? [lower(x.sourcePubkey), lower(x.targetPubkey)]
-        : ['', ''],
-  );
+  const actual: Array<[string, string]> = made.map(x => {
+    if (x.kind === 'withdrawalRequest') {
+      return [lower(x.pubkey), String(x.amount)];
+    }
+    return x.kind === 'consolidationRequest'
+      ? [lower(x.sourcePubkey), lower(x.targetPubkey)]
+      : ['', ''];
+  });
   c.check(`${fn} requests`, expected.length, actual.length);
   expected.forEach(([a, b], i) => {
     if (actual[i] === undefined) return;

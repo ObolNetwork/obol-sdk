@@ -92,6 +92,21 @@ interface Side {
   split: boolean;
 }
 
+/** SPLIT_REUSED for each side whose split already exists. */
+const reusedSplitFindings = (sides: Side[]): FindingsOf<'ovmWithSplits'> =>
+  sides
+    .filter(side => side.split && side.create === undefined)
+    .map(side =>
+      finding(
+        'SPLIT_REUSED',
+        `The split ${side.address} already exists and is reused`,
+        {
+          subject: { address: side.address },
+          details: { address: side.address },
+        },
+      ),
+    );
+
 /**
  * Builds the OVM and any new splits for its recipients. Checks, in order:
  * each side is either `split` or `address` (PAYLOAD_INVALID); each split
@@ -207,21 +222,9 @@ export const prepareOvmWithSplits = async (
     );
   }
 
-  const checks: FindingsOf<'ovmWithSplits'> = [];
-  for (const side of sameSplit ? [reward] : [reward, principal]) {
-    if (side.split && side.create === undefined) {
-      checks.push(
-        finding(
-          'SPLIT_REUSED',
-          `The split ${side.address} already exists and is reused`,
-          {
-            subject: { address: side.address },
-            details: { address: side.address },
-          },
-        ),
-      );
-    }
-  }
+  const checks: FindingsOf<'ovmWithSplits'> = reusedSplitFindings(
+    sameSplit ? [reward] : [reward, principal],
+  );
   checks.push(
     ...(await recipientCodeFindings(
       ctx,

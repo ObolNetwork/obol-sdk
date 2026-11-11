@@ -103,7 +103,7 @@ const checkRecord = (
   if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0) {
     issues.push(malformed('index'));
   }
-  if (typeof amount !== 'string' || !/^[0-9]+$/.test(amount)) {
+  if (typeof amount !== 'string' || !/^\d+$/.test(amount)) {
     issues.push(malformed('amount'));
   }
   if (!Array.isArray(proof) || !proof.every(isBytes32)) {
@@ -298,7 +298,7 @@ const runChecks = async (
     return { issues: [readFailed('the distributor state')], data };
   }
   const [token, root, endTime, claimed] = reads;
-  if (reads.some(r => r === undefined)) {
+  if (reads.includes(undefined)) {
     return { issues: [readFailed('the distributor state')], data, blockNumber };
   }
   if (!sameAddress(token as string, obolToken)) {
@@ -393,9 +393,10 @@ export const prepareClaim = async (
     );
   }
   if (issues.length > 0 || data === undefined) {
+    const failed = issues.map(i => `[${i.code}] ${i.message}`).join('; ');
     throw new ObolError(
       'INCENTIVES_PREFLIGHT_FAILED',
-      `Incentives claim checks failed: ${issues.map(i => `[${i.code}] ${i.message}`).join('; ')}`,
+      `Incentives claim checks failed: ${failed}`,
       { hint: issues[0]?.hint, details: { issues } },
     );
   }

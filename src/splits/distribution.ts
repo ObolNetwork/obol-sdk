@@ -22,7 +22,7 @@ import {
 import { finding, latestBlockNumber, prepared } from '../chainUtils.js';
 import { requireContracts, senderOf, type Context } from '../context.js';
 import { ObolError } from '../errors.js';
-import { provenanceFindings, readOvmCore } from '../ovm/read.js';
+import { provenanceFindings, readOvmCore, type OvmCore } from '../ovm/read.js';
 import { ovmRouting } from '../ovm/routing.js';
 import { readValues, type ReadCall } from '../multicall.js';
 import {
@@ -199,13 +199,19 @@ const buildDistribution = async (
   blockNumber: bigint;
 }> => {
   const d = decode(DistributeAllInputSchema, input);
-  if (
-    d.ovm === undefined &&
-    d.rewardSplit === undefined &&
-    d.principalSplit === undefined
-  ) {
-    throw invalid('', 'needs at least one of ovm, rewardSplit, principalSplit');
-  }
+  const requireSomething = (): void => {
+    if (
+      d.ovm === undefined &&
+      d.rewardSplit === undefined &&
+      d.principalSplit === undefined
+    ) {
+      throw invalid(
+        '',
+        'needs at least one of ovm, rewardSplit, principalSplit',
+      );
+    }
+  };
+  requireSomething();
   const given = (
     key: 'rewardSplit' | 'principalSplit',
   ): { address?: Address; params: SplitParams } | undefined => {
@@ -237,15 +243,14 @@ const buildDistribution = async (
 
   // OVM: provenance, then its state; everything else is read at that block.
   const ovmAddress = d.ovm !== undefined ? checksum(d.ovm) : undefined;
-  if (ovmAddress !== undefined) {
-    checks.push(...(await provenanceFindings(ctx, ovmAddress)));
-  }
-  const ovm =
-    ovmAddress !== undefined
-      ? await readOvmCore(ctx, ovmAddress, {
-          what: 'splits.prepareDistributeAll',
-        })
-      : undefined;
+  /** The OVM: its provenance findings (added to `checks`), then its state. */
+  const readOvm = async (address: Address): Promise<OvmCore> => {
+    checks.push(...(await provenanceFindings(ctx, address)));
+    return await readOvmCore(ctx, address, {
+      what: 'splits.prepareDistributeAll',
+    });
+  };
+  const ovm = ovmAddress !== undefined ? await readOvm(ovmAddress) : undefined;
   const blockNumber =
     ovm !== undefined
       ? ovm.blockNumber
@@ -270,12 +275,9 @@ const buildDistribution = async (
     split: typeof rewardGiven,
   ): ResolvedSplit | undefined => {
     if (split === undefined) return undefined;
-    const ovmRecipient =
-      ovm === undefined
-        ? undefined
-        : kind === 'reward'
-          ? ovm.rewardRecipient
-          : ovm.principalRecipient;
+    const recipientOf = (core: NonNullable<typeof ovm>): Address =>
+      kind === 'reward' ? core.rewardRecipient : core.principalRecipient;
+    const ovmRecipient = ovm === undefined ? undefined : recipientOf(ovm);
     if (
       split.address !== undefined &&
       ovmRecipient !== undefined &&
@@ -299,85 +301,97 @@ const buildDistribution = async (
   const splits: ResolvedSplit[] = [];
   const reward = resolve('reward', rewardGiven);
   const principal = resolve('principal', principalGiven);
-  if (reward !== undefined) splits.push(reward);
-  if (principal !== undefined) {
-    if (
-      reward !== undefined &&
-      sameAddress(reward.address, principal.address)
-    ) {
-      // One split receives both payouts and is distributed once.
-      if (
-        hashSplitParams(reward.params) !== hashSplitParams(principal.params)
-      ) {
-        throw splitParamsMismatch(
-          principal.address,
-          'The reward and principal params for one address',
-        );
-      }
-    } else {
-      splits.push(principal);
+  /** The principal split, unless it is the reward split (distributed once). */
+  const addPrincipal = (split: ResolvedSplit): void => {
+    if (reward === undefined || !sameAddress(reward.address, split.address)) {
+      splits.push(split);
+      return;
     }
-  }
+    // One split receives both payouts and is distributed once.
+    if (hashSplitParams(reward.params) !== hashSplitParams(split.params)) {
+      throw splitParamsMismatch(
+        split.address,
+        'The reward and principal params for one address',
+      );
+    }
+  };
+  if (reward !== undefined) splits.push(reward);
+  if (principal !== undefined) addPrincipal(principal);
 
+  /**
+   * The params of an OVM recipient that is a SplitV2 split; undefined when it
+   * is not one (no code, or no split hash). A split whose params cannot be
+   * found is SPLIT_PARAMS_REQUIRED.
+   */
+  const recipientSplitParams = async (
+    kind: ResolvedSplit['kind'],
+    address: Address,
+  ): Promise<SplitParams | undefined> => {
+    if (!(await hasContractCode(ctx, address, blockNumber))) return undefined;
+    const splitHash = await readSplitHash(ctx, address, blockNumber);
+    if (splitHash === undefined || splitHash === ZERO_HASH) return undefined;
+    const found = await findSplitParams(ctx, {
+      address,
+      splitHash,
+      ...(ovmAddress !== undefined ? { ovm: ovmAddress } : {}),
+      toBlock: blockNumber,
+    });
+    if (found === null) {
+      throw new ObolError(
+        'SPLIT_PARAMS_REQUIRED',
+        `The OVM's ${kind} recipient ${address} is a SplitV2 split and its params could not be found`,
+        {
+          hint: `Pass its params as ${kind}Split`,
+          details: { address, kind },
+        },
+      );
+    }
+    return found.params;
+  };
   // OVM recipients without params are paid directly, unless they are SplitV2
   // splits: those need params, or their funds would stay undistributed.
   const direct: Address[] = [];
-  if (ovm !== undefined) {
+  const known = (address: Address): boolean =>
+    splits.some(s => sameAddress(s.address, address)) ||
+    direct.some(a => sameAddress(a, address));
+  const addOvmRecipients = async (
+    core: NonNullable<typeof ovm>,
+  ): Promise<void> => {
     for (const [kind, address] of [
-      ['principal', ovm.principalRecipient],
-      ['reward', ovm.rewardRecipient],
+      ['principal', core.principalRecipient],
+      ['reward', core.rewardRecipient],
     ] as const) {
-      if (
-        splits.some(s => sameAddress(s.address, address)) ||
-        direct.some(a => sameAddress(a, address))
-      ) {
-        continue;
-      }
-      if (await hasContractCode(ctx, address, blockNumber)) {
-        const splitHash = await readSplitHash(ctx, address, blockNumber);
-        if (splitHash !== undefined && splitHash !== ZERO_HASH) {
-          const found = await findSplitParams(ctx, {
-            address,
-            splitHash,
-            ...(ovmAddress !== undefined ? { ovm: ovmAddress } : {}),
-            toBlock: blockNumber,
-          });
-          if (found === null) {
-            throw new ObolError(
-              'SPLIT_PARAMS_REQUIRED',
-              `The OVM's ${kind} recipient ${address} is a SplitV2 split and its params could not be found`,
-              {
-                hint: `Pass its params as ${kind}Split`,
-                details: { address, kind },
-              },
-            );
-          }
-          splits.push({ kind, address, params: found.params });
-          continue;
-        }
-      }
-      direct.push(address);
+      if (known(address)) continue;
+      const params = await recipientSplitParams(kind, address);
+      if (params !== undefined) splits.push({ kind, address, params });
+      else direct.push(address);
     }
-  }
+  };
+  if (ovm !== undefined) await addOvmRecipients(ovm);
 
   const distributor =
     d.distributor !== undefined
       ? checksum(d.distributor)
       : (sender ?? undefined);
   const hasIncentive = splits.some(s => s.params.distributionIncentive > 0);
-  if (hasIncentive && distributor === ZERO_ADDRESS) {
-    throw invalid(
-      'distributor',
-      'must not be the zero address for splits with a distribution incentive: the incentive would be credited to it and lost',
-      'zero_address',
-    );
-  }
-  if (hasIncentive && distributor === undefined) {
-    throw invalid(
-      'distributor',
-      'is required for splits with a distribution incentive when there is no sender',
-    );
-  }
+  /** Splits with a distribution incentive need a distributor that is not the zero address. */
+  const requireDistributor = (): void => {
+    if (!hasIncentive) return;
+    if (distributor === ZERO_ADDRESS) {
+      throw invalid(
+        'distributor',
+        'must not be the zero address for splits with a distribution incentive: the incentive would be credited to it and lost',
+        'zero_address',
+      );
+    }
+    if (distributor === undefined) {
+      throw invalid(
+        'distributor',
+        'is required for splits with a distribution incentive when there is no sender',
+      );
+    }
+  };
+  requireDistributor();
 
   // Addresses to preview: split recipients, direct OVM recipients, the
   // recipients to withdraw for and the distributor.
@@ -390,12 +404,15 @@ const buildDistribution = async (
   const addAddress = (address: Address): void => {
     if (!addresses.some(a => sameAddress(a, address))) addresses.push(address);
   };
-  splits.forEach(s => {
-    s.params.recipients.forEach(addAddress);
-  });
-  direct.forEach(addAddress);
-  withdrawFor.forEach(addAddress);
-  if (hasIncentive && distributor !== undefined) addAddress(distributor);
+  const addAddresses = (): void => {
+    splits.forEach(s => {
+      s.params.recipients.forEach(addAddress);
+    });
+    direct.forEach(addAddress);
+    withdrawFor.forEach(addAddress);
+    if (hasIncentive && distributor !== undefined) addAddress(distributor);
+  };
+  addAddresses();
 
   const results = await readValues(
     ctx,
@@ -664,23 +681,30 @@ const buildDistribution = async (
     },
   );
 
+  /** The preview's `ovm` leg; nothing without an OVM. */
+  const ovmLeg = (): Pick<DistributeAllPreview, 'ovm'> => {
+    if (
+      ovm === undefined ||
+      routing === undefined ||
+      ovmAddress === undefined
+    ) {
+      return {};
+    }
+    return {
+      ovm: {
+        address: ovmAddress,
+        distributable: routing.distributable,
+        principalPayout: routing.principalPayout,
+        rewardPayout: routing.rewardPayout,
+        principalRecipient: ovm.principalRecipient,
+        rewardRecipient: ovm.rewardRecipient,
+        ...(ovmIncluded ? {} : { skipReason: skipFor(routing.distributable) }),
+      },
+    };
+  };
   const preview: DistributeAllPreview = {
     minWithdraw,
-    ...(ovm !== undefined && routing !== undefined && ovmAddress !== undefined
-      ? {
-          ovm: {
-            address: ovmAddress,
-            distributable: routing.distributable,
-            principalPayout: routing.principalPayout,
-            rewardPayout: routing.rewardPayout,
-            principalRecipient: ovm.principalRecipient,
-            rewardRecipient: ovm.rewardRecipient,
-            ...(ovmIncluded
-              ? {}
-              : { skipReason: skipFor(routing.distributable) }),
-          },
-        }
-      : {}),
+    ...ovmLeg(),
     splits: splitPreviews,
     recipients,
   };

@@ -81,45 +81,72 @@ async function* poll(
   let failures = 0;
   let phase: 'definition' | 'lock' = 'definition';
 
+  /** The events of one definition read: newly signed operators, then ready. */
+  const definitionEvents = async (): Promise<ClusterEvent[]> => {
+    const definition = await fetchDefinition(api, configHash, { signal });
+    const total = (definition.operators ?? []).length;
+    const events: ClusterEvent[] = [];
+    for (const address of signedOperators(definition)) {
+      if (seen.has(address)) continue;
+      seen.add(address);
+      events.push({
+        type: 'operator_signed',
+        address: checksum(address),
+        signed: seen.size,
+        total,
+      });
+    }
+    if (isReady(definition)) {
+      events.push({ type: 'definition_ready' });
+      // Read at the next poll only, so the same as after the yield.
+      phase = 'lock';
+    }
+    return events;
+  };
+  /** The lock's event once it is published; undefined while it is not (404). */
+  const lockEvent = async (): Promise<ClusterEvent | undefined> => {
+    try {
+      const lock = await fetchLockByConfigHash(api, configHash, { signal });
+      return {
+        type: 'lock_published',
+        lockHash: lock.lock_hash.toLowerCase() as Hex,
+      };
+    } catch (error) {
+      if (!isObolError(error, 'API_NOT_FOUND')) throw error;
+      return undefined;
+    }
+  };
+  /**
+   * After a failed poll: false when the watch was aborted (it ends quietly);
+   * a transient failure doubles the wait, up to MAX_WATCH_FAILURES in a row;
+   * anything else is thrown.
+   */
+  const backOff = (error: unknown): boolean => {
+    if (signal.aborted) return false;
+    if (!isTransient(error)) throw error;
+    failures += 1;
+    if (failures >= MAX_WATCH_FAILURES) throw error;
+    wait = Math.min(wait * 2, MAX_WATCH_BACKOFF_MS);
+    return true;
+  };
+
+  /** One poll's events; `lock_published` (the last event) ends the watch. */
+  const pollOnce = async (): Promise<ClusterEvent[]> => {
+    if (phase === 'definition') return await definitionEvents();
+    const published = await lockEvent();
+    return published !== undefined ? [published] : [];
+  };
+
   while (!signal.aborted) {
     try {
-      if (phase === 'definition') {
-        const definition = await fetchDefinition(api, configHash, { signal });
-        const total = (definition.operators ?? []).length;
-        for (const address of signedOperators(definition)) {
-          if (seen.has(address)) continue;
-          seen.add(address);
-          yield {
-            type: 'operator_signed',
-            address: checksum(address),
-            signed: seen.size,
-            total,
-          };
-        }
-        if (isReady(definition)) {
-          yield { type: 'definition_ready' };
-          phase = 'lock';
-        }
-      } else {
-        try {
-          const lock = await fetchLockByConfigHash(api, configHash, { signal });
-          yield {
-            type: 'lock_published',
-            lockHash: lock.lock_hash.toLowerCase() as Hex,
-          };
-          return;
-        } catch (error) {
-          if (!isObolError(error, 'API_NOT_FOUND')) throw error;
-        }
+      for (const event of await pollOnce()) {
+        yield event;
+        if (event.type === 'lock_published') return;
       }
       failures = 0;
       wait = intervalMs;
     } catch (error) {
-      if (signal.aborted) return;
-      if (!isTransient(error)) throw error;
-      failures += 1;
-      if (failures >= MAX_WATCH_FAILURES) throw error;
-      wait = Math.min(wait * 2, MAX_WATCH_BACKOFF_MS);
+      if (!backOff(error)) return;
     }
     if (signal.aborted) return;
     try {

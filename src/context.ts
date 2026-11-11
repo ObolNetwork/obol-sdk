@@ -13,7 +13,7 @@ import {
   type WalletClient,
 } from 'viem';
 import type { ObolApi } from './api.js';
-import { getObolChain, requireContracts, type ObolChain } from './chains.js';
+import { getObolChain, type ObolChain } from './chains.js';
 import { ObolError } from './errors.js';
 
 export interface Context {
@@ -51,7 +51,7 @@ export const requireApi = (ctx: Context, operation: string): ObolApi => {
   return ctx.api;
 };
 
-export { requireContracts };
+export { requireContracts } from './chains.js';
 
 /**
  * G3: the wallet must exist, have an account, and be on the client chain.

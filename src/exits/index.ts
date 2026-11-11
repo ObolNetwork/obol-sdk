@@ -11,10 +11,7 @@ import {
   blsThresholdAggregate,
   blsVerify,
 } from './bls.js';
-import {
-  assertPartialExit,
-  type AssertPartialExitInput,
-} from './assertPartialExit.js';
+import { assertPartialExit } from './assertPartialExit.js';
 
 export {
   aggregate,
@@ -24,7 +21,8 @@ export {
   blsVerify,
   assertPartialExit,
 };
-export type { AggregateInput, AssertPartialExitInput };
+export type { AggregateInput };
+export type { AssertPartialExitInput } from './assertPartialExit.js';
 export type { BlsVerifyOptions } from './bls.js';
 export type { ExitCluster } from './assertPartialExit.js';
 export type {

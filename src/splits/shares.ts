@@ -38,12 +38,8 @@ export const compareAddresses = (a: string, b: string): number => {
  * PAYLOAD_INVALID.
  */
 export const percent = (p: string | number): bigint => {
-  const text =
-    typeof p === 'number' && Number.isFinite(p)
-      ? String(p)
-      : typeof p === 'string'
-        ? p
-        : '';
+  const given = typeof p === 'string' ? p : '';
+  const text = typeof p === 'number' && Number.isFinite(p) ? String(p) : given;
   const match = PERCENT.exec(text);
   const shares =
     match === null
@@ -64,12 +60,9 @@ export const percent = (p: string | number): bigint => {
  * [0, 1_000_000], else PAYLOAD_INVALID.
  */
 export const formatPercent = (ppm: number | bigint): string => {
-  const value =
-    typeof ppm === 'bigint'
-      ? ppm
-      : Number.isSafeInteger(ppm)
-        ? BigInt(ppm)
-        : -1n;
+  const fromNumber = (n: number): bigint =>
+    Number.isSafeInteger(n) ? BigInt(n) : -1n;
+  const value = typeof ppm === 'bigint' ? ppm : fromNumber(ppm);
   if (value < 0n || value > SPLITS_SCALE) {
     throw invalid('ppm', 'must be an integer in [0, 1000000]');
   }
@@ -85,12 +78,12 @@ export interface ShareRecipient {
   share: number | bigint;
 }
 
-const toShare = (value: unknown): bigint | null =>
-  typeof value === 'bigint'
-    ? value
-    : typeof value === 'number' && Number.isSafeInteger(value)
-      ? BigInt(value)
-      : null;
+const toShare = (value: unknown): bigint | null => {
+  if (typeof value === 'bigint') return value;
+  return typeof value === 'number' && Number.isSafeInteger(value)
+    ? BigInt(value)
+    : null;
+};
 
 /**
  * Checks recipients and shares (shared by `splitParams` and the presets):
@@ -228,7 +221,7 @@ export const checkSplitParams = (
   if (params.allocations.length !== params.recipients.length) {
     throw invalid(`${path}.allocations`, 'must have one entry per recipient');
   }
-  const allocations = params.allocations.map(a => BigInt(a));
+  const allocations = params.allocations.map(BigInt);
   const totalAllocation = BigInt(params.totalAllocation);
   const sum = allocations.reduce((s, a) => s + a, 0n);
   if (sum === 0n || sum !== totalAllocation) {

@@ -63,8 +63,10 @@ export const describeFork = (
 ): void => {
   const title = `${name} (${E2E_CHAIN} fork)`;
   if (SKIP_REASON !== undefined) {
+    // No fork to run on (no anvil, or the RPC is unreachable): the title says why.
     describe.skip(`${title} (skipped: ${SKIP_REASON})`, fn);
   } else if (only !== undefined && only !== E2E_CHAIN) {
+    // A suite for the other chain's fork: skipped on this one, by design.
     describe.skip(`${title} (skipped: ${only} only)`, fn);
   } else {
     describe(title, fn);

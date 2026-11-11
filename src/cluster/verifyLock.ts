@@ -203,8 +203,10 @@ const guarded = async <R>(
 };
 
 type Layout = 'v1.6' | 'v1.7' | 'v1.8+';
-const layoutOf = (version: string): Layout =>
-  version === 'v1.6.0' ? 'v1.6' : version === 'v1.7.0' ? 'v1.7' : 'v1.8+';
+const layoutOf = (version: string): Layout => {
+  if (version === 'v1.6.0') return 'v1.6';
+  return version === 'v1.7.0' ? 'v1.7' : 'v1.8+';
+};
 
 interface Run {
   lock: ClusterLock;
@@ -484,12 +486,10 @@ const depositsOf = (
   i: number,
 ): Array<Partial<DepositData>> | undefined => {
   const validator = run.lock.distributed_validators[i];
+  const single =
+    validator.deposit_data !== undefined ? [validator.deposit_data] : undefined;
   const deposits =
-    run.layout === 'v1.8+'
-      ? validator.partial_deposit_data
-      : validator.deposit_data !== undefined
-        ? [validator.deposit_data]
-        : undefined;
+    run.layout === 'v1.8+' ? validator.partial_deposit_data : single;
   return deposits === null || deposits === undefined
     ? undefined
     : (deposits as Array<Partial<DepositData>>);

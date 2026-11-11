@@ -11,6 +11,7 @@ import {
   LOG_CHUNK_SIZE,
   scanLogs,
 } from '../chainUtils.js';
+import type { ObolApi } from '../api.js';
 import { requireApi, type Context } from '../context.js';
 import { isObolError, ObolError } from '../errors.js';
 import { checksum, decode, sameAddress, T } from '../schema.js';
@@ -308,8 +309,8 @@ export const getOvmRoleHolders = async (
   };
   const filter = { address: ovm, topics: [ROLES_UPDATED_TOPIC] };
 
-  let source: Source = 'chain';
-  if (ctx.api !== null) {
+  /** The holders the API OVM record lists; `false` without a record that has them. */
+  const fromRecord = async (): Promise<boolean> => {
     // The API OVM record lists the holders it found; its roles are re-read.
     let record: OvmApiRecord | undefined;
     try {
@@ -317,16 +318,16 @@ export const getOvmRoleHolders = async (
     } catch {
       // Not deployed or unavailable: the interim log index below.
     }
-    if (record?.roles !== undefined) {
-      for (const { address } of record.roles) {
-        candidates.set(address.toLowerCase(), address);
-      }
-      source = 'api';
+    if (record?.roles === undefined) return false;
+    for (const { address } of record.roles) {
+      candidates.set(address.toLowerCase(), address);
     }
-  }
-  if (ctx.api !== null && source === 'chain') {
+    return true;
+  };
+  /** The API's log index; `false` when it has no complete answer. */
+  const fromLogIndex = async (api: ObolApi): Promise<boolean> => {
     try {
-      const response = await ctx.api.request<EthLogsResponse>(
+      const response = await api.request<EthLogsResponse>(
         `/v1/eth/logs/${ctx.chain.network}?address=${ovm}&topic0=${ROLES_UPDATED_TOPIC}&fromBlock=${deployBlock}`,
       );
       // status "0" ("no records") is not conclusive, and a truncated list is
@@ -337,27 +338,31 @@ export const getOvmRoleHolders = async (
         response.truncated !== true
       ) {
         addFromLogs(response.logs);
-        source = 'api';
+        return true;
       }
     } catch {
       // API unavailable: full RPC scan below.
     }
-  }
-  if (source === 'api') {
-    const recent = head - LOG_CHUNK_SIZE + 1n;
-    try {
-      addFromLogs(
-        await scanLogs(
-          ctx.publicClient,
-          filter,
-          recent > deployBlock ? recent : deployBlock,
-          head,
-        ),
-      );
-    } catch {
-      // Recent blocks only add events the API has not indexed yet.
+    return false;
+  };
+  /** With an API answer, the recent blocks (best effort); without one, the full scan. */
+  const scan = async (recentOnly: boolean): Promise<void> => {
+    if (recentOnly) {
+      const recent = head - LOG_CHUNK_SIZE + 1n;
+      try {
+        addFromLogs(
+          await scanLogs(
+            ctx.publicClient,
+            filter,
+            recent > deployBlock ? recent : deployBlock,
+            head,
+          ),
+        );
+      } catch {
+        // Recent blocks only add events the API has not indexed yet.
+      }
+      return;
     }
-  } else {
     try {
       addFromLogs(await scanLogs(ctx.publicClient, filter, deployBlock, head));
     } catch (cause) {
@@ -371,7 +376,13 @@ export const getOvmRoleHolders = async (
         },
       );
     }
-  }
+  };
+
+  const source: Source =
+    ctx.api !== null && ((await fromRecord()) || (await fromLogIndex(ctx.api)))
+      ? 'api'
+      : 'chain';
+  await scan(source === 'api');
 
   // The public forwarders are always checked, whatever the event sources saw.
   for (const { address } of publicForwarders) {
@@ -455,15 +466,15 @@ const parseValidator = (raw: unknown, index: number): OvmValidator => {
       : '';
   const beaconStatus =
     typeof v.beaconStatus === 'string' ? v.beaconStatus : undefined;
+  const named =
+    v.status === 'new' ||
+    v.status === 'queued' ||
+    v.status === 'active' ||
+    v.status === 'exited'
+      ? v.status
+      : null;
   const status =
-    beaconStatus !== undefined
-      ? statusFromBeacon(beaconStatus)
-      : v.status === 'new' ||
-          v.status === 'queued' ||
-          v.status === 'active' ||
-          v.status === 'exited'
-        ? v.status
-        : null;
+    beaconStatus !== undefined ? statusFromBeacon(beaconStatus) : named;
   const lockHash =
     typeof v.lockHash === 'string' ? v.lockHash.toLowerCase() : undefined;
   const balance = weiString(v.balance);

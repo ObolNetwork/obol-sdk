@@ -10,7 +10,7 @@ const HEX: string[] = Array.from({ length: 256 }, (_, i) =>
 /** Lowercase hex of `bytes`, without a `0x` prefix. */
 export const bytesToHex = (bytes: Uint8Array): string => {
   let out = '';
-  for (let i = 0; i < bytes.length; i++) out += HEX[bytes[i]];
+  for (const byte of bytes) out += HEX[byte];
   return out;
 };
 

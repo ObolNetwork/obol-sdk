@@ -172,7 +172,7 @@ const toDeposit = (
     bad('pubkey is not the distributed public key');
   }
   const amountText = String(raw.amount ?? '');
-  if (!/^[0-9]+$/.test(amountText)) bad('missing or malformed amount');
+  if (!/^\d+$/.test(amountText)) bad('missing or malformed amount');
   const amountGwei = BigInt(amountText);
   if (amountGwei === 0n || amountGwei > MAX_UINT64) bad('amount out of range');
 

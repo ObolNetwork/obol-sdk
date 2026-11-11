@@ -60,7 +60,8 @@ export const sortedPartialExits = (
   [...partialExits].sort((a, b) => {
     const x = BigInt(a.signed_exit_message.message.validator_index);
     const y = BigInt(b.signed_exit_message.message.validator_index);
-    return x < y ? -1 : x > y ? 1 : 0;
+    if (x < y) return -1;
+    return x > y ? 1 : 0;
   });
 
 /**
