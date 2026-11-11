@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseEther } from 'viem';
 import { computeLockHash } from '../../src/cluster/index.js';
 import { fromLock } from '../../src/deposits/fromLock.js';
@@ -132,6 +135,49 @@ describe('deposits.fromLock', () => {
         message: expect.stringContaining('allowed keys: amount, bls, chainId'),
       }),
     ]);
+  });
+
+  // A lock Charon produced on mainnet (0x8a187e...c81b, one validator), as an
+  // independent vector next to the generated legacy locks below.
+  describe('a real mainnet v1.7.0 lock', () => {
+    const real = (): any =>
+      JSON.parse(
+        readFileSync(
+          join(
+            dirname(fileURLToPath(import.meta.url)),
+            '../fixtures/locks/mainnet_v1_7_0.json',
+          ),
+          'utf8',
+        ),
+      );
+
+    it('verifies and yields its deposit_data', async () => {
+      const lock = real();
+      expect((await verifyLock(lock)).ok).toBe(true);
+      const { deposits } = await fromLock(lock);
+      expect(deposits).toHaveLength(1);
+      expect(deposits[0].withdrawalCredentials).toBe(
+        lock.distributed_validators[0].deposit_data.withdrawal_credentials,
+      );
+    });
+
+    it('is refused with an added partial_deposit_data entry', async () => {
+      const lock = real();
+      const validator = lock.distributed_validators[0];
+      validator.partial_deposit_data = [
+        {
+          ...validator.deposit_data,
+          withdrawal_credentials: `0x01${'00'.repeat(11)}${'ee'.repeat(20)}`,
+        },
+      ];
+      expect(computeLockHash(lock)).toBe(lock.lock_hash);
+      expect(await verifyLock(lock)).toMatchObject({
+        ok: false,
+        issue: 'partial_deposit_data_unexpected',
+      });
+      const error = await rejection(fromLock(lock, { verify: false }));
+      expect(error.code).toBe('LOCK_INVALID');
+    });
   });
 
   // v1.6.0 / v1.7.0 locks hash and sign only `deposit_data`. Charon drops

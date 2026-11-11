@@ -33,7 +33,7 @@ Fixes from the pre-release review of rc.11, and the names settled before 3.0.0. 
   (`PREPARED_INVALID`).
 - Helpers and types for acknowledging: `warningsOf(prepared, simulation?)` (the warnings to show),
   `warningCodes(prepared, simulation?)` (their codes: `send(tx, { simulation, acknowledge: warningCodes(tx,
-  simulation) })` acknowledges exactly what this transaction carries), `findingsToAcknowledge(prepared, options)`
+simulation) })` acknowledges exactly what this transaction carries), `findingsToAcknowledge(prepared, options)`
   (what is still open, for callers with their own wallet layer) and `UNCHECKED_WARNING_CODES` (the "a check could
   not run" warnings, as a policy list). `FINDINGS` catalogues every finding code with TSDoc, `severity`, `group`,
   `meaning` and `guidance`; `FindingCode` is its key union, `WarningCode` the warnings. `Prepared<K>['checks']` is
@@ -111,6 +111,7 @@ Carried over from the unreleased notes:
 - fix(verification): BLS checks accept `Buffer` (and other `Uint8Array` subclass) inputs; noble v2 rejected them and every check reported an invalid signature (from 2.15.3)
 - docs: `KNOWN_ISSUES.md` notes that the terms and conditions signature has no chain ID by design
 - Includes main through #260 (dependency bumps: undici 6.29.1, fast-uri 3.1.9, markdown-it 14.3.3), then through 2.15.3 and #266; the 2.x worker, batch fallback and `uuid` changes do not apply to 3.x
+- Includes main through 2.16.1 (#267, #268, #270). The 2.x changes do not apply to 3.x, which has its own: `exits.aggregate` already verifies what it returns, `send` already waits for a contract wallet's execution, and the legacy `partial_deposit_data` fix is above. The mainnet v1.7.0 lock fixture from #270 is now also a 3.x test vector
 
 #### [v3.0.0-rc.11](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.10...v3.0.0-rc.11)
 
@@ -353,7 +354,7 @@ After rc.4 only additive changes are planned until 3.0. [MIGRATION.md](MIGRATION
   `FullExitBlob`. `verifyPartialExit` takes `existing` as a list or a map of stored exits and checks each blob against
   its own pubkey's; the payload root is of the partial exits sorted by validator index; the payload signature must be
   65 bytes (high-s accepted, as the API does); the epoch must equal the stored one. `aggregate({ validator, exit,
-  threshold })` takes a stored exit or the API's full exit response, verifies each partial against its public share and
+threshold })` takes a stored exit or the API's full exit response, verifies each partial against its public share and
   uses any `threshold` valid ones.
 - Module namespaces and entries export explicit lists of the documented API. Gone from the namespaces: internals
   (`readOvmCore`, `requestAmountGwei`, `credentialsPointAt`, the merkle helpers, …), the TypeBox schema constants, and
@@ -444,7 +445,7 @@ Fixes from the Launchpad integration of rc.2.
   (`OWNER_TO_PUBLIC_FORWARDER`): anyone can make calls through them. Creating an OVM or split with a public forwarder as owner or recipient is refused too (`OWNER_TO_PUBLIC_FORWARDER`, `RECIPIENT_IS_PUBLIC_FORWARDER`). `ovm.getState` and `ovm.getRoleHolders` (new
   `findings` field) warn `PUBLIC_FORWARDER_HOLDS_ROLE` when one already owns the OVM or holds a role.
 - `splits.prepareDistribution` / `previewDistribution`: each recipient row has `fromThisDistribution` (`fromOvm +
-  fromRewardSplit + fromPrincipalSplit + distributorReward`). `toWallet` is documented precisely: it includes the
+fromRewardSplit + fromPrincipalSplit + distributorReward`). `toWallet` is documented precisely: it includes the
   Warehouse (and SplitMain) balance the recipient already had, from any split, when its withdrawal is included.
 
 #### [v3.0.0-rc.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.0...v3.0.0-rc.2)
@@ -458,7 +459,7 @@ checks, reads and returns, and every error code, is specified in [`spec/`](spec/
 **Changed**
 
 - Built on viem: `createObolClient({ chain, publicClient, walletClient?, api? })` replaces `new Client(config, signer,
-  provider)`. `viem@^2` is a peer dependency.
+provider)`. `viem@^2` is a peer dependency.
 - Prepare, then send: every write is a `prepare*` operation that runs its checks and returns a `Prepared` transaction
   (`request`, `checks` findings, `preview`, `blockNumber`). The caller's wallet layer sends it, or `send` does.
 - Modules: `cluster`, `deposits`, `ovm`, `splits`, `setup`, `incentives`, `exits`, `terms`, `withdrawals` and
@@ -523,6 +524,7 @@ checks, reads and returns, and every error code, is specified in [`spec/`](spec/
 
 - Batched BLS checks (lock deposit and builder registration signatures, deposit data) require each signature to be
   valid on its own; batches are checked with random weights. The same fix ships in 2.15.1.
+
 #### [v2.15.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v2.15.2)
 
 > 28 October 2026
@@ -779,7 +781,7 @@ Additions:
 > 18 September 2025
 
 - chore(release): v2.11.3 [`#152`](https://github.com/ObolNetwork/obol-sdk/pull/152)
-- update  validation for deposit_amounts [`#151`](https://github.com/ObolNetwork/obol-sdk/pull/151)
+- update validation for deposit_amounts [`#151`](https://github.com/ObolNetwork/obol-sdk/pull/151)
 
 #### [v2.11.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.11.1...v2.11.2)
 
