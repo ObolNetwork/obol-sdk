@@ -23,6 +23,9 @@ const OptStr = Type.Optional(Type.String());
 const List = <S extends TSchema>(item: S): TUnion<[TArray<S>, TNull]> =>
   Type.Union([Type.Array(item), Type.Null()]);
 
+/**
+ * Definition and lock versions the SDK hashes and verifies (v1.9.0 is not one of them).
+ */
 export const SUPPORTED_DEFINITION_VERSIONS = [
   'v1.6.0',
   'v1.7.0',
@@ -39,6 +42,9 @@ export const SUPPORTED_DEFINITION_VERSIONS = [
  */
 export const CREATABLE_DEFINITION_VERSIONS = ['v1.10.0', 'v1.11.0'] as const;
 
+/**
+ * The definition version `prepareDefinition` creates by default.
+ */
 export const DEFAULT_DEFINITION_VERSION = 'v1.11.0';
 
 export const OperatorSchema = Type.Object({

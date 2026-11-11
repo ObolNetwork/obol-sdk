@@ -176,7 +176,7 @@ export interface ChainContracts {
     withdrawalRequest: Address;
 }
 
-// @public (undocumented)
+// @public
 export const CHAINS: Record<number, ObolChain>;
 
 // @public
@@ -258,7 +258,6 @@ type ClusterLock = Static<typeof LockSchema>;
 
 // @public
 interface ClusterModule {
-    // (undocumented)
     accept: (input: {
         configHash: string;
         enr: string;
@@ -273,9 +272,7 @@ interface ClusterModule {
     create: (input: PreparedDefinition | (Omit<BoundDefinitionInput, 'creator'> & {
         creator?: string;
     })) => Promise<Hex>;
-    // (undocumented)
     get: (configHash: string) => Promise<ClusterDefinition>;
-    // (undocumented)
     getLock: (input: {
         configHash: string;
     } | {
@@ -292,7 +289,6 @@ interface ClusterModule {
     }, options?: VerifyOptions) => Promise<DefinitionVerification>;
     // (undocumented)
     verifyLock: (lock: unknown, options?: VerifyLockOptions) => Promise<LockVerification>;
-    // (undocumented)
     watch: (configHash: string, options: WatchOptions) => AsyncIterable<ClusterEvent>;
 }
 
@@ -428,10 +424,10 @@ const creatorConfigHashTypedData: (configHash: string, chainId: number) => Clust
 // @public
 export const currentEpoch: (chain: ObolChain, nowMs?: number) => bigint | undefined;
 
-// @public (undocumented)
+// @public
 const DEFAULT_DEFINITION_VERSION = "v1.11.0";
 
-// @public (undocumented)
+// @public
 const DEFAULT_PRINCIPAL_THRESHOLD: bigint;
 
 // @public
@@ -533,9 +529,7 @@ interface DepositsModule {
     assertDepositData: (deposits: readonly DepositInput[], options?: Partial<AssertDepositDataOptions>) => Promise<void>;
     // (undocumented)
     fromLock: (lock: Parameters<typeof fromLock>[0], options?: FromLockOptions) => Promise<LockDeposits>;
-    // (undocumented)
     prepareDeposit: (input: PrepareDepositInput) => Promise<Array<Prepared<'deposit'>>>;
-    // (undocumented)
     status: (pubkeys: readonly string[], options?: DepositStatusOptions) => Promise<DepositStatus[]>;
 }
 
@@ -1182,7 +1176,7 @@ interface FullSimulation extends SimulationBase {
     stateChanges: StateChange[];
 }
 
-// @public (undocumented)
+// @public
 export const getObolChain: (chainId: number) => ObolChain;
 
 // @public (undocumented)
@@ -1234,16 +1228,12 @@ declare namespace incentives {
 
 // @public
 interface IncentivesModule {
-    // (undocumented)
     get: (address: string) => Promise<Incentives | null>;
-    // (undocumented)
     isClaimed: (input: {
         contractAddress: string;
         index: number;
     }) => Promise<boolean>;
-    // (undocumented)
     preflight: (address: string) => Promise<PreflightResult>;
-    // (undocumented)
     prepareClaim: (address: string) => Promise<Prepared<'claim'>>;
 }
 
@@ -1293,7 +1283,6 @@ declare namespace legacy {
 
 // @public
 interface LegacyModule {
-    // (undocumented)
     getOwrTranches: (owr: string) => Promise<OwrTranches>;
 }
 
@@ -1343,16 +1332,16 @@ const MAX_DEPOSIT: bigint;
 // @public
 const MAX_DISTRIBUTION_INCENTIVE = 65535;
 
-// @public (undocumented)
+// @public
 const MAX_PRINCIPAL_THRESHOLD: bigint;
 
 // @public
 const MIN_ACTIVATION_BALANCE: bigint;
 
-// @public (undocumented)
+// @public
 const MIN_DEPOSIT: bigint;
 
-// @public (undocumented)
+// @public
 const MIN_PRINCIPAL_THRESHOLD: bigint;
 
 // @public
@@ -1904,53 +1893,31 @@ const ovmFromReceipt: (receipt: {
 interface OvmModule {
     // (undocumented)
     expectedWithdrawalCredentials: typeof expectedWithdrawalCredentials;
-    // (undocumented)
     getProvenance: (ovm: string, options?: OvmProvenanceOptions) => Promise<OvmProvenance>;
-    // (undocumented)
     getRoleHolders: (ovm: string) => Promise<OvmRoleHolders>;
     getState: (ovm: string) => Promise<OvmState | null>;
-    // (undocumented)
     getValidators: (ovm: string) => Promise<OvmValidators>;
-    // (undocumented)
     OVM_ALL_ROLES: bigint;
     // (undocumented)
     OVM_ROLES: typeof OVM_ROLES;
-    // (undocumented)
     prepareCancelOwnershipHandover: (input: OvmOnlyInput) => Promise<Prepared<'ownership'>>;
-    // (undocumented)
     prepareCompleteOwnershipHandover: (input: CompleteOwnershipHandoverInput) => Promise<Prepared<'ownership'>>;
-    // (undocumented)
     prepareConsolidate: (input: PrepareConsolidateInput) => Promise<Prepared<'consolidate'>>;
-    // (undocumented)
     prepareDistribute: (input: PrepareDistributeInput) => Promise<Prepared<'distribute'>>;
-    // (undocumented)
     prepareGrantRoles: (input: GrantRolesInput) => Promise<Prepared<'role'>>;
-    // (undocumented)
     prepareRecoverFunds: (input: RecoverFundsInput) => Promise<Prepared<'recoverFunds'>>;
-    // (undocumented)
     prepareRenounceRoles: (input: RenounceRolesInput) => Promise<Prepared<'role'>>;
-    // (undocumented)
     prepareRequestOwnershipHandover: (input: OvmOnlyInput) => Promise<Prepared<'ownership'>>;
-    // (undocumented)
     prepareRevokeRoles: (input: RevokeRolesInput) => Promise<Prepared<'role'>>;
-    // (undocumented)
     prepareSetAmountOfPrincipalStake: (input: SetAmountOfPrincipalStakeInput) => Promise<Prepared<'principalStake'>>;
     prepareSetPrincipalRecipient: (input: SetPrincipalRecipientInput) => Promise<Prepared<'recipient'>>;
-    // (undocumented)
     prepareSetRewardRecipient: (input: SetRewardRecipientInput) => Promise<Prepared<'recipient'>>;
-    // (undocumented)
     prepareSweep: (input: SweepInput) => Promise<Prepared<'sweep'>>;
-    // (undocumented)
     prepareTransfer: (input: TransferInput) => Promise<Prepared<'ownership'>>;
-    // (undocumented)
     prepareWithdraw: (input: PrepareWithdrawInput) => Promise<Prepared<'withdraw'>>;
-    // (undocumented)
     prepareWithdrawPullBalance: (input: WithdrawPullBalanceInput) => Promise<Prepared<'withdrawPullBalance'>>;
-    // (undocumented)
     previewDistribute: (input: PrepareDistributeInput) => Promise<PreviewResult<DistributePreview>>;
-    // (undocumented)
     roleNames: (roles: bigint) => OvmRoleName[];
-    // (undocumented)
     routing: (input: OvmRoutingInput) => OvmRouting;
 }
 
@@ -2529,9 +2496,7 @@ interface SetupModule {
     //
     // (undocumented)
     ovmSplitParams: (input: Preset<typeof ovmSplitParams>) => ReturnType<typeof ovmSplitParams>;
-    // (undocumented)
     prepareCreateOvm: (input: CreateOvmInput) => Promise<Prepared<'createOvm'>>;
-    // (undocumented)
     prepareOvmWithSplits: (input: OvmWithSplitsInput) => Promise<Prepared<'ovmWithSplits'>>;
     // (undocumented)
     rewardsSplit: (input: Preset<typeof rewardsSplit>) => OvmWithSplitsInput;
@@ -2723,16 +2688,12 @@ interface SplitsModule {
     getSplit: (input: GetSplitInput) => Promise<SplitInfo | null>;
     // (undocumented)
     percent: typeof percent;
-    // (undocumented)
     predictSplit: (input: PredictSplitInput) => Promise<{
         address: Address;
         exists: boolean;
     }>;
-    // (undocumented)
     prepareCreateSplit: (input: CreateSplitInput) => Promise<Prepared<'createSplit'>>;
-    // (undocumented)
     prepareDistributeAll: (input: DistributeAllInput) => Promise<Prepared<'distributeAll'>>;
-    // (undocumented)
     previewDistributeAll: (input: DistributeAllInput) => Promise<PreviewResult<DistributeAllPreview>>;
     // (undocumented)
     splitParams: typeof splitParams;
@@ -2831,7 +2792,7 @@ export interface StatusSource {
 // @public (undocumented)
 type StoredExitBlob = Static<typeof StoredExitBlobSchema>;
 
-// @public (undocumented)
+// @public
 const SUPPORTED_DEFINITION_VERSIONS: readonly ["v1.6.0", "v1.7.0", "v1.8.0", "v1.10.0", "v1.11.0"];
 
 // @public (undocumented)
@@ -2864,13 +2825,11 @@ const TERMS_AND_CONDITIONS_VERSION = 1;
 
 // @public
 interface TermsModule {
-    // (undocumented)
     accept: (input?: {
         ifNotAccepted?: boolean;
     }) => Promise<{
         signed: boolean;
     }>;
-    // (undocumented)
     hasAccepted: (address?: string) => Promise<boolean>;
 }
 
@@ -2999,7 +2958,6 @@ declare namespace withdrawals {
 
 // @public
 interface WithdrawalsModule {
-    // (undocumented)
     prepareEoaWithdraw: (input: PrepareEoaWithdrawInput) => Promise<Prepared<'eoaWithdraw'>>;
 }
 

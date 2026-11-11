@@ -418,12 +418,34 @@ export const prepareClaim = async (
 
 /** The incentives module bound to a client context. */
 export interface IncentivesModule {
+  /**
+   * The incentives `address` can claim (Obol API), or null.
+   *
+   * @see spec/operations.md "incentives.get"
+   */
   get: (address: string) => Promise<Incentives | null>;
+  /**
+   * Whether the incentives at `index` of the distributor were claimed (on chain).
+   *
+   * @see spec/operations.md "incentives.isClaimed"
+   */
   isClaimed: (input: {
     contractAddress: string;
     index: number;
   }) => Promise<boolean>;
+  /**
+   * Runs every check of `prepareClaim` and returns `{ ok, issues }` instead of throwing:
+   * the distributor code, Merkle root and proof on chain, the claim window, the token.
+   *
+   * @see spec/operations.md "incentives.prepareClaim"
+   */
   preflight: (address: string) => Promise<PreflightResult>;
+  /**
+   * Prepares the claim of `address`'s incentives. A failed check: INCENTIVES_PREFLIGHT_FAILED
+   * (details.issues); already claimed: ALREADY_CLAIMED.
+   *
+   * @see spec/operations.md "incentives.prepareClaim"
+   */
   prepareClaim: (address: string) => Promise<Prepared<'claim'>>;
 }
 

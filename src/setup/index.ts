@@ -40,7 +40,22 @@ type Preset<F extends (input: never) => unknown> = Omit<
 
 /** The setup module bound to a client context (presets use the client chain). */
 export interface SetupModule {
+  /**
+   * Deploys an OVM through the Obol factory with the given owner, recipients and principal
+   * threshold (default 16 ETH). The address is known after mining: `ovmFromReceipt`.
+   * A recipient with no code: RECIPIENT_NOT_CONTRACT (info).
+   *
+   * @see spec/operations.md "setup.prepareCreateOvm"
+   */
   prepareCreateOvm: (input: CreateOvmInput) => Promise<Prepared<'createOvm'>>;
+  /**
+   * Deploys an OVM and the splits behind its recipients in one transaction (Multicall3),
+   * reusing splits that exist (SPLIT_REUSED). Build the input with `rewardsSplit`,
+   * `totalSplit` or `solo`. Each send creates a new OVM: after an unknown outcome, look for
+   * the earlier `CreateObolValidatorManager` event before retrying.
+   *
+   * @see spec/operations.md "setup.prepareOvmWithSplits"
+   */
   prepareOvmWithSplits: (
     input: OvmWithSplitsInput,
   ) => Promise<Prepared<'ovmWithSplits'>>;

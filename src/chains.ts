@@ -60,6 +60,10 @@ const CONSOLIDATION_REQUEST = getAddress(
   '0x0000BBdDc7CE488642fb579F8B00f3a590007251',
 );
 
+/**
+ * The chains the SDK supports, by chain id: fork versions, genesis validators root and,
+ * for mainnet and Hoodi, the Obol contract addresses.
+ */
 export const CHAINS: Record<number, ObolChain> = {
   1: {
     id: 1,
@@ -142,6 +146,9 @@ export const CHAINS: Record<number, ObolChain> = {
   },
 };
 
+/**
+ * The `ObolChain` for a chain id; UNSUPPORTED_CHAIN for any other.
+ */
 export const getObolChain = (chainId: number): ObolChain => {
   const chain = CHAINS[chainId];
   if (chain === undefined) {

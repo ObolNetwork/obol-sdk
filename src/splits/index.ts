@@ -52,17 +52,42 @@ export interface SplitsModule {
   percent: typeof percent;
   formatPercent: typeof formatPercent;
   splitParams: typeof splitParams;
+  /**
+   * The deterministic (CREATE2) address of a SplitV2 split for these params, owner and salt,
+   * and whether it exists already.
+   *
+   * @see spec/operations.md "splits.predictSplit"
+   */
   predictSplit: (
     input: PredictSplitInput,
   ) => Promise<{ address: Address; exists: boolean }>;
+  /**
+   * Creates a SplitV2 split from recipients and shares (parts per million). Already deployed
+   * at the predicted address: SPLIT_ALREADY_EXISTS (use its `address`; nothing to send).
+   *
+   * @see spec/operations.md "splits.prepareCreateSplit"
+   */
   prepareCreateSplit: (
     input: CreateSplitInput,
   ) => Promise<Prepared<'createSplit'>>;
   /** null when the address is not a SplitV2 split; throws for read failures. */
   getSplit: (input: GetSplitInput) => Promise<SplitInfo | null>;
+  /**
+   * Distributes an OVM, the SplitV2 splits behind its recipients and the recipients'
+   * Warehouse balances in one Multicall3 transaction. Splits must be passed with the exact
+   * params they were created with (SPLIT_PARAMS_MISMATCH, SPLIT_PARAMS_REQUIRED).
+   * `ovm.prepareDistribute` is the OVM alone.
+   *
+   * @see spec/operations.md "splits.prepareDistributeAll"
+   */
   prepareDistributeAll: (
     input: DistributeAllInput,
   ) => Promise<Prepared<'distributeAll'>>;
+  /**
+   * The reads and amounts of `prepareDistributeAll` without a transaction.
+   *
+   * @see spec/operations.md "splits.prepareDistributeAll"
+   */
   previewDistributeAll: (
     input: DistributeAllInput,
   ) => Promise<PreviewResult<DistributeAllPreview>>;

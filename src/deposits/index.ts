@@ -45,10 +45,30 @@ export interface DepositsModule {
     deposits: readonly DepositInput[],
     options?: Partial<AssertDepositDataOptions>,
   ) => Promise<void>;
+  /**
+   * What the beacon chain has for each pubkey: `new`, `queued` (EIP-6110 pending deposits or
+   * a pending registry entry), `active` or `exited`, with credentials, balances and epochs
+   * when known. From the Obol API, else a beacon node (`beaconUrl`), which is first checked
+   * to be on the client chain and in sync. A failed or untrusted source: STATUS_UNAVAILABLE.
+   *
+   * @see spec/operations.md "deposits.status"
+   */
   status: (
     pubkeys: readonly string[],
     options?: DepositStatusOptions,
   ) => Promise<DepositStatus[]>;
+  /**
+   * Prepares deposits via an OVM (`via: { ovm }`) or the batch deposit contract
+   * (`via: { batch: true }`). Checks the deposit data, OVM provenance (on chain) and the
+   * sender's DEPOSIT role, and, with a status source, that a `kind: 'deposit'` validator
+   * does not exist yet (DEPOSIT_VALIDATOR_EXISTS, or DEPOSIT_CONFLICT when its credentials
+   * are someone else's). Returns one `Prepared` per transaction (OVM deposits one each;
+   * one per 500 deposits via the batch contract.
+   *
+   * @throws ObolError DEPOSIT_INVALID, DEPOSIT_CONFLICT, DEPOSIT_VALIDATOR_EXISTS, OVM_NOT_OBOL,
+   * PROVENANCE_UNKNOWN, OVM_ROLE_MISSING, STATUS_UNAVAILABLE
+   * @see spec/operations.md "deposits.prepareDeposit"
+   */
   prepareDeposit: (
     input: PrepareDepositInput,
   ) => Promise<Array<Prepared<'deposit'>>>;

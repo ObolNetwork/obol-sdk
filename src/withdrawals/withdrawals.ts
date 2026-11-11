@@ -117,6 +117,13 @@ export const prepareEoaWithdraw = async (
 
 /** The withdrawals module bound to a client context. */
 export interface WithdrawalsModule {
+  /**
+   * An EIP-7002 withdrawal (or, with amount 0 and `acknowledgeFullExit`, exit) request sent
+   * by the withdrawal address of a validator with EOA credentials, straight to the
+   * predeploy. Same beacon chain rules as `ovm.prepareWithdraw`.
+   *
+   * @see spec/operations.md "withdrawals.prepareEoaWithdraw (2.15 `eoa.requestWithdrawal`)"
+   */
   prepareEoaWithdraw: (
     input: PrepareEoaWithdrawInput,
   ) => Promise<Prepared<'eoaWithdraw'>>;

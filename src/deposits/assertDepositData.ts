@@ -27,6 +27,9 @@ import { decode, rejectUnknownKeys, T } from '../schema.js';
 import type { Deposit, DepositInput, DepositKind } from '../types.js';
 import { ETH, GWEI } from '../units.js';
 
+/**
+ * Smallest deposit, 1 ETH in wei.
+ */
 export const MIN_DEPOSIT = 1n * ETH;
 /** MAX_EFFECTIVE_BALANCE for 0x00 / 0x01 credentials. */
 export const MAX_DEPOSIT = 32n * ETH;

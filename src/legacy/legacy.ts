@@ -56,6 +56,12 @@ export const getOwrTranches = async (
 
 /** The legacy module bound to a client context. */
 export interface LegacyModule {
+  /**
+   * Reads an existing 2.x OptimisticWithdrawalRecipient's tranches (`getTranches()`).
+   * Experimental: any client chain.
+   *
+   * @see spec/operations.md "legacy.getOwrTranches (2.15 `getOWRTranches`)"
+   */
   getOwrTranches: (owr: string) => Promise<OwrTranches>;
 }
 

@@ -156,9 +156,11 @@ const routeArrival = (
  * warning); the sender is owner or holds WITHDRAWAL (OVM_ROLE_MISSING); the
  * fee (FEE_READ_FAILED, FEE_OUT_OF_RANGE; default the top of the accepted
  * range, max(10 × fee, 1 gwei) × n: the OVM refunds the excess to
- * `excessFeeRecipient`); with a status source, per-pubkey warnings
- * (WITHDRAW_CREDENTIALS_NOT_OVM, WITHDRAW_PARTIAL_REQUIRES_COMPOUNDING,
- * WITHDRAW_VALIDATOR_NOT_ACTIVE).
+ * `excessFeeRecipient`); with a status source, the beacon chain request
+ * rules as errors (VALIDATOR_NOT_ACTIVE, CREDENTIALS_NOT_SOURCE,
+ * VALIDATOR_EXITING, VALIDATOR_TOO_NEW, EXIT_BLOCKED_BY_PENDING_WITHDRAWAL,
+ * PARTIAL_REQUIRES_COMPOUNDING, EFFECTIVE_BALANCE_TOO_LOW, NO_EXCESS_BALANCE);
+ * rules it could not check are VALIDATOR_STATUS_UNCHECKED (warning).
  */
 export const prepareWithdraw = async (
   ctx: Context,

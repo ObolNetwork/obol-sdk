@@ -94,15 +94,51 @@ export interface ClusterModule {
       | PreparedDefinition
       | (Omit<BoundDefinitionInput, 'creator'> & { creator?: string }),
   ) => Promise<Hex>;
+  /**
+   * Joins a cluster as an operator: fetches the definition, verifies it
+   * (`verifyDefinition`, else DEFINITION_INVALID), checks the wallet account is one of its
+   * operators (ACCOUNT_NOT_OPERATOR), then signs the config hash and the ENR and posts them.
+   * Accepting again with the same ENR returns the definition without signing.
+   *
+   * @throws ObolError DEFINITION_INVALID, ACCOUNT_NOT_OPERATOR, WALLET_REQUIRED, CHAIN_MISMATCH
+   * @see spec/operations.md "cluster.accept"
+   */
   accept: (input: {
     configHash: string;
     enr: string;
     version?: string;
   }) => Promise<ClusterDefinition>;
+  /**
+   * The cluster definition for `configHash` from the Obol API. Not verified: pass it to
+   * `verifyDefinition` before acting on it. A file for another hash: API_RESPONSE_MISMATCH.
+   *
+   * @see spec/operations.md "cluster.get / cluster.getLock"
+   */
   get: (configHash: string) => Promise<ClusterDefinition>;
+  /**
+   * The cluster lock by `configHash` or `lockHash` from the Obol API (API_NOT_FOUND until the
+   * DKG has published it). Not verified: use `verifyLock`, or `deposits.fromLock`, which
+   * verifies by default.
+   *
+   * @see spec/operations.md "cluster.get / cluster.getLock"
+   */
   getLock: (
     input: { configHash: string } | { lockHash: string },
   ) => Promise<ClusterLock>;
+  /**
+   * Follows a definition until its lock is published: yields `operator_signed` once per
+   * newly signed operator, `definition_ready` once, then `lock_published` and ends. Polls
+   * every `intervalMs` (default 12 s) and backs off on rate limits; aborting `signal` ends
+   * the iteration without an error.
+   *
+   * @example
+   * ```ts
+   * for await (const event of obol.cluster.watch(configHash, { signal })) {
+   *   if (event.type === 'lock_published') console.log(event.lockHash);
+   * }
+   * ```
+   * @see spec/operations.md "cluster.watch"
+   */
   watch: (
     configHash: string,
     options: WatchOptions,

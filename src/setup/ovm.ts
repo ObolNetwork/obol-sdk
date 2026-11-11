@@ -29,8 +29,18 @@ import type { Finding, Prepared } from '../types.js';
 import { ETH, GWEI, weiToGwei } from '../units.js';
 import { EXPECTED_CODE_HASHES, requireExpectedCode } from '../splits/chain.js';
 
+/**
+ * Default OVM principal threshold, 16 ETH in wei: a distribution of at least this much is
+ * paid as principal while `amountOfPrincipalStake` lasts.
+ */
 export const DEFAULT_PRINCIPAL_THRESHOLD = 16n * ETH;
+/**
+ * Smallest principal threshold the SDK accepts (16 ETH, wei).
+ */
 export const MIN_PRINCIPAL_THRESHOLD = 16n * ETH;
+/**
+ * Largest principal threshold the factory accepts (2048 ETH, wei).
+ */
 export const MAX_PRINCIPAL_THRESHOLD = 2048n * ETH;
 
 export const CreateOvmInputSchema = Type.Object(

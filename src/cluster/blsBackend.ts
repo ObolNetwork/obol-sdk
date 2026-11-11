@@ -48,9 +48,11 @@ export interface BlsBatch<PublicKey = unknown> {
  * browser bundle refers to it:
  *
  * ```ts
+ * import { isValidLock } from '@obolnetwork/obol-sdk';
  * import { loadBlstBackend } from '@obolnetwork/obol-sdk/blst';
+ *
  * const bls = await loadBlstBackend(); // or blstBackendFrom(await import('@chainsafe/blst'))
- * await cluster.isValidLock(lock, { bls });
+ * const ok = await isValidLock(lock, { bls });
  * ```
  */
 export interface BlsBackend<PublicKey = unknown> {

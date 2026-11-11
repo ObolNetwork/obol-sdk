@@ -109,7 +109,25 @@ export const accept = async (
 
 /** The terms module bound to a client context. */
 export interface TermsModule {
+  /**
+   * Whether `address` (default: the wallet account) has accepted the latest Obol terms
+   * and conditions. Neither an address nor a wallet: WALLET_REQUIRED.
+   *
+   * @see spec/operations.md "terms.hasAccepted"
+   */
   hasAccepted: (address?: string) => Promise<boolean>;
+  /**
+   * Signs the terms and conditions (EIP-712, no chain id) with the wallet and posts the
+   * acceptance. `ifNotAccepted: true` signs only when the account has not accepted yet
+   * (`{ signed: false }` otherwise). Needed once per address before `cluster.create` or
+   * `cluster.accept`.
+   *
+   * @example
+   * ```ts
+   * await obol.terms.accept({ ifNotAccepted: true });
+   * ```
+   * @see spec/operations.md "terms.accept"
+   */
   accept: (input?: { ifNotAccepted?: boolean }) => Promise<{ signed: boolean }>;
 }
 
