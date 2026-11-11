@@ -2,10 +2,10 @@
 import {
   ByteVectorType,
   ContainerType,
-  ListCompositeType,
   UintBigintType,
   fromHexString,
 } from '@chainsafe/ssz';
+import { ListCompositeType } from '../internal/sszLists.js';
 import { computeDomain, signingRoot } from '../internal/exitDomain.js';
 import type { PartialExitBlob } from './types.js';
 
@@ -47,7 +47,7 @@ export const exitSigningRoot = (
     epoch: BigInt(message.epoch),
     validator_index: BigInt(message.validator_index),
   });
-  return signingRoot(domain, Buffer.from(root));
+  return signingRoot(domain, root);
 };
 
 /**

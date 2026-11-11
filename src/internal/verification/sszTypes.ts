@@ -1,11 +1,10 @@
 import {
-  ByteListType,
   ByteVectorType,
   ContainerType,
-  ListCompositeType,
   UintBigintType,
   UintNumberType,
 } from '@chainsafe/ssz';
+import { ByteListType, ListCompositeType } from '../sszLists.js';
 import { type UintNumberByteLen } from '@chainsafe/ssz/lib/type/uint.js';
 
 const MAX_UINT64 = BigInt('0xffffffffffffffff');

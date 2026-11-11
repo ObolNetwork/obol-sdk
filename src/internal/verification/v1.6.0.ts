@@ -1,3 +1,4 @@
+import { bytesTo0xHex } from '../bytes.js';
 import {
   type UintNumberByteLen,
   UintNumberType,
@@ -16,13 +17,12 @@ import {
   strToUint8Array,
 } from './sszTypes.js';
 import {
-  ByteListType,
   ByteVectorType,
   ContainerType,
-  ListCompositeType,
   fromHexString,
   type ValueOf,
 } from '@chainsafe/ssz';
+import { ByteListType, ListCompositeType } from '../sszLists.js';
 import { type ValueOfFields } from '@chainsafe/ssz/lib/view/container.js';
 import { type ClusterDefinition, type ClusterLock } from '../types.js';
 
@@ -188,5 +188,5 @@ export const hashClusterLockV1X6 = (cluster: ClusterLock): string => {
     dvValueV1X6,
   );
 
-  return '0x' + Buffer.from(lockType.hashTreeRoot(val).buffer).toString('hex');
+  return bytesTo0xHex(lockType.hashTreeRoot(val));
 };

@@ -27,7 +27,7 @@ function computeForkDataRoot(
   const forkDataVal = ForkDataType.defaultValue();
   forkDataVal.currentVersion = currentVersion;
   forkDataVal.genesisValidatorsRoot = genesisValidatorsRoot;
-  return Buffer.from(ForkDataType.hashTreeRoot(forkDataVal).buffer);
+  return ForkDataType.hashTreeRoot(forkDataVal);
 }
 
 /**
@@ -92,18 +92,18 @@ function computeSigningRoot(
   const val = SigningRootType.defaultValue();
   val.objectRoot = sszObjectRoot;
   val.domain = domain;
-  return Buffer.from(SigningRootType.hashTreeRoot(val).buffer);
+  return SigningRootType.hashTreeRoot(val);
 }
 
 /**
  * Convenience wrapper for computeSigningRoot.
  * @param domain - Uint8Array of the domain.
- * @param messageBuffer - Buffer of the message (SSZ object root).
+ * @param messageBuffer - The message's SSZ object root (32 bytes).
  * @returns Uint8Array - The signing root.
  */
 export function signingRoot(
   domain: Uint8Array,
-  messageBuffer: Buffer, // Assumed to be the 32-byte sszObjectRoot
+  messageBuffer: Uint8Array, // The 32-byte sszObjectRoot
 ): Uint8Array {
   const sszObjectRootU8 = Uint8Array.from(messageBuffer);
   return computeSigningRoot(sszObjectRootU8, domain);

@@ -3,12 +3,9 @@
  * registration and node signature checks (carried over from SDK 2.x). The
  * lock verification steps themselves live in `cluster/verifyLock.ts`.
  */
-import {
-  ByteVectorType,
-  ContainerType,
-  ListCompositeType,
-  fromHexString,
-} from '@chainsafe/ssz';
+import { bytesTo0xHex } from '../bytes.js';
+import { ByteVectorType, ContainerType, fromHexString } from '@chainsafe/ssz';
+import { ListCompositeType } from '../sszLists.js';
 import { ENR } from '@chainsafe/enr';
 import {
   type BuilderRegistrationMessage,
@@ -84,46 +81,32 @@ export const clusterConfigOrDefinitionHash = (
   if (cluster.version === 'v1.6.0') {
     definitionType = clusterDefinitionContainerTypeV1X6(configOnly);
     val = hashClusterDefinitionV1X6(cluster, configOnly);
-    return (
-      '0x' +
-      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
-    );
+    return bytesTo0xHex(definitionType.hashTreeRoot(val));
   }
 
   if (cluster.version === 'v1.7.0') {
     definitionType = clusterDefinitionContainerTypeV1X7(configOnly);
     val = hashClusterDefinitionV1X7(cluster, configOnly);
-    return (
-      '0x' +
-      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
-    );
+    return bytesTo0xHex(definitionType.hashTreeRoot(val));
   }
 
   if (cluster.version === 'v1.8.0') {
     definitionType = clusterDefinitionContainerTypeV1X8(configOnly);
     val = hashClusterDefinitionV1X8(cluster, configOnly);
-    return (
-      '0x' +
-      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
-    );
+    return bytesTo0xHex(definitionType.hashTreeRoot(val));
   }
 
   if (cluster.version === 'v1.10.0') {
     definitionType = clusterDefinitionContainerTypeV1X10(configOnly);
     val = hashClusterDefinitionV1X10(cluster, configOnly);
-    const x =
-      '0x' +
-      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex');
+    const x = bytesTo0xHex(definitionType.hashTreeRoot(val));
     return x;
   }
 
   if (cluster.version === 'v1.11.0') {
     definitionType = clusterDefinitionContainerTypeV1X11(configOnly);
     val = hashClusterDefinitionV1X11(cluster, configOnly);
-    return (
-      '0x' +
-      Buffer.from(definitionType.hashTreeRoot(val).buffer).toString('hex')
-    );
+    return bytesTo0xHex(definitionType.hashTreeRoot(val));
   }
 
   throw new Error('unsupported version');
@@ -269,7 +252,7 @@ export const clusterConfigOrDefinitionHashSliced = async (
     'validators',
     tick,
   );
-  return '0x' + Buffer.from(root).toString('hex');
+  return bytesTo0xHex(root);
 };
 
 interface DvHashing {
@@ -315,7 +298,7 @@ export const clusterLockHashSliced = async (
     cluster_definition: definitionRoot,
     distributed_validators: dvRootsType.hashTreeRoot(roots),
   });
-  return '0x' + Buffer.from(root).toString('hex');
+  return bytesTo0xHex(root);
 };
 
 // cluster-lock data verification
@@ -326,12 +309,12 @@ const computeSigningRoot = (
   const signingRootDefaultValue = signingRootType.defaultValue();
   signingRootDefaultValue.objectRoot = sszObjectRoot;
   signingRootDefaultValue.domain = domain;
-  return Buffer.from(
-    signingRootType.hashTreeRoot(signingRootDefaultValue).buffer,
-  );
+  return signingRootType.hashTreeRoot(signingRootDefaultValue);
 };
 
-export const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
+export const computeDepositMsgRoot = (
+  msg: Partial<DepositData>,
+): Uint8Array => {
   const depositMsgVal = depositMessageType.defaultValue();
 
   depositMsgVal.pubkey = fromHexString(msg.pubkey as string);
@@ -349,7 +332,7 @@ export const computeDepositMsgRoot = (msg: Partial<DepositData>): Buffer => {
     );
   }
   depositMsgVal.amount = toUint64(msg.amount as string);
-  return Buffer.from(depositMessageType.hashTreeRoot(depositMsgVal).buffer);
+  return depositMessageType.hashTreeRoot(depositMsgVal);
 };
 
 const computeForkDataRoot = (
@@ -359,12 +342,12 @@ const computeForkDataRoot = (
   const forkDataVal = forkDataType.defaultValue();
   forkDataVal.currentVersion = currentVersion;
   forkDataVal.genesisValidatorsRoot = genesisValidatorsRoot;
-  return Buffer.from(forkDataType.hashTreeRoot(forkDataVal).buffer);
+  return forkDataType.hashTreeRoot(forkDataVal);
 };
 
 const computebuilderRegistrationMsgRoot = (
   msg: BuilderRegistrationMessage,
-): Buffer => {
+): Uint8Array => {
   const builderRegistrationMsgVal =
     builderRegistrationMessageType.defaultValue();
 
@@ -372,10 +355,7 @@ const computebuilderRegistrationMsgRoot = (
   builderRegistrationMsgVal.gas_limit = msg.gas_limit;
   builderRegistrationMsgVal.timestamp = msg.timestamp;
   builderRegistrationMsgVal.pubkey = fromHexString(msg.pubkey);
-  return Buffer.from(
-    builderRegistrationMessageType.hashTreeRoot(builderRegistrationMsgVal)
-      .buffer,
-  );
+  return builderRegistrationMessageType.hashTreeRoot(builderRegistrationMsgVal);
 };
 
 const computeDomain = (
@@ -489,7 +469,7 @@ export const verifyNodeSignatures = async (
 
 export const signingRoot = (
   domain: Uint8Array,
-  messageBuffer: Buffer,
+  messageBuffer: Uint8Array,
 ): Uint8Array => {
   return computeSigningRoot(messageBuffer, domain);
 };
