@@ -66,9 +66,6 @@ export default defineConfig([
     noExternal: ['@chainsafe/enr', '@noble/curves', '@noble/hashes'],
     // Externalize everything else
     external: [
-      'ajv',
-      'ajv-formats',
-      'ajv-keywords',
       'semver',
       'uuid',
       '@chainsafe/ssz',

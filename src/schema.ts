@@ -1,10 +1,25 @@
-import { ZeroAddress } from 'ethers';
+import { ZeroAddress, parseUnits } from 'ethers';
 import {
   DEFAULT_RETROACTIVE_FUNDING_REWARDS_ONLY_SPLIT,
   DEFAULT_RETROACTIVE_FUNDING_TOTAL_SPLIT,
   PRINCIPAL_THRESHOLD,
 } from './constants.js';
-import { VALID_DEPOSIT_AMOUNTS, VALID_NON_COMPOUNDING_AMOUNTS } from './ajv.js';
+
+// Schemas are compiled to plain JS at build time (scripts/generate-validators.mjs
+// -> src/generated/validators.ts) so no code is generated at runtime. After
+// changing a schema here, run `yarn generate:validators`.
+
+export const VALID_DEPOSIT_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+  parseUnits('8', 'gwei').toString(),
+  parseUnits('256', 'gwei').toString(),
+];
+
+export const VALID_NON_COMPOUNDING_AMOUNTS = [
+  parseUnits('1', 'gwei').toString(),
+  parseUnits('32', 'gwei').toString(),
+];
 
 export const ADDRESS_PATTERN = '^0x[a-fA-F0-9]{40}$';
 const ZERO_ADDRESS_PATTERN = '^0x0{40}$';
