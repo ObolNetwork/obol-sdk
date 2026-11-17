@@ -80,8 +80,10 @@ src/
 ├── utils.ts          # Utility functions (incl. assertSignerChain)
 ├── validation.ts     # assertHash32 / assertAddress for URL path arguments
 ├── withdrawalFee.ts  # EIP-7002 withdrawal fee read + bounds
-├── schema.ts         # AJV JSON schemas for payload validation
-├── ajv.ts            # AJV setup with custom validation keywords
+├── schema.ts         # JSON schemas for payload validation (run `yarn generate:validators` after editing)
+├── customKeywords.ts # Custom schema keywords (unique addresses, split percentage totals)
+├── ajv.ts            # validatePayload: runs the precompiled validator for a schema
+├── generated/        # validators.ts: GENERATED from schema.ts + customKeywords.ts, do not edit
 ├── bytecodes.ts      # Contract bytecodes (large file, do not read unless needed)
 ├── abi/              # Smart contract ABIs
 ├── deposits/         # getDepositData (lock → deposit payloads), depositGuard (`kind` → verifyDepositPayloads)
@@ -299,7 +301,7 @@ Any other `chainId` throws `UnsupportedChainError` from the `Client` constructor
 
 ### Validation
 
-All payloads are validated via **AJV** schemas before API/contract calls. Custom keywords handle:
+All payloads are validated against the JSON schemas in `src/schema.ts` before API/contract calls. The schemas are compiled to plain JavaScript at build time (ajv standalone code, `scripts/generate-validators.mjs` → `src/generated/validators.ts`, committed), so the SDK never generates code at runtime (no `new Function`) and runs under a CSP without `'unsafe-eval'`; ajv is a devDependency only. After changing `schema.ts` or `customKeywords.ts`, run `yarn generate:validators` (`yarn build` fails if the generated file is stale; `test/client/precompiledValidators.spec.ts` compares it with runtime ajv). Custom keywords (`src/customKeywords.ts`) handle:
 - Unique operator addresses (min 4 operators)
 - Percent allocation totals: V1 SplitMain recipients must sum to exactly 100% at contract precision (1e-4 %); OVM / SplitV2 recipients may be off by one unit per recipient (SplitV2 uses the sum as its total), e.g. Launchpad's "split everything" shares of 33.3333...%
 - RAF (Retroactive Funding) auto-appending
@@ -446,7 +448,7 @@ DEL_AUTH=...      # API deletion auth token
 | `@chainsafe/ssz` | SSZ serialization for consensus types |
 | `@chainsafe/enr` | Ethereum Node Record parsing |
 | `@safe-global/protocol-kit` | Safe multisig wallet integration |
-| `ajv` | JSON schema payload validation |
+| `ajv` (dev only) | Precompiles the payload JSON schemas at build time |
 
 ## Dependencies policy
 
@@ -480,7 +482,7 @@ Version bumping follows semantic versioning:
 ### Adding a New Client Method
 
 1. Add types to `src/types.ts`
-2. Add validation schema to `src/schema.ts` with AJV keyword if needed
+2. Add validation schema to `src/schema.ts` (custom keyword in `src/customKeywords.ts` if needed), then `yarn generate:validators`
 3. Implement in `src/index.ts` (or sub-module file)
 4. If it requires signer, check `this.signer` and throw `SignerRequiredError`
 5. If chain-restricted, check `chainId` and throw `UnsupportedChainError`

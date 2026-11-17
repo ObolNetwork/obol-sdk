@@ -19,7 +19,12 @@ module.exports = {
     ecmaVersion: 'latest',
     sourceType: 'module',
   },
-  ignorePatterns: ['**/dist/**', '**/*.spec.ts', '**/test/**'],
+  ignorePatterns: [
+    '**/dist/**',
+    '**/*.spec.ts',
+    '**/test/**',
+    'src/generated/**',
+  ],
   rules: {
     '@typescript-eslint/strict-boolean-expressions': 0,
     '@typescript-eslint/comma-dangle': 0,
