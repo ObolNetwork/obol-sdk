@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.13](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.12...v3.0.0-rc.13)
+
+> 24 November 2026
+
+Additive: lock flow and key attestation for callers deciding what to trust, and contract-wallet placeholder
+signatures read as unverifiable. No breaking changes from rc.12.
+
+**Added**
+
+- `cluster.definitionFlow(definitionOrLock)` (pure, also on the client and the root `cluster` namespace):
+  `'group' | 'solo' | 'charon' | null`, read from which definition fields are signed (as `verifyLock` step 1).
+  Checks no signature.
+- A successful `cluster.verifyLock` returns `flow` and `keysAttestedByOperators` (`true` for a `group` lock from
+  v1.7.0: every operator signed its ENR and each node signed `lock_hash`). `deposits.fromLock` returns both too
+  (`keysAttestedByOperators: false` with `verify: false`). For `solo` and `charon` locks only the creator's own copy
+  of the lock confirms the validator keys.
+
+**Changed**
+
+- An all-zero definition signature that its signer's contract refuses (EIP-1271) is `unverifiable`
+  (`definition_signature_unverifiable`), not `invalid`: the Obol API has stored it as a placeholder for
+  contract-wallet signers. An all-zero signature from an account is still `invalid`.
+
+**Docs**
+
+- `spec/operations.md`: `cluster.definitionFlow`, the new `verifyLock` / `fromLock` outputs, the zero-signature rule,
+  and that `depositsByAmount` holds every checked amount whatever `amount` is passed (pass any one of `amounts` for a
+  lock with several, and read `depositsByAmount`).
+
 #### [v3.0.0-rc.12](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.11...v3.0.0-rc.12)
 
 > 11 November 2026
