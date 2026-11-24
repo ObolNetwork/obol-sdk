@@ -185,9 +185,16 @@ export const clientForChain = (
  * - `invalid`: it does not, and `address` was checked on chain (an account,
  *   or a contract that refuses it), or the signature is not hex;
  * - `unverifiable`: it does not recover to `address`, and no client for the
- *   chain was given, so a contract wallet could not be asked.
+ *   chain was given, so a contract wallet could not be asked; or `address`
+ *   is a contract that refuses an all-zero signature, which is a placeholder
+ *   (the Obol API has stored one for contract-wallet signers), not a
+ *   signature that could be checked.
  */
 export type TypedDataSignatureCheck = 'valid' | 'invalid' | 'unverifiable';
+
+/** All zero bytes (`0x` alone is not a signature at all). */
+const isZeroSignature = (signature: Hex): boolean =>
+  /^0x(?:00)+$/i.test(signature);
 
 /**
  * Checks `signature` over `data` for `address`: ECDSA recovery first; when
@@ -228,14 +235,17 @@ export const checkTypedDataSignature = async ({
     if ((await getCodeKind(publicClient, address)) !== 'contract') {
       return 'invalid';
     }
-    return (await contractAccepts(
-      publicClient,
-      address,
-      hashTypedData(data),
-      signature,
-    ))
-      ? 'valid'
-      : 'invalid';
+    if (
+      await contractAccepts(
+        publicClient,
+        address,
+        hashTypedData(data),
+        signature,
+      )
+    ) {
+      return 'valid';
+    }
+    return isZeroSignature(signature) ? 'unverifiable' : 'invalid';
   } catch {
     // The code read or the hashing failed.
     return 'invalid';

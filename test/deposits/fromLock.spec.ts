@@ -114,6 +114,17 @@ describe('deposits.fromLock', () => {
     },
   );
 
+  it('reports the flow and whether the operators vouch for the keys', async () => {
+    // A verified group lock from v1.7.0: signed ENRs and node signatures.
+    expect(
+      await fromLock(copy(clusterLockV1X10), { chainId: 560048 }),
+    ).toMatchObject({ flow: 'group', keysAttestedByOperators: true });
+    // Unverified: the flow is still read, but nothing is vouched for.
+    expect(
+      await fromLock(copy(clusterLockV1X10), { verify: false }),
+    ).toMatchObject({ flow: 'group', keysAttestedByOperators: false });
+  });
+
   it('`deposits` is always present: the only amount when there is one', async () => {
     const result = await fromLock(copy(clusterLockV1X10), { verify: false });
     expect(result.amounts).toEqual([parseEther('32')]);

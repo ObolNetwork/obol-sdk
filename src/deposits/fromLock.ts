@@ -7,7 +7,11 @@ import type { Hex, PublicClient } from 'viem';
 import { CHAINS } from '../chains.js';
 import type { BlsBackend } from '../cluster/blsBackend.js';
 import type { PublicClients } from '../cluster/eip712.js';
-import { verifyLock } from '../cluster/verifyLock.js';
+import {
+  definitionFlow,
+  verifyLock,
+  type DefinitionFlowName,
+} from '../cluster/verifyLock.js';
 import { LockSchema, type ClusterLock } from '../cluster/schema.js';
 import { ObolError } from '../errors.js';
 import { decode, invalid, rejectUnknownKeys, T } from '../schema.js';
@@ -60,6 +64,15 @@ export interface LockDeposits {
    * when given, else the lock's only amount. Always present.
    */
   deposits: Deposit[];
+  /** The definition's flow (`cluster.definitionFlow`); null if unknown. */
+  flow: DefinitionFlowName | null;
+  /**
+   * Whether the operators vouch for the validator keys (`verifyLock`'s
+   * `keysAttestedByOperators`): a verified `group` lock from v1.7.0. False
+   * with `verify: false`, and for `solo` / `charon` locks, whose keys only
+   * the creator's own copy of the lock can confirm.
+   */
+  keysAttestedByOperators: boolean;
 }
 
 export const FromLockOptionsSchema = Type.Object(
@@ -241,7 +254,7 @@ const verifyForDeposits = async (
   verify: 'attested' | 'full' | true,
   options: FromLockOptions,
   yieldMs: number | undefined,
-): Promise<void> => {
+): Promise<boolean> => {
   const level = verify === 'full' ? 'full' : 'attested';
   const result = await verifyLock(lock, {
     level,
@@ -266,6 +279,7 @@ const verifyForDeposits = async (
       },
     );
   }
+  return result.keysAttestedByOperators === true;
 };
 
 type LockValidator = ClusterLock['distributed_validators'][number];
@@ -424,9 +438,9 @@ export const fromLock = async (
 
   checkForkVersion(lock, chainId);
 
-  if (verify !== false) {
-    await verifyForDeposits(lock, selected, verify, options, yieldMs);
-  }
+  const keysAttestedByOperators =
+    verify !== false &&
+    (await verifyForDeposits(lock, selected, verify, options, yieldMs));
 
   const validators = lock.distributed_validators;
   if (validators.length === 0) {
@@ -449,5 +463,7 @@ export const fromLock = async (
     amounts,
     depositsByAmount,
     deposits,
+    flow: definitionFlow(lock),
+    keysAttestedByOperators,
   };
 };

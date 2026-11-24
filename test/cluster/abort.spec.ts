@@ -88,7 +88,7 @@ describe('options.signal', () => {
 
   it('an unaborted signal changes nothing', async () => {
     const signal = new AbortController().signal;
-    expect(await verifyLock(lock, { signal })).toEqual({
+    expect(await verifyLock(lock, { signal })).toMatchObject({
       ok: true,
       level: 'full',
     });

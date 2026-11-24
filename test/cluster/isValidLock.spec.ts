@@ -204,12 +204,12 @@ describe('contract-wallet signatures through the bound client', () => {
       await obol.cluster.verifyLock(copy(clusterLockV1X11), {
         publicClients: { 1: mainnet },
       }),
-    ).toEqual({ ok: true, level: 'full' });
+    ).toMatchObject({ ok: true, level: 'full' });
     expect(
       await obol.cluster.verifyLock(copy(clusterLockV1X11), {
         publicClients: () => undefined,
       }),
-    ).toEqual({ ok: true, level: 'full' });
+    ).toMatchObject({ ok: true, level: 'full' });
   });
 });
 

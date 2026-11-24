@@ -41,17 +41,17 @@ const quick = { yieldMs: 0 };
 
 describe('cluster.verifyLock on synthetic locks', () => {
   it('passes at both levels', async () => {
-    expect(await verifyLock(copy(), quick)).toEqual({
+    expect(await verifyLock(copy(), quick)).toMatchObject({
       ok: true,
       level: 'full',
     });
-    expect(await verifyLock(copy(), { level: 'attested' })).toEqual({
+    expect(await verifyLock(copy(), { level: 'attested' })).toMatchObject({
       ok: true,
       level: 'attested',
     });
     expect(
       await verifyLock(copy(), { level: 'attested', signatures: 'all' }),
-    ).toEqual({ ok: true, level: 'attested' });
+    ).toMatchObject({ ok: true, level: 'attested' });
   });
 
   it.each<[string, (lock: any) => void, object]>([
@@ -190,7 +190,7 @@ describe('cluster.verifyLock on synthetic locks', () => {
       ...failure,
     });
     // Attested does not decode shares: the node signatures vouch for them.
-    expect(await verifyLock(lock, { level: 'attested' })).toEqual({
+    expect(await verifyLock(lock, { level: 'attested' })).toMatchObject({
       ok: true,
       level: 'attested',
     });
@@ -253,7 +253,7 @@ describe('cluster.verifyLock on synthetic locks', () => {
     });
     expect(
       await verifyLock(lock, { level: 'attested', signatures: [0, 1] }),
-    ).toEqual({ ok: true, level: 'attested' });
+    ).toMatchObject({ ok: true, level: 'attested' });
   });
 
   it('reports structural failures with the validator at both levels', async () => {

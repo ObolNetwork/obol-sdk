@@ -23,6 +23,7 @@ import {
   type VerifyOptions,
 } from './verifyDefinition.js';
 import {
+  definitionFlow,
   isValidLock,
   verifyLock,
   type LockVerification,
@@ -38,6 +39,7 @@ export {
   verifyDefinition,
   verifyLock,
   isValidLock,
+  definitionFlow,
 };
 export { isValidEnr, parseEnr, type ParsedEnr } from './enr.js';
 export { nobleBls, type BlsBackend, type BlsBatch } from './blsBackend.js';
@@ -66,6 +68,7 @@ export type {
   VerifyOptions,
 } from './verifyDefinition.js';
 export type {
+  DefinitionFlowName,
   LockStep,
   LockVerification,
   LockVerificationLevel,
@@ -83,6 +86,7 @@ export interface ClusterModule {
   computeConfigHash: typeof computeConfigHash;
   computeDefinitionHash: typeof computeDefinitionHash;
   computeLockHash: typeof computeLockHash;
+  definitionFlow: typeof definitionFlow;
   /** As the pure `prepareDefinition`; `chainId` defaults to the client chain. */
   prepareDefinition: (input: BoundDefinitionInput) => PreparedDefinition;
   /**
@@ -163,6 +167,7 @@ export const createClusterModule = (ctx: Context): ClusterModule => ({
   computeConfigHash,
   computeDefinitionHash,
   computeLockHash,
+  definitionFlow,
   /** As the pure `prepareDefinition`, with `chainId` defaulting to the client chain. */
   prepareDefinition: input =>
     prepareDefinition({ ...input, chainId: input.chainId ?? ctx.chain.id }),

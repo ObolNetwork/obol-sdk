@@ -195,6 +195,7 @@ declare namespace cluster {
         verifyDefinition,
         verifyLock,
         isValidLock,
+        definitionFlow,
         isValidEnr,
         parseEnr,
         ParsedEnr,
@@ -219,6 +220,7 @@ declare namespace cluster {
         DefinitionIssue,
         DefinitionVerification,
         VerifyOptions,
+        DefinitionFlowName,
         LockStep,
         LockVerification,
         LockVerificationLevel,
@@ -272,6 +274,8 @@ interface ClusterModule {
     create: (input: PreparedDefinition | (Omit<BoundDefinitionInput, 'creator'> & {
         creator?: string;
     })) => Promise<Hex>;
+    // (undocumented)
+    definitionFlow: typeof definitionFlow;
     get: (configHash: string) => Promise<ClusterDefinition>;
     getLock: (input: {
         configHash: string;
@@ -432,6 +436,12 @@ const DEFAULT_PRINCIPAL_THRESHOLD: bigint;
 
 // @public
 const DEFAULT_SPLIT_SALT: Hex;
+
+// @public
+const definitionFlow: (definitionOrLock: unknown) => DefinitionFlowName | null;
+
+// @public
+type DefinitionFlowName = 'group' | 'solo' | 'charon';
 
 // @public (undocumented)
 interface DefinitionIssue {
@@ -1299,6 +1309,8 @@ interface LockDeposits {
     amounts: bigint[];
     deposits: Deposit[];
     depositsByAmount: Map<bigint, Deposit[]>;
+    flow: DefinitionFlowName | null;
+    keysAttestedByOperators: boolean;
     // (undocumented)
     lockHash: Hex;
     validators: number[];
@@ -1309,7 +1321,9 @@ type LockStep = 'definition_flow_unknown' | 'definition_invalid' | 'definition_s
 
 // @public (undocumented)
 interface LockVerification {
+    flow?: DefinitionFlowName;
     issue?: string;
+    keysAttestedByOperators?: boolean;
     level: LockVerificationLevel;
     // (undocumented)
     ok: boolean;

@@ -128,6 +128,14 @@ Cluster files follow distributed-validator-specs `cluster-files.md`. Supported d
 `v1.7.0`, `v1.8.0`, `v1.10.0`, `v1.11.0`; default `v1.11.0`. EIP-712 domain `{ name: "Obol", version: "1", chainId }`
 (chain-bound) for config hash and ENR signatures; without `chainId` for terms.
 
+### cluster.definitionFlow
+
+Tag: `pure`. Input: a definition, or a lock (its `cluster_definition` is read). Output: `"group" | "solo" |
+"charon" | null`, from which fields are signed, as `verifyLock` step 1: group (creator and every operator signed,
+operators carry ENRs and ENR signatures), solo (only the creator signed; operators carry ENRs only), charon (nothing
+signed). `null` for any other combination. No signature is checked. A malformed definition: `PAYLOAD_INVALID`.
+(3.0.0-rc.13; 2.15 `definitionFlow`, internal)
+
 ### cluster.computeConfigHash / cluster.computeLockHash
 
 Tag: `pure`. Input: a definition / a lock. Output: `Hash32`. As distributed-validator-specs "Definition Hash
@@ -221,7 +229,10 @@ else the legacy `isValidSignature(bytes data, signature)` returning `0x20c13b0b`
 Safes before 1.3.0 implement it and 2.x accepted; each magic counts only from its own function) with the client for
 the domain's chain: from `publicClients` (a client on another chain than the one it is listed for is
 ignored), else `publicClient` when it is on that chain. With a client: an address with no code (or an EIP-7702
-delegation) is `invalid`; a contract that refuses, reverts or fails the read is `invalid`. Without one the SDK cannot
+delegation) is `invalid`; a contract that refuses, reverts or fails the read is `invalid`, except an all-zero
+signature that the contract refuses, which is `unverifiable`: it is a placeholder (the Obol API has stored one for
+contract-wallet signers), not a signature the contract could be asked about (3.0.0-rc.13; before, `invalid`, so such a
+lock read as tampered). Without one the SDK cannot
 tell an account from a contract wallet, so the signature is `unverifiable`: a failure (`ok: false`) that names the
 missing client instead of passing for `invalid`. The SDK has no RPCs of its own (2.x used built-in ones,
 `PROVIDER_MAP`), so a server passes `publicClients` for every chain it serves.
@@ -248,8 +259,13 @@ step, as `{ ok: false, step: "hash_mismatch", issue: "version_unsupported" }` (3
 v1.9.0 lock used to fail at whichever earlier step its contents tripped). v1.9.0 is not supported by design: the
 Obol API does not accept it.
 
-Output: `{ ok: bool, level, step: string?, issue: string?, validator: uint? }`; `validator` is the index of the
-failing validator when the failing check is per validator (steps 5–8). Steps: `definition_flow_unknown`,
+Output: `{ ok: bool, level, step: string?, issue: string?, validator: uint?, flow: "group" | "solo" | "charon"?,
+keysAttestedByOperators: bool? }`; `validator` is the index of the failing validator when the failing check is per
+validator (steps 5–8). On success (only), `flow` is the definition's flow (step 1) and `keysAttestedByOperators`
+says whether the operators vouch for the validator keys: `true` for a `group` lock from v1.7.0, where every operator
+signed its ENR (step 3) and each node signed `lock_hash` (step 8); `false` for `solo` and `charon` locks and before
+v1.7.0, whose keys anyone holding the definition could have generated, so only the creator's own copy of the lock
+confirms them (3.0.0-rc.13). Steps: `definition_flow_unknown`,
 `definition_invalid`, `definition_signature_invalid`, `definition_signature_unverifiable`, `hash_mismatch`,
 `share_layout_invalid`,
 `share_reconstruction_failed`, `deposit_data_invalid`, `builder_registration_invalid`, `lock_signature_invalid`.
@@ -426,8 +442,17 @@ Pubkey)[]?, yieldMs: uint?, bls: BlsBackend?, publicClient: PublicClient?, publi
 
 ```
 { lockHash: Hash32, validators: uint[] (lock indexes, ascending), amounts: bigint[] (ascending),
-  depositsByAmount: map bigint -> Deposit[], deposits: Deposit[] }
+  depositsByAmount: map bigint -> Deposit[], deposits: Deposit[],
+  flow: "group" | "solo" | "charon" | null, keysAttestedByOperators: bool }
 ```
+
+`flow` is `cluster.definitionFlow(lock)`. `keysAttestedByOperators` is `verifyLock`'s (`false` with `verify:
+false`): without it, a caller depositing for a `solo` or `charon` lock should confirm the lock with the creator's own
+copy of it (its `lock_hash`) before depositing (3.0.0-rc.13).
+
+`depositsByAmount` holds every amount of each returned validator, all checked when `verify` is on, whatever
+`amount` is: a caller composing deposits from several amounts passes any one of `amounts` (needed for a lock with
+several) and reads `depositsByAmount`.
 
 `deposits` is always present and holds one deposit per returned validator, all of one amount. An options key
 outside the list above is `PAYLOAD_INVALID` (`unknown_key`).

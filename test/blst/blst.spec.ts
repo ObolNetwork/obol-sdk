@@ -12,7 +12,7 @@ describe('@obolnetwork/obol-sdk/blst', () => {
   it('loads @chainsafe/blst once and verifies a lock at full', async () => {
     const bls = await loadBlstBackend();
     expect(await loadBlstBackend()).toBe(bls);
-    expect(await verifyLock(structuredClone(lock), { bls })).toEqual({
+    expect(await verifyLock(structuredClone(lock), { bls })).toMatchObject({
       ok: true,
       level: 'full',
     });

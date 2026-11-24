@@ -17,7 +17,10 @@ import type {
   DepositData,
   DistributedValidator,
 } from '../internal/types.js';
-import { DefinitionFlow, definitionFlow } from '../internal/definitionFlow.js';
+import {
+  DefinitionFlow,
+  definitionFlow as legacyDefinitionFlow,
+} from '../internal/definitionFlow.js';
 import {
   builderDomainForFork,
   builderFieldsMatch,
@@ -52,7 +55,7 @@ import {
   type SignatureClients,
 } from './eip712.js';
 import { isSupportedVersion } from './hash.js';
-import { LockSchema, type ClusterLock } from './schema.js';
+import { DefinitionSchema, LockSchema, type ClusterLock } from './schema.js';
 import { invalidDefinitionSignatures } from './verifyDefinition.js';
 
 export type LockStep =
@@ -78,10 +81,57 @@ export type LockStep =
  */
 export type LockVerificationLevel = 'attested' | 'full';
 
+/**
+ * How a cluster definition was signed: `group` (creator and every operator
+ * signed, operators sign their ENRs), `solo` (only the creator signed),
+ * `charon` (nothing signed, `charon create cluster`).
+ */
+export type DefinitionFlowName = 'group' | 'solo' | 'charon';
+
+const FLOW_NAMES: Record<DefinitionFlow, DefinitionFlowName> = {
+  [DefinitionFlow.Group]: 'group',
+  [DefinitionFlow.Solo]: 'solo',
+  [DefinitionFlow.Charon]: 'charon',
+};
+
+/**
+ * The flow of a cluster definition (or of a lock's definition), read from
+ * which of its fields are signed; null for any other combination (a lock
+ * with it fails `verifyLock` at `definition_flow_unknown`). Pure: it checks
+ * no signature.
+ */
+export const definitionFlow = (
+  definitionOrLock: unknown,
+): DefinitionFlowName | null => {
+  const candidate = definitionOrLock as { cluster_definition?: unknown } | null;
+  const definition =
+    candidate !== null &&
+    typeof candidate === 'object' &&
+    'cluster_definition' in candidate
+      ? candidate.cluster_definition
+      : definitionOrLock;
+  const decoded = decode(DefinitionSchema, definition, 'definition');
+  const flow = legacyDefinitionFlow(decoded as unknown as LegacyDefinition);
+  return flow === null ? null : FLOW_NAMES[flow];
+};
+
 export interface LockVerification {
   ok: boolean;
   /** The level that was run. */
   level: LockVerificationLevel;
+  /**
+   * On success: the definition's flow. (On a failure, `definitionFlow` reads
+   * it from the lock without checking anything.)
+   */
+  flow?: DefinitionFlowName;
+  /**
+   * On success: whether the operators vouch for the validator keys, i.e. a
+   * `group` lock from v1.7.0 on, where every operator signed its ENR and
+   * each node signed `lock_hash` (checked). False for `solo` and `charon`
+   * locks and before v1.7.0: anyone holding the definition could run a DKG
+   * for it, so only the creator's own copy of the lock confirms the keys.
+   */
+  keysAttestedByOperators?: boolean;
   /** The first failing step. */
   step?: LockStep;
   /** Detail of the failure within the step. */
@@ -223,7 +273,7 @@ interface Run {
 }
 
 const checkFlow = (lock: ClusterLock): DefinitionFlow => {
-  const flow = definitionFlow(
+  const flow = legacyDefinitionFlow(
     lock.cluster_definition as unknown as LegacyDefinition,
   );
   return flow ?? fail('definition_flow_unknown', 'definition_flow_unknown');
@@ -636,7 +686,14 @@ const runSteps = async (run: Run): Promise<LockVerification> => {
     await checkDeposits(run);
     if (run.layout !== 'v1.6') await checkBuilderRegistrations(run);
     await checkLockSignatures(run);
-    return { ok: true, level };
+    return {
+      ok: true,
+      level,
+      flow: FLOW_NAMES[flow],
+      // Node signatures exist (and were checked above) from v1.7.0.
+      keysAttestedByOperators:
+        flow === DefinitionFlow.Group && run.layout !== 'v1.6',
+    };
   } catch (error) {
     if (error instanceof StepFailed) {
       return {

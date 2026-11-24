@@ -65,7 +65,7 @@ describeDist('browser build without a global Buffer', () => {
   );
 
   it.each([0, 1])('verifies the real lock in full (%i)', i => {
-    expect(output.locks[i].verification).toEqual({ ok: true, level: 'full' });
+    expect(output.locks[i].verification).toMatchObject({ ok: true, level: 'full' });
     expect(output.locks[i].isValid).toBe(true);
   });
 

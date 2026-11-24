@@ -3,6 +3,7 @@ import { hashTypedData, parseAbi, type Hex } from 'viem';
 import {
   computeLockHash,
   creatorConfigHashTypedData,
+  definitionFlow,
   verifyLock,
 } from '../../src/cluster/index.js';
 import {
@@ -30,16 +31,41 @@ const tampered = (edit: (lock: any) => void): any => {
 };
 
 describe('cluster.verifyLock', () => {
-  it.each<[string, unknown]>([
-    ['v1.10.0 group', clusterLockV1X10],
-    ['v1.10.0 solo', clusterLockSoloV1X10],
-    ['v1.8.0 null deposit_amounts', nullDepositAmountsClusterLockV1X8],
-    ['v1.10.0 compounding', clusterLockWithCompoundingWithdrawalss],
-    ['v1.10.0 charon create cluster', charonCreateClusterLockV1X10],
-    ['v1.10.0 charon create dkg', charonCreateDkgLockV1X10],
-  ])('passes every step: %s', async (_name, lock) => {
-    expect(await verifyLock(copy(lock))).toEqual({ ok: true, level: 'full' });
-  });
+  it.each<[string, unknown, string, boolean]>([
+    ['v1.10.0 group', clusterLockV1X10, 'group', true],
+    ['v1.10.0 solo', clusterLockSoloV1X10, 'solo', false],
+    [
+      'v1.8.0 null deposit_amounts',
+      nullDepositAmountsClusterLockV1X8,
+      'charon',
+      false,
+    ],
+    [
+      'v1.10.0 compounding',
+      clusterLockWithCompoundingWithdrawalss,
+      'group',
+      true,
+    ],
+    [
+      'v1.10.0 charon create cluster',
+      charonCreateClusterLockV1X10,
+      'charon',
+      false,
+    ],
+    ['v1.10.0 charon create dkg', charonCreateDkgLockV1X10, 'charon', false],
+  ])(
+    'passes every step: %s',
+    async (_name, lock, flow, keysAttestedByOperators) => {
+      // The flow, and whether the operators vouch for the keys (group from
+      // v1.7.0: signed ENRs and node signatures over lock_hash).
+      expect(await verifyLock(copy(lock))).toEqual({
+        ok: true,
+        level: 'full',
+        flow,
+        keysAttestedByOperators,
+      });
+    },
+  );
 
   it('step 1: definition_flow_unknown', async () => {
     const lock = copy(clusterLockV1X10);
@@ -111,7 +137,7 @@ describe('cluster.verifyLock', () => {
       await verifyLock(copy(clusterLockV1X11), {
         publicClient: safe('0x20c13b0b').publicClient,
       }),
-    ).toEqual({ ok: true, level: 'full' });
+    ).toMatchObject({ ok: true, level: 'full' });
     expect(
       await verifyLock(copy(clusterLockV1X11), {
         publicClient: safe('0x00000000').publicClient,
@@ -120,6 +146,18 @@ describe('cluster.verifyLock', () => {
       ok: false,
       step: 'definition_signature_invalid',
       issue: 'creator config_signature',
+    });
+  });
+
+  it('step 2: an all-zero signature from an account is invalid', async () => {
+    const lock = copy(clusterLockV1X10);
+    lock.cluster_definition.operators[1].config_signature = `0x${'00'.repeat(65)}`;
+    expect(
+      await verifyLock(lock, { publicClient: fakeChain().publicClient }),
+    ).toMatchObject({
+      ok: false,
+      step: 'definition_signature_invalid',
+      issue: 'operators[1] config_signature',
     });
   });
 
@@ -163,7 +201,7 @@ describe('cluster.verifyLock', () => {
       ]) {
         expect(
           await verifyLock(copy(clusterLockV1X11), { publicClients }),
-        ).toEqual({ ok: true, level: 'full' });
+        ).toMatchObject({ ok: true, level: 'full' });
       }
       // Listed under the wrong chain id: ignored.
       expect(
@@ -177,7 +215,7 @@ describe('cluster.verifyLock', () => {
           publicClients: { 1: mainnet },
           publicClient: chain.publicClient,
         }),
-      ).toEqual({ ok: true, level: 'full' });
+      ).toMatchObject({ ok: true, level: 'full' });
     });
 
     it('refuses publicClients that are neither a map nor a function', async () => {
@@ -191,7 +229,22 @@ describe('cluster.verifyLock', () => {
         await verifyLock(copy(clusterLockV1X11), {
           publicClient: chain.publicClient,
         }),
-      ).toEqual({ ok: true, level: 'full' });
+      ).toMatchObject({ ok: true, level: 'full' });
+    });
+
+    // The Obol API has stored an all-zero placeholder for some contract-wallet
+    // signers: not a signature the contract can be asked about.
+    it('is unverifiable when the contract refuses an all-zero placeholder', async () => {
+      const lock = copy(clusterLockV1X11);
+      lock.cluster_definition.creator.config_signature = `0x${'00'.repeat(65)}`;
+      expect(
+        await verifyLock(lock, { publicClient: chain.publicClient }),
+      ).toEqual({
+        ok: false,
+        level: 'full',
+        step: 'definition_signature_unverifiable',
+        issue: 'creator config_signature',
+      });
     });
 
     it('fails when the contract refuses it', async () => {
@@ -373,5 +426,33 @@ describe('cluster.verifyLock', () => {
   it('keeps hashes lowercase hex', () => {
     const hash: Hex = computeLockHash(copy(clusterLockV1X10));
     expect(hash).toBe(clusterLockV1X10.lock_hash.toLowerCase());
+  });
+});
+
+describe('cluster.definitionFlow', () => {
+  it('reads the flow from a lock or its definition, checking no signature', () => {
+    expect(definitionFlow(copy(clusterLockV1X10))).toBe('group');
+    expect(definitionFlow(copy(clusterLockV1X10).cluster_definition)).toBe(
+      'group',
+    );
+    expect(definitionFlow(copy(clusterLockSoloV1X10))).toBe('solo');
+    expect(definitionFlow(copy(charonCreateClusterLockV1X10))).toBe('charon');
+    // Signatures are not checked: a wrong one still reads as group.
+    const wrong = copy(clusterLockV1X10);
+    wrong.cluster_definition.operators[1].config_signature =
+      wrong.cluster_definition.operators[0].config_signature;
+    expect(definitionFlow(wrong)).toBe('group');
+  });
+
+  it('is null for a mix of signed and unsigned fields', () => {
+    const lock = copy(clusterLockV1X10);
+    lock.cluster_definition.operators[1].enr_signature = '';
+    expect(definitionFlow(lock)).toBeNull();
+  });
+
+  it('throws PAYLOAD_INVALID for something that is not a definition', () => {
+    expect(() => definitionFlow({ name: 'x' })).toThrow(
+      expect.objectContaining({ code: 'PAYLOAD_INVALID' }),
+    );
   });
 });
