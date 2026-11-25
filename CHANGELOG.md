@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.14](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.13...v3.0.0-rc.14)
+
+> 25 November 2026
+
+A fix to `deposits.status`. No API changes from rc.13.
+
+**Fixed**
+
+- `deposits.status` accepted the Obol API's deposit status only with a numeric validator `index`, but the API
+  sends it as a decimal string (a uint64, as the beacon API does), so every registered validator read through the
+  API failed as malformed and `prepareDeposit` refused to complete a partial activation. A decimal string is read as
+  the index; a JSON number is still accepted, and anything else is still malformed.
+
 #### [v3.0.0-rc.13](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.12...v3.0.0-rc.13)
 
 > 24 November 2026
