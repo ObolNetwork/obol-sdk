@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased
+
+- fix: payload schemas are precompiled at build time (ajv standalone code), so the SDK no longer generates code at run time and apps bundling it can ship a Content-Security-Policy without `'unsafe-eval'`. Accepted inputs, defaults and error objects are unchanged. ajv moves to devDependencies; ajv-formats and ajv-keywords are dropped
+
 #### [v2.16.1](https://github.com/ObolNetwork/obol-sdk/compare/v2.16.0...v2.16.1)
 
 > 10 November 2026
