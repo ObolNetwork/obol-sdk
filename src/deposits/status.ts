@@ -425,7 +425,13 @@ const depositStatusEntry = (raw: unknown): DepositStatus => {
     if (credentials === undefined) {
       return bad('malformed withdrawal credentials');
     }
-    const index = entry.index;
+    // obol-api sends the index as a decimal string (uint64, as the beacon
+    // API does); a JSON number is accepted too.
+    const rawIndex = entry.index;
+    const index =
+      typeof rawIndex === 'string' && DECIMAL.test(rawIndex)
+        ? Number(rawIndex)
+        : rawIndex;
     if (
       typeof index !== 'number' ||
       !Number.isSafeInteger(index) ||

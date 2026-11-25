@@ -346,8 +346,13 @@ describe('deposit-status entries (Obol API)', () => {
       `malformed withdrawal credentials${FOR}`,
     ],
     [
-      'an index that is a string',
-      registry({ index: '7' }),
+      'an index that is a non-decimal string',
+      registry({ index: '7a' }),
+      `a malformed validator index${FOR}`,
+    ],
+    [
+      'an index that is a signed string',
+      registry({ index: '-1' }),
       `a malformed validator index${FOR}`,
     ],
     [
@@ -461,6 +466,15 @@ describe('deposit-status entries (Obol API)', () => {
       status: 'exited',
       activationEpoch: null,
       exitEpoch: 99n,
+    });
+  });
+
+  // obol-api sends the index as a decimal string, as the beacon API does
+  // (prod and nonprod); a JSON number is accepted too.
+  it('reads the index from a decimal string, as obol-api sends it', async () => {
+    expect(await read(registry({ index: '1236239' }))).toMatchObject({
+      status: 'active',
+      validatorIndex: 1236239,
     });
   });
 
