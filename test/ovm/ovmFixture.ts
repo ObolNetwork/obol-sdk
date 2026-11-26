@@ -249,7 +249,12 @@ export interface MockBeaconNode {
 
 /** Replaces global fetch with a beacon node serving these rows; returns the restore function. */
 export const mockBeacon = (
-  pending: Array<{ pubkey: Hex; withdrawal_credentials: Hex; amount: string }>,
+  pending: Array<{
+    pubkey: Hex;
+    withdrawal_credentials: Hex;
+    amount: string;
+    signature?: Hex;
+  }>,
   validators: unknown[],
   partials: Array<{
     validator_index: string;

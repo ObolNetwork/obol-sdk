@@ -229,6 +229,7 @@ describe('types (compile-time)', () => {
     sameType<
       WarningCodeFor<'deposit'>,
       | 'DEPOSIT_EXISTENCE_UNCHECKED'
+      | 'QUEUED_DEPOSIT_UNCHECKED'
       | 'QUEUED_CREDENTIALS_CONFLICT'
       | 'TOP_UP_ABOVE_EFFECTIVE_CAP'
       | 'TOP_UP_EXITED_VALIDATOR'

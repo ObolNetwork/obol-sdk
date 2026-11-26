@@ -352,7 +352,8 @@ export const accept = async (
     return definition;
   }
 
-  // Sign the stored config_hash: verifiers check the signature against it.
+  // Sign the config_hash; the typed data puts it in the lower-case form
+  // verifiers (and Charon) check the signature against.
   const configHash = definition.config_hash;
   const operatorSignature = await signTypedData(
     walletClient,

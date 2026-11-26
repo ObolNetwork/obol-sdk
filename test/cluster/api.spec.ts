@@ -248,6 +248,31 @@ describe('cluster.accept', () => {
     expect(api.calls.map(c => c.method)).toEqual(['GET', 'PUT']);
   });
 
+  it('signs the lower-case config_hash of a definition stored in upper case', async () => {
+    const { api, hash, cluster } = await setup({
+      edit: d => {
+        d.config_hash = `0x${d.config_hash.slice(2).toUpperCase()}`;
+      },
+    });
+    const request = (api as any).request;
+    let authorization: string | undefined;
+    (api as any).request = async (endpoint: string, opts: any = {}) => {
+      if (opts.method === 'PUT') {
+        authorization = opts.headers?.Authorization;
+        return {};
+      }
+      return await request(endpoint, opts);
+    };
+    await cluster.accept({ configHash: hash, enr });
+    expect(
+      await recoverTypedDataAddress({
+        ...(operatorConfigHashTypedData(hash.toLowerCase(), 560048) as any),
+        message: { operator_config_hash: hash.toLowerCase() },
+        signature: authorization?.replace('Bearer ', '') as Hex,
+      }),
+    ).toBe(operator.address);
+  });
+
   it('returns the definition without signing when already accepted with the ENR', async () => {
     const { api, hash, definition, cluster } = await setup({
       operatorSigned: true,

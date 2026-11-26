@@ -821,7 +821,7 @@ export const FINDING_CODES: FindingCode[];
 
 // @public
 export const FINDING_CODES_BY_KIND: {
-    readonly deposit: readonly ["DEPOSIT_EXISTENCE_UNCHECKED", "DEPOSIT_ALREADY_QUEUED", "QUEUED_CREDENTIALS_CONFLICT", "TOP_UP_ABOVE_EFFECTIVE_CAP", "TOP_UP_EXITED_VALIDATOR", "TOP_UP_CREDENTIALS_FOREIGN", "OVM_STAKE_NOT_TRACKED"];
+    readonly deposit: readonly ["DEPOSIT_EXISTENCE_UNCHECKED", "QUEUED_DEPOSIT_UNCHECKED", "DEPOSIT_ALREADY_QUEUED", "QUEUED_CREDENTIALS_CONFLICT", "TOP_UP_ABOVE_EFFECTIVE_CAP", "TOP_UP_EXITED_VALIDATOR", "TOP_UP_CREDENTIALS_FOREIGN", "OVM_STAKE_NOT_TRACKED"];
     readonly withdraw: readonly ["PROVENANCE_UNKNOWN", "VALIDATOR_STATUS_UNCHECKED", "WITHDRAW_AMOUNT_CAPPED", "PARTIAL_WITHDRAWAL_QUEUE_FULL"];
     readonly consolidate: readonly ["PROVENANCE_UNKNOWN", "VALIDATOR_STATUS_UNCHECKED", "CONSOLIDATION_CREDENTIALS_DIFFER"];
     readonly distribute: readonly ["PROVENANCE_UNKNOWN"];
@@ -866,6 +866,12 @@ export const FINDINGS: {
         readonly group: "unchecked";
         readonly meaning: "No deposit status source: whether the validators already exist, and with which withdrawal credentials, was not checked.";
         readonly guidance: "Pass `beaconUrl` or enable the Obol API so it is checked. Acknowledge only after checking each pubkey yourself (a beacon explorer): a deposit to a validator someone else created first goes to their withdrawal address.";
+    };
+    readonly QUEUED_DEPOSIT_UNCHECKED: {
+        readonly severity: "warning";
+        readonly group: "risk";
+        readonly meaning: "The status source reported the deposits queued for the pubkey only as a summary, so which one creates the validator, and with which withdrawal credentials, is not known.";
+        readonly guidance: "Check the deposits queued for the pubkey yourself (a beacon explorer) before acknowledging: the first validly signed one creates the validator with its withdrawal credentials, and this deposit then only tops it up.";
     };
     readonly DEPOSIT_ALREADY_QUEUED: {
         readonly severity: "info";

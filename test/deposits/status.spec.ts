@@ -404,9 +404,11 @@ describe('deposits.status', () => {
         expect(a).not.toHaveProperty('signaturesPending');
         expect(a).not.toHaveProperty('credentialsConflict');
         expect(a.pendingDeposits[0]).not.toHaveProperty('signatureValid');
-        // No signature checks: the first queued deposit's credentials apply.
+        // No signature checks: the first queued deposit's credentials are
+        // reported, but either deposit may create the validator, so
+        // credentialsMatch is undecided.
         expect(a.withdrawalCredentials).toBe(credentials('01', OTHER));
-        expect(a.credentialsMatch).toBe(false);
+        expect(a.credentialsMatch).toBeNull();
       });
 
       it('has no credentials when no queued deposit is validly signed', async () => {
@@ -761,7 +763,8 @@ describe('deposits.status', () => {
       ];
       const api = serving(() => [
         registry(PUBKEY_A),
-        // A queued zero-credential top-up does not set the credentials.
+        // An unchecked zero-credential deposit ahead may create the validator
+        // (if validly signed): undecided.
         queued(PUBKEY_B, [
           [ETH, ZERO],
           [32n * ETH, OTHER_CREDS],
@@ -775,7 +778,7 @@ describe('deposits.status', () => {
       });
       expect(statuses.map(s => s.credentialsMatch)).toEqual([
         true,
-        true,
+        null,
         null,
         false,
       ]);
@@ -784,7 +787,7 @@ describe('deposits.status', () => {
       });
       expect(other.map(s => s.credentialsMatch)).toEqual([
         false,
-        false,
+        null,
         null,
         false,
       ]);

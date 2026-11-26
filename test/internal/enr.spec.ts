@@ -7,7 +7,8 @@
 import { ENR } from '@chainsafe/enr';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { bytesToHex } from 'viem';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex, hexToBytes, keccak256 } from 'viem';
 import { decodeEnrText, enrIp, enrPort } from '../../src/internal/enr.js';
 
 // EIP-778 "Test Vectors" example record (private key b71c71a6…, 127.0.0.1:30303).
@@ -112,12 +113,22 @@ describe('decodeEnrText', () => {
   });
 
   it('agrees with @chainsafe/enr on every fixture ENR', () => {
+    let repeatedKeys = 0;
     for (const text of FIXTURES) {
+      // The one deliberate difference: a repeated key (Charon refuses the
+      // record; @chainsafe/enr keeps the last value). test/fuzz/regressions
+      // holds a lock with such an ENR.
+      if (!ours(text).ok && theirs(text).ok) {
+        expect(() => decodeEnrText(text)).toThrow(/duplicate key/);
+        repeatedKeys++;
+        continue;
+      }
       expect({ text, outcome: ours(text) }).toEqual({
         text,
         outcome: theirs(text),
       });
     }
+    expect(repeatedKeys).toBeLessThanOrEqual(1);
   });
 
   it('agrees with @chainsafe/enr on byte mutations of the fixtures', () => {
@@ -131,7 +142,7 @@ describe('decodeEnrText', () => {
         const at = next() % mutated.length;
         let candidate: Uint8Array;
         if (kind === 0) {
-          mutated[at] ^= 1 << next() % 8;
+          mutated[at] ^= 1 << (next() % 8);
           candidate = mutated;
         } else if (kind === 1) {
           candidate = mutated.slice(0, at);
@@ -172,5 +183,68 @@ describe('decodeEnrText', () => {
     const text = toText(mutated);
     expect(ours(text)).toEqual({ ok: false });
     expect(theirs(text)).toEqual({ ok: false });
+  });
+
+  // Found by differential testing against Charon: a record with two
+  // `secp256k1` entries, signed by
+  // the second key. @chainsafe/enr and the SDK before this fix kept the last
+  // entry and accepted it; Charon's enr.Parse refuses any repeated key, so a
+  // lock with such an operator ENR passed verifyLock but cannot be loaded by
+  // Charon. Built at run time so the fixture scan above does not pick it up.
+  it('refuses a record with a repeated key (Charon does)', () => {
+    const rlpList = (items: Uint8Array[]): Uint8Array => {
+      const len = (n: number, base: number): number[] =>
+        n < 56 ? [base + n] : [base + 56, n];
+      const body: number[] = [];
+      for (const it of items) {
+        if (it.length === 1 && it[0] < 0x80) body.push(it[0]);
+        else body.push(...len(it.length, 0x80), ...it);
+      }
+      return Uint8Array.from([...len(body.length, 0xc0), ...body]);
+    };
+    const te = new TextEncoder();
+    const first = new Uint8Array(32).fill(1);
+    const second = new Uint8Array(32).fill(2);
+    const BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
+    const record = (
+      keys: Uint8Array[],
+      signer: Uint8Array,
+      names: Uint8Array[] = keys.map(() => te.encode('secp256k1')),
+    ): string => {
+      const content = [
+        new Uint8Array(0),
+        te.encode('id'),
+        te.encode('v4'),
+        ...keys.flatMap((k, i) => [names[i], secp256k1.getPublicKey(k, true)]),
+      ];
+      const digest = hexToBytes(keccak256(rlpList(content)));
+      const sig = secp256k1.sign(digest, signer, {
+        prehash: false,
+        lowS: true,
+      });
+      return toText(rlpList([sig, ...content]));
+    };
+    // The same construction with one key is a valid record.
+    expect(ours(record([second], second)).ok).toBe(true);
+    const duplicated = record([first, second], second);
+    expect(ours(duplicated)).toEqual({ ok: false });
+    expect(() => decodeEnrText(duplicated)).toThrow(/duplicate key/);
+    // A UTF-8 BOM before `secp256k1` makes another key for Charon (raw
+    // bytes); a default TextDecoder strips it and the SDK took that entry as
+    // the node key. Signed by the BOM entry's key, Charon refuses the record.
+    const bomKey = new Uint8Array([...BOM, ...te.encode('secp256k1')]);
+    const aliased = record([first, second], second, [
+      te.encode('secp256k1'),
+      bomKey,
+    ]);
+    expect(ours(aliased)).toEqual({ ok: false });
+    // Signed by the plain entry's key it is a valid record bound to that key.
+    const plain = ours(
+      record([first, second], first, [te.encode('secp256k1'), bomKey]),
+    );
+    expect(plain).toMatchObject({
+      ok: true,
+      publicKey: bytesToHex(secp256k1.getPublicKey(first, true)),
+    });
   });
 });

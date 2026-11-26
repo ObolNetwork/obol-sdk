@@ -240,9 +240,13 @@ const checkDeposit = (
   }
 };
 
-const signatureItem = (
+/** A deposit's BLS signature check in the deposit domain `domain`. */
+export const signatureItem = (
   bls: BlsBackend,
-  deposit: Deposit,
+  deposit: Pick<
+    Deposit,
+    'pubkey' | 'withdrawalCredentials' | 'amount' | 'signature'
+  >,
   domain: Uint8Array,
 ): SignatureItem<unknown> => {
   let publicKey: unknown = null;

@@ -3,8 +3,11 @@
  * Charon writes (`enr:` + base64url of the RLP list `[signature, seq, k, v,
  * ...]`). Replaces the bundled `@chainsafe/enr` (and its libp2p /
  * multiformats tree), which the SDK used only to decode a record and check
- * its signature. The rules match `@chainsafe/enr` 6.x `decodeTxt`:
- * test/internal/enr.spec.ts compares the two on fixtures and mutations.
+ * its signature. The rules match `@chainsafe/enr` 6.x `decodeTxt`, except
+ * that keys are compared as raw bytes, as Charon does: a repeated key is
+ * refused (`@chainsafe/enr` keeps the last value) and a key with a leading
+ * UTF-8 BOM is not read as the key without it. test/internal/enr.spec.ts
+ * compares the two on fixtures and mutations.
  */
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak256 } from 'viem';
@@ -145,13 +148,25 @@ export const decodeEnrText = (text: string): DecodedEnr => {
   }
   const entries = new Map<string, Uint8Array>();
   const signed: Uint8Array[] = [seq as Uint8Array];
-  const utf8 = new TextDecoder();
+  // ignoreBOM: a default TextDecoder drops a leading UTF-8 BOM, so a key
+  // "\uFEFFsecp256k1" would read as `secp256k1` (Charon keeps them apart).
+  const utf8 = new TextDecoder('utf-8', { ignoreBOM: true });
+  // EIP-778: keys are unique. Charon (eth2util/enr.Parse) refuses a record
+  // with a repeated key; a Map would silently keep the last value (so with
+  // two `secp256k1` entries, the last key would be the node's key here and
+  // the record unusable in Charon). Compared as raw bytes, as Charon does.
+  const seenKeys = new Set<string>();
   for (let i = 2; i < list.length; i += 2) {
     const key = list[i];
     const value = list[i + 1];
     if (!(key instanceof Uint8Array) || !(value instanceof Uint8Array)) {
       fail('keys and values must be byte strings');
     }
+    const rawKey = Array.from(key as Uint8Array, b =>
+      b.toString(16).padStart(2, '0'),
+    ).join('');
+    if (seenKeys.has(rawKey)) fail('duplicate key');
+    seenKeys.add(rawKey);
     entries.set(utf8.decode(key as Uint8Array), value as Uint8Array);
     signed.push(key as Uint8Array, value as Uint8Array);
   }

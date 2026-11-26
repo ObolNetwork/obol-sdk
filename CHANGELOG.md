@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### Unreleased (v3.0.0-rc.16)
+
+**Breaking**
+
+- `deposits.prepareDeposit` with `kind: 'topUp'` throws `DEPOSIT_TOP_UP_TARGET_MISSING` for any pubkey that is not
+  in the validator registry yet, including one only in the deposit queue, whatever is queued. Until the validator
+  exists the beacon chain treats a top-up as a deposit that must create it. Fund it with a fully signed
+  `kind: 'deposit'`.
+- New warning `QUEUED_DEPOSIT_UNCHECKED` (group `risk`, not in `UNCHECKED_WARNING_CODES`, so `send` refuses it
+  until it is acknowledged by name): `kind: 'deposit'` to a queue-only pubkey whose queue the status source reported
+  only as a summary (the interim `/v1/state` route).
+
+**Changed**
+
+- `deposits.status` and `deposits.prepareDeposit` verify queued deposit signatures before trusting their
+  credentials: for a pubkey only in a beacon node's deposit queue, the first 16 queued deposits are checked
+  (`signatureValid`), and `withdrawalCredentials` are the first validly signed one's.
+- One rule for which queued deposits decide a queue-only validator's credentials, for every source: those not known
+  to be invalid, up to and including the first validly signed one. `deposits.prepareDeposit` with
+  `kind: 'deposit'` throws `DEPOSIT_CONFLICT` when one of them has other credentials, all-zero ones included. A deposit after the first
+  validly signed one is a top-up and no longer a conflict on the beacon path. `credentialsMatch` is `null` while
+  they differ.
+- Definition signatures are checked over, and signed with, the canonical lower-case `config_hash`, as Charon does:
+  `creatorConfigHashTypedData` / `operatorConfigHashTypedData` lower-case it. A definition signed over a
+  non-canonical (upper-case or `0X`) string no longer verifies.
+
+**Fixed**
+
+- ENR decoding refuses a record with a repeated key, and no longer reads a key with a leading byte-order mark as
+  the key without it (both as Charon).
+
 #### [v3.0.0-rc.15](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.14...v3.0.0-rc.15)
 
 > 26 November 2026

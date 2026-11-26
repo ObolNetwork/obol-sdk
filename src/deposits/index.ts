@@ -16,6 +16,7 @@ import {
   assertDepositData,
   type AssertDepositDataOptions,
 } from './assertDepositData.js';
+import { queuedSignatureCheck } from './queuedSignatures.js';
 
 export { fromLock, assertDepositData };
 export { depositDataRoot } from './assertDepositData.js';
@@ -86,7 +87,12 @@ export const createDepositsModule = (ctx: Context): DepositsModule => ({
     await assertDepositData(deposits, { chainId: ctx.chain.id, ...options });
   },
   status: async (pubkeys, options) =>
-    await getDepositStatus(ctx, pubkeys, options),
+    await getDepositStatus(
+      ctx,
+      pubkeys,
+      options,
+      queuedSignatureCheck(ctx.chain.id),
+    ),
   prepareDeposit: async input => await prepareDeposit(ctx, input),
 });
 

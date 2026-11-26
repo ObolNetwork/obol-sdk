@@ -19,8 +19,17 @@ import {
   registryRow,
   type OvmChainOptions,
 } from '../ovm/ovmFixture.js';
+import { bls12_381 } from '@noble/curves/bls12-381.js';
+import { depositDataRoot } from '../../src/deposits/assertDepositData.js';
+import { createDepositsModule } from '../../src/deposits/index.js';
+import {
+  computeDepositMsgRoot,
+  depositDomainForFork,
+  signingRoot,
+} from '../../src/internal/verification/common.js';
 import { offsetDepositPair } from '../helpers/blsSignatures.js';
 import { fakeApi } from '../helpers/fakeChain.js';
+import { blsSign, hex, randomScalar } from '../helpers/syntheticLock.js';
 
 const vectors = JSON.parse(
   readFileSync('spec/vectors/deposit_checks.json', 'utf8'),
@@ -284,6 +293,26 @@ describe('deposits.prepareDeposit', () => {
       });
     });
 
+    // A top-up needs a validator in the registry, whatever is queued.
+    it('throws DEPOSIT_TOP_UP_TARGET_MISSING when only zero-credential deposits are queued (beacon)', async () => {
+      restore = mockBeacon(
+        [
+          {
+            pubkey: TOP_UP.pubkey.toLowerCase() as Hex,
+            withdrawal_credentials: `0x${'00'.repeat(32)}` as Hex,
+            amount: '1000000000',
+          },
+        ],
+        [],
+      );
+      expect(
+        await caught(run({ deposits: [TOP_UP], kind: 'topUp' })),
+      ).toMatchObject({
+        code: 'DEPOSIT_TOP_UP_TARGET_MISSING',
+        details: { index: 0 },
+      });
+    });
+
     it('throws DEPOSIT_CONFLICT for a queued deposit with other credentials', async () => {
       restore = mockBeacon(
         [
@@ -305,7 +334,23 @@ describe('deposits.prepareDeposit', () => {
       });
     });
 
-    it('does not count a queued zero-credential top-up as a conflict', async () => {
+    it('does not count a queued Launchpad-style top-up (no valid signature) as a conflict', async () => {
+      restore = mockBeacon(
+        [
+          {
+            pubkey: PUBKEY,
+            withdrawal_credentials: `0x${'00'.repeat(32)}`,
+            amount: '1000000000',
+            signature: TOP_UP.signature,
+          },
+        ],
+        [],
+      );
+      expect((await run({}))[0].checks).toEqual([]);
+    });
+
+    it('throws DEPOSIT_CONFLICT for an unchecked queued deposit with all-zero credentials', async () => {
+      // No signature in the row: unchecked, so it may create the validator.
       restore = mockBeacon(
         [
           {
@@ -316,9 +361,10 @@ describe('deposits.prepareDeposit', () => {
         ],
         [],
       );
-      expect(codes((await run({}))[0].checks)).toEqual([
-        'DEPOSIT_ALREADY_QUEUED',
-      ]);
+      expect(await caught(run({}))).toMatchObject({
+        code: 'DEPOSIT_CONFLICT',
+        details: { existing: 'queued', existingCredentials: `0x${'00'.repeat(32)}` },
+      });
     });
 
     it('notes DEPOSIT_ALREADY_QUEUED for same-credential queued deposits', async () => {
@@ -337,19 +383,21 @@ describe('deposits.prepareDeposit', () => {
       ]);
     });
 
-    it('lets a zero-credential top-up follow a queued deposit', async () => {
+    it('refuses a top-up to a pubkey only in the queue, even behind a validly signed deposit', async () => {
       restore = mockBeacon(
         [
           {
             pubkey: PUBKEY,
             withdrawal_credentials: credentials('02', OVM),
             amount: '32000000000',
+            signature: DEPOSIT.signature,
           },
         ],
         [],
       );
-      const [result] = await run({ deposits: [TOP_UP], kind: 'topUp' });
-      expect(codes(result.checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+      expect(
+        await caught(run({ deposits: [TOP_UP], kind: 'topUp' })),
+      ).toMatchObject({ code: 'DEPOSIT_TOP_UP_TARGET_MISSING' });
     });
 
     // rc.12: kind "deposit" for a pubkey that is already in the registry
@@ -476,25 +524,6 @@ describe('deposits.prepareDeposit', () => {
       ]);
     });
 
-    it('warns TOP_UP_CREDENTIALS_FOREIGN for a zero-credential top-up behind a queued foreign deposit', async () => {
-      const theirs = credentials('02', OTHER);
-      restore = mockBeacon(
-        [
-          {
-            pubkey: PUBKEY,
-            withdrawal_credentials: theirs,
-            amount: '32000000000',
-          },
-        ],
-        [],
-      );
-      const [result] = await run({ deposits: [TOP_UP], kind: 'topUp' });
-      expect(codes(result.checks)).toEqual([
-        'DEPOSIT_ALREADY_QUEUED',
-        'TOP_UP_CREDENTIALS_FOREIGN',
-      ]);
-    });
-
     it('DEPOSIT_EXISTENCE_UNCHECKED is a warning (send needs it acknowledged)', async () => {
       const [result] = await prepareDeposit(chainWith().context(), {
         deposits: [DEPOSIT],
@@ -600,6 +629,302 @@ describe('deposits.prepareDeposit', () => {
     });
   });
 
+  // The beacon chain creates a validator from the first queued deposit with
+  // a valid signature, with that deposit's credentials (all-zero ones
+  // included); invalidly signed ones are dropped. prepareDeposit checks the
+  // signatures of a beacon node's queue; the interim /v1/state route has
+  // none to check.
+  describe('existence: which queued deposit creates the validator', () => {
+    const ZERO = `0x${'00'.repeat(32)}` as Hex;
+    const MINE = credentials('02', OVM);
+    const domain = depositDomainForFork(CHAINS[560048].forkVersion!);
+    /** A validator key and deposits signed with it (or with `signer`). */
+    const key = () => {
+      const secret = randomScalar();
+      const pubkey = hex(
+        bls12_381.G1.Point.BASE.multiply(secret).toBytes(),
+      ) as Hex;
+      const sign = (
+        creds: Hex,
+        gwei: bigint,
+        signer: bigint = secret,
+      ): Deposit => {
+        const signature = blsSign(
+          signingRoot(
+            domain,
+            computeDepositMsgRoot({
+              pubkey,
+              withdrawal_credentials: creds,
+              amount: gwei.toString(),
+            }),
+          ),
+          signer,
+        ) as Hex;
+        return {
+          pubkey,
+          withdrawalCredentials: creds,
+          signature,
+          depositDataRoot: depositDataRoot({
+            pubkey,
+            withdrawalCredentials: creds,
+            amountGwei: gwei,
+            signature,
+          }),
+          amount: gwei * GWEI,
+        };
+      };
+      const topUp: Deposit = { ...TOP_UP, pubkey };
+      topUp.depositDataRoot = depositDataRoot({
+        ...topUp,
+        amountGwei: ETH / GWEI,
+      });
+      return { pubkey, sign, topUp };
+    };
+    const row = (d: Deposit) => ({
+      pubkey: d.pubkey,
+      withdrawal_credentials: d.withdrawalCredentials,
+      amount: (d.amount / GWEI).toString(),
+      signature: d.signature,
+    });
+
+    describe('beacon node', () => {
+      let restore: () => void = () => {};
+      afterEach(() => restore());
+      const run = async (input: object) =>
+        await prepareDeposit(chainWith().context(), {
+          via: { ovm: OVM },
+          from: OWNER,
+          beaconUrl: BEACON_URL,
+          ...(input as { deposits: Deposit[] }),
+        });
+
+      it('throws DEPOSIT_CONFLICT for a deposit behind a validly signed queued deposit with all-zero credentials', async () => {
+        const k = key();
+        restore = mockBeacon([row(k.sign(ZERO, 1_000_000_000n))], []);
+        expect(
+          await caught(run({ deposits: [k.sign(MINE, 32_000_000_000n)] })),
+        ).toMatchObject({
+          code: 'DEPOSIT_CONFLICT',
+          details: { existing: 'queued', existingCredentials: ZERO },
+        });
+      });
+
+      it.each([
+        ['a validly signed deposit with all-zero credentials', 'zero'],
+        ['an invalidly signed deposit with own credentials', 'invalid'],
+        ['a validly signed deposit with own credentials', 'own'],
+      ])(
+        'throws DEPOSIT_TOP_UP_TARGET_MISSING for a top-up behind %s',
+        async (_name, queued) => {
+          const k = key();
+          const ahead =
+            queued === 'zero'
+              ? k.sign(ZERO, 1_000_000_000n)
+              : k.sign(
+                  MINE,
+                  1_000_000_000n,
+                  queued === 'invalid' ? randomScalar() : undefined,
+                );
+          restore = mockBeacon([row(ahead)], []);
+          for (const deposit of [k.topUp, k.sign(MINE, 31_000_000_000n)]) {
+            expect(
+              await caught(run({ deposits: [deposit], kind: 'topUp' })),
+            ).toMatchObject({ code: 'DEPOSIT_TOP_UP_TARGET_MISSING' });
+          }
+        },
+      );
+
+      it('leaves an invalidly signed queued deposit out of the conflict check', async () => {
+        const k = key();
+        const theirs = k.sign(credentials('01', OTHER), 1_000_000_000n);
+        restore = mockBeacon(
+          [row({ ...theirs, signature: k.sign(ZERO, 1_000_000_000n).signature })],
+          [],
+        );
+        const [result] = await run({ deposits: [k.sign(MINE, 32_000_000_000n)] });
+        expect(result.checks).toEqual([]);
+      });
+
+      it('notes only DEPOSIT_ALREADY_QUEUED behind a validly signed own deposit', async () => {
+        const k = key();
+        restore = mockBeacon(
+          [
+            row(k.sign(MINE, 1_000_000_000n)),
+            row({ ...k.topUp, signature: TOP_UP.signature }),
+          ],
+          [],
+        );
+        const [result] = await run({ deposits: [k.sign(MINE, 31_000_000_000n)] });
+        expect(codes(result.checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+      });
+
+      // spec/operations.md: the first 16 queued deposits per pubkey.
+      it('checks the signatures of the first 16 queued deposits per pubkey', async () => {
+        const k = key();
+        const theirs = credentials('01', OTHER);
+        const junk = row(k.sign(MINE, 1_000_000_000n, randomScalar()));
+        const invalidTheirs = row(
+          k.sign(theirs, 1_000_000_000n, randomScalar()),
+        );
+        const deposit = k.sign(MINE, 32_000_000_000n);
+        // The last deposit checked: found invalid, so left out.
+        restore = mockBeacon(
+          [
+            ...Array.from({ length: 15 }, () => junk),
+            invalidTheirs,
+          ],
+          [],
+        );
+        expect((await run({ deposits: [deposit] }))[0].checks).toEqual([]);
+        restore();
+        // The first one past the limit: unchecked, so it may create the
+        // validator.
+        restore = mockBeacon(
+          [
+            ...Array.from({ length: 16 }, () => junk),
+            invalidTheirs,
+          ],
+          [],
+        );
+        expect(await caught(run({ deposits: [deposit] }))).toMatchObject({
+          code: 'DEPOSIT_CONFLICT',
+          details: { existingCredentials: theirs },
+        });
+      });
+
+      it('treats a deposit after the first validly signed own one as a top-up, not a conflict', async () => {
+        const k = key();
+        const theirs = credentials('01', OTHER);
+        restore = mockBeacon(
+          [
+            row(k.sign(MINE, 1_000_000_000n)),
+            row(k.sign(ZERO, 1_000_000_000n)),
+            row(k.sign(theirs, 1_000_000_000n)),
+          ],
+          [],
+        );
+        const [result] = await run({ deposits: [k.sign(MINE, 31_000_000_000n)] });
+        expect(codes(result.checks)).toEqual([
+          'QUEUED_CREDENTIALS_CONFLICT',
+          'DEPOSIT_ALREADY_QUEUED',
+        ]);
+        restore();
+        // Two validly signed deposits, the first not ours: a conflict.
+        restore = mockBeacon(
+          [
+            row(k.sign(theirs, 1_000_000_000n)),
+            row(k.sign(MINE, 1_000_000_000n)),
+          ],
+          [],
+        );
+        expect(
+          await caught(run({ deposits: [k.sign(MINE, 31_000_000_000n)] })),
+        ).toMatchObject({
+          code: 'DEPOSIT_CONFLICT',
+          details: { existingCredentials: theirs },
+        });
+      });
+
+      it('deposits.status reports which queued deposits are validly signed, and the credentials the first one gives', async () => {
+        const k = key();
+        const theirs = credentials('01', OTHER);
+        restore = mockBeacon(
+          [
+            row(k.sign(theirs, 1_000_000_000n, randomScalar())),
+            row(k.sign(MINE, 1_000_000_000n)),
+            row(k.sign(theirs, 1_000_000_000n)),
+          ],
+          [],
+        );
+        const [status] = await createDepositsModule(
+          chainWith().context(),
+        ).status([k.pubkey], { beaconUrl: BEACON_URL });
+        expect(status).toMatchObject({
+          status: 'queued',
+          source: 'chain',
+          withdrawalCredentials: MINE,
+        });
+        expect(status.pendingDeposits.map(p => p.signatureValid)).toEqual([
+          false,
+          true,
+          true,
+        ]);
+      });
+
+      it('fails closed on a malformed queued deposit signature', async () => {
+        const k = key();
+        restore = mockBeacon(
+          [{ ...row(k.sign(MINE, 1_000_000_000n)), signature: '0x1234' as Hex }],
+          [],
+        );
+        expect(
+          (await caught(run({ deposits: [k.sign(MINE, 32_000_000_000n)] })))
+            .code,
+        ).toBe('STATUS_UNAVAILABLE');
+      });
+    });
+
+    describe('interim /v1/state (no signatures to check)', () => {
+      const LOCK = `0x${'11'.repeat(32)}` as Hex;
+      const run = async (pubkey: Hex, reported: Hex, input: object) => {
+        const api = fakeApi({
+          [`/v1/lock/${LOCK}`]: () => ({
+            lock_hash: LOCK,
+            distributed_validators: [{ distributed_public_key: pubkey }],
+          }),
+          [`/v1/state/${LOCK}`]: () => ({
+            [pubkey]: {
+              index: null,
+              status: 'pending_deposit',
+              balance: null,
+              effective_balance: null,
+              withdrawal_credentials: reported,
+              pending_partial_withdrawals: null,
+              pending_partial_deposits: '1',
+            },
+          }),
+        });
+        return await prepareDeposit(chainWith().context(api), {
+          via: { ovm: OVM },
+          from: OWNER,
+          lockHash: LOCK,
+          ...(input as { deposits: Deposit[] }),
+        });
+      };
+
+      it('throws DEPOSIT_CONFLICT for a deposit when the queued credentials are all-zero', async () => {
+        const k = key();
+        expect(
+          await caught(
+            run(k.pubkey, ZERO, { deposits: [k.sign(MINE, 32_000_000_000n)] }),
+          ),
+        ).toMatchObject({
+          code: 'DEPOSIT_CONFLICT',
+          details: { existing: 'queued', existingCredentials: ZERO },
+        });
+      });
+
+      it('warns QUEUED_DEPOSIT_UNCHECKED for a deposit behind unchecked queued deposits with own credentials', async () => {
+        const k = key();
+        const [result] = await run(k.pubkey, MINE, {
+          deposits: [k.sign(MINE, 31_000_000_000n)],
+        });
+        expect(codes(result.checks)).toEqual([
+          'QUEUED_DEPOSIT_UNCHECKED',
+          'DEPOSIT_ALREADY_QUEUED',
+        ]);
+        expect(result.checks[0].severity).toBe('warning');
+      });
+
+      it('throws DEPOSIT_TOP_UP_TARGET_MISSING for a top-up', async () => {
+        const k = key();
+        expect(
+          await caught(run(k.pubkey, MINE, { deposits: [k.topUp], kind: 'topUp' })),
+        ).toMatchObject({ code: 'DEPOSIT_TOP_UP_TARGET_MISSING' });
+      });
+    });
+  });
+
   describe('existence from the Obol API queued deposit signatures', () => {
     const ROUTE = 'POST /v1/validators/hoodi/deposit-status';
     const ZERO = `0x${'00'.repeat(32)}` as Hex;
@@ -678,13 +1003,10 @@ describe('deposits.prepareDeposit', () => {
         details: { reason: 'signatures_pending', pubkey: PUBKEY },
       });
       expect(error.hint).toMatch(/retry/i);
-      // A zero-credential top-up is not let through on a guess either.
+      // A top-up to a queue-only pubkey is refused before the queue is read.
       expect(
         await caught(run([PENDING], { deposits: [TOP_UP], kind: 'topUp' })),
-      ).toMatchObject({
-        code: 'STATUS_UNAVAILABLE',
-        details: { reason: 'signatures_pending' },
-      });
+      ).toMatchObject({ code: 'DEPOSIT_TOP_UP_TARGET_MISSING' });
     });
 
     it('proceeds while later signatures are pending once the credentials are decided', async () => {
@@ -709,14 +1031,10 @@ describe('deposits.prepareDeposit', () => {
       expect(calls).toBe(1);
       expect(codes(result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
       expect(result[0].checks[0].message).toMatch(/^2 deposit/);
-      // An unchecked later deposit with other credentials counts as possibly
-      // valid: conservative, a conflict.
-      expect(
-        await caught(run([decided(THEIRS)], { pendingRetry: { tries: 1 } })),
-      ).toMatchObject({
-        code: 'DEPOSIT_CONFLICT',
-        details: { existingCredentials: THEIRS },
-      });
+      // A later deposit, whatever its credentials, only tops up the
+      // validator the first validly signed one creates.
+      const later = await run([decided(THEIRS)], { pendingRetry: { tries: 1 } });
+      expect(codes(later.result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
       // Decided on other credentials: a conflict, not STATUS_UNAVAILABLE.
       expect(
         await caught(
@@ -773,6 +1091,16 @@ describe('deposits.prepareDeposit', () => {
       });
     });
 
+    it('treats a validly signed zero-credential deposit after a validly signed own one as a top-up', async () => {
+      const { result } = await run([
+        entry([
+          [MINE, true],
+          [ZERO, true],
+        ]),
+      ]);
+      expect(codes(result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+    });
+
     it('on credentialsConflict: DEPOSIT_CONFLICT unless the deposit has the first valid credentials', async () => {
       const mineFirst = entry([
         [MINE, true],
@@ -800,33 +1128,22 @@ describe('deposits.prepareDeposit', () => {
         code: 'DEPOSIT_CONFLICT',
         details: { existingCredentials: THEIRS },
       });
-      // A zero-credential top-up does not care which credentials apply.
-      const topUp = await run(
-        [
-          entry([
-            [MINE, true],
-            [THEIRS, true],
-          ]),
-        ],
-        { deposits: [TOP_UP], kind: 'topUp' },
-      );
-      expect(codes(topUp.result[0].checks)).toEqual([
-        'QUEUED_CREDENTIALS_CONFLICT',
-        'DEPOSIT_ALREADY_QUEUED',
-      ]);
     });
 
-    it('lets a zero-credential top-up follow a validly signed queued deposit', async () => {
-      const { result } = await run(
-        [
-          entry([
-            [MINE, true],
-            [ZERO, false],
-          ]),
-        ],
-        { deposits: [TOP_UP], kind: 'topUp' },
-      );
-      expect(codes(result[0].checks)).toEqual(['DEPOSIT_ALREADY_QUEUED']);
+    it('refuses a top-up even behind a validly signed queued deposit', async () => {
+      expect(
+        await caught(
+          run(
+            [
+              entry([
+                [MINE, true],
+                [ZERO, false],
+              ]),
+            ],
+            { deposits: [TOP_UP], kind: 'topUp' },
+          ),
+        ),
+      ).toMatchObject({ code: 'DEPOSIT_TOP_UP_TARGET_MISSING' });
     });
 
     it('treats a pubkey whose queued deposits are all invalid as having no target', async () => {

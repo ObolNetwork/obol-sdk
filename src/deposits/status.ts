@@ -24,13 +24,16 @@ export interface PendingDeposit {
    */
   withdrawalCredentials?: Hex;
   /**
-   * Obol API, pubkeys only in the queue: whether the deposit's BLS signature
-   * is valid (the beacon chain skips queued deposits with an invalid one
-   * until a valid one creates the validator); null when not checked (a
-   * registered validator's top-up, whose signature does not matter, or while
-   * `signaturesPending`). Absent when the source does not check signatures
-   * (the beacon fallback, the interim `/v1/state/:lockHash`, an older API);
-   * such a deposit is treated as possibly valid.
+   * Pubkeys only in the queue: whether the deposit's BLS signature is valid
+   * (the beacon chain skips queued deposits with an invalid one until a
+   * valid one creates the validator, with that deposit's credentials). From
+   * the Obol API, or checked by the SDK on a beacon node's queue (the first
+   * 16 per pubkey). Null when the API has not checked it (a registered
+   * validator's top-up, whose signature does not matter, or while
+   * `signaturesPending`). Absent when it was not checked (the interim
+   * `/v1/state/:lockHash`, an older API, a registered validator's top-up on
+   * a beacon node, deposits past the limit); such a deposit is treated as
+   * possibly valid.
    */
   signatureValid?: boolean | null;
 }
@@ -44,11 +47,11 @@ export interface DepositStatus {
   validatorIndex?: number;
   /**
    * The registry entry's credentials or, queue only, the ones the validator
-   * will be created with: from the Obol API, the first validly signed queued
-   * deposit's once every deposit before it is checked (so possibly while
-   * `signaturesPending`; absent while an unchecked deposit comes first, or
-   * when none is valid); from a source without signature checks, the first
-   * queued deposit's.
+   * will be created with: when the queued signatures are checked (Obol API,
+   * beacon node), the first validly signed queued deposit's once every
+   * deposit before it is checked (so possibly while `signaturesPending`;
+   * absent while an unchecked deposit comes first, or when none is valid);
+   * from a source without signature checks, the first queued deposit's.
    */
   withdrawalCredentials?: Hex;
   balance?: bigint;
@@ -188,6 +191,16 @@ export const canReadStatus = (
 const ZERO_CREDENTIALS = `0x${'0'.repeat(64)}`;
 
 /**
+ * Queue entries of the interim `/v1/state` route: one entry stands for the
+ * whole queue, so which deposit creates the validator is not known.
+ */
+const queueSummaries = new WeakSet<PendingDeposit>();
+
+/** Whether the queued deposits are reported only as one summary (`/v1/state`). */
+export const isQueueSummary = (status: DepositStatus): boolean =>
+  status.pendingDeposits.some(p => queueSummaries.has(p));
+
+/**
  * Queued deposits that may still create or fund the validator: all but those
  * whose signature the source found invalid (an unchecked one is kept).
  */
@@ -197,20 +210,25 @@ export const possiblyValidDeposits = (
   status.pendingDeposits.filter(p => p.signatureValid !== false);
 
 /**
- * Whether a queued deposit can be the one that creates the validator: not
- * known to be invalid, and either known valid or with non-zero credentials
- * (a zero-credential top-up has no valid signature for a new validator, so
- * an unchecked one is skipped).
+ * Queue only: the queued deposits that may create the validator, in queue
+ * order. The chain creates it from the first validly signed one, with its
+ * credentials (all-zero ones included), so these are every deposit not known
+ * to be invalid up to and including the first known valid one; later ones
+ * only top it up.
  */
-export const canCreateValidator = (p: PendingDeposit): boolean =>
-  p.signatureValid === true ||
-  (p.signatureValid !== false &&
-    p.withdrawalCredentials !== undefined &&
-    p.withdrawalCredentials.toLowerCase() !== ZERO_CREDENTIALS);
+export const creatingCandidates = (status: DepositStatus): PendingDeposit[] => {
+  const candidates: PendingDeposit[] = [];
+  for (const p of status.pendingDeposits) {
+    if (p.signatureValid === false) continue;
+    candidates.push(p);
+    if (p.signatureValid === true) break;
+  }
+  return candidates;
+};
 
 /**
- * Queue only, signatures checked by the source: the first validly signed
- * deposit's credentials when every deposit before it is checked, else
+ * Queue only, signatures checked: the first validly signed deposit's
+ * credentials when every deposit before it is checked, else
  * undefined (none valid, or an unchecked one first: undecided). Later
  * deposits do not matter; the chain applies them as top-ups.
  */
@@ -225,21 +243,19 @@ const decidedCredentials = (
 };
 
 /**
- * The credentials a validator has, or (no registry entry yet) will get. With
- * signature checks (Obol API), the first validly signed queued deposit's once
- * every deposit before it is checked, so possibly while `signaturesPending`;
- * undefined while an unchecked deposit comes first (never guessed). Without
- * them, the first queued deposit that can create it (`canCreateValidator`).
+ * The credentials a validator has, or (no registry entry yet) will get: the
+ * ones every queued deposit that may create it carries
+ * (`creatingCandidates`), whatever the source; undefined when they differ
+ * (undecided, never guessed) or there is none.
  */
 export const effectiveCredentials = (
   status: DepositStatus,
 ): Hex | undefined => {
   if (status.validatorIndex !== undefined) return status.withdrawalCredentials;
-  if (status.pendingDeposits.some(p => p.signatureValid !== undefined)) {
-    return decidedCredentials(status.pendingDeposits);
-  }
-  if (status.signaturesPending === true) return undefined;
-  return status.pendingDeposits.find(canCreateValidator)?.withdrawalCredentials;
+  const found = new Set(
+    creatingCandidates(status).map(p => p.withdrawalCredentials?.toLowerCase()),
+  );
+  return found.size === 1 ? ([...found][0] as Hex | undefined) : undefined;
 };
 
 const credentialsMatch = (
@@ -609,17 +625,21 @@ const apiEntry = (pubkey: Hex, raw: unknown): DepositStatus => {
         `The Obol API reported ${pubkey} as queued without a deposit amount`,
       );
     }
+    // The API reports the sum of the queue and the credentials of the first
+    // validly signed queued deposit (older deployments: the first queued
+    // deposit's), with no signature fields: one unchecked summary entry.
+    const summary: PendingDeposit = {
+      amount: queued,
+      withdrawalCredentials: credentials as Hex,
+    };
+    queueSummaries.add(summary);
     return {
       pubkey,
       status,
       source: 'api',
       beaconStatus,
       withdrawalCredentials: credentials as Hex,
-      // The API reports the credentials of the first queued deposit, which
-      // are the ones the validator will be created with.
-      pendingDeposits: [
-        { amount: queued, withdrawalCredentials: credentials as Hex },
-      ],
+      pendingDeposits: [summary],
     };
   }
   const index = entry.index;
@@ -872,6 +892,22 @@ const beaconEpoch = (value: unknown, what: string): bigint | null => {
   return n === FAR_FUTURE_EPOCH ? null : n;
 };
 
+/**
+ * Sets `signatureValid` on the queued deposits of pubkeys only in a beacon
+ * node's queue (`signatures`: each deposit's, as the node reported it):
+ * `queuedSignatureCheck` in queuedSignatures.ts. Passed in by the deposits
+ * module only, so that status.ts carries no BLS code.
+ */
+export type QueuedSignatureCheck = (
+  queue: Array<{
+    pubkey: Hex;
+    deposits: PendingDeposit[];
+    signatures: Array<Hex | undefined>;
+  }>,
+) => Promise<void>;
+
+const SIGNATURE = /^0x[0-9a-f]{192}$/;
+
 /** Beacon PENDING_PARTIAL_WITHDRAWALS_LIMIT (Electra). */
 export const PENDING_PARTIAL_WITHDRAWALS_LIMIT = 2 ** 27;
 
@@ -892,6 +928,7 @@ const fromBeacon = async (
   ctx: Context,
   pubkeys: Hex[],
   beaconUrl: string,
+  checkSignatures: QueuedSignatureCheck | undefined,
 ): Promise<Map<string, DepositStatus>> => {
   const base = normalizeBeaconUrl(beaconUrl);
   await checkBeaconNode(ctx, base);
@@ -900,6 +937,8 @@ const fromBeacon = async (
   // The pending queue is read before the registry, so a deposit that moves
   // from the queue into the registry between the two requests is still seen.
   const pending = new Map<string, PendingDeposit[]>();
+  // Each queued deposit's signature, by position in its pubkey's list.
+  const signatures = new Map<string, Array<Hex | undefined>>();
   const rows = await beaconData(
     `${base}/eth/v1/beacon/states/head/pending_deposits`,
     'pending_deposits',
@@ -916,12 +955,21 @@ const fromBeacon = async (
       throw unavailable('Malformed beacon node pending_deposits response');
     }
     if (!requested.has(pubkey)) continue;
+    // A node that leaves the signature out leaves the deposit unchecked.
+    const signature = lowerString(row?.signature);
+    if (row?.signature !== undefined && !SIGNATURE.test(signature ?? '')) {
+      throw unavailable('Malformed beacon node pending_deposits response');
+    }
     const entries = pending.get(pubkey) ?? [];
     entries.push({
       amount: gweiString(row?.amount, 'pending deposit amount'),
       withdrawalCredentials: credentials as Hex,
     });
     pending.set(pubkey, entries);
+    signatures.set(pubkey, [
+      ...(signatures.get(pubkey) ?? []),
+      signature as Hex | undefined,
+    ]);
   }
 
   // Pending partial withdrawals, by validator index (gwei amounts).
@@ -999,14 +1047,27 @@ const fromBeacon = async (
       });
     }
   }
-  for (const [pubkey, entries] of pending) {
-    if (found.has(pubkey)) continue;
+  const queueOnly = [...pending].filter(([pubkey]) => !found.has(pubkey));
+  await checkSignatures?.(
+    queueOnly.map(([pubkey, deposits]) => ({
+      pubkey: pubkey as Hex,
+      deposits,
+      signatures: signatures.get(pubkey) ?? [],
+    })),
+  );
+  for (const [pubkey, entries] of queueOnly) {
+    const checked = entries.some(p => p.signatureValid !== undefined);
+    const credentials = checked
+      ? decidedCredentials(entries)
+      : entries[0].withdrawalCredentials;
     found.set(pubkey, {
       pubkey: pubkey as Hex,
       status: 'queued',
       source: 'chain',
       beaconStatus: PENDING_DEPOSIT,
-      withdrawalCredentials: entries[0].withdrawalCredentials,
+      ...(credentials !== undefined
+        ? { withdrawalCredentials: credentials }
+        : {}),
       pendingDeposits: entries,
     });
   }
@@ -1097,7 +1158,9 @@ const fromApiSources = async (
  * API is unavailable (a timeout, a network failure or a 5xx; any other API
  * error is thrown), the beacon node at `beaconUrl` (pending queue read
  * before the registry), after checking that it is a node of the client's
- * chain (genesis validators root) and in sync: `STATUS_UNAVAILABLE` with
+ * chain (genesis validators root) and in sync; with `checkSignatures`, the
+ * signatures of the first queued deposits of pubkeys not yet in the
+ * registry are checked (`signatureValid`). `STATUS_UNAVAILABLE` with
  * `reason` `beacon_wrong_chain`, `beacon_syncing` or `beacon_optimistic`
  * otherwise. Neither source: `API_DISABLED` (API off) or
  * `STATUS_UNAVAILABLE` (API without the route). A malformed, duplicate,
@@ -1108,12 +1171,15 @@ export const getDepositStatus = async (
   ctx: Context,
   pubkeys: readonly string[],
   options: DepositStatusOptions = {},
-): Promise<DepositStatus[]> => (await readStatuses(ctx, pubkeys, options)).list;
+  checkSignatures?: QueuedSignatureCheck,
+): Promise<DepositStatus[]> =>
+  (await readStatuses(ctx, pubkeys, options, checkSignatures)).list;
 
 const readStatuses = async (
   ctx: Context,
   pubkeys: readonly string[],
   options: DepositStatusOptions,
+  checkSignatures: QueuedSignatureCheck | undefined,
 ): Promise<{
   list: DepositStatus[];
   queues?: BeaconQueues;
@@ -1137,7 +1203,7 @@ const readStatuses = async (
         { hint: 'Enable the API, or pass beaconUrl' },
       );
     }
-    found = await fromBeacon(ctx, unique, opts.beaconUrl);
+    found = await fromBeacon(ctx, unique, opts.beaconUrl, checkSignatures);
     queues = queuesOf(found);
     source = 'chain';
   }
@@ -1173,10 +1239,16 @@ export const statusIfAvailable = async (
   ctx: Context,
   pubkeys: readonly string[],
   options: DepositStatusOptions,
+  checkSignatures?: QueuedSignatureCheck,
 ): Promise<Map<string, DepositStatus> | null> => {
   if (!canReadStatus(ctx, options)) return null;
   try {
-    const { list, queues } = await readStatuses(ctx, pubkeys, options);
+    const { list, queues } = await readStatuses(
+      ctx,
+      pubkeys,
+      options,
+      checkSignatures,
+    );
     const map = new Map(list.map(s => [s.pubkey, s]));
     if (queues !== undefined) beaconQueues.set(map, queues);
     return map;

@@ -78,7 +78,7 @@ fallback with `beaconUrl`).
 | Status | Beacon state | Observed by | What `prepareDeposit` does |
 |---|---|---|---|
 | `new` | no registry entry, no pending deposit | `deposits.status` | `deposit`: full checks incl. BLS. `topUp`: `DEPOSIT_TOP_UP_TARGET_MISSING` |
-| `queued` | in `pending_deposits` only (`beaconStatus: "pending_deposit"`) | `deposits.status` (`pendingDeposits[]`, `beaconStatus`) | same credentials: `DEPOSIT_ALREADY_QUEUED` (info); different or unknown credentials: `DEPOSIT_CONFLICT` (`existing: "queued"`) |
+| `queued` | in `pending_deposits` only (`beaconStatus: "pending_deposit"`) | `deposits.status` (`pendingDeposits[]`, `beaconStatus`) | `deposit`: same credentials: `DEPOSIT_ALREADY_QUEUED` (info), plus `QUEUED_DEPOSIT_UNCHECKED` (warning) when the source reports the queue only as a summary (`/v1/state`); different, unknown or all-zero credentials on a queued deposit that may create the validator: `DEPOSIT_CONFLICT` (`existing: "queued"`). `topUp`: `DEPOSIT_TOP_UP_TARGET_MISSING` |
 | `queued` | registry `pending_initialized` / `pending_queued` (the validator exists) | `deposits.status` (`validatorIndex`, `beaconStatus`) | as `active`: `deposit` throws; the rest of a chunked activation deposit is a `topUp` |
 | `active` | `active_ongoing`, `active_exiting`, `active_slashed` | `deposits.status` (`validatorIndex`, `balance`) | `deposit`: error, `DEPOSIT_VALIDATOR_EXISTS` (its credentials point at the expected address) or `DEPOSIT_CONFLICT` (`existing: "validator"`: they do not); `topUp`: allowed, with `TOP_UP_CREDENTIALS_FOREIGN` (warning) when the credentials are not the expected address's |
 | `exited` | `exited_*`, `withdrawal_*` | `deposits.status` | `deposit`: error, as `active`; `topUp`: `TOP_UP_EXITED_VALIDATOR` (warning) |
@@ -86,10 +86,14 @@ fallback with `beaconUrl`).
 Notes:
 
 - **New deposit**: needs a valid BLS signature over the deposit message for the chain and the intended credentials;
-  the first processed deposit for a pubkey fixes the credentials for good. That is why a pending deposit with other
+  the first processed deposit for a pubkey with a valid signature creates the validator with its credentials, for
+  good, all-zero (`0x00`, never withdrawable) ones included. Deposits with an invalid signature before it are
+  dropped; later ones only top it up. That is why a pending deposit that may create the validator with other
   credentials is a conflict, not a warning.
-- **Top-up**: a deposit to an existing (or already queued) pubkey. The signature is not checked by the beacon chain and
-  the credentials are ignored, so Launchpad sends all-zero credentials and signature. Allowed up to 2048 ETH; the
+- **Top-up**: a deposit to a pubkey in the validator registry. The signature is not checked by the beacon chain and
+  the credentials are ignored, so Launchpad sends all-zero credentials and signature. While the pubkey is only in the
+  deposit queue a top-up is still a deposit that must create the validator, so `prepareDeposit` refuses it
+  (3.0.0-rc.16). Allowed up to 2048 ETH; the
   effective balance cap is the validator's (32 ETH for `0x01`, 2048 ETH for `0x02`). A top-up to a pubkey that is not
   known is a deposit with an invalid signature: the ETH is lost.
 - A deposit through the OVM (`OVM.deposit`) also raises `amountOfPrincipalStake`, which decides how withdrawn funds are

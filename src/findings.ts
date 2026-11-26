@@ -73,6 +73,21 @@ export const FINDINGS = {
       'Pass `beaconUrl` or enable the Obol API so it is checked. Acknowledge only after checking each pubkey yourself (a beacon explorer): a deposit to a validator someone else created first goes to their withdrawal address.',
   },
   /**
+   * Deposits. A deposit to a pubkey that is only in the beacon chain's
+   * deposit queue, which the status source reported only as a summary (the
+   * interim `/v1/state` route: one set of credentials for the whole queue).
+   * The chain creates the validator from the first validly signed queued
+   * deposit, with its credentials; this deposit then only tops it up.
+   */
+  QUEUED_DEPOSIT_UNCHECKED: {
+    severity: 'warning',
+    group: 'risk',
+    meaning:
+      'The status source reported the deposits queued for the pubkey only as a summary, so which one creates the validator, and with which withdrawal credentials, is not known.',
+    guidance:
+      'Check the deposits queued for the pubkey yourself (a beacon explorer) before acknowledging: the first validly signed one creates the validator with its withdrawal credentials, and this deposit then only tops it up.',
+  },
+  /**
    * Deposits. Deposits with the same withdrawal credentials are already in
    * the beacon chain's queue for this pubkey. Normal for a deposit made in
    * parts; otherwise it may be a repeat.
@@ -558,6 +573,7 @@ export const UNCHECKED_WARNING_CODES = [
 export const FINDING_CODES_BY_KIND = {
   deposit: [
     'DEPOSIT_EXISTENCE_UNCHECKED',
+    'QUEUED_DEPOSIT_UNCHECKED',
     'DEPOSIT_ALREADY_QUEUED',
     'QUEUED_CREDENTIALS_CONFLICT',
     'TOP_UP_ABOVE_EFFECTIVE_CAP',

@@ -551,11 +551,13 @@ Read `beaconStatus` for anything finer, such as an "exiting" or "slashed" label.
 
 **Which credentials apply** (the _effective credentials_). A registered validator has its own. For a pubkey only in the
 queue, the beacon chain skips queued deposits with an invalid BLS signature until the first valid one creates the
-validator, so the effective credentials are those of the first queued deposit that is not `signatureValid: false` and
-is either `signatureValid: true` or has non-zero credentials (an unchecked zero-credential top-up has no valid
-signature for a new validator). With the Obol API's signature checks they are the first validly signed deposit's once
-every deposit before it is checked, even while later ones are still pending (those are top-ups); while an unchecked
-deposit (`signatureValid: null`) comes before the first valid one there are none (undecided, never guessed).
+validator, with that deposit's credentials (all-zero ones included); later deposits only top it up. So the deposits
+that may create it are every queued deposit not `signatureValid: false`, in queue order, up to and including the
+first `signatureValid: true` one, and the effective credentials are the ones they all carry; when they differ there
+are none (undecided, never guessed). This is the same rule for every source: with signature checks (the Obol API, or
+the SDK on a beacon node's queue) it is usually decided by the first validly signed deposit, even while later ones
+are still pending; without them (the interim `/v1/state` route, an older API) unchecked deposits all count
+(3.0.0-rc.16; before, an unchecked all-zero one was skipped).
 
 `credentialsMatch`: the effective credentials are `0x01` / `0x02` + 11 zero bytes + `expectedWithdrawalAddress`
 (case-insensitive); `null` when there are none yet (`new`, every queued deposit invalid, or undecided while
@@ -627,11 +629,13 @@ null`, and `credentialsConflict` matches its validly signed deposits. A signatur
 /eth/v1/beacon/states/head/pending_partial_withdrawals` (summed per validator index) and `POST
 /eth/v1/beacon/states/head/validators` (with `validator.activation_epoch`, `exit_epoch`, `effective_balance`); the
    pending queue is read before the registry so a deposit moving from the queue to the registry is not missed (2.16
-   `existingDeposits.ts`). A beacon node does not check queued deposit signatures: the signature fields are absent,
-   every queued deposit counts as possibly valid, and a queue-only pubkey's `withdrawalCredentials` are its first
-   queued deposit's. So a queued deposit with an invalid signature and other credentials is reported there as a
-   `DEPOSIT_CONFLICT` by `prepareDeposit` (fails closed), where the API would skip it. The interim `/v1/state` source
-   (2.) has no signature fields either.
+   `existingDeposits.ts`). For a pubkey only in the queue, `deposits.status` and `prepareDeposit` check the BLS
+   signatures of its first 16 queued deposits (in queue order; the deposit domain of
+   the chain's genesis fork, as `assertDepositData`) and set `signatureValid`; `withdrawalCredentials` are then the
+   first validly signed deposit's, as from the API (3.0.0-rc.16). Later deposits, a row without `signature`, and
+   registry validators' top-ups stay unchecked (no `signatureValid`, possibly valid); a malformed `signature` is
+   `STATUS_UNAVAILABLE`. The interim `/v1/state` source (2.) has no signature fields: it reports one deposit's
+   credentials for the whole queue, unchecked.
 
 Without API and `beaconUrl`: `API_DISABLED`. A malformed or incomplete answer (missing pubkey, duplicate result, bad
 credentials, unknown status) or a failed beacon request is `STATUS_UNAVAILABLE`, never a guessed `new`. (2.16)
@@ -675,20 +679,27 @@ Checks:
    - queue only, `signaturesPending` still true after the `pendingRetry` re-reads, and the credentials undecided (an
      unchecked deposit before the first valid one) → `STATUS_UNAVAILABLE` (details `reason: "signatures_pending"`,
      `pubkey`; hint: retry in a slot or two): which deposit creates the validator, and so its credentials, is not
-     known yet, and is never guessed (any `kind`) (new). Once decided, the write proceeds with them; the unchecked
-     later deposits count as possibly valid in the conflict check below (conservative);
+     known yet, and is never guessed (new; a top-up to a queue-only pubkey is refused anyway, below). Once decided,
+     the write proceeds with them;
    - queued deposits with `signatureValid: false` are left out of the rest of this check (they never reach the
      validator); `null` or absent counts as possibly valid;
-   - `credentialsConflict: true` (validly signed queued deposits disagree; the first one applies): `DEPOSIT_CONFLICT`
-     (`existingCredentials` = the first validly signed deposit's) when this deposit's credentials differ from it,
-     else Finding `QUEUED_CREDENTIALS_CONFLICT` (warning, subject the pubkey) (new);
-   - otherwise, a possibly valid pending deposit for the pubkey has different or unknown credentials →
-     `DEPOSIT_CONFLICT` (2.16); a queued deposit with all-zero credentials (a top-up, which cannot create the
-     validator) is not a conflict unless it is `signatureValid: true`;
-   - a top-up with all-zero credentials checks no credentials (it does not fix them), so it gets neither
-     `DEPOSIT_CONFLICT` nor, on `credentialsConflict`, more than the warning;
-   - `kind: "topUp"` and the pubkey is `new`, or only in the queue with every queued deposit `signatureValid: false`
-     → `DEPOSIT_TOP_UP_TARGET_MISSING` (new);
+   - a queued deposit that may create the validator (see "Which credentials apply" in `deposits.status`: not
+     invalid, up to and including the first validly signed one) has different or unknown credentials →
+     `DEPOSIT_CONFLICT` (`existingCredentials` = its credentials) (2.16). All-zero credentials count like any others
+     (3.0.0-rc.16; before, an unchecked one was taken for an unsigned top-up): all-zero (`0x00`) credentials can
+     never be withdrawn from. Deposits after the first validly signed one only top the validator up and are not a
+     conflict; one of them validly signed with other non-zero credentials (`credentialsConflict` on the API) →
+     Finding `QUEUED_CREDENTIALS_CONFLICT` (warning, subject the pubkey) (new). The rule is the same for every source
+     (3.0.0-rc.16; before, the beacon and API paths differed);
+   - the source reported the queue only as a summary (the interim `/v1/state` route: one set of credentials for the
+     whole queue) → Finding `QUEUED_DEPOSIT_UNCHECKED` (warning, group `risk`, not in `UNCHECKED_WARNING_CODES`,
+     subject the pubkey): a deposit behind the reported one may be the one that creates the validator
+     (3.0.0-rc.16);
+   - `kind: "topUp"` and the pubkey is not in the validator registry (`new`, or only in the queue, whatever is
+     queued) → `DEPOSIT_TOP_UP_TARGET_MISSING`, before the queue is looked at (new; 3.0.0-rc.16 for queue-only
+     pubkeys, before: when no queued deposit could create the validator). Until the validator exists the chain
+     treats a top-up as a deposit that must create it, so a top-up without a valid signature is dropped; fund such
+     a validator with a fully signed `kind: "deposit"`;
    - `kind: "deposit"` and the pubkey is already in the validator registry, in any status (`pending_initialized`
      through `withdrawal_done`): always an error (3.0.0-rc.12; before, the warning `DEPOSIT_IS_TOP_UP`). The beacon
      chain applies such a deposit as a top-up and ignores its withdrawal credentials, so the ETH follows the ones
@@ -698,8 +709,7 @@ Checks:
        first with someone else's withdrawal address;
      - they are → `DEPOSIT_VALIDATOR_EXISTS` (`status`, `withdrawalCredentials`). Adding stake to an existing
        validator is `kind: "topUp"`;
-   - `kind: "topUp"` and the credentials the validator has (registry), or will get (the first possibly valid queued
-     deposit), do not point at the expected address → Finding `TOP_UP_CREDENTIALS_FOREIGN` (warning: the top-up can
+   - `kind: "topUp"` and the credentials the validator has do not point at the expected address → Finding `TOP_UP_CREDENTIALS_FOREIGN` (warning: the top-up can
      only be withdrawn to those credentials; a top-up to a validator the caller does not control is a donation, so
      `send` refuses it until acknowledged) (3.0.0-rc.12);
    - same-credential deposits already queued (possibly valid ones) → Finding `DEPOSIT_ALREADY_QUEUED` (info) (2.16);

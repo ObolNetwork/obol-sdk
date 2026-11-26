@@ -30,7 +30,9 @@ import { credentialsPointAt, credentialsPrefix } from '../ovm/credentials.js';
 import { readOvmCore, requireRole, requireSender } from '../ovm/read.js';
 import { requireObolOvm, getOvmProvenance } from '../ovm/provenance.js';
 import {
+  creatingCandidates,
   effectiveCredentials,
+  isQueueSummary,
   isExiting,
   possiblyValidDeposits,
   StatusSourceFields,
@@ -39,12 +41,13 @@ import {
   type DepositStatus,
 } from './status.js';
 import { DepositSchema, assertDepositData } from './assertDepositData.js';
+import { queuedSignatureCheck } from './queuedSignatures.js';
 
 /** Deposits per batch deposit transaction. */
 export const BATCH_DEPOSIT_SIZE = 500;
 /** Effective balance cap for 0x00 / 0x01 credentials. */
 const EFFECTIVE_CAP_0X01 = 32n * ETH;
-const ZERO_CREDENTIALS = `0x${'0'.repeat(64)}`;
+const ZERO_CREDENTIALS_RE = /^0x0{64}$/i;
 
 export const PrepareDepositInputSchema = Type.Object(
   {
@@ -88,7 +91,6 @@ interface ExistenceContext {
   deposit: Deposit;
   /** The address the deposit's credentials were checked against (the OVM, or `expectedWithdrawalAddress`). */
   expected: Address;
-  kind: DepositKind;
   status: DepositStatus;
   pubkey: Hex;
   credentials: string;
@@ -117,50 +119,50 @@ const conflictError = (
     },
   );
 
-/** Validly signed queued deposits disagree: the first one applies. */
-const checkConflictingQueue = (
-  c: ExistenceContext,
-  checkCredentials: boolean,
-): void => {
-  const applies = effectiveCredentials(c.status);
-  if (
-    checkCredentials &&
-    (applies === undefined || applies.toLowerCase() !== c.credentials)
-  ) {
-    throw conflictError(c, applies);
-  }
-  c.findings.push(
-    finding(
-      'QUEUED_CREDENTIALS_CONFLICT',
-      `Validly signed deposits queued for ${c.pubkey} carry different withdrawal credentials; the first one (${applies ?? 'unknown'}) applies`,
-      {
-        hint: 'Find out who queued the other deposits before adding to this validator',
-        subject: c.subject,
-        details: c.details,
-      },
-    ),
+/**
+ * The queued deposits that may create the validator (`creatingCandidates`)
+ * must all carry this deposit's credentials: the first validly signed one
+ * creates it with its own, all-zero ones included (nobody can withdraw from
+ * those). Later deposits only top it up; validly signed ones with other
+ * (non-zero) credentials are a warning.
+ */
+const checkQueue = (c: ExistenceContext): void => {
+  const candidates = creatingCandidates(c.status);
+  const other = candidates.find(
+    p => p.withdrawalCredentials?.toLowerCase() !== c.credentials,
   );
-};
-
-/** No queued deposit may carry other (or unknown) credentials. */
-const checkAgreeingQueue = (
-  c: ExistenceContext,
-  checkCredentials: boolean,
-): void => {
-  const other = c.queued.find(p => {
-    if (p.withdrawalCredentials === undefined) return true;
-    const existing = p.withdrawalCredentials.toLowerCase();
-    return (
-      existing !== c.credentials &&
-      (existing !== ZERO_CREDENTIALS || p.signatureValid === true)
+  if (other !== undefined) throw conflictError(c, other.withdrawalCredentials);
+  const later = c.status.pendingDeposits.slice(
+    c.status.pendingDeposits.indexOf(candidates[candidates.length - 1]) + 1,
+  );
+  if (
+    candidates.length > 0 &&
+    later.some(
+      p =>
+        p.signatureValid === true &&
+        p.withdrawalCredentials !== undefined &&
+        !ZERO_CREDENTIALS_RE.test(p.withdrawalCredentials) &&
+        p.withdrawalCredentials.toLowerCase() !== c.credentials,
+    )
+  ) {
+    c.findings.push(
+      finding(
+        'QUEUED_CREDENTIALS_CONFLICT',
+        `Validly signed deposits queued for ${c.pubkey} carry different withdrawal credentials; the first one (${c.credentials}) applies`,
+        {
+          hint: 'Find out who queued the other deposits before adding to this validator',
+          subject: c.subject,
+          details: c.details,
+        },
+      ),
     );
-  });
-  if (checkCredentials && other !== undefined) {
-    throw conflictError(c, other.withdrawalCredentials);
   }
 };
 
-/** Check 5 for a pubkey that is not registered yet but has pending deposits. */
+/**
+ * Check 5, `kind: 'deposit'` for a pubkey that is not registered yet but
+ * has pending deposits (a top-up to it is refused before this).
+ */
 const pendingDepositChecks = (c: ExistenceContext): void => {
   if (
     c.status.signaturesPending === true &&
@@ -178,16 +180,22 @@ const pendingDepositChecks = (c: ExistenceContext): void => {
       },
     );
   }
-  // The first processed deposit with a valid signature fixes the
-  // credentials. A top-up with all-zero credentials does not care which
-  // ones they are, and an unchecked queued one (no valid signature for a
-  // new validator) does not fix them.
-  const checkCredentials =
-    c.kind === 'deposit' || c.credentials !== ZERO_CREDENTIALS;
-  if (c.status.credentialsConflict === true) {
-    checkConflictingQueue(c, checkCredentials);
-  } else {
-    checkAgreeingQueue(c, checkCredentials);
+  checkQueue(c);
+  // The interim /v1/state route reports the whole queue as one entry: a
+  // deposit behind the one it reports may be the one that creates the
+  // validator.
+  if (isQueueSummary(c.status)) {
+    c.findings.push(
+      finding(
+        'QUEUED_DEPOSIT_UNCHECKED',
+        `The Obol API reported the deposits queued for ${c.pubkey} only as a summary (/v1/state), so which one creates the validator, and with which withdrawal credentials, is not known`,
+        {
+          hint: 'Check the deposits queued for this pubkey on a beacon explorer before acknowledging: the first validly signed one decides the withdrawal credentials',
+          subject: c.subject,
+          details: c.details,
+        },
+      ),
+    );
   }
   if (c.queued.length > 0) {
     c.findings.push(
@@ -251,8 +259,8 @@ const registeredDepositError = (c: ExistenceContext): ObolError => {
 };
 
 /**
- * Check 5, `kind: 'topUp'`: the credentials the validator has (or will get)
- * do not point at the expected address, so the top-up funds someone else's
+ * Check 5, `kind: 'topUp'` (registry validators only): the credentials the
+ * validator has do not point at the expected address, so the top-up funds someone else's
  * withdrawal address. A warning: `send` refuses it until acknowledged.
  */
 const foreignTopUpCheck = (c: ExistenceContext): void => {
@@ -328,7 +336,6 @@ const existenceChecks = (
   const c: ExistenceContext = {
     deposit,
     expected,
-    kind,
     status,
     pubkey,
     credentials: deposit.withdrawalCredentials.toLowerCase(),
@@ -339,23 +346,24 @@ const existenceChecks = (
     subject: { pubkey },
     findings,
   };
-  const { queued, details, subject } = c;
+  const { details, subject } = c;
 
-  if (!registered && status.pendingDeposits.length > 0) {
-    pendingDepositChecks(c);
-  }
-  if (
-    kind === 'topUp' &&
-    (status.status === 'new' || (!registered && queued.length === 0))
-  ) {
+  // A top-up needs a validator in the registry. Until then the beacon chain
+  // treats it as a deposit that must create the validator: it is dropped
+  // unless validly signed, and whichever queued deposit is the first
+  // validly signed one decides the credentials. So the queue is not read.
+  if (kind === 'topUp' && !registered) {
     throw new ObolError(
       'DEPOSIT_TOP_UP_TARGET_MISSING',
-      `Top-up for ${pubkey}, which has no validator and no validly signed pending deposit`,
+      `Top-up for ${pubkey}, which is not in the validator registry yet`,
       {
-        hint: 'Check the pubkey; send the full deposit data first',
+        hint: 'Check the pubkey. To fund a validator that does not exist yet, send a fully signed deposit with the withdrawal credentials of the cluster (kind "deposit")',
         details,
       },
     );
+  }
+  if (status.pendingDeposits.length > 0 && !registered) {
+    pendingDepositChecks(c);
   }
   if (kind === 'deposit' && registered) throw registeredDepositError(c);
   if (kind === 'topUp') foreignTopUpCheck(c);
@@ -396,6 +404,7 @@ const existenceChecks = (
  *    DEPOSIT_TOP_UP_TARGET_MISSING, STATUS_UNAVAILABLE `signatures_pending`
  *    while the credentials are undecided, and the findings
  *    DEPOSIT_ALREADY_QUEUED, QUEUED_CREDENTIALS_CONFLICT,
+ *    QUEUED_DEPOSIT_UNCHECKED,
  *    TOP_UP_CREDENTIALS_FOREIGN, TOP_UP_EXITED_VALIDATOR,
  *    TOP_UP_ABOVE_EFFECTIVE_CAP; or the warning DEPOSIT_EXISTENCE_UNCHECKED
  *    without a status source;
@@ -473,7 +482,12 @@ export const prepareDeposit = async (
   // 5. Existence. Findings about one deposit go only on its transaction.
   const perDeposit: Array<FindingsOf<'deposit'>> = deposits.map(() => []);
   const pubkeys = deposits.map(d => d.pubkey.toLowerCase() as Hex);
-  const statuses = await statusIfAvailable(ctx, pubkeys, statusSourceOf(args));
+  const statuses = await statusIfAvailable(
+    ctx,
+    pubkeys,
+    statusSourceOf(args),
+    queuedSignatureCheck(ctx.chain.id),
+  );
   if (statuses === null) {
     checks.push(
       finding(

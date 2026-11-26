@@ -46,19 +46,36 @@ const typedData = (
   message: { [field]: value },
 });
 
-/** `CreatorConfigHash { creator_config_hash }`, signed by the creator. */
+/**
+ * `CreatorConfigHash { creator_config_hash }`, signed by the creator. The
+ * hash is put in its canonical form (lower-case hex), the one Charon signs
+ * and checks; hashes are compared case-insensitively elsewhere.
+ */
 export const creatorConfigHashTypedData = (
   configHash: string,
   chainId: number,
 ): ClusterTypedData =>
-  typedData(chainId, 'CreatorConfigHash', 'creator_config_hash', configHash);
+  typedData(
+    chainId,
+    'CreatorConfigHash',
+    'creator_config_hash',
+    configHash.toLowerCase(),
+  );
 
-/** `OperatorConfigHash { operator_config_hash }`, signed by each operator. */
+/**
+ * `OperatorConfigHash { operator_config_hash }`, signed by each operator;
+ * the hash lower-cased as for `creatorConfigHashTypedData`.
+ */
 export const operatorConfigHashTypedData = (
   configHash: string,
   chainId: number,
 ): ClusterTypedData =>
-  typedData(chainId, 'OperatorConfigHash', 'operator_config_hash', configHash);
+  typedData(
+    chainId,
+    'OperatorConfigHash',
+    'operator_config_hash',
+    configHash.toLowerCase(),
+  );
 
 /** `ENR { enr }`, signed by each operator. */
 export const enrTypedData = (enr: string, chainId: number): ClusterTypedData =>

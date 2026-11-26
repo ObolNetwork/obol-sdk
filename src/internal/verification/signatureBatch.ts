@@ -66,3 +66,39 @@ export const firstInvalidSignature = async <PublicKey>(
   }
   return -1;
 };
+
+/**
+ * Whether each item's signature is valid on its own: chunks that pass the
+ * backend's batch are all valid; the items of a chunk that fails are checked
+ * one at a time.
+ */
+export const signatureValidity = async <PublicKey>(
+  bls: BlsBackend<PublicKey>,
+  items: Array<SignatureItem<PublicKey>>,
+  tick: Tick,
+  batchSize = BATCH_SIZE,
+): Promise<boolean[]> => {
+  const valid: boolean[] = [];
+  for (let start = 0; start < items.length; start += batchSize) {
+    const chunk = items.slice(start, start + batchSize);
+    let all = false;
+    try {
+      const batch = bls.createBatch();
+      for (const item of chunk) {
+        if (item.publicKey === null) throw new Error('public key malformed');
+        batch.add(item.publicKey, item.message, item.signature);
+        await tick();
+      }
+      all = batch.verify();
+    } catch (error) {
+      rethrowAborted(error);
+      all = false;
+    }
+    await tick();
+    for (const item of chunk) {
+      valid.push(all || verifyOne(bls, item));
+      if (!all) await tick();
+    }
+  }
+  return valid;
+};
