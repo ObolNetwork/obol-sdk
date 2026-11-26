@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
-#### Unreleased (v3.0.0-rc.16)
+#### [v3.0.0-rc.16](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.15...v3.0.0-rc.16)
 
 **Breaking**
 
