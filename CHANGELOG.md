@@ -646,6 +646,12 @@ provider)`. `viem@^2` is a peer dependency.
 - Batched BLS checks (lock deposit and builder registration signatures, deposit data) require each signature to be
   valid on its own; batches are checked with random weights. The same fix ships in 2.15.1.
 
+#### [v2.16.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.16.1...v2.16.2)
+
+> 25 November 2026
+
+- fix: payload schemas are precompiled at build time (ajv standalone code), so the SDK no longer generates code at run time and apps bundling it can ship a Content-Security-Policy without `'unsafe-eval'`. Accepted inputs, defaults and error objects are unchanged. ajv moves to devDependencies; ajv-formats and ajv-keywords are dropped
+
 #### [v2.15.2](https://github.com/ObolNetwork/obol-sdk/compare/v2.15.1...v2.15.2)
 
 > 28 October 2026
