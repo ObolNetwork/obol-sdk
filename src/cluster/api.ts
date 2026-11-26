@@ -1,7 +1,7 @@
 /**
  * Cluster operations that talk to the Obol API: get, getLock, create, accept.
  */
-import { ENR } from '@chainsafe/enr';
+import { decodeEnrText } from '../internal/enr.js';
 import { Type } from '@sinclair/typebox';
 import type { Hex } from 'viem';
 import type { ObolApi } from '../api.js';
@@ -291,7 +291,7 @@ export const accept = async (
 ): Promise<ClusterDefinition> => {
   const args = decode(AcceptSchema, input);
   try {
-    ENR.decodeTxt(args.enr);
+    decodeEnrText(args.enr);
   } catch {
     throw invalid('enr', 'must be a valid ENR');
   }

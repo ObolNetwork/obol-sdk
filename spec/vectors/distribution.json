@@ -332,6 +332,7 @@
         }
       ],
       "preview": {
+        "empty": false,
         "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
@@ -364,7 +365,8 @@
             "distributorReward": "0",
             "warehouseBalance": "5",
             "splitMainBalance": "10",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "20160000000000000011",
             "fromThisDistribution": "20159999999999999998",
             "alreadyWaiting": "15"
           },
@@ -376,7 +378,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "19759999999999999997",
             "fromThisDistribution": "19759999999999999998",
             "alreadyWaiting": "0"
           },
@@ -388,7 +391,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "79999999999999998",
             "fromThisDistribution": "79999999999999999",
             "alreadyWaiting": "0"
           }
@@ -452,6 +456,7 @@
         }
       ],
       "preview": {
+        "empty": false,
         "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
@@ -471,7 +476,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "0",
             "fromThisDistribution": "0",
             "alreadyWaiting": "0"
           },
@@ -483,7 +489,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "1000000000000000000",
             "fromThisDistribution": "1000000000000000000",
             "alreadyWaiting": "0"
           }
@@ -578,6 +585,7 @@
         }
       ],
       "preview": {
+        "empty": false,
         "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
@@ -613,7 +621,8 @@
             "distributorReward": "0",
             "warehouseBalance": "100",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "99",
             "fromThisDistribution": "0",
             "alreadyWaiting": "100"
           },
@@ -625,8 +634,9 @@
             "distributorReward": "0",
             "warehouseBalance": "1",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
             "skipReason": "nothing",
+            "toWallet": "0",
             "fromThisDistribution": "0",
             "alreadyWaiting": "1"
           },
@@ -638,7 +648,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "0",
             "fromThisDistribution": "0",
             "alreadyWaiting": "0"
           }
@@ -717,6 +728,7 @@
         }
       ],
       "preview": {
+        "empty": false,
         "minWithdraw": "1",
         "splits": [
           {
@@ -735,7 +747,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "0",
             "fromThisDistribution": "500",
             "alreadyWaiting": "0"
           },
@@ -747,7 +760,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "0",
             "fromThisDistribution": "490",
             "alreadyWaiting": "0"
           },
@@ -759,7 +773,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "0",
             "fromThisDistribution": "10",
             "alreadyWaiting": "0"
           }
@@ -875,6 +890,7 @@
         }
       ],
       "preview": {
+        "empty": false,
         "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
@@ -907,8 +923,9 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
             "skipReason": "paused",
+            "toWallet": "0",
             "fromThisDistribution": "20159999999999999998",
             "alreadyWaiting": "0"
           },
@@ -920,7 +937,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "0",
             "fromThisDistribution": "19759999999999999998",
             "alreadyWaiting": "0"
           },
@@ -932,7 +950,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": false,
+            "inWithdrawalSet": false,
+            "toWallet": "0",
             "fromThisDistribution": "79999999999999999",
             "alreadyWaiting": "0"
           },
@@ -944,7 +963,8 @@
             "distributorReward": "0",
             "warehouseBalance": "50",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "49",
             "fromThisDistribution": "0",
             "alreadyWaiting": "50"
           }
@@ -1059,6 +1079,7 @@
         }
       ],
       "preview": {
+        "empty": false,
         "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
@@ -1092,7 +1113,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "4999999999999999998",
             "fromThisDistribution": "4999999999999999999",
             "alreadyWaiting": "0"
           },
@@ -1104,7 +1126,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "4899999999999999998",
             "fromThisDistribution": "4899999999999999999",
             "alreadyWaiting": "0"
           },
@@ -1116,7 +1139,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "99999999999999998",
             "fromThisDistribution": "99999999999999999",
             "alreadyWaiting": "0"
           }
@@ -1514,6 +1538,7 @@
         }
       ],
       "preview": {
+        "empty": false,
         "minWithdraw": "1",
         "ovm": {
           "address": "0x8901234567890123456789012345678901234567",
@@ -1546,7 +1571,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "20159999999999999997",
             "fromThisDistribution": "20159999999999999998",
             "alreadyWaiting": "0"
           },
@@ -1558,7 +1584,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "19759999999999999997",
             "fromThisDistribution": "19759999999999999998",
             "alreadyWaiting": "0"
           },
@@ -1570,7 +1597,8 @@
             "distributorReward": "0",
             "warehouseBalance": "0",
             "splitMainBalance": "0",
-            "withdraw": true,
+            "inWithdrawalSet": true,
+            "toWallet": "79999999999999998",
             "fromThisDistribution": "79999999999999999",
             "alreadyWaiting": "0"
           }

@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [v3.0.0-rc.15](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.14...v3.0.0-rc.15)
+
+> 26 November 2026
+
+Breaking (distribution preview), with a wider top-up check and fewer dependencies.
+
+**Breaking**
+
+- `DistributeAllPreview` recipients: `withdraw` is renamed `inWithdrawalSet`. It only says the address is in the
+  withdrawal set (`recipients`, by default every split recipient), and was misread as "this recipient is withdrawn".
+
+**Added**
+
+- `DistributeAllPreview.empty`: `true` exactly when every leg is left out, so `prepareDistributeAll` would throw
+  `NOTHING_TO_DISTRIBUTE`. Callers no longer have to re-derive that rule from the legs.
+- Recipient `toWallet`: the ETH the transaction sends to the recipient's wallet (direct OVM payout plus each included
+  withdrawal leg, less the 1 wei each leaves; 0 when nothing reaches it). `fromThisDistribution` and `alreadyWaiting`
+  stay for display; rc.4 removed rc.3's `toWallet` because it was read as what the distribution earned, and it is
+  back documented as the wallet amount. `experimental.simulate` compares each recipient's ETH balance change with it.
+
+**Changed**
+
+- `deposits.prepareDeposit` with `kind: 'topUp'` also reports `TOP_UP_EXITED_VALIDATOR` (warning) for a validator
+  whose exit has started but that is still `active` (`active_exiting`, `active_slashed`: an exit epoch is set). The
+  chain postpones such a deposit until the validator is withdrawable and then sweeps it, so it is never staked. The
+  message says "is exiting (<beacon status>)"; the code, severity and acknowledgement are unchanged.
+  `TOP_UP_ABOVE_EFFECTIVE_CAP` is no longer reported for those validators.
+
+**Docs**
+
+- `spec/operations.md` "deposits.status": `active` follows the beacon API and includes `active_exiting` and
+  `active_slashed` (still in committees until the exit epoch); whether a validator's exit has started is read from
+  `exitEpoch` or `beaconStatus`, which is what gates exit and withdrawal requests and top-ups.
+
+**Dependencies**
+
+- The only runtime dependency is `@sinclair/typebox` (exact version, no dependencies of its own; its types are part of
+  the public declarations), next to the `viem` peer. `@chainsafe/ssz` (0.14.3), `@chainsafe/persistent-merkle-tree`
+  and `@chainsafe/as-sha256` are bundled and pinned, so nothing resolves under a floating range in an app's
+  lockfile. Tree-shaking leaves out as-sha256's WebAssembly, which an app bundling the external ssz instantiated on
+  load (a CSP then needed `'wasm-unsafe-eval'`).
+- `@chainsafe/enr` and its libp2p / multiformats tree (13 packages, about 11% of the full client bundle) are replaced
+  by a small EIP-778 decoder (`src/internal/enr.ts`): base64url, strict RLP, the v4 signature check over the bundled
+  secp256k1, and the node id. `parseEnr` / `isValidEnr` are unchanged. It accepts and refuses exactly what
+  `@chainsafe/enr` 6.x does on every fixture ENR, the EIP-778 example and several thousand mutations of them
+  (`test/internal/enr.spec.ts`). This also removes the bundled `@libp2p/crypto` and its advisory
+  (GHSA-rvfr-cqwq-rc4j, which the SDK never reached).
+
 #### [v3.0.0-rc.14](https://github.com/ObolNetwork/obol-sdk/compare/v3.0.0-rc.13...v3.0.0-rc.14)
 
 > 25 November 2026

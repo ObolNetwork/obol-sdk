@@ -1,8 +1,10 @@
 /**
  * What the built package imports at run time must be installable by a
  * consumer: a dependency or a peer dependency. A bundled package
- * (`noExternal` in tsup.config.ts: @chainsafe/enr, @noble/*) must not be
- * imported by any build, which is what lets it live in devDependencies.
+ * (`noExternal` in tsup.config.ts: @noble/*, @chainsafe/ssz and its merkle
+ * tree) must not be imported by any build, which is what lets it live in
+ * devDependencies. The goal is one tarball: apart from the viem peer, a
+ * consumer installs only @sinclair/typebox (exact, no dependencies).
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
@@ -70,22 +72,47 @@ describeDist('packaging: run-time imports of the built package', () => {
       const packages = imported.filter(name => !builtin(name));
       expect(packages.filter(name => !installable.has(name))).toEqual([]);
       // The scan sees the real imports.
-      expect(packages).toEqual(
-        expect.arrayContaining(['viem', '@chainsafe/ssz']),
-      );
+      expect(packages).toContain('viem');
+      // Nothing but viem, typebox and (Node-only blst entry) the optional
+      // @chainsafe/blst peer is imported at run time.
+      expect(
+        packages.filter(
+          n =>
+            n !== 'viem' &&
+            n !== '@sinclair/typebox' &&
+            n !== '@chainsafe/blst',
+        ),
+      ).toEqual([]);
       if (build === 'browser') expect(imported.filter(builtin)).toEqual([]);
     },
     60_000,
   );
 
   it('bundled packages are devDependencies, not dependencies', () => {
-    for (const name of ['@chainsafe/enr', '@noble/curves']) {
+    for (const name of [
+      '@noble/curves',
+      '@chainsafe/ssz',
+      '@chainsafe/persistent-merkle-tree',
+      '@chainsafe/as-sha256',
+    ]) {
       expect(Object.keys(pkg.dependencies)).not.toContain(name);
       expect(Object.keys(pkg.devDependencies)).toContain(name);
     }
-    expect(Object.keys(pkg.dependencies).sort()).toEqual([
-      '@chainsafe/ssz',
-      '@sinclair/typebox',
-    ]);
+    expect(Object.keys(pkg.dependencies)).toEqual(['@sinclair/typebox']);
+    expect(pkg.dependencies['@sinclair/typebox']).toMatch(/^\d+\.\d+\.\d+$/);
   });
+
+  it.each(['esm', 'browser'])(
+    'dist/%s carries no WebAssembly (as-sha256 stays tree-shaken out)',
+    build => {
+      const files = jsFiles(join('dist', build, 'src'));
+      expect(files.length).toBeGreaterThan(0);
+      for (const file of files) {
+        expect({ file, wasm: /WebAssembly\./.test(readFileSync(file, 'utf8')) }).toEqual({
+          file,
+          wasm: false,
+        });
+      }
+    },
+  );
 });

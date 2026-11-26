@@ -600,6 +600,7 @@ interface DistributeAllInput {
 
 // @public (undocumented)
 interface DistributeAllPreview {
+    empty: boolean;
     minWithdraw: bigint;
     // (undocumented)
     ovm?: {
@@ -620,8 +621,9 @@ interface DistributeAllPreview {
         distributorReward: bigint;
         warehouseBalance: bigint;
         splitMainBalance: bigint;
-        withdraw: boolean;
+        inWithdrawalSet: boolean;
         skipReason?: SkipReason;
+        toWallet: bigint;
         fromThisDistribution: bigint;
         alreadyWaiting: bigint;
     }>;
@@ -886,8 +888,8 @@ export const FINDINGS: {
     readonly TOP_UP_EXITED_VALIDATOR: {
         readonly severity: "warning";
         readonly group: "risk";
-        readonly meaning: "Top-up to an exited validator: the ETH is swept back to its withdrawal address, not staked.";
-        readonly guidance: "Do not top up an exited validator. Acknowledging sends ETH on a round trip to the withdrawal address.";
+        readonly meaning: "Top-up to a validator that has exited or is exiting: the ETH is swept back to its withdrawal address, not staked.";
+        readonly guidance: "Do not top up a validator whose exit has started. Acknowledging sends ETH on a round trip to the withdrawal address.";
     };
     readonly TOP_UP_CREDENTIALS_FOREIGN: {
         readonly severity: "warning";

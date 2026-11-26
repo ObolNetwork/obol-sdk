@@ -518,6 +518,37 @@ describe('deposits.prepareDeposit', () => {
       expect(codes(result.checks)).toEqual(['TOP_UP_EXITED_VALIDATOR']);
     });
 
+    it.each(['active_exiting', 'active_slashed'])(
+      'warns TOP_UP_EXITED_VALIDATOR for an %s validator (still active until its exit epoch)',
+      async beaconStatus => {
+        restore = mockBeacon(
+          [],
+          [
+            registryRow(PUBKEY, beaconStatus, credentials('01', OVM), 32n * ETH, {
+              exitEpoch: '400000',
+            }),
+          ],
+        );
+        const [result] = await run({ deposits: [TOP_UP], kind: 'topUp' });
+        expect(result.checks).toEqual([
+          expect.objectContaining({
+            code: 'TOP_UP_EXITED_VALIDATOR',
+            severity: 'warning',
+            message: expect.stringContaining(`is exiting (${beaconStatus})`),
+          }),
+        ]);
+      },
+    );
+
+    it('does not warn TOP_UP_EXITED_VALIDATOR for an active_ongoing validator', async () => {
+      restore = mockBeacon(
+        [],
+        [registryRow(PUBKEY, 'active_ongoing', credentials('01', OVM), 31n * ETH)],
+      );
+      const [result] = await run({ deposits: [TOP_UP], kind: 'topUp' });
+      expect(codes(result.checks)).not.toContain('TOP_UP_EXITED_VALIDATOR');
+    });
+
     it('warns TOP_UP_ABOVE_EFFECTIVE_CAP for a 0x01 validator going over 32 ETH', async () => {
       restore = mockBeacon(
         [

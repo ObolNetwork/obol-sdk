@@ -53,8 +53,17 @@ const nodeEntries: Record<string, string> = {
   'blst/index': 'src/blst/index.ts',
 };
 
-// Bundle ESM-only deps and @noble/curves (avoids ESM resolution issues in CJS consumers)
-const noExternal = ['@chainsafe/enr', '@noble/curves', '@noble/hashes'];
+// Bundled, so consumers install only this package, @sinclair/typebox (exact,
+// no dependencies) and the viem peer: nothing resolves under a floating range
+// in their lockfile. Tree-shaking also leaves out @chainsafe/as-sha256's
+// WebAssembly, which an app bundling an external ssz instantiates on load.
+const noExternal = [
+  '@noble/curves',
+  '@noble/hashes',
+  '@chainsafe/ssz',
+  '@chainsafe/persistent-merkle-tree',
+  '@chainsafe/as-sha256',
+];
 
 export default defineConfig([
   // Node.js CJS build
@@ -66,7 +75,7 @@ export default defineConfig([
     splitting: true,
     sourcemap: true,
     noExternal,
-    external: ['@chainsafe/blst', '@chainsafe/ssz', 'viem'],
+    external: ['@chainsafe/blst', 'viem'],
     define,
     esbuildOptions(options) {
       options.platform = 'node';
@@ -82,8 +91,13 @@ export default defineConfig([
     sourcemap: true,
     outExtension: () => ({ js: '.js' }), // Use .js instead of .mjs
     noExternal,
-    external: ['@chainsafe/blst', '@chainsafe/ssz', 'viem'],
+    external: ['@chainsafe/blst', 'viem'],
     define,
+    // The bundled CommonJS @noble/hashes 1.x (under the 0.14 merkle tree)
+    // requires node:crypto; give the ESM output a real `require` for it.
+    banner: {
+      js: "import { createRequire as __obolCreateRequire } from 'node:module';\nconst require = __obolCreateRequire(import.meta.url);",
+    },
     esbuildOptions(options) {
       options.platform = 'node';
     },
@@ -99,7 +113,7 @@ export default defineConfig([
     sourcemap: true,
     outExtension: () => ({ js: '.js' }),
     noExternal,
-    external: ['@chainsafe/ssz', '@sinclair/typebox', 'viem'],
+    external: ['@sinclair/typebox', 'viem'],
     define,
     esbuildOptions(options) {
       options.platform = 'browser';

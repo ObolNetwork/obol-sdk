@@ -111,16 +111,18 @@ export const FINDINGS = {
       'Deposit at most up to 32 ETH, or switch the validator to 0x02 first. Acknowledge if the round trip of the excess is acceptable.',
   },
   /**
-   * Deposits. A top-up to a validator that has exited: the ETH is not staked
-   * and is swept back to the withdrawal address.
+   * Deposits. A top-up to a validator whose exit has started (exit epoch set:
+   * `active_exiting`, `active_slashed`, or exited): the chain holds the
+   * deposit until the validator is withdrawable, then sweeps it back to the
+   * withdrawal address, so the ETH is never staked.
    */
   TOP_UP_EXITED_VALIDATOR: {
     severity: 'warning',
     group: 'risk',
     meaning:
-      'Top-up to an exited validator: the ETH is swept back to its withdrawal address, not staked.',
+      'Top-up to a validator that has exited or is exiting: the ETH is swept back to its withdrawal address, not staked.',
     guidance:
-      'Do not top up an exited validator. Acknowledging sends ETH on a round trip to the withdrawal address.',
+      'Do not top up a validator whose exit has started. Acknowledging sends ETH on a round trip to the withdrawal address.',
   },
   /**
    * Deposits. A top-up to a validator whose withdrawal credentials are not

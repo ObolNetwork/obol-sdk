@@ -1,10 +1,15 @@
 /**
  * Ethereum Node Records (EIP-778) as Charon writes them (`enr:-…`): parsing
- * and validation over the bundled `@chainsafe/enr`. The 2.x root export
- * `ENR` (the `@chainsafe/enr` class) is replaced by these two functions.
+ * and validation (src/internal/enr.ts). The 2.x root export `ENR` (the
+ * `@chainsafe/enr` class) is replaced by these two functions.
  */
-import { ENR } from '@chainsafe/enr';
 import { bytesToHex, type Hex } from 'viem';
+import {
+  decodeEnrText,
+  enrIp,
+  enrPort,
+  type DecodedEnr,
+} from '../internal/enr.js';
 import { invalid } from '../schema.js';
 
 export interface ParsedEnr {
@@ -18,10 +23,10 @@ export interface ParsedEnr {
   udp?: number;
 }
 
-const decodeEnr = (enr: unknown): ENR | null => {
+const decodeEnr = (enr: unknown): DecodedEnr | null => {
   if (typeof enr !== 'string' || !enr.startsWith('enr:')) return null;
   try {
-    return ENR.decodeTxt(enr);
+    return decodeEnrText(enr);
   } catch {
     return null;
   }
@@ -37,14 +42,13 @@ const decodeEnr = (enr: unknown): ENR | null => {
 export const parseEnr = (enr: string): ParsedEnr => {
   const record = decodeEnr(enr);
   if (record === null) throw invalid('enr', 'must be a valid ENR');
-  const { ip, tcp, udp } = record;
-  const nodeId = record.nodeId.startsWith('0x')
-    ? record.nodeId
-    : `0x${record.nodeId}`;
+  const ip = enrIp(record);
+  const tcp = enrPort(record, 'tcp');
+  const udp = enrPort(record, 'udp');
   return {
     publicKey: bytesToHex(record.publicKey),
-    nodeId: nodeId.toLowerCase() as Hex,
-    seq: BigInt(record.seq),
+    nodeId: bytesToHex(record.nodeId),
+    seq: record.seq,
     ...(ip !== undefined ? { ip } : {}),
     ...(tcp !== undefined ? { tcp } : {}),
     ...(udp !== undefined ? { udp } : {}),

@@ -127,6 +127,7 @@ src/
     ├── bls.ts                    # BLS12-381 (@noble/curves): point decoding, finite differences, randomised batch, threshold aggregation
     ├── secp256k1.ts              # ENR-key signature verification
     ├── exitDomain.ts             # computeDomain / signingRoot for exits
+    ├── enr.ts                    # EIP-778 v4 records: base64url, strict RLP, signature check, node id
     ├── bytes.ts                  # hex helpers without Buffer
     ├── sszLists.ts               # ByteListType / ListBasicType / ListCompositeType that hash without Buffer
     ├── yielder.ts                # createTick: yield to the event loop every yieldMs
@@ -167,7 +168,7 @@ Types are generated separately via `tsc -b tsconfig.types.json` → `dist/types/
 
 Key build notes:
 - `viem` is a peer dependency and always external.
-- `@noble/curves`, `@noble/hashes` and `@chainsafe/enr` (ESM-only) are bundled and so are devDependencies; `@chainsafe/ssz` and `@sinclair/typebox` are the only dependencies. `test/package/packaging.spec.ts` fails if a build imports anything that is not a dependency or peer.
+- `@noble/curves`, `@noble/hashes`, `@chainsafe/ssz` 0.14.3, `@chainsafe/persistent-merkle-tree` and `@chainsafe/as-sha256` are bundled (pinned devDependencies); `@sinclair/typebox` (exact, no dependencies, types in the public `.d.ts`) is the only dependency. Keep it that way: an app installing the SDK should get nothing that resolves under a floating range. Bundling also tree-shakes away as-sha256's import-time WebAssembly; check `dist/browser` has no `WebAssembly` after changing what ssz code is used. `test/package/packaging.spec.ts` fails if a build imports anything that is not a dependency or peer.
 - The browser build must run without `Buffer` (and without Node built-ins). `@chainsafe/ssz` 0.14.3 needs `Buffer` to hash lists (`mixInLength`), so list types come from `src/internal/sszLists.ts`, never from `@chainsafe/ssz` (ESLint enforces both). `test/package/browserNoBuffer.spec.ts` runs the built bundle with `Buffer` deleted.
 - Browser build defines `process.env` as empty and `global` as `globalThis`.
 - One entry per module plus the root (`src/index.ts`, `src/<module>/index.ts`), with shared chunks (`splitting`), so classes such as `ObolError` exist once across entries; no worker bundle and no `worker_threads` / native imports in `dist`, except the Node-only `blst` entry (cjs / esm, not browser), whose `import('@chainsafe/blst')` stays external and runs on `loadBlstBackend()`.
@@ -339,8 +340,8 @@ The SDK reads no environment variables; RPCs come from the viem clients the call
 | `viem` (peer) | Chains, clients, ABIs, encoding, EIP-712 |
 | `@sinclair/typebox` | Input schemas and decoding |
 | `@noble/curves` | BLS12-381 and secp256k1 (bundled) |
-| `@chainsafe/ssz` | SSZ hashing of cluster files, deposits and exits |
-| `@chainsafe/enr` (dev) | Ethereum Node Record parsing (bundled into every build; ESM-only) |
+| `@chainsafe/ssz` (bundled) | SSZ hashing of cluster files, deposits and exits |
+| `@chainsafe/enr` (dev) | Test-only: `test/internal/enr.spec.ts` checks the SDK's own EIP-778 decoder (`src/internal/enr.ts`) against it |
 | `@chainsafe/blst` (optional peer, dev) | Native BLS for Node servers through `@obolnetwork/obol-sdk/blst` (dynamic import); cross-checks the pure-JS backend in tests |
 
 ## Dependencies policy

@@ -9,7 +9,7 @@ import type { Address, Hex } from 'viem';
 import type { ChainContracts } from '../chains.js';
 import { DEPOSIT_CONTRACT, ovmAbi } from '../abi.js';
 import { byCodeUnit, sameAddress } from '../schema.js';
-import type { AnyPrepared, Prepared } from '../types.js';
+import type { AnyPrepared } from '../types.js';
 import { decodeCall } from './decode.js';
 import { requestFees, type ReadValues } from './analyze.js';
 import type { SimTx } from './backends.js';
@@ -180,43 +180,8 @@ const distribute = (c: Comparer, tx: SimTx, p: Obj): void => {
   }
 };
 
-const withoutDust = (amount: bigint): bigint =>
-  amount > 0n ? amount - 1n : 0n;
-
-/**
- * ETH a distribution sends to a recipient's wallet: its direct OVM payout,
- * plus each included withdrawal leg (Warehouse: what was waiting there and
- * this distribution's credits; SplitMain v1), less the 1 wei each leaves.
- */
-const walletAmount = (r: Obj, minWithdraw: bigint, paused: boolean): bigint => {
-  let amount = r.fromOvm as bigint;
-  if (r.withdraw !== true || r.skipReason !== undefined) return amount;
-  const warehouse = withoutDust(
-    (r.warehouseBalance as bigint) +
-      (r.fromRewardSplit as bigint) +
-      (r.fromPrincipalSplit as bigint) +
-      (r.distributorReward as bigint),
-  );
-  const splitMain = withoutDust(r.splitMainBalance as bigint);
-  if (!paused && warehouse >= minWithdraw) amount += warehouse;
-  if (splitMain >= minWithdraw) amount += splitMain;
-  return amount;
-};
-
 /** splits.prepareDistributeAll */
-const distribution = (
-  c: Comparer,
-  p: Obj,
-  prepared: Prepared<'distributeAll'>,
-): void => {
-  const paused = (address: string): boolean =>
-    prepared.checks.some(
-      f =>
-        f.code === 'RECIPIENT_WITHDRAW_PAUSED' &&
-        f.subject !== undefined &&
-        'address' in f.subject &&
-        sameAddress(f.subject.address, address),
-    );
+const distribution = (c: Comparer, p: Obj): void => {
   if (isObj(p.ovm) && p.ovm.skipReason === undefined) {
     payouts(c, p.ovm.address, p.ovm, 'OVM');
   }
@@ -275,11 +240,8 @@ const distribution = (
       );
       c.check(`${r.address} distributor reward`, r.distributorReward, earned);
     }
-    c.check(
-      `ETH to ${r.address}`,
-      walletAmount(r, p.minWithdraw as bigint, paused(r.address as string)),
-      c.ethDelta(r.address),
-    );
+    // The preview's own figure: direct OVM payout plus the included legs.
+    c.check(`ETH to ${r.address}`, r.toWallet, c.ethDelta(r.address));
   }
 };
 
@@ -538,7 +500,7 @@ export const comparePreview = (
       distribute(c, tx, p);
       break;
     case 'distributeAll':
-      distribution(c, p, prepared);
+      distribution(c, p);
       break;
     case 'withdraw':
     case 'consolidate':

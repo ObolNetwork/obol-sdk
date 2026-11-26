@@ -543,6 +543,12 @@ Mapping (beacon names): no registry entry and no pending deposit → `new`; a pe
 `pending_deposits`) and no registry entry, or a registry entry in `pending_initialized` / `pending_queued` → `queued`;
 `active_*` → `active`; `exited_*` / `withdrawal_*` → `exited`.
 
+`active` follows the beacon API: it includes `active_exiting` and `active_slashed`, which stay in committees until their
+exit epoch (a slashed validator can no longer propose and earns no rewards). A cluster with any `active` validator is
+live. Whether a validator's exit has started is a separate question, answered by `exitEpoch` (or, without it, the
+`beaconStatus`): it gates exit and withdrawal requests (`VALIDATOR_EXITING`) and top-ups (`TOP_UP_EXITED_VALIDATOR`).
+Read `beaconStatus` for anything finer, such as an "exiting" or "slashed" label.
+
 **Which credentials apply** (the _effective credentials_). A registered validator has its own. For a pubkey only in the
 queue, the beacon chain skips queued deposits with an invalid BLS signature until the first valid one creates the
 validator, so the effective credentials are those of the first queued deposit that is not `signatureValid: false` and
@@ -697,7 +703,9 @@ Checks:
      only be withdrawn to those credentials; a top-up to a validator the caller does not control is a donation, so
      `send` refuses it until acknowledged) (3.0.0-rc.12);
    - same-credential deposits already queued (possibly valid ones) → Finding `DEPOSIT_ALREADY_QUEUED` (info) (2.16);
-   - `kind: "topUp"` to an `exited` validator → Finding `TOP_UP_EXITED_VALIDATOR` (warning) (new);
+   - `kind: "topUp"` to a validator whose exit has started (`exited`, or an exit epoch set: `active_exiting`,
+     `active_slashed`) → Finding `TOP_UP_EXITED_VALIDATOR` (warning; the chain postpones the deposit until the validator
+     is withdrawable, then sweeps it) (new; exiting validators 3.0.0-rc.15);
    - the validator has `0x01` (or `0x00`) credentials and `balance` + queued amounts + this deposit > 32 ETH →
      Finding `TOP_UP_ABOVE_EFFECTIVE_CAP` (warning; queued amounts without `signatureValid: false`: the excess is swept back to the withdrawal address by the next
      partial-withdrawal sweep, not staked) (new).
@@ -1140,8 +1148,10 @@ has something in the Warehouse after this distribution, Finding `RAF_LEFT_IN_WAR
 
 `splits.previewDistributeAll(input)` runs the same reads and returns `PreviewResult<DistributeAllPreview>` (`{ preview,
 checks, blockNumber }`) without throwing for `NOTHING_TO_DISTRIBUTE`, for a page that shows greyed-out legs with the button disabled. Other errors
-(e.g. `SPLIT_PAUSED`) still throw. A recipient in the withdrawal set whose withdrawal is left out keeps `withdraw:
-true` and gets a `skipReason`.
+(e.g. `SPLIT_PAUSED`) still throw. `preview.empty` is `true` exactly when every leg is left out, that is when
+`prepareDistributeAll` would throw `NOTHING_TO_DISTRIBUTE`: disable the action on it rather than re-deriving the rule.
+A recipient in the withdrawal set whose withdrawal is left out keeps `inWithdrawalSet: true`, gets a `skipReason` and
+has `toWallet` 0 (plus any direct OVM payout).
 
 Calls (`aggregate3` on Multicall3, in this order):
 
@@ -1156,18 +1166,21 @@ false`), where `distributable = max(splitBalance + incoming − 1, 0) + max(ware
 With the default `minWithdraw = 1` wei every non-empty leg is included (2.16 behaviour). Legs below it are still
 listed in the preview with a `skipReason`.
 
-Preview: `{ minWithdraw, ovm?: { address, distributable, principalPayout, rewardPayout, principalRecipient,
+Preview: `{ empty, minWithdraw, ovm?: { address, distributable, principalPayout, rewardPayout, principalRecipient,
 rewardRecipient, skipReason? }, splits: { address, kind, distributable, distributorReward, skipReason? }[],
 recipients: { address, fromOvm, fromRewardSplit, fromPrincipalSplit, distributorReward, warehouseBalance,
-splitMainBalance, withdraw: bool, skipReason?, fromThisDistribution, alreadyWaiting }[] }` (the block is the
+splitMainBalance, inWithdrawalSet: bool, skipReason?, toWallet, fromThisDistribution, alreadyWaiting }[] }` (the block is the
 `Prepared`'s `blockNumber`, not repeated in the preview). A recipient's `distributorReward` is the split distribution
 incentives credited to it as the distributor (the sum of the included splits' `distributorReward`), 0 for every other
 row. `fromThisDistribution = fromOvm + fromRewardSplit + fromPrincipalSplit + distributorReward`: what this distribution
 credits the recipient, withdrawn or not. `alreadyWaiting = warehouseBalance + splitMainBalance`: what was waiting for
-it before this transaction, from any split. When its withdrawal is included, the wallet receives `fromOvm`, its
-Warehouse balance after the split distributions (`alreadyWaiting`'s Warehouse part plus the split credits) and its
-SplitMain v1 balance, each less the 1 wei the contract keeps, for the legs at or above `minWithdraw`. (rc.4 replaced
-rc.3's `toWallet`, which mixed the two.) `skipReason` is set exactly when a leg is left out: `"nothing"` (0 after the 1
+it before this transaction, from any split. `toWallet` is what the transaction sends to the recipient's wallet:
+`fromOvm`, plus, for each withdrawal leg that is included, its Warehouse balance after the split distributions
+(`alreadyWaiting`'s Warehouse part plus the split credits) or its SplitMain v1 balance, each less the 1 wei the
+contract keeps; `simulate` checks it against the balance change. Show `fromThisDistribution` as what this distribution
+earned and `toWallet` as what lands in the wallet: rc.3's `toWallet` was read as the first, which is why rc.4 split
+them, and rc.15 brings it back next to them. `inWithdrawalSet` (was `withdraw`) only says the address is in
+`recipients`. `skipReason` is set exactly when a leg is left out: `"nothing"` (0 after the 1
 wei kept), `"dust"` (positive but below `minWithdraw`) or `"paused"` (recipients only: Warehouse withdrawals paused
 and the sender cannot bypass it). Each split
 recipient gets `floor((distributable − distributorReward) × allocation / totalAllocation)`, with `distributorReward =

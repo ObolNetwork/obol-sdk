@@ -1,4 +1,4 @@
-import { ENR } from '@chainsafe/enr';
+import { decodeEnrText } from '../internal/enr.js';
 import { Type } from '@sinclair/typebox';
 import { fromHexString } from '@chainsafe/ssz';
 import type { Hex } from 'viem';
@@ -249,7 +249,7 @@ export const assertPartialExit = (
 
   let enrKey: Uint8Array;
   try {
-    enrKey = ENR.decodeTxt(cluster.operators[shareIdx - 1].enr).publicKey;
+    enrKey = decodeEnrText(cluster.operators[shareIdx - 1].enr).publicKey;
   } catch {
     throw invalid(
       `cluster.operators[${shareIdx - 1}].enr`,

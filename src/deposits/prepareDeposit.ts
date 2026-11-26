@@ -31,6 +31,7 @@ import { readOvmCore, requireRole, requireSender } from '../ovm/read.js';
 import { requireObolOvm, getOvmProvenance } from '../ovm/provenance.js';
 import {
   effectiveCredentials,
+  isExiting,
   possiblyValidDeposits,
   StatusSourceFields,
   statusIfAvailable,
@@ -286,6 +287,7 @@ const effectiveCapCheck = (
   );
   if (
     c.status.status === 'exited' ||
+    isExiting(c.status) === true ||
     (prefix !== '0x00' && prefix !== '0x01')
   ) {
     return;
@@ -357,11 +359,20 @@ const existenceChecks = (
   }
   if (kind === 'deposit' && registered) throw registeredDepositError(c);
   if (kind === 'topUp') foreignTopUpCheck(c);
-  if (kind === 'topUp' && status.status === 'exited') {
+  // Electra process_pending_deposits postpones a deposit to a validator with
+  // an exit epoch until it is withdrawable, then credits it to be swept.
+  if (
+    kind === 'topUp' &&
+    (status.status === 'exited' || isExiting(status) === true)
+  ) {
+    const state =
+      status.status === 'exited'
+        ? 'has exited'
+        : `is exiting (${status.beaconStatus ?? 'exit epoch set'})`;
     findings.push(
       finding(
         'TOP_UP_EXITED_VALIDATOR',
-        `${pubkey} has exited: the top-up is swept back to its withdrawal address, not staked`,
+        `${pubkey} ${state}: the top-up is swept back to its withdrawal address, not staked`,
         { hint: 'Do not top up', subject, details },
       ),
     );

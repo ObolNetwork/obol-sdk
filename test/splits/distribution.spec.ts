@@ -143,7 +143,10 @@ describe('splits.prepareDistributeAll', () => {
     expect(byAddress[A].alreadyWaiting).toBe(100n);
     expect(byAddress[A].fromThisDistribution).toBe(0n);
     // The RAF is in the withdrawal set by default.
-    expect(byAddress[HOODI.rafRecipient].withdraw).toBe(true);
+    expect(byAddress[HOODI.rafRecipient].inWithdrawalSet).toBe(true);
+    // In the set, but nothing reaches anyone's wallet: the preview is empty.
+    expect(preview.empty).toBe(true);
+    expect(preview.recipients.every(r => r.toWallet === 0n)).toBe(true);
     expect('blockNumber' in preview).toBe(false);
     expect(preview.minWithdraw).toBe(parseEther('2'));
   });
@@ -161,7 +164,13 @@ describe('splits.prepareDistributeAll', () => {
     const raf = withRaf.preview.recipients.find(
       r => r.address === HOODI.rafRecipient,
     )!;
-    expect(raf).toMatchObject({ withdraw: true, alreadyWaiting: 500n });
+    expect(raf).toMatchObject({
+      inWithdrawalSet: true,
+      alreadyWaiting: 500n,
+      // 500 wei waiting plus its credit, less the 1 wei the Warehouse keeps.
+      toWallet: 500n + raf.fromRewardSplit + raf.fromPrincipalSplit - 1n,
+    });
+    expect(withRaf.preview.empty).toBe(false);
     expect(raf.skipReason).toBeUndefined();
     expect(
       decodeDistributionCalls(withRaf.request.data, OVM).some(
@@ -179,7 +188,8 @@ describe('splits.prepareDistributeAll', () => {
     const left = without.preview.recipients.find(
       r => r.address === HOODI.rafRecipient,
     )!;
-    expect(left.withdraw).toBe(false);
+    expect(left.inWithdrawalSet).toBe(false);
+    expect(left.toWallet).toBe(0n);
     expect(without.checks).toEqual([
       expect.objectContaining({
         code: 'RAF_LEFT_IN_WAREHOUSE',
@@ -217,6 +227,8 @@ describe('splits.prepareDistributeAll', () => {
     expect(a.warehouseBalance).toBe(100n);
     // What was waiting is reported apart from this distribution's credit.
     expect(a.alreadyWaiting).toBe(100n);
+    // toWallet: both, withdrawn together, less the 1 wei the Warehouse keeps.
+    expect(a.toWallet).toBe(a.fromThisDistribution + a.alreadyWaiting - 1n);
   });
 
   it('includes a leg at exactly minWithdraw', async () => {
@@ -332,7 +344,7 @@ describe('splits.prepareDistributeAll', () => {
     expect(prepared.checks).toEqual([]);
     expect(
       prepared.preview.recipients.find(r => r.address === SENDER),
-    ).toMatchObject({ withdraw: true, alreadyWaiting: 50n });
+    ).toMatchObject({ inWithdrawalSet: true, alreadyWaiting: 50n });
     expect(
       prepared.preview.recipients.find(r => r.address === SENDER)?.skipReason,
     ).toBeUndefined();
@@ -439,7 +451,9 @@ describe('splits.prepareDistributeAll', () => {
     ).toMatchObject({
       fromThisDistribution: 10_000n,
       alreadyWaiting: 0n,
-      withdraw: true,
+      inWithdrawalSet: true,
+      // The incentive is credited and withdrawn in the same transaction.
+      toWallet: 10_000n - 1n,
     });
   });
 

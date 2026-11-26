@@ -1,10 +1,10 @@
 {
   "ovm-reads": {
-    "bytes": 180224,
+    "bytes": 181248,
     "gzip": 49152
   },
   "ovm-reads-root": {
-    "bytes": 180224,
+    "bytes": 181248,
     "gzip": 49152
   },
   "splits-distribution": {
@@ -12,7 +12,7 @@
     "gzip": 43008
   },
   "client": {
-    "bytes": 687104,
-    "gzip": 208896
+    "bytes": 558080,
+    "gzip": 163840
   }
 }

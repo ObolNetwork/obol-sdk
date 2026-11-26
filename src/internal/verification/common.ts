@@ -6,7 +6,7 @@
 import { bytesTo0xHex } from '../bytes.js';
 import { ByteVectorType, ContainerType, fromHexString } from '@chainsafe/ssz';
 import { ListCompositeType } from '../sszLists.js';
-import { ENR } from '@chainsafe/enr';
+import { decodeEnrText } from '../enr.js';
 import {
   type BuilderRegistrationMessage,
   type ClusterDefinition,
@@ -453,7 +453,7 @@ export const verifyNodeSignatures = async (
   const lockHash = fromHexString(clusterLock.lock_hash);
   // node(ENR) signatures
   for (let i = 0; i < nodeSignatures.length; i++) {
-    const publicKey = ENR.decodeTxt(
+    const publicKey = decodeEnrText(
       clusterLock.cluster_definition.operators[i].enr as string,
     ).publicKey;
     await tick();

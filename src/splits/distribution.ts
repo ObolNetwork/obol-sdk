@@ -104,6 +104,12 @@ export interface DistributeAllInput {
 export type SkipReason = 'nothing' | 'dust' | 'paused';
 
 export interface DistributeAllPreview {
+  /**
+   * Every leg is left out, so there is no transaction to send:
+   * `prepareDistributeAll` throws NOTHING_TO_DISTRIBUTE exactly when this is
+   * true. Use it to disable a "Distribute" action.
+   */
+  empty: boolean;
   /** The `minWithdraw` the legs were compared with (wei). */
   minWithdraw: bigint;
   ovm?: {
@@ -133,9 +139,20 @@ export interface DistributeAllPreview {
     warehouseBalance: bigint;
     /** Its SplitMain v1 ETH balance before this transaction (wei). */
     splitMainBalance: bigint;
-    /** The recipient is in the withdrawal set; `skipReason` says if its withdrawal is left out. */
-    withdraw: boolean;
+    /**
+     * The recipient is in the withdrawal set (`recipients`, by default every
+     * split recipient). It does not say this transaction withdraws anything:
+     * read `toWallet`, or `skipReason` for why its withdrawal is left out.
+     */
+    inWithdrawalSet: boolean;
     skipReason?: SkipReason;
+    /**
+     * ETH this transaction sends to the recipient's wallet (wei): its direct
+     * OVM payout plus each withdrawal leg that is included (Warehouse: what
+     * was waiting there and this distribution's split credits; SplitMain v1),
+     * less the 1 wei each leg leaves behind. 0 when nothing reaches it.
+     */
+    toWallet: bigint;
     /**
      * What this distribution credits the recipient (wei): `fromOvm +
      * fromRewardSplit + fromPrincipalSplit + distributorReward`, whether or
@@ -594,7 +611,7 @@ const buildDistribution = async (
       const fromOvm = direct.some(a => sameAddress(a, address))
         ? fromOvmTo(address)
         : 0n;
-      const withdraw = withdrawFor.some(a => sameAddress(a, address));
+      const inWithdrawalSet = withdrawFor.some(a => sameAddress(a, address));
       const warehouseAmount = withoutDust(
         warehouseBalance +
           fromSplits.reward +
@@ -603,7 +620,8 @@ const buildDistribution = async (
       );
       const splitMainAmount = withoutDust(splitMainBalance);
       let skipReason: SkipReason | undefined;
-      if (withdraw) {
+      let toWallet = fromOvm;
+      if (inWithdrawalSet) {
         const blocked =
           pausedAt(i) &&
           !(isSender(address) && warehouseOwnerBypass) &&
@@ -611,6 +629,7 @@ const buildDistribution = async (
         let included = false;
         if (warehouseAmount >= minWithdraw && !blocked) {
           included = true;
+          toWallet += warehouseAmount;
           calls.push({
             target: warehouse,
             allowFailure: true,
@@ -623,6 +642,7 @@ const buildDistribution = async (
         }
         if (splitMainAmount >= minWithdraw) {
           included = true;
+          toWallet += splitMainAmount;
           calls.push({
             target: splitMain,
             allowFailure: true,
@@ -672,8 +692,9 @@ const buildDistribution = async (
         distributorReward: fromSplits.other,
         warehouseBalance,
         splitMainBalance,
-        withdraw,
+        inWithdrawalSet,
         ...(skipReason !== undefined ? { skipReason } : {}),
+        toWallet,
         fromThisDistribution:
           fromOvm + fromSplits.reward + fromSplits.principal + fromSplits.other,
         alreadyWaiting: warehouseBalance + splitMainBalance,
@@ -703,6 +724,7 @@ const buildDistribution = async (
     };
   };
   const preview: DistributeAllPreview = {
+    empty: calls.length === 0,
     minWithdraw,
     ...ovmLeg(),
     splits: splitPreviews,

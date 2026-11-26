@@ -156,6 +156,29 @@ export const statusFromBeacon = (
   return null;
 };
 
+/**
+ * Beacon names of a validator whose exit has started: `active_exiting` and
+ * `active_slashed` (exit epoch set, still `active` until it), then the
+ * `exited_*` and `withdrawal_*` names.
+ */
+const EXITING_STATUS = /^(active_exiting|active_slashed|exited_|withdrawal_)/;
+
+/**
+ * Whether the validator's exit has started (an exit epoch is set), from
+ * `exitEpoch` when the source gives it, else from the beacon name; undefined
+ * when neither is known. `status` stays `active` until the exit epoch, as in
+ * the beacon API: a slashed or exiting validator is still in committees until
+ * then, but it takes no further exit or withdrawal requests and a top-up to it
+ * is not staked.
+ */
+export const isExiting = (status: DepositStatus): boolean | undefined => {
+  if (status.exitEpoch !== undefined) return status.exitEpoch !== null;
+  if (status.beaconStatus !== undefined) {
+    return EXITING_STATUS.test(status.beaconStatus);
+  }
+  return undefined;
+};
+
 /** Whether `getDepositStatus` has a source for these options. */
 export const canReadStatus = (
   ctx: Context,

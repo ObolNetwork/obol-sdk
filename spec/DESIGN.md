@@ -201,7 +201,7 @@ spec/
   or SSZ code (`yarn size:check` keeps it so, with a size budget).
 - The public surface is explicit export lists, recorded in `etc/obol-sdk.api.md` (API Extractor; CI fails on an
   unreviewed change). What may still change (`simulate`, `legacy`) is under `experimental`.
-- Peer dependency: `viem@^2`. Bundled: `@noble/curves`, `@noble/hashes`, `@chainsafe/enr`; dependencies: `@chainsafe/ssz`, `@sinclair/typebox`. No ethers (the launchpad uses wagmi / viem;
+- Peer dependency: `viem@^2`. Bundled: `@noble/curves`, `@noble/hashes`, `@chainsafe/ssz` (with its merkle tree); the only dependency: `@sinclair/typebox`. ENRs are decoded by the SDK's own EIP-778 decoder. No ethers (the launchpad uses wagmi / viem;
   the ethers adapter was dropped).
 - Node ≥ 20, browsers via the ESM build.
 - No native modules and no worker threads: BLS is pure JS (`@noble/curves`), and long verifications run on the

@@ -15,6 +15,7 @@ import type { Finding, FindingsOf } from '../types.js';
 import { ETH, GWEI } from '../units.js';
 import {
   PENDING_PARTIAL_WITHDRAWALS_LIMIT,
+  isExiting,
   queuesOf,
   type DepositStatus,
 } from '../deposits/status.js';
@@ -28,8 +29,6 @@ import {
 export const MIN_ACTIVATION_BALANCE = 32n * ETH;
 /** SHARD_COMMITTEE_PERIOD: epochs after activation before a validator may exit or withdraw. */
 export const SHARD_COMMITTEE_PERIOD = 256n;
-
-const EXITING_STATUS = /^(active_exiting|active_slashed|exited_|withdrawal_)/;
 
 /** What the rules need besides each validator's status. */
 export interface RuleContext {
@@ -77,14 +76,6 @@ export const noStatusFinding = (
       details: { checks: ['all'] },
     },
   );
-
-const isExiting = (status: DepositStatus): boolean | undefined => {
-  if (status.exitEpoch !== undefined) return status.exitEpoch !== null;
-  if (status.beaconStatus !== undefined) {
-    return EXITING_STATUS.test(status.beaconStatus);
-  }
-  return undefined;
-};
 
 const requireRegistry = (status: DepositStatus): void => {
   if (status.validatorIndex === undefined || status.status !== 'active') {
