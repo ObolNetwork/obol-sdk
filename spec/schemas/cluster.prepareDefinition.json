@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/cluster.prepareDefinition.json",
+  "title": "cluster.prepareDefinition",
+  "additionalProperties": false,
+  "properties": {
+    "chainId": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "compounding": {
+      "type": "boolean"
+    },
+    "consensusProtocol": {
+      "anyOf": [
+        {
+          "const": "",
+          "type": "string"
+        },
+        {
+          "const": "qbft",
+          "type": "string"
+        }
+      ]
+    },
+    "creator": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "depositAmounts": {
+      "items": {
+        "description": "wei",
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)$",
+        "x-obol-type": "bigint",
+        "x-obol-minimum": "0"
+      },
+      "type": "array"
+    },
+    "name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "operators": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+                "format": "obol-address",
+                "type": "string"
+              },
+              {
+                "const": "",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "type": "object"
+      },
+      "minItems": 4,
+      "type": "array"
+    },
+    "targetGasLimit": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "timestamp": {
+      "maxLength": 32,
+      "minLength": 1,
+      "type": "string"
+    },
+    "uuid": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    },
+    "validators": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "feeRecipientAddress": {
+            "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+            "format": "obol-address",
+            "type": "string"
+          },
+          "withdrawalAddress": {
+            "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+            "format": "obol-address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feeRecipientAddress",
+          "withdrawalAddress"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "operators",
+    "validators",
+    "creator",
+    "chainId"
+  ],
+  "type": "object"
+}

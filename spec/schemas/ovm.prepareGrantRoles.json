@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/ovm.prepareGrantRoles.json",
+  "title": "ovm.prepareGrantRoles",
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "ovm": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "roles": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "x-obol-type": "bigint",
+          "x-obol-minimum": "0"
+        },
+        {
+          "minimum": 0,
+          "type": "integer"
+        }
+      ]
+    },
+    "user": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ovm",
+    "user",
+    "roles"
+  ],
+  "type": "object"
+}

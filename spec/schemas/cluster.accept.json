@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/cluster.accept.json",
+  "title": "cluster.accept",
+  "additionalProperties": false,
+  "properties": {
+    "configHash": {
+      "description": "32-byte hex",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "type": "string"
+    },
+    "enr": {
+      "pattern": "^enr:",
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "configHash",
+    "enr"
+  ],
+  "type": "object"
+}

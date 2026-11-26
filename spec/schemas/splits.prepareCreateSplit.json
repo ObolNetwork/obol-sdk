@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/splits.prepareCreateSplit.json",
+  "title": "splits.prepareCreateSplit",
+  "additionalProperties": false,
+  "properties": {
+    "distributionIncentive": {
+      "description": "ppm, integer in [0, 65535]"
+    },
+    "owner": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "recipients": {
+      "description": "array of { address, share }: shares in ppm (bigint or safe integer), summing to 1000000"
+    },
+    "salt": {
+      "description": "32-byte hex",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "recipients"
+  ],
+  "type": "object"
+}

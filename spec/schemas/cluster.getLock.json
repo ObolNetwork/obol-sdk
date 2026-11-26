@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/cluster.getLock.json",
+  "title": "cluster.getLock",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configHash": {
+          "description": "32-byte hex",
+          "pattern": "^0x[0-9a-fA-F]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "configHash"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "lockHash": {
+          "description": "32-byte hex",
+          "pattern": "^0x[0-9a-fA-F]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "lockHash"
+      ],
+      "type": "object"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/ovm.prepareDistribute.json",
+  "title": "ovm.prepareDistribute",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "anyOf": [
+        {
+          "const": "push",
+          "type": "string"
+        },
+        {
+          "const": "pull",
+          "type": "string"
+        }
+      ]
+    },
+    "ovm": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ovm"
+  ],
+  "type": "object"
+}

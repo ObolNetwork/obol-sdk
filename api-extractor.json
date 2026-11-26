@@ -1,0 +1,25 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/types/src/index.d.ts",
+  "bundledPackages": [],
+  "compiler": { "tsconfigFilePath": "<projectFolder>/tsconfig.types.json" },
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "obol-sdk",
+    "reportFolder": "<projectFolder>/etc/",
+    "reportTempFolder": "<projectFolder>/temp/"
+  },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+  "messages": {
+    "compilerMessageReporting": { "default": { "logLevel": "warning" } },
+    "extractorMessageReporting": {
+      "default": { "logLevel": "warning", "addToApiReportFile": true },
+      "ae-missing-release-tag": { "logLevel": "none" },
+      "ae-internal-missing-underscore": { "logLevel": "none" },
+      "ae-forgotten-export": { "logLevel": "none", "addToApiReportFile": true }
+    },
+    "tsdocMessageReporting": { "default": { "logLevel": "none" } }
+  }
+}

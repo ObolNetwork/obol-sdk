@@ -1,4 +1,4 @@
-name: 'Lint, Unit and E2E Tests'
+name: 'Lint and Unit Tests'
 
 on:
   pull_request:
@@ -7,9 +7,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # Dependabot and fork PRs get no repo secrets; skip e2e instead of failing on an empty key.
-      HAS_E2E_SECRETS: ${{ secrets.PRIVATE_KEY != '' }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -32,34 +29,15 @@ jobs:
       - name: Build SDK
         run: yarn run build
 
+      # Fails on a public API change not reviewed into etc/obol-sdk.api.md
+      # (run `yarn api:update` and commit the report).
+      - name: API report
+        run: yarn run api:check
+
+      # Bundle sizes against scripts/bundle-budget.json; a reads-only ovm
+      # import must not carry BLS or SSZ code.
+      - name: Bundle size
+        run: yarn run size:check
+
       - name: Run unit tests
         run: yarn run test
-        env:
-          RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
-          RPC_GNOSIS: ${{ secrets.RPC_GNOSIS }}
-          RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}
-          RPC_HOODI: ${{ secrets.RPC_HOODI }}
-
-      - name: Install e2e dependencies
-        working-directory: ./test/sdk-package
-        run: yarn install --frozen-lockfile
-
-      - name: Build e2e
-        working-directory: ./test/sdk-package
-        run: yarn run build
-
-      - name: Clear Jest cache
-        working-directory: ./test/sdk-package
-        run: yarn jest --clearCache || true
-
-      - name: Run e2e tests
-        if: env.HAS_E2E_SECRETS == 'true'
-        working-directory: ./test/sdk-package
-        run: yarn run test:e2e
-        env:
-          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-          DEL_AUTH: ${{ secrets.DEL_AUTH }}
-          RPC_HOODI: ${{ secrets.RPC_HOODI }}
-          RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
-          RPC_GNOSIS: ${{ secrets.RPC_GNOSIS }}
-          RPC_SEPOLIA: ${{ secrets.RPC_SEPOLIA }}

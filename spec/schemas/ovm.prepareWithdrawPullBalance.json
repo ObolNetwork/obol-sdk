@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ObolNetwork/obol-sdk/spec/schemas/ovm.prepareWithdrawPullBalance.json",
+  "title": "ovm.prepareWithdrawPullBalance",
+  "additionalProperties": false,
+  "properties": {
+    "account": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    },
+    "ovm": {
+      "description": "Address: all-lowercase, all-uppercase or valid EIP-55 checksum",
+      "format": "obol-address",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ovm",
+    "account"
+  ],
+  "type": "object"
+}
